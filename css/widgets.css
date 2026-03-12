@@ -315,11 +315,23 @@ body.widget-page {
   color: var(--color-text);
 }
 
-.dashboard-page {
+.snippet-block {
+  margin: 12px 0 0;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: rgba(3, 10, 18, 0.88);
+  color: var(--color-text);
+  font: 0.88rem/1.45 "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dashboard-native-page {
   padding: 10px;
 }
 
-.dashboard-grid {
+.native-dashboard {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
@@ -329,19 +341,184 @@ body.widget-page {
   min-height: 0;
 }
 
-.dashboard-frame {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 22px;
-  background: transparent;
+.dash-card {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(0, 224, 255, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(27, 36, 48, 0.96), rgba(18, 25, 34, 0.98));
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
 
-.dashboard-frame:nth-child(1),
-.dashboard-frame:nth-child(5),
-.dashboard-frame:nth-child(6) {
+.dash-card--wide {
   grid-column: span 2;
+}
+
+.dash-card__header,
+.dash-card__title-group,
+.dash-media,
+.dash-weather__current {
+  display: flex;
+  align-items: center;
+}
+
+.dash-card__header,
+.dash-weather__current {
+  justify-content: space-between;
+}
+
+.dash-card__header,
+.dash-card__title-group,
+.dash-media,
+.dash-weather__current {
+  gap: 12px;
+}
+
+.dash-card__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.dash-clock,
+.dash-calendar {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  min-height: 0;
+}
+
+.dash-clock__time {
+  font-size: clamp(3.8rem, 10vw, 6rem);
+  line-height: 0.95;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.dash-clock__date {
+  font-size: 1.05rem;
+  color: var(--color-text-dim);
+}
+
+.dash-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-height: 0;
+}
+
+.dash-stat {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dash-stat__value {
+  font-size: 1.9rem;
+  font-weight: 700;
+}
+
+.dash-weather,
+.dash-calendar {
+  grid-template-rows: auto 1fr;
+}
+
+.dash-weather {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.dash-weather__temp {
+  font-size: 3.2rem;
+  font-weight: 700;
+}
+
+.dash-weather__icon {
+  width: 72px;
+  height: 72px;
+}
+
+.dash-mini-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+
+.dash-mini-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dash-mini-list__item span,
+.dash-mini-list__item strong {
+  min-width: 0;
+}
+
+.dash-mini-list__item span {
+  color: var(--color-text-dim);
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-mini-list__item strong {
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.dash-media {
+  min-height: 0;
+  align-items: stretch;
+}
+
+.dash-media__art {
+  width: 180px;
+  min-width: 180px;
+  height: 100%;
+  border-radius: 20px;
+  object-fit: cover;
+}
+
+.dash-media__meta {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 12px;
+}
+
+.dash-media__title {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.dash-media__artist {
+  color: var(--color-text-dim);
+  font-size: 1rem;
+}
+
+.dash-calendar__today {
+  display: grid;
+  gap: 4px;
 }
 
 [data-size="small"] .widget-shell {
@@ -537,12 +714,16 @@ body.widget-page {
   .landing-shell,
   .split-grid,
   .media-layout,
-  .dashboard-grid {
+  .native-dashboard {
     grid-template-columns: 1fr;
   }
 
-  .dashboard-grid {
+  .native-dashboard {
     grid-template-rows: repeat(6, minmax(280px, 1fr));
     height: auto;
+  }
+
+  .dash-card--wide {
+    grid-column: auto;
   }
 }

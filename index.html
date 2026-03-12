@@ -14,24 +14,24 @@
   <main class="landing-shell">
     <section class="hero-card">
       <p class="eyebrow">CORSAIR XENEON EDGE</p>
-      <h1>Modular widget library</h1>
-      <p class="hero-copy">Static HTML widgets built for the 2560x720 iCUE iframe environment.</p>
+      <h1>Paste-ready XENEON widgets</h1>
+      <p class="hero-copy">Use the hosted GitHub Pages URLs below. The dashboard is now a single native page, not a nested iframe grid.</p>
       <div class="hero-actions">
         <a class="button" href="./dashboard.html">Open dashboard</a>
         <a class="button button-secondary" href="./widgets/clock-widget.html">Open clock widget</a>
       </div>
     </section>
     <section class="widget-list-card">
-      <h2>Included widgets</h2>
+      <h2>Paste Into iCUE</h2>
       <div class="widget-list">
-        <a class="widget-link" href="./widgets/clock-widget.html">Clock</a>
-        <a class="widget-link" href="./widgets/system-monitor.html">System Monitor</a>
-        <a class="widget-link" href="./widgets/weather-widget.html">Weather</a>
-        <a class="widget-link" href="./widgets/network-widget.html">Network</a>
-        <a class="widget-link" href="./widgets/media-widget.html">Media</a>
-        <a class="widget-link" href="./widgets/calendar-widget.html">Calendar</a>
+        <a class="widget-link" href="./dashboard.html">Dashboard page</a>
+        <a class="widget-link" href="./widgets/clock-widget.html">Clock widget</a>
+        <a class="widget-link" href="./widgets/weather-widget.html">Weather widget</a>
       </div>
-      <p class="footnote">Use <code>?apiKey=YOUR_KEY&amp;city=Indianapolis</code> on the weather widget URL.</p>
+      <pre class="snippet-block"><code>&lt;iframe src="https://silverfuel.github.io/xeneon-widgets/dashboard.html" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
+      <pre class="snippet-block"><code>&lt;iframe src="https://silverfuel.github.io/xeneon-widgets/widgets/clock-widget.html" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
+      <pre class="snippet-block"><code>&lt;iframe src="https://silverfuel.github.io/xeneon-widgets/widgets/weather-widget.html?apiKey=YOUR_KEY&amp;city=Indianapolis" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
+      <p class="footnote">Paste one of those snippets directly into the iCUE iframe widget code field.</p>
     </section>
   </main>
 </body>
