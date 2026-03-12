@@ -42,10 +42,12 @@
         { time: "14:00", title: "Benchmarks", detail: "iFrame performance test" },
         { time: "16:30", title: "Deploy", detail: "Publish to GitHub Pages" }
       ];
+      var widgetSize = WidgetCore.getWidgetSize();
       var widget = {
         refreshInterval: 60000,
         initWidget: function () {
-          document.getElementById("agenda-list").innerHTML = agendaItems.map(function (item) {
+          var itemCount = widgetSize === "small" ? 2 : widgetSize === "medium" ? 3 : 4;
+          document.getElementById("agenda-list").innerHTML = agendaItems.slice(0, itemCount).map(function (item) {
             return '<div class="agenda-item"><div><strong>' + item.title + '</strong><span>' + item.detail + '</span></div><strong>' + item.time + '</strong></div>';
           }).join("");
         },

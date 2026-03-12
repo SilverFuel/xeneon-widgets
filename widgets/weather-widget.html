@@ -44,18 +44,20 @@
   <script>
     (function () {
       var forecastGrid = document.getElementById("forecast-grid");
+      var widgetSize = WidgetCore.getWidgetSize();
       var widget = {
         refreshInterval: 600000,
         initWidget: function () {},
         updateWidget: async function () {
           try {
             var weather = await WeatherApi.fetchWeather();
+            var forecastCount = widgetSize === "small" ? 2 : widgetSize === "medium" ? 3 : 5;
             document.getElementById("weather-city").textContent = weather.city;
             document.getElementById("weather-temp").textContent = weather.temperature + "°";
             document.getElementById("weather-condition").textContent = weather.condition;
             document.getElementById("weather-icon").src = WeatherApi.getWeatherIconUrl(weather.icon);
             document.getElementById("weather-status").textContent = weather.source;
-            forecastGrid.innerHTML = weather.forecast.map(function (entry) {
+            forecastGrid.innerHTML = weather.forecast.slice(0, forecastCount).map(function (entry) {
               return '<div class="forecast-entry"><strong>' + entry.hour + '</strong><span>' + entry.condition + '</span><strong>' + entry.temp + '°</strong></div>';
             }).join("");
           } catch (error) {
