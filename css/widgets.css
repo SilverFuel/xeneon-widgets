@@ -1,0 +1,370 @@
+body.widget-page {
+  padding: 18px;
+}
+
+.widget-shell {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 36px);
+  min-height: 164px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: linear-gradient(180deg, rgba(27, 36, 48, 0.96), rgba(18, 25, 34, 0.98));
+  box-shadow: var(--shadow-panel);
+}
+
+.widget-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 35%);
+}
+
+.widget-header,
+.widget-title-group,
+.weather-current,
+.forecast-entry,
+.agenda-item,
+.network-item,
+.hero-actions,
+.media-controls {
+  display: flex;
+  align-items: center;
+}
+
+.widget-header,
+.weather-current,
+.forecast-entry,
+.agenda-item,
+.network-item {
+  justify-content: space-between;
+}
+
+.widget-header,
+.widget-title-group,
+.weather-current,
+.forecast-entry,
+.agenda-item,
+.network-item,
+.hero-actions,
+.media-controls {
+  gap: 12px;
+}
+
+.widget-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: 24px;
+}
+
+.widget-title,
+.hero-card h1,
+.widget-list-card h2 {
+  margin: 0;
+  font-weight: 700;
+}
+
+.widget-title {
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+}
+
+.widget-subtitle,
+.metric-detail,
+.weather-condition,
+.hero-copy,
+.footnote,
+.forecast-entry span,
+.agenda-item span,
+.network-item span,
+.media-artist {
+  color: var(--color-text-dim);
+}
+
+.widget-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+}
+
+.widget-status,
+.button,
+.widget-link,
+.control-button {
+  min-height: 44px;
+}
+
+.widget-status {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.widget-content {
+  position: relative;
+  min-height: 0;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric-card,
+.list-card,
+.forecast-card {
+  min-height: 120px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+}
+
+.metric-label {
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.metric-value {
+  margin-top: 12px;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  font-weight: 700;
+}
+
+.bar,
+.progress-track {
+  width: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar {
+  height: 12px;
+  margin-top: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bar > span,
+.progress-track > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-accent), #44f0c2);
+}
+
+.clock-face,
+.stack,
+.forecast-grid,
+.agenda-list,
+.network-list,
+.widget-list,
+.media-meta {
+  display: grid;
+  gap: 14px;
+}
+
+.clock-face {
+  align-content: center;
+  height: 100%;
+}
+
+.clock-time {
+  font-size: clamp(3.8rem, 10vw, 8rem);
+  line-height: 0.95;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.clock-date {
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+  color: var(--color-text-dim);
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 16px;
+  height: 100%;
+}
+
+.weather-temp {
+  font-size: clamp(2.8rem, 6vw, 4.8rem);
+  font-weight: 700;
+}
+
+.weather-icon {
+  width: 96px;
+  height: 96px;
+}
+
+.media-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 18px;
+  height: 100%;
+}
+
+.album-art {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 22px;
+  object-fit: cover;
+}
+
+.media-meta {
+  align-content: center;
+}
+
+.media-title {
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  font-weight: 700;
+}
+
+.control-button {
+  min-width: 56px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.control-button.is-primary,
+.button {
+  background: linear-gradient(90deg, var(--color-accent), #1fb7ff);
+  color: #041118;
+  font-weight: 700;
+}
+
+.progress-track {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.landing-page {
+  padding: 28px;
+}
+
+.landing-shell {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 18px;
+  height: calc(100vh - 56px);
+}
+
+.hero-card,
+.widget-list-card {
+  padding: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(27, 36, 48, 0.96), rgba(18, 25, 34, 0.98));
+  box-shadow: var(--shadow-panel);
+}
+
+.eyebrow {
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.8rem;
+}
+
+.hero-card h1,
+.widget-list-card h2 {
+  margin-bottom: 14px;
+  font-size: clamp(2.4rem, 5vw, 4.6rem);
+}
+
+.hero-copy,
+.footnote {
+  max-width: 42rem;
+  line-height: 1.5;
+}
+
+.button,
+.widget-link {
+  padding: 12px 18px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.button-secondary,
+.widget-link {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+}
+
+.dashboard-page {
+  padding: 14px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: 340px 340px;
+  gap: 14px;
+  width: 100%;
+  height: calc(100vh - 28px);
+}
+
+.dashboard-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+}
+
+.dashboard-frame:nth-child(1),
+.dashboard-frame:nth-child(5),
+.dashboard-frame:nth-child(6) {
+  grid-column: span 2;
+}
+
+[data-size="small"] .widget-shell {
+  padding: 16px;
+}
+
+[data-size="small"] .widget-title {
+  font-size: 1rem;
+}
+
+[data-size="small"] .clock-time {
+  font-size: clamp(2rem, 5vw, 3.4rem);
+}
+
+[data-size="small"] .metric-grid,
+[data-size="medium"] .metric-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1280px) {
+  .landing-shell,
+  .split-grid,
+  .media-layout,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-grid {
+    grid-template-rows: repeat(6, minmax(280px, 1fr));
+    height: auto;
+  }
+}

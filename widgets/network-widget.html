@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Network Widget</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/widgets.css">
+</head>
+<body class="widget-page">
+  <main class="widget-shell">
+    <header class="widget-header">
+      <div class="widget-title-group">
+        <div class="widget-icon">⇅</div>
+        <div>
+          <h1 class="widget-title">Network Monitor</h1>
+          <p class="widget-subtitle">Connection quality and estimated throughput</p>
+        </div>
+      </div>
+      <div id="network-status" class="widget-status">Measuring</div>
+    </header>
+    <section class="widget-content split-grid">
+      <article class="list-card">
+        <div class="network-list">
+          <div class="network-item"><span>Download</span><strong id="download-speed">--</strong></div>
+          <div class="network-item"><span>Upload</span><strong id="upload-speed">--</strong></div>
+          <div class="network-item"><span>Ping</span><strong id="ping-speed">--</strong></div>
+        </div>
+      </article>
+      <article class="list-card">
+        <div class="metric-label">Connection</div>
+        <div id="network-connection" class="metric-value">--</div>
+        <div id="network-detail" class="metric-detail">Browser network information</div>
+      </article>
+    </section>
+  </main>
+  <script src="../js/widget-core.js"></script>
+  <script>
+    (function () {
+      var seed = 37;
+      function nextValue(min, max) {
+        seed = (seed * 9301 + 49297) % 233280;
+        return min + (seed / 233280) * (max - min);
+      }
+
+      function getNetworkSnapshot() {
+        var connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        var downlink = connection && typeof connection.downlink === "number" ? connection.downlink : nextValue(45, 210);
+        var upload = downlink * nextValue(0.18, 0.36);
+        var ping = connection && typeof connection.rtt === "number" ? connection.rtt : nextValue(14, 42);
+        var type = connection && connection.effectiveType ? connection.effectiveType : "ethernet";
+        return {
+          download: downlink,
+          upload: upload,
+          ping: ping,
+          type: type,
+          detail: connection ? "Network Information API" : "Estimated fallback"
+        };
+      }
+
+      var widget = {
+        refreshInterval: 2000,
+        initWidget: function () {},
+        updateWidget: function () {
+          var snapshot = getNetworkSnapshot();
+          document.getElementById("download-speed").textContent = WidgetCore.formatBytesPerSecond(snapshot.download);
+          document.getElementById("upload-speed").textContent = WidgetCore.formatBytesPerSecond(snapshot.upload);
+          document.getElementById("ping-speed").textContent = Math.round(snapshot.ping) + " ms";
+          document.getElementById("network-connection").textContent = snapshot.type;
+          document.getElementById("network-detail").textContent = snapshot.detail;
+          document.getElementById("network-status").textContent = "Live";
+        },
+        destroyWidget: function () {
+          if (this.__interval) {
+            clearInterval(this.__interval);
+          }
+        }
+      };
+      WidgetCore.mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>
