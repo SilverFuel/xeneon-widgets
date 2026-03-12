@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/widgets.css">
+</head>
+<body class="widget-page">
+  <main class="widget-shell">
+    <header class="widget-header">
+      <div class="widget-title-group">
+        <div class="widget-icon">🖥</div>
+        <div>
+          <h1 class="widget-title">System Monitor</h1>
+          <p class="widget-subtitle">Browser-accessible or simulated metrics</p>
+        </div>
+      </div>
+      <div id="system-status" class="widget-status">Refreshing</div>
+    </header>
+    <section class="widget-content metric-grid">
+      <article class="metric-card">
+        <div class="metric-label">CPU Usage</div>
+        <div id="cpu-usage" class="metric-value">--%</div>
+        <div class="bar"><span id="cpu-bar" style="width:0%"></span></div>
+        <div id="cpu-temp" class="metric-detail">-- C</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-label">GPU Usage</div>
+        <div id="gpu-usage" class="metric-value">--%</div>
+        <div class="bar"><span id="gpu-bar" style="width:0%"></span></div>
+        <div id="gpu-temp" class="metric-detail">-- C</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-label">RAM Usage</div>
+        <div id="ram-usage" class="metric-value">--%</div>
+        <div class="bar"><span id="ram-bar" style="width:0%"></span></div>
+        <div class="metric-detail">Memory pressure</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-label">Disk Activity</div>
+        <div id="disk-usage" class="metric-value">--%</div>
+        <div class="bar"><span id="disk-bar" style="width:0%"></span></div>
+        <div class="metric-detail">Active utilization</div>
+      </article>
+    </section>
+  </main>
+  <script src="../js/widget-core.js"></script>
+  <script src="../js/system-stats.js"></script>
+  <script>
+    (function () {
+      var widget = {
+        refreshInterval: 2000,
+        initWidget: function () {},
+        updateWidget: async function () {
+          var stats = await SystemStats.getSystemStats();
+          document.getElementById("cpu-usage").textContent = WidgetCore.formatPercent(stats.cpu);
+          document.getElementById("gpu-usage").textContent = WidgetCore.formatPercent(stats.gpu);
+          document.getElementById("ram-usage").textContent = WidgetCore.formatPercent(stats.ram);
+          document.getElementById("disk-usage").textContent = WidgetCore.formatPercent(stats.disk);
+          document.getElementById("cpu-temp").textContent = Math.round(stats.cpuTemp) + " C";
+          document.getElementById("gpu-temp").textContent = Math.round(stats.gpuTemp) + " C";
+          document.getElementById("cpu-bar").style.width = stats.cpu + "%";
+          document.getElementById("gpu-bar").style.width = stats.gpu + "%";
+          document.getElementById("ram-bar").style.width = stats.ram + "%";
+          document.getElementById("disk-bar").style.width = stats.disk + "%";
+          document.getElementById("system-status").textContent = stats.source;
+        },
+        destroyWidget: function () {
+          if (this.__interval) {
+            clearInterval(this.__interval);
+          }
+        }
+      };
+      WidgetCore.mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

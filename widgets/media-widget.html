@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Media Widget</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/widgets.css">
+</head>
+<body class="widget-page">
+  <main class="widget-shell">
+    <header class="widget-header">
+      <div class="widget-title-group">
+        <div class="widget-icon">♫</div>
+        <div>
+          <h1 class="widget-title">Media</h1>
+          <p class="widget-subtitle">Touch-first transport controls</p>
+        </div>
+      </div>
+      <div class="widget-status">Demo source</div>
+    </header>
+    <section class="widget-content media-layout">
+      <img id="album-art" class="album-art" alt="Album art" src="https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=600&q=80">
+      <article class="media-meta">
+        <div>
+          <div id="media-title" class="media-title">Midnight Circuit</div>
+          <div id="media-artist" class="media-artist">Neon Avenue</div>
+        </div>
+        <div class="progress-track"><span id="media-progress" style="width:38%"></span></div>
+        <div class="media-controls">
+          <button class="control-button" data-action="prev">Prev</button>
+          <button class="control-button is-primary" data-action="toggle">Pause</button>
+          <button class="control-button" data-action="next">Next</button>
+        </div>
+      </article>
+    </section>
+  </main>
+  <script src="../js/widget-core.js"></script>
+  <script src="../js/touch-controls.js"></script>
+  <script>
+    (function () {
+      var tracks = [
+        { title: "Midnight Circuit", artist: "Neon Avenue", art: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=600&q=80" },
+        { title: "Skyline Static", artist: "Voltage Hearts", art: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=600&q=80" },
+        { title: "Night Drive", artist: "Pulse Arcade", art: "https://images.unsplash.com/photo-1501612780327-45045538702b?auto=format&fit=crop&w=600&q=80" }
+      ];
+      var state = { index: 0, playing: true, progress: 38 };
+      function render() {
+        var track = tracks[state.index];
+        document.getElementById("media-title").textContent = track.title;
+        document.getElementById("media-artist").textContent = track.artist;
+        document.getElementById("album-art").src = track.art;
+        document.getElementById("media-progress").style.width = state.progress + "%";
+        document.querySelector('[data-action="toggle"]').textContent = state.playing ? "Pause" : "Play";
+      }
+      function stepTrack(direction) {
+        state.index = (state.index + direction + tracks.length) % tracks.length;
+        state.progress = 8;
+        render();
+      }
+      var widget = {
+        refreshInterval: 2000,
+        initWidget: function () {
+          TouchControls.enhanceControls(".control-button");
+          document.querySelectorAll(".control-button").forEach(function (button) {
+            button.addEventListener("click", function () {
+              var action = button.getAttribute("data-action");
+              if (action === "prev") {
+                stepTrack(-1);
+              } else if (action === "next") {
+                stepTrack(1);
+              } else {
+                state.playing = !state.playing;
+                render();
+              }
+            });
+          });
+        },
+        updateWidget: function () {
+          if (state.playing) {
+            state.progress = (state.progress + 4) % 100;
+            render();
+          }
+        },
+        destroyWidget: function () {
+          if (this.__interval) {
+            clearInterval(this.__interval);
+          }
+        }
+      };
+      WidgetCore.mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

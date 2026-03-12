@@ -1,0 +1,40 @@
+:root {
+  --color-bg: #0b0f14;
+  --color-panel: #1b2430;
+  --color-panel-2: #121922;
+  --color-accent: #00e0ff;
+  --color-accent-soft: rgba(0, 224, 255, 0.18);
+  --color-text: #e6edf3;
+  --color-text-dim: #8b9aab;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --shadow-panel: 0 20px 40px rgba(0, 0, 0, 0.35);
+  --radius-panel: 24px;
+  --font-ui: "Inter", "Roboto", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(0, 224, 255, 0.12), transparent 25%),
+    radial-gradient(circle at bottom right, rgba(48, 79, 254, 0.12), transparent 30%),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  overflow: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+}
