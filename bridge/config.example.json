@@ -1,0 +1,11 @@
+{
+  "port": 8976,
+  "weather": {
+    "apiKey": "",
+    "city": "Indianapolis",
+    "units": "metric"
+  },
+  "calendar": {
+    "icsUrl": ""
+  }
+}

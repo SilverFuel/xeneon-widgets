@@ -11,8 +11,9 @@
   <link rel="stylesheet" href="./css/widgets.css">
 </head>
 <body class="dashboard-native-page">
-  <main class="native-dashboard">
-    <section class="dash-card dash-card--wide">
+  <div id="dashboard-stage-shell" class="dashboard-stage-shell">
+    <main id="dashboard-stage" class="native-dashboard dashboard-stage">
+      <section class="dash-card dash-card--wide dash-card--clock">
       <header class="dash-card__header">
         <div class="dash-card__title-group">
           <div class="widget-icon">🕒</div>
@@ -27,9 +28,9 @@
         <div id="dashboard-clock-time" class="dash-clock__time">--:--:--</div>
         <div id="dashboard-clock-date" class="dash-clock__date">Loading date</div>
       </div>
-    </section>
+      </section>
 
-    <section class="dash-card">
+      <section class="dash-card dash-card--system">
       <header class="dash-card__header">
         <div class="dash-card__title-group">
           <div class="widget-icon">🖥</div>
@@ -66,9 +67,9 @@
           <div class="bar"><span id="dashboard-disk-bar" style="width:0%"></span></div>
         </article>
       </div>
-    </section>
+      </section>
 
-    <section class="dash-card">
+      <section class="dash-card dash-card--weather">
       <header class="dash-card__header">
         <div class="dash-card__title-group">
           <div class="widget-icon">☁</div>
@@ -90,9 +91,9 @@
         </div>
         <div id="dashboard-weather-forecast" class="dash-mini-list"></div>
       </div>
-    </section>
+      </section>
 
-    <section class="dash-card">
+      <section class="dash-card dash-card--network">
       <header class="dash-card__header">
         <div class="dash-card__title-group">
           <div class="widget-icon">⇅</div>
@@ -109,41 +110,41 @@
         <div class="dash-mini-list__item"><span>Ping</span><strong id="dashboard-ping">--</strong></div>
         <div class="dash-mini-list__item"><span>Link</span><strong id="dashboard-network-type">--</strong></div>
       </div>
-    </section>
+      </section>
 
-    <section class="dash-card dash-card--wide">
+      <section class="dash-card dash-card--wide dash-card--media">
       <header class="dash-card__header">
         <div class="dash-card__title-group">
           <div class="widget-icon">♫</div>
           <div>
             <h2 class="dash-card__title">Media</h2>
-            <p class="widget-subtitle">Touch-first transport controls</p>
+            <p class="widget-subtitle">Windows media session</p>
           </div>
         </div>
-        <div class="widget-status">Demo source</div>
+        <div id="dashboard-media-source" class="widget-status">Bridge required</div>
       </header>
       <div class="dash-media">
         <img
           id="dashboard-media-art"
           class="dash-media__art"
           alt="Album art"
-          src="https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=600&q=80">
+          src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='300' height='300' rx='28' fill='%23131b25'/%3E%3Ccircle cx='150' cy='150' r='66' fill='%2300e0ff' fill-opacity='0.18'/%3E%3Ccircle cx='150' cy='150' r='24' fill='%2300e0ff' fill-opacity='0.78'/%3E%3C/svg%3E">
         <div class="dash-media__meta">
           <div>
-            <div id="dashboard-media-title" class="dash-media__title">Midnight Circuit</div>
-            <div id="dashboard-media-artist" class="dash-media__artist">Neon Avenue</div>
+            <div id="dashboard-media-title" class="dash-media__title">No media session</div>
+            <div id="dashboard-media-artist" class="dash-media__artist">Run the bridge for live playback data</div>
           </div>
-          <div class="progress-track"><span id="dashboard-media-progress" style="width:38%"></span></div>
+          <div class="progress-track"><span id="dashboard-media-progress" style="width:0%"></span></div>
           <div class="media-controls">
             <button class="control-button" data-dashboard-action="prev">Prev</button>
-            <button class="control-button is-primary" data-dashboard-action="toggle">Pause</button>
+            <button class="control-button is-primary" data-dashboard-action="toggle">Play</button>
             <button class="control-button" data-dashboard-action="next">Next</button>
           </div>
         </div>
       </div>
-    </section>
+      </section>
 
-    <section class="dash-card">
+      <section class="dash-card dash-card--calendar">
       <header class="dash-card__header">
         <div class="dash-card__title-group">
           <div class="widget-icon">🗓</div>
@@ -152,7 +153,7 @@
             <p class="widget-subtitle">Today</p>
           </div>
         </div>
-        <div class="widget-status">Local schedule</div>
+        <div id="dashboard-calendar-source" class="widget-status">Bridge required</div>
       </header>
       <div class="dash-calendar">
         <div class="dash-calendar__today">
@@ -161,13 +162,11 @@
         </div>
         <div id="dashboard-calendar-list" class="dash-mini-list"></div>
       </div>
-    </section>
-  </main>
+      </section>
+    </main>
+  </div>
 
   <script src="./js/widget-core.js"></script>
-  <script src="./js/api-utils.js"></script>
-  <script src="./js/system-stats.js"></script>
-  <script src="./js/weather-api.js"></script>
   <script src="./js/touch-controls.js"></script>
   <script src="./js/dashboard.js"></script>
 </body>

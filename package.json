@@ -1,0 +1,7 @@
+{
+  "name": "xeneon-widgets",
+  "private": true,
+  "scripts": {
+    "bridge": "node bridge/server.mjs"
+  }
+}
