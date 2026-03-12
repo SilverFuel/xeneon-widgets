@@ -356,6 +356,22 @@ body.widget-page {
   transform-origin: top left;
 }
 
+.dash-warning {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 179, 71, 0.35);
+  border-radius: 18px;
+  background: rgba(255, 179, 71, 0.12);
+  color: #ffd9a8;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.dash-warning code {
+  color: inherit;
+}
+
 .dash-card {
   min-width: 0;
   min-height: 0;
@@ -548,12 +564,68 @@ body.widget-page {
   grid-column: span 2;
 }
 
+.layout-no-weather .dash-card--system {
+  grid-column: span 2;
+}
+
+.layout-no-weather .dash-card--network {
+  grid-column: span 2;
+}
+
 .layout-no-calendar .dash-card--media {
   grid-column: span 3;
 }
 
+.layout-no-weather.layout-no-media .dash-card--network {
+  grid-column: span 3;
+}
+
+.layout-no-weather.layout-no-calendar .dash-card--system {
+  grid-column: span 2;
+}
+
 .layout-no-media.layout-no-calendar .dash-card--network {
   grid-column: span 4;
+}
+
+.hosted-dashboard .dash-card--clock {
+  grid-column: span 3;
+}
+
+.dash-card--hosted-timezone {
+  grid-column: span 1;
+}
+
+.dash-card--hosted-note {
+  grid-column: span 3;
+}
+
+.dash-note-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dash-note {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dash-note strong {
+  font-size: 0.95rem;
+}
+
+.dash-note code {
+  color: var(--color-text-dim);
+  font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.82rem;
+  white-space: normal;
+  word-break: break-word;
 }
 
 [data-size="small"] .widget-shell {

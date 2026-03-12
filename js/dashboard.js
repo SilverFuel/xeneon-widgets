@@ -6,6 +6,10 @@
   var stageWidth = 2560;
   var stageHeight = 720;
 
+  function isLocalBridgeBlockedByPageOrigin() {
+    return window.location.protocol === "https:" && /^http:\/\/127\.0\.0\.1:\d+$/i.test(bridgeOrigin);
+  }
+
   function setScale() {
     var scale = Math.min(window.innerWidth / stageWidth, window.innerHeight / stageHeight);
     document.documentElement.style.setProperty("--dashboard-scale", String(scale));
@@ -84,16 +88,18 @@
   }
 
   async function renderWeather() {
+    var weatherCard = document.querySelector(".dash-card--weather");
     try {
       var weather = await fetchBridge("/api/weather?city=" + encodeURIComponent(weatherCity) + "&units=" + encodeURIComponent(weatherUnits));
 
       if (!weather.configured) {
-        setStatus("dashboard-weather-source", "Set weather key");
-        setText("dashboard-weather-condition", weather.message);
-        document.getElementById("dashboard-weather-forecast").innerHTML = "";
+        document.documentElement.classList.add("layout-no-weather");
+        weatherCard.classList.add("is-hidden");
         return;
       }
 
+      document.documentElement.classList.remove("layout-no-weather");
+      weatherCard.classList.remove("is-hidden");
       setText("dashboard-weather-city", weather.city);
       setText("dashboard-weather-temp", weather.temperature + "°");
       setText("dashboard-weather-condition", weather.condition);
@@ -103,6 +109,8 @@
       }).join("");
       setStatus("dashboard-weather-source", "Live");
     } catch (error) {
+      document.documentElement.classList.add("layout-no-weather");
+      weatherCard.classList.add("is-hidden");
       setStatus("dashboard-weather-source", "Bridge offline");
     }
   }
@@ -185,9 +193,15 @@
         document.documentElement.classList.add("layout-no-calendar");
         document.querySelector(".dash-card--calendar").classList.add("is-hidden");
       }
+      if (!health.capabilities.weather) {
+        document.documentElement.classList.add("layout-no-weather");
+        document.querySelector(".dash-card--weather").classList.add("is-hidden");
+      }
     } catch (error) {
+      document.documentElement.classList.add("layout-no-weather");
       document.documentElement.classList.add("layout-no-media");
       document.documentElement.classList.add("layout-no-calendar");
+      document.querySelector(".dash-card--weather").classList.add("is-hidden");
       document.querySelector(".dash-card--media").classList.add("is-hidden");
       document.querySelector(".dash-card--calendar").classList.add("is-hidden");
       setStatus("dashboard-system-source", "Bridge offline");
@@ -198,10 +212,31 @@
     }
   }
 
+  function showLocalhostWarning() {
+    document.getElementById("dashboard-bridge-warning").classList.remove("is-hidden");
+    document.documentElement.classList.add("layout-no-weather");
+    document.documentElement.classList.add("layout-no-media");
+    document.documentElement.classList.add("layout-no-calendar");
+    document.querySelector(".dash-card--weather").classList.add("is-hidden");
+    document.querySelector(".dash-card--media").classList.add("is-hidden");
+    document.querySelector(".dash-card--calendar").classList.add("is-hidden");
+    setStatus("dashboard-system-source", "Use localhost URL");
+    setStatus("dashboard-network-source", "Use localhost URL");
+    setStatus("dashboard-weather-source", "Use localhost URL");
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     setScale();
     renderClock();
     bindMediaControls();
+
+    if (isLocalBridgeBlockedByPageOrigin()) {
+      showLocalhostWarning();
+      window.addEventListener("resize", setScale);
+      window.setInterval(renderClock, 1000);
+      return;
+    }
+
     applyCapabilities();
     renderSystem();
     renderNetwork();

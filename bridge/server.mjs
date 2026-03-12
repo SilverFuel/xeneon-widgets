@@ -7,9 +7,23 @@ import http from "node:http";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, "..");
 const configPath = path.join(__dirname, "config.json");
 const exampleConfigPath = path.join(__dirname, "config.example.json");
 const config = loadConfig();
+const mimeTypes = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp"
+};
 
 function loadConfig() {
   const sourcePath = fs.existsSync(configPath) ? configPath : exampleConfigPath;
@@ -24,6 +38,44 @@ function json(response, statusCode, payload) {
     "Access-Control-Allow-Headers": "Content-Type"
   });
   response.end(JSON.stringify(payload));
+}
+
+function sendText(response, statusCode, text) {
+  response.writeHead(statusCode, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "no-store"
+  });
+  response.end(text);
+}
+
+function safeResolveStaticPath(requestUrl) {
+  const pathname = new URL(requestUrl, `http://127.0.0.1:${config.port}`).pathname;
+  const relativePath = pathname === "/" ? "dashboard.html" : pathname.replace(/^\/+/, "");
+  const resolvedPath = path.resolve(rootDir, relativePath);
+
+  if (!resolvedPath.startsWith(rootDir)) {
+    return null;
+  }
+
+  return resolvedPath;
+}
+
+function serveStaticFile(requestUrl, response) {
+  const filePath = safeResolveStaticPath(requestUrl);
+
+  if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    sendText(response, 404, "Not found");
+    return;
+  }
+
+  const extension = path.extname(filePath).toLowerCase();
+  const mimeType = mimeTypes[extension] || "application/octet-stream";
+
+  response.writeHead(200, {
+    "Content-Type": mimeType,
+    "Cache-Control": "no-store"
+  });
+  fs.createReadStream(filePath).pipe(response);
 }
 
 async function runWindowsPowerShell(script) {
@@ -268,7 +320,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    json(response, 404, { error: "Not found" });
+    serveStaticFile(request.url, response);
   } catch (error) {
     json(response, 500, { error: error.message });
   }

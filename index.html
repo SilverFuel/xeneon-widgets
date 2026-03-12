@@ -14,27 +14,27 @@
   <main class="landing-shell">
     <section class="hero-card">
       <p class="eyebrow">CORSAIR XENEON EDGE</p>
-      <h1>Paste-ready XENEON widgets</h1>
-      <p class="hero-copy">Use the hosted GitHub Pages URL in iCUE and run the local bridge for real Windows telemetry. No nested iframe dashboard, no fake stats.</p>
+      <h1>Two honest modes</h1>
+      <p class="hero-copy">Use the hosted dashboard when you want zero local setup. Use the localhost dashboard when you want real Windows telemetry with a one-time bridge install.</p>
       <div class="hero-actions">
-        <a class="button" href="./dashboard.html">Open dashboard</a>
-        <a class="button button-secondary" href="./widgets/clock-widget.html">Open clock widget</a>
+        <a class="button" href="./hosted-dashboard.html">Open hosted dashboard</a>
+        <a class="button button-secondary" href="./dashboard.html">Open real-time dashboard</a>
       </div>
     </section>
     <section class="widget-list-card">
       <h2>Paste Into iCUE</h2>
       <div class="widget-list">
-        <a class="widget-link" href="./dashboard.html">Dashboard page</a>
+        <a class="widget-link" href="./hosted-dashboard.html">Hosted dashboard</a>
+        <a class="widget-link" href="./dashboard.html">Real-time dashboard</a>
         <a class="widget-link" href="./widgets/clock-widget.html">Clock widget</a>
-        <a class="widget-link" href="./widgets/weather-widget.html">Weather widget</a>
       </div>
-      <pre class="snippet-block"><code>&lt;iframe src="https://silverfuel.github.io/xeneon-widgets/dashboard.html?v=20260312-1" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
-      <pre class="snippet-block"><code>&lt;iframe src="https://silverfuel.github.io/xeneon-widgets/widgets/clock-widget.html" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
+      <pre class="snippet-block"><code>&lt;iframe src="https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-3" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
+      <pre class="snippet-block"><code>&lt;iframe src="http://127.0.0.1:8976/dashboard.html?v=20260312-3" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
       <pre class="snippet-block"><code>1. Copy bridge/config.example.json to bridge/config.json
 2. Add your OpenWeather API key or calendar ICS URL if needed
-3. Run: node bridge/server.mjs
-4. Paste the iframe above into the iCUE iframe widget</code></pre>
-      <p class="footnote">Paste the dashboard iframe directly into iCUE. Run the local bridge for real system and network data, plus optional weather and calendar feeds.</p>
+3. Run once: powershell -ExecutionPolicy Bypass -File .\bridge\install-bridge.ps1
+4. Paste the localhost iframe above into the iCUE iframe widget</code></pre>
+      <p class="footnote">Hosted mode is helper-free and public. Real-time mode uses the local bridge and can be installed once to auto-start at logon.</p>
     </section>
   </main>
 </body>
