@@ -3,7 +3,7 @@
 ## Paste This Into iCUE
 
 ```html
-<iframe src="https://silverfuel.github.io/xeneon-widgets/dashboard.html" style="width:100%;height:100%;border:0;"></iframe>
+<iframe src="https://silverfuel.github.io/xeneon-widgets/dashboard.html?v=20260312-1" style="width:100%;height:100%;border:0;"></iframe>
 ```
 
 ## Real Data Setup
