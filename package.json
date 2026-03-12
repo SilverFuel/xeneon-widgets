@@ -2,6 +2,8 @@
   "name": "xeneon-widgets",
   "private": true,
   "scripts": {
-    "bridge": "node bridge/server.mjs"
+    "bridge": "node bridge/server.mjs",
+    "bridge:install": "powershell -ExecutionPolicy Bypass -File .\\bridge\\install-bridge.ps1",
+    "bridge:uninstall": "powershell -ExecutionPolicy Bypass -File .\\bridge\\uninstall-bridge.ps1"
   }
 }
