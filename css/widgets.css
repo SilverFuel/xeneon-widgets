@@ -328,17 +328,32 @@ body.widget-page {
 }
 
 .dashboard-native-page {
-  padding: 10px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
 }
 
-.native-dashboard {
+.dashboard-stage-shell {
+  position: relative;
+  width: calc(2560px * var(--dashboard-scale, 1));
+  height: calc(720px * var(--dashboard-scale, 1));
+  overflow: hidden;
+}
+
+.dashboard-stage.native-dashboard {
+  position: absolute;
+  inset: 0 auto auto 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  width: 100%;
-  height: calc(100vh - 20px);
+  width: 2560px;
+  height: 720px;
+  padding: 10px;
   min-height: 0;
+  transform: scale(var(--dashboard-scale, 1));
+  transform-origin: top left;
 }
 
 .dash-card {
@@ -346,8 +361,8 @@ body.widget-page {
   min-height: 0;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--color-border);
   border-radius: 24px;
   background:
@@ -383,7 +398,7 @@ body.widget-page {
 
 .dash-card__title {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
 }
 
@@ -396,14 +411,14 @@ body.widget-page {
 }
 
 .dash-clock__time {
-  font-size: clamp(3.8rem, 10vw, 6rem);
+  font-size: 5.3rem;
   line-height: 0.95;
   font-weight: 700;
   letter-spacing: -0.04em;
 }
 
 .dash-clock__date {
-  font-size: 1.05rem;
+  font-size: 0.96rem;
   color: var(--color-text-dim);
 }
 
@@ -426,7 +441,7 @@ body.widget-page {
 }
 
 .dash-stat__value {
-  font-size: 1.9rem;
+  font-size: 1.72rem;
   font-weight: 700;
 }
 
@@ -442,13 +457,13 @@ body.widget-page {
 }
 
 .dash-weather__temp {
-  font-size: 3.2rem;
+  font-size: 2.7rem;
   font-weight: 700;
 }
 
 .dash-weather__icon {
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
 }
 
 .dash-mini-list {
@@ -463,7 +478,7 @@ body.widget-page {
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 9px 11px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
 }
@@ -475,14 +490,14 @@ body.widget-page {
 
 .dash-mini-list__item span {
   color: var(--color-text-dim);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .dash-mini-list__item strong {
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   white-space: nowrap;
 }
 
@@ -492,8 +507,8 @@ body.widget-page {
 }
 
 .dash-media__art {
-  width: 180px;
-  min-width: 180px;
+  width: 150px;
+  min-width: 150px;
   height: 100%;
   border-radius: 20px;
   object-fit: cover;
@@ -507,18 +522,38 @@ body.widget-page {
 }
 
 .dash-media__title {
-  font-size: 2rem;
+  font-size: 1.55rem;
   font-weight: 700;
 }
 
 .dash-media__artist {
   color: var(--color-text-dim);
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .dash-calendar__today {
   display: grid;
   gap: 4px;
+}
+
+.is-hidden {
+  display: none;
+}
+
+.layout-no-media .dash-card--network {
+  grid-column: span 2;
+}
+
+.layout-no-media .dash-card--calendar {
+  grid-column: span 2;
+}
+
+.layout-no-calendar .dash-card--media {
+  grid-column: span 3;
+}
+
+.layout-no-media.layout-no-calendar .dash-card--network {
+  grid-column: span 4;
 }
 
 [data-size="small"] .widget-shell {
@@ -713,17 +748,7 @@ body.widget-page {
 @media (max-width: 1280px) {
   .landing-shell,
   .split-grid,
-  .media-layout,
-  .native-dashboard {
+  .media-layout {
     grid-template-columns: 1fr;
-  }
-
-  .native-dashboard {
-    grid-template-rows: repeat(6, minmax(280px, 1fr));
-    height: auto;
-  }
-
-  .dash-card--wide {
-    grid-column: auto;
   }
 }

@@ -1,27 +1,32 @@
 # XENEON Widgets
 
-Paste one of these directly into the iCUE iframe widget.
-
-## Dashboard
+## Paste This Into iCUE
 
 ```html
 <iframe src="https://silverfuel.github.io/xeneon-widgets/dashboard.html" style="width:100%;height:100%;border:0;"></iframe>
 ```
 
-## Clock
+## Real Data Setup
 
-```html
-<iframe src="https://silverfuel.github.io/xeneon-widgets/widgets/clock-widget.html" style="width:100%;height:100%;border:0;"></iframe>
+1. Copy `bridge/config.example.json` to `bridge/config.json`
+2. Put your OpenWeather API key in `bridge/config.json` if you want live weather
+3. Put an ICS URL in `bridge/config.json` if you want a real calendar feed
+4. Start the bridge:
+
+```powershell
+node bridge/server.mjs
 ```
 
-## Weather
+The dashboard reads real system and network data from `http://127.0.0.1:8976`.
 
-```html
-<iframe src="https://silverfuel.github.io/xeneon-widgets/widgets/weather-widget.html?apiKey=YOUR_KEY&city=Indianapolis" style="width:100%;height:100%;border:0;"></iframe>
-```
+## What Is Real Right Now
 
-## Notes
+- Clock: local time
+- System: Windows perf counters through the local bridge
+- Network: Windows counters and ping through the local bridge
+- Weather: OpenWeather through the local bridge when configured
+- Calendar: ICS feed through the local bridge when configured
 
-- `dashboard.html` is a single native page, not a nested iframe dashboard.
-- Replace `YOUR_KEY` with your OpenWeather API key for live weather.
-- Standalone widgets are also available under `widgets/`.
+## What Still Needs a Windows Media Bridge
+
+- Media playback is no longer faked, but the local bridge does not yet expose Windows media sessions or transport controls.
