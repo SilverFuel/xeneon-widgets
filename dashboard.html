@@ -10,14 +10,165 @@
   <link rel="stylesheet" href="./css/theme.css">
   <link rel="stylesheet" href="./css/widgets.css">
 </head>
-<body class="dashboard-page">
-  <main class="dashboard-grid">
-    <iframe class="dashboard-frame" title="Clock Widget" src="./widgets/clock-widget.html?size=large"></iframe>
-    <iframe class="dashboard-frame" title="System Monitor" src="./widgets/system-monitor.html?size=small"></iframe>
-    <iframe class="dashboard-frame" title="Weather Widget" src="./widgets/weather-widget.html?size=small"></iframe>
-    <iframe class="dashboard-frame" title="Network Widget" src="./widgets/network-widget.html?size=small"></iframe>
-    <iframe class="dashboard-frame" title="Media Widget" src="./widgets/media-widget.html?size=large"></iframe>
-    <iframe class="dashboard-frame" title="Calendar Widget" src="./widgets/calendar-widget.html?size=medium"></iframe>
+<body class="dashboard-native-page">
+  <main class="native-dashboard">
+    <section class="dash-card dash-card--wide">
+      <header class="dash-card__header">
+        <div class="dash-card__title-group">
+          <div class="widget-icon">🕒</div>
+          <div>
+            <h1 class="dash-card__title">Clock</h1>
+            <p class="widget-subtitle">Local time and date</p>
+          </div>
+        </div>
+        <div class="widget-status">Live</div>
+      </header>
+      <div class="dash-clock">
+        <div id="dashboard-clock-time" class="dash-clock__time">--:--:--</div>
+        <div id="dashboard-clock-date" class="dash-clock__date">Loading date</div>
+      </div>
+    </section>
+
+    <section class="dash-card">
+      <header class="dash-card__header">
+        <div class="dash-card__title-group">
+          <div class="widget-icon">🖥</div>
+          <div>
+            <h2 class="dash-card__title">System Monitor</h2>
+            <p class="widget-subtitle">Compact live metrics</p>
+          </div>
+        </div>
+        <div id="dashboard-system-source" class="widget-status">Refreshing</div>
+      </header>
+      <div class="dash-stat-grid">
+        <article class="dash-stat">
+          <span class="metric-label">CPU</span>
+          <strong id="dashboard-cpu" class="dash-stat__value">--%</strong>
+          <span id="dashboard-cpu-temp" class="metric-detail">-- C</span>
+          <div class="bar"><span id="dashboard-cpu-bar" style="width:0%"></span></div>
+        </article>
+        <article class="dash-stat">
+          <span class="metric-label">GPU</span>
+          <strong id="dashboard-gpu" class="dash-stat__value">--%</strong>
+          <span id="dashboard-gpu-temp" class="metric-detail">-- C</span>
+          <div class="bar"><span id="dashboard-gpu-bar" style="width:0%"></span></div>
+        </article>
+        <article class="dash-stat">
+          <span class="metric-label">RAM</span>
+          <strong id="dashboard-ram" class="dash-stat__value">--%</strong>
+          <span class="metric-detail">Memory use</span>
+          <div class="bar"><span id="dashboard-ram-bar" style="width:0%"></span></div>
+        </article>
+        <article class="dash-stat">
+          <span class="metric-label">Disk</span>
+          <strong id="dashboard-disk" class="dash-stat__value">--%</strong>
+          <span class="metric-detail">Activity</span>
+          <div class="bar"><span id="dashboard-disk-bar" style="width:0%"></span></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="dash-card">
+      <header class="dash-card__header">
+        <div class="dash-card__title-group">
+          <div class="widget-icon">☁</div>
+          <div>
+            <h2 class="dash-card__title">Weather</h2>
+            <p class="widget-subtitle">Current conditions</p>
+          </div>
+        </div>
+        <div id="dashboard-weather-source" class="widget-status">Fetching</div>
+      </header>
+      <div class="dash-weather">
+        <div class="dash-weather__current">
+          <div>
+            <div id="dashboard-weather-city" class="metric-label">City</div>
+            <div id="dashboard-weather-temp" class="dash-weather__temp">--°</div>
+            <div id="dashboard-weather-condition" class="metric-detail">Loading conditions</div>
+          </div>
+          <img id="dashboard-weather-icon" class="dash-weather__icon" alt="Weather icon">
+        </div>
+        <div id="dashboard-weather-forecast" class="dash-mini-list"></div>
+      </div>
+    </section>
+
+    <section class="dash-card">
+      <header class="dash-card__header">
+        <div class="dash-card__title-group">
+          <div class="widget-icon">⇅</div>
+          <div>
+            <h2 class="dash-card__title">Network</h2>
+            <p class="widget-subtitle">Throughput and latency</p>
+          </div>
+        </div>
+        <div id="dashboard-network-source" class="widget-status">Live</div>
+      </header>
+      <div class="dash-mini-list">
+        <div class="dash-mini-list__item"><span>Download</span><strong id="dashboard-download">--</strong></div>
+        <div class="dash-mini-list__item"><span>Upload</span><strong id="dashboard-upload">--</strong></div>
+        <div class="dash-mini-list__item"><span>Ping</span><strong id="dashboard-ping">--</strong></div>
+        <div class="dash-mini-list__item"><span>Link</span><strong id="dashboard-network-type">--</strong></div>
+      </div>
+    </section>
+
+    <section class="dash-card dash-card--wide">
+      <header class="dash-card__header">
+        <div class="dash-card__title-group">
+          <div class="widget-icon">♫</div>
+          <div>
+            <h2 class="dash-card__title">Media</h2>
+            <p class="widget-subtitle">Touch-first transport controls</p>
+          </div>
+        </div>
+        <div class="widget-status">Demo source</div>
+      </header>
+      <div class="dash-media">
+        <img
+          id="dashboard-media-art"
+          class="dash-media__art"
+          alt="Album art"
+          src="https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=600&q=80">
+        <div class="dash-media__meta">
+          <div>
+            <div id="dashboard-media-title" class="dash-media__title">Midnight Circuit</div>
+            <div id="dashboard-media-artist" class="dash-media__artist">Neon Avenue</div>
+          </div>
+          <div class="progress-track"><span id="dashboard-media-progress" style="width:38%"></span></div>
+          <div class="media-controls">
+            <button class="control-button" data-dashboard-action="prev">Prev</button>
+            <button class="control-button is-primary" data-dashboard-action="toggle">Pause</button>
+            <button class="control-button" data-dashboard-action="next">Next</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="dash-card">
+      <header class="dash-card__header">
+        <div class="dash-card__title-group">
+          <div class="widget-icon">🗓</div>
+          <div>
+            <h2 class="dash-card__title">Calendar</h2>
+            <p class="widget-subtitle">Today</p>
+          </div>
+        </div>
+        <div class="widget-status">Local schedule</div>
+      </header>
+      <div class="dash-calendar">
+        <div class="dash-calendar__today">
+          <div id="dashboard-calendar-day" class="dash-stat__value">--</div>
+          <div id="dashboard-calendar-date" class="metric-detail">Loading date</div>
+        </div>
+        <div id="dashboard-calendar-list" class="dash-mini-list"></div>
+      </div>
+    </section>
   </main>
+
+  <script src="./js/widget-core.js"></script>
+  <script src="./js/api-utils.js"></script>
+  <script src="./js/system-stats.js"></script>
+  <script src="./js/weather-api.js"></script>
+  <script src="./js/touch-controls.js"></script>
+  <script src="./js/dashboard.js"></script>
 </body>
 </html>
