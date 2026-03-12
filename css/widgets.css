@@ -312,16 +312,17 @@ body.widget-page {
 }
 
 .dashboard-page {
-  padding: 14px;
+  padding: 10px;
 }
 
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-rows: 340px 340px;
-  gap: 14px;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   width: 100%;
-  height: calc(100vh - 28px);
+  height: calc(100vh - 20px);
+  min-height: 0;
 }
 
 .dashboard-frame {
@@ -330,6 +331,7 @@ body.widget-page {
   border: 0;
   border-radius: 22px;
   background: transparent;
+  overflow: hidden;
 }
 
 .dashboard-frame:nth-child(1),
