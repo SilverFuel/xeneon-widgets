@@ -588,44 +588,143 @@ body.widget-page {
   grid-column: span 4;
 }
 
-.hosted-dashboard .dash-card--clock {
-  grid-column: span 3;
+.hosted-weather-stage {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: 1fr;
 }
 
-.dash-card--hosted-timezone {
-  grid-column: span 1;
+.dash-card--hosted-weather {
+  grid-column: 1 / -1;
+  gap: 18px;
 }
 
-.dash-card--hosted-note {
-  grid-column: span 3;
-}
-
-.dash-note-grid {
+.hosted-weather-layout {
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 18px;
 }
 
-.dash-note {
-  min-width: 0;
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 16px;
+.hosted-weather-current,
+.hosted-weather-forecast {
+  min-height: 0;
+  padding: 22px;
+  border-radius: 20px;
   border: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.03);
 }
 
-.dash-note strong {
-  font-size: 0.95rem;
+.hosted-weather-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
 }
 
-.dash-note code {
+.hosted-weather-current__copy {
+  display: grid;
+  gap: 10px;
+}
+
+.hosted-weather-current__temp {
+  font-size: clamp(4.6rem, 10vw, 7rem);
+  line-height: 0.92;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+.hosted-weather-current__condition {
   color: var(--color-text-dim);
-  font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 1.25rem;
+}
+
+.hosted-weather-current__icon {
+  width: 170px;
+  height: 170px;
+  object-fit: contain;
+}
+
+.hosted-weather-forecast__grid {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hosted-weather-forecast__item {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 18px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.hosted-weather-forecast__item span,
+.hosted-weather-forecast__item small {
+  color: var(--color-text-dim);
+}
+
+.hosted-weather-forecast__item span {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hosted-weather-forecast__item strong {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.hosted-weather-forecast__item small {
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.hosted-empty-state {
+  min-height: 0;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 14px;
+  padding: 34px 36px;
+  border-radius: 24px;
+  border: 1px solid var(--color-border);
+  background:
+    radial-gradient(circle at top right, rgba(0, 224, 255, 0.1), transparent 28%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.hosted-empty-state__eyebrow {
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
   font-size: 0.82rem;
-  white-space: normal;
-  word-break: break-word;
+}
+
+.hosted-empty-state__title {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.02;
+}
+
+.hosted-empty-state__copy {
+  max-width: 52rem;
+  margin: 0;
+  color: var(--color-text-dim);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.hosted-empty-state__code {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: rgba(3, 10, 18, 0.9);
+  color: var(--color-text);
+  font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.95rem;
 }
 
 [data-size="small"] .widget-shell {

@@ -3,107 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XENEON Hosted Dashboard</title>
+  <title>XENEON Hosted Weather</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./css/theme.css?v=20260312-3">
-  <link rel="stylesheet" href="./css/widgets.css?v=20260312-3">
+  <link rel="stylesheet" href="./css/theme.css?v=20260312-4">
+  <link rel="stylesheet" href="./css/widgets.css?v=20260312-4">
 </head>
 <body class="dashboard-native-page">
   <div class="dashboard-stage-shell">
-    <main class="native-dashboard dashboard-stage hosted-dashboard">
-      <section class="dash-card dash-card--wide dash-card--clock">
-        <header class="dash-card__header">
-          <div class="dash-card__title-group">
-            <div class="widget-icon">🕒</div>
-            <div>
-              <h1 class="dash-card__title">Clock</h1>
-              <p class="widget-subtitle">Hosted mode</p>
-            </div>
-          </div>
-          <div class="widget-status">Live</div>
-        </header>
-        <div class="dash-clock">
-          <div id="hosted-clock-time" class="dash-clock__time">--:--:--</div>
-          <div id="hosted-clock-date" class="dash-clock__date">Loading date</div>
-        </div>
-      </section>
-
-      <section class="dash-card dash-card--hosted-timezone">
-        <header class="dash-card__header">
-          <div class="dash-card__title-group">
-            <div class="widget-icon">🌐</div>
-            <div>
-              <h2 class="dash-card__title">Timezone</h2>
-              <p class="widget-subtitle">Local and UTC</p>
-            </div>
-          </div>
-          <div class="widget-status">Hosted</div>
-        </header>
-        <div class="dash-mini-list">
-          <div class="dash-mini-list__item"><span>Local zone</span><strong id="hosted-timezone-name">--</strong></div>
-          <div class="dash-mini-list__item"><span>UTC time</span><strong id="hosted-utc-time">--:--</strong></div>
-          <div class="dash-mini-list__item"><span>Offset</span><strong id="hosted-utc-offset">UTC --</strong></div>
-        </div>
-      </section>
-
-      <section class="dash-card dash-card--weather">
+    <main class="native-dashboard dashboard-stage hosted-weather-stage">
+      <section class="dash-card dash-card--hosted-weather">
         <header class="dash-card__header">
           <div class="dash-card__title-group">
             <div class="widget-icon">☁</div>
             <div>
-              <h2 class="dash-card__title">Weather</h2>
-              <p class="widget-subtitle">Optional OpenWeather feed</p>
+              <h1 class="dash-card__title">Weather</h1>
+              <p class="widget-subtitle">Hosted mode</p>
             </div>
           </div>
-          <div id="hosted-weather-source" class="widget-status">Waiting</div>
+          <div id="hosted-weather-source" class="widget-status">Ready</div>
         </header>
-        <div class="dash-weather">
-          <div class="dash-weather__current">
-            <div>
-              <div id="hosted-weather-city" class="metric-label">City</div>
-              <div id="hosted-weather-temp" class="dash-weather__temp">--°</div>
-              <div id="hosted-weather-condition" class="metric-detail">Add ?apiKey=YOUR_KEY&amp;city=Indianapolis</div>
-            </div>
-            <img id="hosted-weather-icon" class="dash-weather__icon" alt="Weather icon">
-          </div>
-          <div id="hosted-weather-forecast" class="dash-mini-list"></div>
-        </div>
-      </section>
 
-      <section class="dash-card dash-card--wide dash-card--hosted-note">
-        <header class="dash-card__header">
-          <div class="dash-card__title-group">
-            <div class="widget-icon">ℹ</div>
-            <div>
-              <h2 class="dash-card__title">Hosted Dashboard</h2>
-              <p class="widget-subtitle">No local helper required</p>
+        <div id="hosted-weather-live" class="hosted-weather-layout is-hidden">
+          <section class="hosted-weather-current">
+            <div class="hosted-weather-current__copy">
+              <div id="hosted-weather-city" class="metric-label">City</div>
+              <div id="hosted-weather-temp" class="hosted-weather-current__temp">--°</div>
+              <div id="hosted-weather-condition" class="hosted-weather-current__condition">Loading conditions</div>
             </div>
-          </div>
-          <div class="widget-status">Public</div>
-        </header>
-        <div class="dash-note-grid">
-          <div class="dash-note">
-            <strong>Paste this in iCUE</strong>
-            <code>https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-3</code>
-          </div>
-          <div class="dash-note">
-            <strong>Live weather</strong>
-            <code>?apiKey=YOUR_KEY&amp;city=Indianapolis</code>
-          </div>
-          <div class="dash-note">
-            <strong>For real telemetry</strong>
-            <code>http://127.0.0.1:8976/dashboard.html?v=20260312-3</code>
-          </div>
+            <img id="hosted-weather-icon" class="hosted-weather-current__icon" alt="Weather icon">
+          </section>
+
+          <section class="hosted-weather-forecast">
+            <div id="hosted-weather-forecast" class="hosted-weather-forecast__grid"></div>
+          </section>
         </div>
+
+        <section id="hosted-weather-empty" class="hosted-empty-state">
+          <div class="hosted-empty-state__eyebrow">Hosted Weather</div>
+          <h2 class="hosted-empty-state__title">Add your OpenWeather key to the URL</h2>
+          <p class="hosted-empty-state__copy">This hosted page is intentionally simple: weather only, no helper, no fake telemetry.</p>
+          <code id="hosted-weather-url" class="hosted-empty-state__code">?apiKey=YOUR_KEY&amp;city=Indianapolis</code>
+        </section>
       </section>
     </main>
   </div>
 
-  <script src="./js/widget-core.js?v=20260312-3"></script>
-  <script src="./js/api-utils.js?v=20260312-3"></script>
-  <script src="./js/weather-api.js?v=20260312-3"></script>
-  <script src="./js/hosted-dashboard.js?v=20260312-3"></script>
+  <script src="./js/widget-core.js?v=20260312-4"></script>
+  <script src="./js/api-utils.js?v=20260312-4"></script>
+  <script src="./js/weather-api.js?v=20260312-4"></script>
+  <script src="./js/hosted-dashboard.js?v=20260312-4"></script>
 </body>
 </html>

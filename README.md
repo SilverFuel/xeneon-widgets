@@ -3,19 +3,20 @@
 ## Hosted Mode
 
 ```html
-<iframe src="https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-3" style="width:100%;height:100%;border:0;"></iframe>
+<iframe src="https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-4" style="width:100%;height:100%;border:0;"></iframe>
 ```
 
-Hosted mode uses only public web features:
+Hosted mode is intentionally minimal:
 
-- clock
-- timezone
-- optional weather if you add `?apiKey=YOUR_KEY&city=Indianapolis` to the URL
+- weather only
+- no helper
+- no fake telemetry
+- add `?apiKey=YOUR_KEY&city=Indianapolis` to the URL for live weather
 
 ## Real-Time Mode
 
 ```html
-<iframe src="http://127.0.0.1:8976/dashboard.html?v=20260312-3" style="width:100%;height:100%;border:0;"></iframe>
+<iframe src="http://127.0.0.1:8976/dashboard.html?v=20260312-4" style="width:100%;height:100%;border:0;"></iframe>
 ```
 
 ## One-Time Bridge Install
@@ -42,14 +43,14 @@ node bridge/server.mjs
 GitHub Pages is still fine for previewing the static UI:
 
 ```text
-https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-3
+https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-4
 ```
 
 Use the hosted page for the helper-free dashboard. Use the localhost page for live telemetry.
 
 ## What Is Real Right Now
 
-- Hosted mode: clock, timezone, optional OpenWeather
+- Hosted mode: weather only
 - Real-time mode: system and network through the local bridge
 - Real-time mode optional: weather and calendar through `bridge/config.json`
 
