@@ -25,4 +25,4 @@ Start-ScheduledTask -TaskName $taskName
 
 Write-Host "Installed scheduled task '$taskName'."
 Write-Host "The bridge will start automatically at logon."
-Write-Host "iCUE URL: http://127.0.0.1:8976/dashboard.html?v=20260312-3"
+Write-Host "iCUE URL: http://127.0.0.1:8976/dashboard.html?v=20260312-4"
