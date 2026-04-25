@@ -3,7 +3,7 @@
   var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
-  var assetRevision = "20260425-6";
+  var assetRevision = "20260425-7";
   var onboardingVersion = 1;
   var showAdvanced = params.get("advanced") === "1";
   var stageWidth = 2560;
@@ -997,6 +997,7 @@
             hueLinkEndpoint: buildUrl(bridgeOrigin, "/api/hue/link"),
             dashboardUrl: buildUrl(bridgeOrigin, "/dashboard.html", { v: assetRevision }),
             advancedUrl: buildUrl(bridgeOrigin, "/dashboard.html", { v: assetRevision, advanced: "1" }),
+            advanced: showAdvanced ? "1" : "",
             onboardingVersion: onboardingVersion
           });
         }
@@ -1434,6 +1435,7 @@
       bridgeOrigin: bridgeOrigin,
       assetRevision: assetRevision,
       onboardingVersion: onboardingVersion,
+      showAdvanced: showAdvanced,
       bridgeSetup: bridgeSetup,
       bridgeConfig: bridgeConfig,
       getSetting: getSetting,

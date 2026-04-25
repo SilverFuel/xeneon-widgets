@@ -62,7 +62,11 @@ if ($RunUninstall) {
   Write-Step "Running uninstaller"
   $removeScript = Join-Path $installRoot "Remove-XenonEdgeHost.ps1"
   Assert-Present $removeScript "Uninstaller script"
-  Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $removeScript, "-Quiet") -Wait -WindowStyle Hidden
+  $removeArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $removeScript, "-Quiet")
+  if ($RemoveLocalData) {
+    $removeArgs += "-RemoveLocalData"
+  }
+  Start-Process -FilePath "powershell.exe" -ArgumentList $removeArgs -Wait -WindowStyle Hidden
   Start-Sleep -Seconds 4
 
   Write-Step "Checking uninstall cleanup"
@@ -70,9 +74,12 @@ if ($RunUninstall) {
   Assert-Absent $shortcutRoot "Start Menu shortcut folder"
   Assert-Absent $desktopShortcut "Desktop shortcut"
   Assert-Absent $uninstallKey "Apps and Features uninstall entry"
-}
-
-if ($RemoveLocalData) {
+  if ($RemoveLocalData) {
+    Write-Step "Checking local data cleanup"
+    Assert-Absent $userDataRoot "Roaming local data"
+    Assert-Absent $localDataRoot "Local app data"
+  }
+} elseif ($RemoveLocalData) {
   Write-Step "Removing current-user local data"
   foreach ($path in @($userDataRoot, $localDataRoot)) {
     if (Test-Path -LiteralPath $path) {

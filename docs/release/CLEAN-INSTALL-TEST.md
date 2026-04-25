@@ -8,9 +8,10 @@ Run this before every public Windows release. Use a fresh Windows user profile o
 2. Run the installer from a normal user account.
 3. Confirm the Start Menu shortcut appears.
 4. Confirm the Desktop shortcut appears if enabled.
-5. Open XENEON Edge Host from the Start Menu.
-6. Confirm the dashboard opens at `http://127.0.0.1:8976/`.
-7. Finish setup without configuring optional integrations.
+5. Confirm the Start Menu includes Uninstall and Remove Local Data.
+6. Open XENEON Edge Host from the Start Menu.
+7. Confirm the dashboard opens at `http://127.0.0.1:8976/`.
+8. Finish setup without configuring optional integrations.
 
 ## First Launch
 
@@ -29,6 +30,7 @@ Run this before every public Windows release. Use a fresh Windows user profile o
 3. Click Confirm reset.
 4. Confirm setup returns to the first-run state.
 5. Confirm Weather and Hue secrets are removed from protected storage.
+6. Reconfigure one harmless setting, then use the Start Menu cleanup uninstall shortcut and confirm local data is removed.
 
 ## Restart
 

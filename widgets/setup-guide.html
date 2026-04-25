@@ -457,16 +457,15 @@
           </div>
           <div id="guide-integrations" class="optional-list"></div>
           <p class="empty-copy">These stay hidden until configured.</p>
-          <pre id="guide-advanced-url" class="url-box"></pre>
           <div class="actions">
-            <button id="guide-copy-advanced" class="button" type="button">Copy advanced URL</button>
+            <a id="guide-open-advanced" class="button" href="#">Open advanced</a>
           </div>
         </section>
       </div>
     </section>
   </main>
 
-  <script src="../js/widget-core.js?v=20260425-5"></script>
+  <script src="../js/widget-core.js?v=20260425-7"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
@@ -478,6 +477,7 @@
       var hueLinkEndpoint = params.get("hueLinkEndpoint") || "/api/hue/link";
       var dashboardUrl = params.get("dashboardUrl") || window.location.href;
       var advancedUrl = params.get("advancedUrl") || dashboardUrl;
+      var showAdvanced = params.get("advanced") === "1";
       var onboardingVersion = Number(params.get("onboardingVersion") || 1);
       var settingsStorageKey = "xeneon-dashboard-settings";
       var defaultDashboardSettings = {
@@ -588,7 +588,7 @@
       function renderSnippets() {
         var iframeSnippet = '<iframe src="' + dashboardUrl + '" width="2560" height="720" loading="eager" scrolling="no" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border:0;overflow:hidden;background:#0b0f14;"></iframe>';
         document.getElementById("guide-iframe-snippet").textContent = iframeSnippet;
-        document.getElementById("guide-advanced-url").textContent = advancedUrl;
+        document.getElementById("guide-open-advanced").href = advancedUrl;
       }
 
       function countState(items, state) {
@@ -906,10 +906,16 @@
           renderOverview(setup);
           renderEssentials(setup);
           renderOptional(config, hue, setup);
-          renderIntegrations();
+          if (showAdvanced) {
+            renderIntegrations();
+          } else {
+            document.getElementById("guide-integrations").innerHTML = "";
+          }
           renderCompletion(setup);
           bindOptionalForms();
-          bindIntegrationForms();
+          if (showAdvanced) {
+            bindIntegrationForms();
+          }
           setGuideStatus(setup.needsAttention || !setup.onboardingCompleted ? "Needs Setup" : "Ready", setup.needsAttention || !setup.onboardingCompleted ? "Needs Setup" : "Ready");
         } catch (error) {
           setGuideStatus("Needs Setup", "Needs Setup");
@@ -999,9 +1005,6 @@
           });
           document.getElementById("guide-copy-url-button").addEventListener("click", function () {
             copyText(dashboardUrl);
-          });
-          document.getElementById("guide-copy-advanced").addEventListener("click", function () {
-            copyText(advancedUrl);
           });
         },
         updateWidget: function () {

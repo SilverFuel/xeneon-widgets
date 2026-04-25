@@ -6,7 +6,7 @@ namespace XenonEdgeHost;
 
 public sealed class BridgeManager : IDisposable
 {
-    private const string DashboardAssetRevision = "20260425-6";
+    private const string DashboardAssetRevision = "20260425-7";
     private const int MaxJsonBodyBytes = 256 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

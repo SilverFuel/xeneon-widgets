@@ -694,6 +694,25 @@
     var onboardingCompleted = Boolean(setup.onboardingCompleted);
     var weatherConfig = config.weather || {};
     var calendarConfig = config.calendar || {};
+    var advancedSetupUrl = buildBridgeUrl(env, "/dashboard.html", {
+      widget: "setup",
+      advanced: "1",
+      v: env.assetRevision || ""
+    });
+    var advancedSetupBlock = env.showAdvanced
+      ? '<div class="inline-grid inline-grid--2">' + renderAdvancedSetupForms(env) + '</div>'
+      : '<article class="list-card inline-card">' +
+          '<div class="inline-card-header">' +
+            '<div>' +
+              '<div class="metric-label">Advanced connectors</div>' +
+              '<div class="router-inline-copy">Hidden from normal setup.</div>' +
+            '</div>' +
+            statusPill("Optional", "muted") +
+          '</div>' +
+          '<div class="inline-actions">' +
+            '<a class="inline-button" href="' + escapeHtml(advancedSetupUrl) + '">Open advanced</a>' +
+          '</div>' +
+        '</article>';
 
     return '' +
       '<div class="inline-widget-shell">' +
@@ -787,7 +806,7 @@
             '</form>' +
           '</article>' +
         '</div>' +
-        '<div class="inline-grid inline-grid--2">' + renderAdvancedSetupForms(env) + '</div>' +
+        advancedSetupBlock +
       '</div>';
   }
 

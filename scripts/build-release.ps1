@@ -1,6 +1,7 @@
 param(
   [switch]$SkipInstaller,
   [switch]$SkipChecks,
+  [switch]$SkipReadiness,
   [string]$SignPath = "",
   [string]$CertificatePath = "",
   [string]$Thumbprint = ""
@@ -40,6 +41,21 @@ try {
       $signArgs += @("-Thumbprint", $Thumbprint)
     }
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\sign-windows.ps1 @signArgs
+  }
+
+  if (-not $SkipReadiness) {
+    Write-Step "Checking release readiness"
+    $readinessArgs = @("-AllowGitHubSupportPath")
+    $latestInstaller = $null
+    if (Test-Path app\dist) {
+      $latestInstaller = Get-ChildItem app\dist -Filter "*.exe" -File |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    }
+    if ($latestInstaller) {
+      $readinessArgs += @("-InstallerPath", $latestInstaller.FullName)
+    }
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\assert-release-ready.ps1 @readinessArgs
   }
 
   Write-Step "Release output"

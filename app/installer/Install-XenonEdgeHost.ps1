@@ -73,7 +73,7 @@ function Register-UninstallEntry($installPath, $exePath) {
 
 function Assert-SafeInstallPath($installPath) {
   $programsRoot = Join-Path $env:LOCALAPPDATA "Programs"
-  $resolvedProgramsRoot = [System.IO.Path]::GetFullPath($programsRoot)
+  $resolvedProgramsRoot = [System.IO.Path]::GetFullPath($programsRoot).TrimEnd('\') + '\'
   $resolvedInstallPath = [System.IO.Path]::GetFullPath($installPath)
   if (-not $resolvedInstallPath.StartsWith($resolvedProgramsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "InstallRoot must stay under $resolvedProgramsRoot"
@@ -134,6 +134,13 @@ try {
     -shortcutPath (Join-Path $shortcutRoot "Uninstall XENEON Edge Host.lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`"" `
+    -workingDirectory $InstallRoot `
+    -iconLocation $exePath
+
+  New-Shortcut `
+    -shortcutPath (Join-Path $shortcutRoot "Uninstall and Remove Local Data.lnk") `
+    -targetPath "powershell.exe" `
+    -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`" -RemoveLocalData" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 

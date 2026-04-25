@@ -30,6 +30,7 @@ XENEON Edge Host 0.2.0
 
 ## Before Upload
 
+- `npm run release:ready` passes.
 - Windows installer is signed.
 - macOS package is signed and notarized.
 - SHA256 files match the uploaded files.
