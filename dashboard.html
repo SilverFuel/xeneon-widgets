@@ -3,175 +3,87 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XENEON Dashboard</title>
+  <title>XENEON Real-Time Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./css/theme.css?v=20260312-3">
-  <link rel="stylesheet" href="./css/widgets.css?v=20260312-3">
+  <link rel="stylesheet" href="./css/theme.css?v=20260425-4">
+  <link rel="stylesheet" href="./css\widgets.css?v=20260425-4">
 </head>
 <body class="dashboard-native-page">
   <div id="dashboard-stage-shell" class="dashboard-stage-shell">
-    <main id="dashboard-stage" class="native-dashboard dashboard-stage">
+    <canvas id="dashboard-ambient-canvas" class="dashboard-ambient-canvas" aria-hidden="true"></canvas>
+    <div class="dashboard-ambient-layer" aria-hidden="true"></div>
+    <main id="dashboard-stage" class="dashboard-router-stage">
       <section id="dashboard-bridge-warning" class="dash-warning is-hidden">
-        Real-time mode requires the localhost dashboard URL:
+        Real-time widgets require the localhost dashboard URL:
         <code>http://127.0.0.1:8976/dashboard.html</code>
       </section>
-      <section class="dash-card dash-card--wide dash-card--clock">
-      <header class="dash-card__header">
-        <div class="dash-card__title-group">
-          <div class="widget-icon">🕒</div>
-          <div>
-            <h1 class="dash-card__title">Clock</h1>
-            <p class="widget-subtitle">Local time and date</p>
-          </div>
-        </div>
-        <div class="widget-status">Live</div>
-      </header>
-      <div class="dash-clock">
-        <div id="dashboard-clock-time" class="dash-clock__time">--:--:--</div>
-        <div id="dashboard-clock-date" class="dash-clock__date">Loading date</div>
-      </div>
-      </section>
 
-      <section class="dash-card dash-card--system">
-      <header class="dash-card__header">
-        <div class="dash-card__title-group">
-          <div class="widget-icon">🖥</div>
-          <div>
-            <h2 class="dash-card__title">System Monitor</h2>
-            <p class="widget-subtitle">Compact live metrics</p>
-          </div>
+      <aside class="router-rail">
+        <div class="router-rail__hero">
+          <p class="eyebrow">Real-Time Dashboard</p>
+          <h1 class="router-rail__title">Real-time widgets</h1>
+          <p id="dashboard-rail-copy" class="router-rail__copy">Finishing setup once keeps the main dashboard focused on the widgets that are ready now.</p>
         </div>
-        <div id="dashboard-system-source" class="widget-status">Refreshing</div>
-      </header>
-      <div class="dash-stat-grid">
-        <article class="dash-stat">
-          <span class="metric-label">CPU</span>
-          <strong id="dashboard-cpu" class="dash-stat__value">--%</strong>
-          <span id="dashboard-cpu-temp" class="metric-detail">-- C</span>
-          <div class="bar"><span id="dashboard-cpu-bar" style="width:0%"></span></div>
-        </article>
-        <article class="dash-stat">
-          <span class="metric-label">GPU</span>
-          <strong id="dashboard-gpu" class="dash-stat__value">--%</strong>
-          <span id="dashboard-gpu-temp" class="metric-detail">-- C</span>
-          <div class="bar"><span id="dashboard-gpu-bar" style="width:0%"></span></div>
-        </article>
-        <article class="dash-stat">
-          <span class="metric-label">RAM</span>
-          <strong id="dashboard-ram" class="dash-stat__value">--%</strong>
-          <span class="metric-detail">Memory use</span>
-          <div class="bar"><span id="dashboard-ram-bar" style="width:0%"></span></div>
-        </article>
-        <article class="dash-stat">
-          <span class="metric-label">Disk</span>
-          <strong id="dashboard-disk" class="dash-stat__value">--%</strong>
-          <span class="metric-detail">Activity</span>
-          <div class="bar"><span id="dashboard-disk-bar" style="width:0%"></span></div>
-        </article>
-      </div>
-      </section>
 
-      <section class="dash-card dash-card--weather">
-      <header class="dash-card__header">
-        <div class="dash-card__title-group">
-          <div class="widget-icon">☁</div>
-          <div>
-            <h2 class="dash-card__title">Weather</h2>
-            <p class="widget-subtitle">Current conditions</p>
-          </div>
+        <div class="router-status-stack">
+          <div id="dashboard-origin-status" class="widget-status">Loading</div>
+          <div id="dashboard-selection-status" class="widget-status">Selecting widget</div>
         </div>
-        <div id="dashboard-weather-source" class="widget-status">Fetching</div>
-      </header>
-      <div class="dash-weather">
-        <div class="dash-weather__current">
-          <div>
-            <div id="dashboard-weather-city" class="metric-label">City</div>
-            <div id="dashboard-weather-temp" class="dash-weather__temp">--°</div>
-            <div id="dashboard-weather-condition" class="metric-detail">Loading conditions</div>
-          </div>
-          <img id="dashboard-weather-icon" class="dash-weather__icon" alt="Weather icon">
-        </div>
-        <div id="dashboard-weather-forecast" class="dash-mini-list"></div>
-      </div>
-      </section>
 
-      <section class="dash-card dash-card--network">
-      <header class="dash-card__header">
-        <div class="dash-card__title-group">
-          <div class="widget-icon">⇅</div>
-          <div>
-            <h2 class="dash-card__title">Network</h2>
-            <p class="widget-subtitle">Throughput and latency</p>
-          </div>
-        </div>
-        <div id="dashboard-network-source" class="widget-status">Live</div>
-      </header>
-      <div class="dash-mini-list">
-        <div class="dash-mini-list__item"><span>Download</span><strong id="dashboard-download">--</strong></div>
-        <div class="dash-mini-list__item"><span>Upload</span><strong id="dashboard-upload">--</strong></div>
-        <div class="dash-mini-list__item"><span>Ping</span><strong id="dashboard-ping">--</strong></div>
-        <div class="dash-mini-list__item"><span>Link</span><strong id="dashboard-network-type">--</strong></div>
-      </div>
-      </section>
+        <button id="dashboard-diagnostics-rail" class="router-diagnostics is-hidden" type="button" data-state="needs-setup">
+          <span id="dashboard-diagnostics-rail-state" class="router-diagnostics__state">Needs Setup</span>
+          <strong class="router-diagnostics__title">Diagnostics</strong>
+          <span id="dashboard-diagnostics-rail-copy" class="router-diagnostics__copy">Open the diagnostics board.</span>
+        </button>
 
-      <section class="dash-card dash-card--wide dash-card--media">
-      <header class="dash-card__header">
-        <div class="dash-card__title-group">
-          <div class="widget-icon">♫</div>
-          <div>
-            <h2 class="dash-card__title">Media</h2>
-            <p class="widget-subtitle">Windows media session</p>
-          </div>
-        </div>
-        <div id="dashboard-media-source" class="widget-status">Bridge required</div>
-      </header>
-      <div class="dash-media">
-        <img
-          id="dashboard-media-art"
-          class="dash-media__art"
-          alt="Album art"
-          src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='300' height='300' rx='28' fill='%23131b25'/%3E%3Ccircle cx='150' cy='150' r='66' fill='%2300e0ff' fill-opacity='0.18'/%3E%3Ccircle cx='150' cy='150' r='24' fill='%2300e0ff' fill-opacity='0.78'/%3E%3C/svg%3E">
-        <div class="dash-media__meta">
-          <div>
-            <div id="dashboard-media-title" class="dash-media__title">No media session</div>
-            <div id="dashboard-media-artist" class="dash-media__artist">Run the bridge for live playback data</div>
-          </div>
-          <div class="progress-track"><span id="dashboard-media-progress" style="width:0%"></span></div>
-          <div class="media-controls">
-            <button class="control-button" data-dashboard-action="prev">Prev</button>
-            <button class="control-button is-primary" data-dashboard-action="toggle">Play</button>
-            <button class="control-button" data-dashboard-action="next">Next</button>
-          </div>
-        </div>
-      </div>
-      </section>
+        <div class="router-rail__lower">
+          <div id="dashboard-widget-picker" class="router-picker"></div>
 
-      <section class="dash-card dash-card--calendar">
-      <header class="dash-card__header">
-        <div class="dash-card__title-group">
-          <div class="widget-icon">🗓</div>
+          <section class="router-settings">
+            <header class="router-settings__header">
+              <div>
+                <p class="eyebrow">Integration Settings</p>
+                <h2 id="dashboard-settings-title" class="router-settings__title">Widget settings</h2>
+                <p id="dashboard-settings-copy" class="router-settings__copy">Local settings for the selected widget.</p>
+              </div>
+              <div class="router-settings__header-actions">
+                <button id="dashboard-diagnostics-inline" class="router-settings__button router-settings__button--ghost" type="button">Open Diagnostics</button>
+                <div id="dashboard-config-status" class="widget-status">Ready</div>
+              </div>
+            </header>
+
+            <div id="dashboard-widget-settings" class="router-settings__body"></div>
+          </section>
+        </div>
+      </aside>
+
+      <section class="router-viewer">
+        <header class="router-viewer__header">
           <div>
-            <h2 class="dash-card__title">Calendar</h2>
-            <p class="widget-subtitle">Today</p>
+            <p id="dashboard-widget-kicker" class="eyebrow">Active widget</p>
+            <h2 id="dashboard-widget-title" class="router-viewer__title">Loading</h2>
+            <p id="dashboard-widget-copy" class="router-viewer__copy">Preparing dashboard frame.</p>
           </div>
+          <div id="dashboard-widget-source" class="widget-status">Loading</div>
+        </header>
+
+        <div class="router-viewer__frame-shell">
+          <div id="dashboard-widget-loading" class="router-viewer__loading">Loading widget</div>
+          <div id="dashboard-widget-empty" class="router-viewer__empty is-hidden">
+            <strong id="dashboard-widget-empty-title">Bridge unavailable</strong>
+            <p id="dashboard-widget-empty-copy">Start the localhost bridge to load the selected widget.</p>
+            <button id="dashboard-widget-retry" class="router-settings__button is-primary" type="button">Retry connection</button>
+          </div>
+          <div id="dashboard-inline-widget" class="router-inline-widget is-hidden" aria-live="polite"></div>
         </div>
-        <div id="dashboard-calendar-source" class="widget-status">Bridge required</div>
-      </header>
-      <div class="dash-calendar">
-        <div class="dash-calendar__today">
-          <div id="dashboard-calendar-day" class="dash-stat__value">--</div>
-          <div id="dashboard-calendar-date" class="metric-detail">Loading date</div>
-        </div>
-        <div id="dashboard-calendar-list" class="dash-mini-list"></div>
-      </div>
       </section>
     </main>
   </div>
 
-  <script src="./js/widget-core.js?v=20260312-3"></script>
-  <script src="./js/touch-controls.js?v=20260312-3"></script>
-  <script src="./js/dashboard.js?v=20260312-3"></script>
+  <script src="./js/widget-core.js?v=20260425-4"></script>
+  <script src="./js/inline-widgets.js?v=20260425-4"></script>
+  <script src="./js/dashboard.js?v=20260425-4"></script>
 </body>
 </html>

@@ -7,12 +7,14 @@
     document.documentElement.style.setProperty("--dashboard-scale", String(scale));
   }
 
-  function renderEmptyState() {
+  function renderEmptyState(message) {
     var city = ApiUtils.getQueryParam("city", "Indianapolis");
-    document.getElementById("hosted-weather-source").textContent = "Add apiKey";
+    document.getElementById("hosted-weather-source").textContent = message || "Unavailable";
     document.getElementById("hosted-weather-empty").classList.remove("is-hidden");
     document.getElementById("hosted-weather-live").classList.add("is-hidden");
-    document.getElementById("hosted-weather-url").textContent = "?apiKey=YOUR_KEY&city=" + city;
+    document.getElementById("hosted-weather-url").textContent = message === "Open setup"
+      ? "http://127.0.0.1:8976/dashboard.html?widget=setup"
+      : "Weather request failed for " + city;
   }
 
   function renderForecast(entries) {
@@ -26,8 +28,8 @@
     try {
       var weather = await WeatherApi.fetchWeather();
 
-      if (weather.source === "fallback") {
-        renderEmptyState();
+      if (weather.configured === false) {
+        renderEmptyState("Open setup");
         return;
       }
 
@@ -38,12 +40,9 @@
       document.getElementById("hosted-weather-temp").textContent = weather.temperature + "°";
       document.getElementById("hosted-weather-condition").textContent = weather.condition;
       document.getElementById("hosted-weather-icon").src = WeatherApi.getWeatherIconUrl(weather.icon);
-      renderForecast(weather.forecast.slice(0, 5));
+      renderForecast((weather.forecast || weather.hourly || []).slice(0, 5));
     } catch (error) {
-      document.getElementById("hosted-weather-source").textContent = "Unavailable";
-      document.getElementById("hosted-weather-empty").classList.remove("is-hidden");
-      document.getElementById("hosted-weather-live").classList.add("is-hidden");
-      document.getElementById("hosted-weather-url").textContent = "Weather request failed";
+      renderEmptyState("Unavailable");
     }
   }
 

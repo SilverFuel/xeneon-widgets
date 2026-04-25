@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>XenonEdgeHost</RootNamespace>
+    <AssemblyName>XenonEdgeHost</AssemblyName>
+    <Product>XENEON Edge Host</Product>
+    <Company>SilverFuel</Company>
+    <Authors>SilverFuel</Authors>
+    <Version>0.2.0</Version>
+    <FileVersion>0.2.0.0</FileVersion>
+    <InformationalVersion>0.2.0+20260425</InformationalVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <PublishSingleFile>false</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <ApplicationIcon>Assets\XenonEdgeHost.ico</ApplicationIcon>
+    <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\bridge\audio-core.cs" Link="Audio\audio-core.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="dist\**\*;installer-build\**\*;installer\**\*;*.ps1;*.sln" />
+    <None Remove="dist\**\*;installer-build\**\*;installer\**\*;*.ps1;*.sln" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('FixedRuntime')">
+    <Content Include="FixedRuntime\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\dashboard.html" Link="WebAssets\dashboard.html" LogicalName="WebAssets/dashboard.html" />
+    <EmbeddedResource Include="..\hosted-dashboard.html" Link="WebAssets\hosted-dashboard.html" LogicalName="WebAssets/hosted-dashboard.html" />
+    <EmbeddedResource Include="..\index.html" Link="WebAssets\index.html" LogicalName="WebAssets/index.html" />
+    <EmbeddedResource Include="..\css\**\*" Link="WebAssets\css\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/css/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\js\**\*" Link="WebAssets\js\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/js/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\widgets\**\*" Link="WebAssets\widgets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/widgets/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\assets\**\*" Link="WebAssets\assets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/assets/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -3,38 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XENEON Widgets</title>
+  <title>XENEON Edge Host</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./css/theme.css">
   <link rel="stylesheet" href="./css/widgets.css">
 </head>
-<body class="landing-page">
+<body class="landing-page landing-page--product">
   <main class="landing-shell">
     <section class="hero-card">
-      <p class="eyebrow">CORSAIR XENEON EDGE</p>
-      <h1>Two honest modes</h1>
-      <p class="hero-copy">Use the hosted weather page when you want zero local setup. Use the localhost dashboard when you want real Windows telemetry with a one-time bridge install.</p>
+      <p class="eyebrow">Native Windows dashboard</p>
+      <h1>XENEON Edge Host</h1>
+      <p class="hero-copy">A local dashboard app for the CORSAIR XENEON EDGE: system telemetry, network stats, audio routing, media controls, weather, calendar, Hue lights, launchers, and home-lab panels in one 2560x720 control surface.</p>
       <div class="hero-actions">
-        <a class="button" href="./hosted-dashboard.html">Open hosted weather</a>
-        <a class="button button-secondary" href="./dashboard.html">Open real-time dashboard</a>
+        <a class="button" href="http://127.0.0.1:8976/dashboard.html?v=20260425-4">Open local dashboard</a>
+        <a class="button button-secondary" href="./hosted-dashboard.html?v=20260425-4">Open hosted preview</a>
+      </div>
+      <div class="landing-signal" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
     </section>
     <section class="widget-list-card">
-      <h2>Paste Into iCUE</h2>
-      <div class="widget-list">
-        <a class="widget-link" href="./hosted-dashboard.html">Hosted weather</a>
-        <a class="widget-link" href="./dashboard.html">Real-time dashboard</a>
-        <a class="widget-link" href="./widgets/clock-widget.html">Clock widget</a>
+      <p class="eyebrow">Install path</p>
+      <h2>Build, launch, install</h2>
+      <div class="widget-list product-path-list">
+        <a class="widget-link" href="http://127.0.0.1:8976/dashboard.html?v=20260425-4">Dashboard served by the native host</a>
+        <a class="widget-link" href="http://127.0.0.1:8976/dashboard.html?advanced=1&v=20260425-4">Diagnostics and setup mode</a>
+        <a class="widget-link" href="./hosted-dashboard.html?v=20260425-4">Hosted weather-only preview</a>
       </div>
-      <pre class="snippet-block"><code>&lt;iframe src="https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-4" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
-      <pre class="snippet-block"><code>&lt;iframe src="http://127.0.0.1:8976/dashboard.html?v=20260312-4" style="width:100%;height:100%;border:0;"&gt;&lt;/iframe&gt;</code></pre>
-      <pre class="snippet-block"><code>1. Copy bridge/config.example.json to bridge/config.json
-2. Add your OpenWeather API key or calendar ICS URL if needed
-3. Run once: powershell -ExecutionPolicy Bypass -File .\bridge\install-bridge.ps1
-4. Paste the localhost iframe above into the iCUE iframe widget</code></pre>
-      <p class="footnote">Hosted mode is helper-free and public. Real-time mode uses the local bridge and can be installed once to auto-start at logon.</p>
+      <pre class="snippet-block"><code>1. Open PowerShell in app
+2. Run: powershell -File publish.ps1
+3. Launch: ..\publish\XenonEdgeHost.exe
+4. Optional auto-start: powershell -File install.ps1</code></pre>
+      <pre class="snippet-block"><code>To create the easy installer:
+Double-click: Build XENEON Installer.cmd
+
+Output:
+app\dist\XenonEdgeHost-Setup.exe</code></pre>
+      <p class="footnote">The old iframe bridge still exists for compatibility, but the native host is the product path.</p>
+    </section>
+    <section class="widget-list-card landing-wide-card">
+      <p class="eyebrow">Commercial path</p>
+      <h2>What you would sell</h2>
+      <div class="landing-sell-grid">
+        <div><strong>Product</strong><span>A polished Windows companion app for XENEON EDGE owners.</span></div>
+        <div><strong>Package</strong><span>Signed installer, auto-start, first-run setup, and release notes.</span></div>
+        <div><strong>Proof</strong><span>Screenshots, demo video, feature list, privacy note, and support email.</span></div>
+        <div><strong>Branding</strong><span>Sell it as independent software, not an official CORSAIR product unless you have permission.</span></div>
+      </div>
+    </section>
+    <section class="widget-list-card landing-wide-card">
+      <p class="eyebrow">Value layer</p>
+      <h2>Now product-shaped</h2>
+      <div class="landing-sell-grid">
+        <div><strong>Profiles</strong><span>Gaming, streaming, home-lab, minimal, and command modes retheme and reorder the dashboard.</span></div>
+        <div><strong>Theme Studio</strong><span>Accent color, opacity, and animation controls make the display feel owned.</span></div>
+        <div><strong>Packs</strong><span>Curated widget bundles turn optional panels into sellable add-ons.</span></div>
+        <div><strong>Trust</strong><span>The privacy screen explains local settings, optional services, and release readiness.</span></div>
+      </div>
     </section>
   </main>
 </body>

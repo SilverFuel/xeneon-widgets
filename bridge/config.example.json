@@ -7,5 +7,15 @@
   },
   "calendar": {
     "icsUrl": ""
+  },
+  "hue": {
+    "bridgeIp": "",
+    "appKey": "",
+    "clientKey": ""
+  },
+  "dashboard": {
+    "onboardingCompleted": false,
+    "onboardingCompletedAt": "",
+    "onboardingVersion": 1
   }
 }

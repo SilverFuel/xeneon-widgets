@@ -1,59 +1,104 @@
-# XENEON Widgets
+# XENEON Edge Host
 
-## Hosted Mode
+XENEON Edge Host is a native Windows dashboard for the CORSAIR XENEON EDGE. It serves a 2560x720 local control surface with system telemetry, network stats, audio routing, media controls, weather, calendar, Hue lights, launchers, clipboard history, and optional home-lab panels.
 
-```html
-<iframe src="https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-4" style="width:100%;height:100%;border:0;"></iframe>
-```
+The product is now the native host in `app`, not the old iCUE iframe flow.
 
-Hosted mode is intentionally minimal:
+## Product Layer
 
-- weather only
-- no helper
-- no fake telemetry
-- add `?apiKey=YOUR_KEY&city=Indianapolis` to the URL for live weather
+The dashboard now includes the pieces that make it feel like an installable product:
 
-## Real-Time Mode
+- first-run diagnostics and setup
+- dashboard profiles for command, gaming, streaming, home-lab, and minimal modes
+- Theme Studio with accent, opacity, and animation controls
+- drag-and-drop layout ordering
+- release channel and GitHub release checks
+- OBS/streaming panel foundation
+- Game Mode profile and launcher handoff
+- marketplace-style widget packs
+- installer readiness panel
+- local-first privacy and trust screen
 
-```html
-<iframe src="http://127.0.0.1:8976/dashboard.html?v=20260312-4" style="width:100%;height:100%;border:0;"></iframe>
-```
+The update, streaming, and marketplace panels are product-ready foundations. Before charging customers for those specific features, wire them to a signed updater service, authenticated OBS commands, and hosted pack manifests.
 
-## One-Time Bridge Install
+## Install From Source
 
-1. Copy `bridge/config.example.json` to `bridge/config.json`
-2. Put your OpenWeather API key in `bridge/config.json` if you want live weather
-3. Put an ICS URL in `bridge/config.json` if you want a real calendar feed
-4. Install the bridge auto-start task once:
+1. Open PowerShell in `app`.
+2. Run `powershell -File publish.ps1`.
+3. Launch `..\publish\XenonEdgeHost.exe`.
+4. Optional: run `powershell -File install.ps1` to register auto-start at login.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\bridge\install-bridge.ps1
-```
+The native host:
 
-The bridge now serves both the dashboard and the APIs from `http://127.0.0.1:8976`.
+- runs full-screen on the XENEON EDGE
+- serves the dashboard locally on `http://127.0.0.1:8976/`
+- owns system, network, UniFi detection, audio, calendar, media, weather, and Hue APIs directly
+- stores Weather and Hue keys with Windows per-user protection instead of plain dashboard config
+- does not require Node.js for the normal app path
 
-## Manual Start
+## UniFi
 
-```powershell
-node bridge/server.mjs
-```
-
-## GitHub Pages
-
-GitHub Pages is still fine for previewing the static UI:
+Xenon includes a built-in UniFi detector now. The dashboard uses:
 
 ```text
-https://silverfuel.github.io/xeneon-widgets/hosted-dashboard.html?v=20260312-4
+http://127.0.0.1:8976/api/unifi/network
 ```
 
-Use the hosted page for the helper-free dashboard. Use the localhost page for live telemetry.
+That endpoint auto-detects a local UniFi OS console, such as `https://192.168.0.1`, and gives the dashboard a setup-free UniFi state. Full client, AP, app, and camera stats can be added later with a local credential flow, but the basic UniFi panel no longer requires a separate helper service.
 
-## What Is Real Right Now
+## Build The Installer
 
-- Hosted mode: weather only
-- Real-time mode: system and network through the local bridge
-- Real-time mode optional: weather and calendar through `bridge/config.json`
+The easiest packaging path is:
 
-## What Still Needs a Windows Media Bridge
+```text
+Build XENEON Installer.cmd
+```
 
-- Media playback is no longer faked, but the local bridge does not yet expose Windows media sessions or transport controls.
+Or from a terminal:
+
+```powershell
+powershell -File app\build-installer.ps1
+```
+
+That creates:
+
+- `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe`
+- `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe.sha256`
+- `app\dist\README-install.txt`
+
+The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, creates Start Menu and Desktop shortcuts, registers auto-start, and adds an Apps & Features uninstall entry.
+
+Before selling it, treat these as release blockers:
+
+- replace development branding with a clear product name
+- add a license, privacy note, support email, and release notes
+- sign the installer and executable
+- test first-run setup on a clean Windows machine
+- avoid presenting the app as an official CORSAIR product unless you have permission
+
+## First-Run Checklist
+
+- `System Monitor` renders
+- `Network Monitor` renders
+- `Audio` renders with live devices
+- `Media` renders and shows transport state
+- `Calendar` appears after you add an ICS feed in Diagnostics
+- `Weather` appears after you add an OpenWeather key
+- tray icon appears on the primary display
+- `install.ps1` creates the `XenonEdgeHost` logon task
+
+## Legacy Bridge
+
+`bridge/server.mjs` is now legacy-only.
+
+It is kept for the old browser/iCUE iframe workflow and compatibility testing, but the native WinUI host does not use it. If you are shipping or installing the current app, use the native host in `app` and ignore the legacy bridge scripts unless you are specifically testing the old path.
+
+## Legacy iCUE Path
+
+If you still want the old iframe flow for comparison, use `Start XENEON Widgets.cmd` and point iCUE at:
+
+```html
+<iframe src="http://127.0.0.1:8976/dashboard.html" width="2560" height="720" loading="eager" scrolling="no" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border:0;overflow:hidden;background:#0b0f14;"></iframe>
+```
+
+That path depends on the legacy bridge and is no longer the default.

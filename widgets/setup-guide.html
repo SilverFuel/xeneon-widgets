@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XENEON Setup Guide</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: rgba(27, 36, 48, 0.96);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --panel-strong: rgba(7, 14, 22, 0.78);
+      --accent: #00e0ff;
+      --text: #e6edf3;
+      --muted: #8b9aab;
+      --border: rgba(255, 255, 255, 0.08);
+      --good: #44d17a;
+      --warn: #ffb347;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      --font: Inter, Roboto, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.12), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(68, 240, 194, 0.08), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    h1,
+    h2,
+    h3,
+    p,
+    pre {
+      margin: 0;
+    }
+
+    code {
+      color: #c8f7ff;
+      font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 0.94em;
+    }
+
+    .widget {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 10px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(14, 20, 28, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .header,
+    .overview-strip,
+    .section-header,
+    .row-head,
+    .actions,
+    .panel-footer {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header,
+    .section-header,
+    .panel-footer {
+      justify-content: space-between;
+    }
+
+    .layout {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(380px, 0.92fr);
+      gap: 10px;
+    }
+
+    .column,
+    .panel,
+    .row-list,
+    .optional-list {
+      min-height: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .column {
+      align-content: start;
+    }
+
+    .column--main {
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .panel {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--panel-soft);
+      overflow: hidden;
+    }
+
+    .panel--fill {
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    .eyebrow,
+    .section-kicker,
+    .row-label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.68rem;
+    }
+
+    h1 {
+      font-size: 1.16rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    h2 {
+      font-size: 0.96rem;
+      font-weight: 700;
+    }
+
+    h3 {
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .subtitle,
+    .detail,
+    .empty-copy {
+      color: var(--muted);
+      line-height: 1.28;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 0.78rem;
+    }
+
+    .detail,
+    .empty-copy {
+      font-size: 0.72rem;
+    }
+
+    .overview-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .overview-chip {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .overview-chip strong {
+      display: block;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .overview-chip span {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .status,
+    .pill {
+      min-height: 32px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.06);
+      white-space: nowrap;
+      font-size: 0.72rem;
+      flex-shrink: 0;
+    }
+
+    .pill {
+      min-height: 24px;
+      padding: 4px 9px;
+      font-size: 0.66rem;
+    }
+
+    .tone-good {
+      color: #bfffe1;
+      background: rgba(68, 209, 122, 0.16);
+      border-color: rgba(68, 209, 122, 0.24);
+    }
+
+    .tone-warn {
+      color: #ffe4bd;
+      background: rgba(255, 179, 71, 0.16);
+      border-color: rgba(255, 179, 71, 0.24);
+    }
+
+    .tone-muted {
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .button {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .button.is-primary {
+      background: linear-gradient(90deg, var(--accent), #1fb7ff);
+      color: #041118;
+      font-weight: 700;
+    }
+
+    .button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .row-list,
+    .optional-list {
+      overflow: auto;
+      padding-right: 4px;
+      align-content: start;
+      gap: 8px;
+    }
+
+    .setup-row,
+    .optional-card {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .setup-row strong,
+    .optional-card strong {
+      display: block;
+      font-size: 0.84rem;
+      line-height: 1.15;
+    }
+
+    .setup-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+    }
+
+    .row-head {
+      justify-content: space-between;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .row-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .row-body {
+      display: grid;
+      gap: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 8px;
+    }
+
+    .row-body.is-hidden {
+      display: none;
+    }
+
+    .form,
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 150px;
+      gap: 8px;
+    }
+
+    .field label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 0.66rem;
+      font-weight: 600;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      min-height: 36px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-strong);
+      color: var(--text);
+      outline: none;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: rgba(0, 224, 255, 0.34);
+      box-shadow: 0 0 0 1px rgba(0, 224, 255, 0.12);
+    }
+
+    .snippet-box,
+    .url-box {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(7, 14, 22, 0.66);
+      color: #c8f7ff;
+      font-size: 0.72rem;
+      line-height: 1.38;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    .snippet-card {
+      display: grid;
+      gap: 8px;
+    }
+
+    .compact-note {
+      color: var(--muted);
+      font-size: 0.7rem;
+      line-height: 1.35;
+    }
+
+    .empty-copy {
+      padding: 6px 0;
+    }
+
+    @media (max-width: 980px) {
+      .overview-strip,
+      .layout,
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="widget">
+    <header class="header">
+      <div>
+        <p class="eyebrow">Diagnostics</p>
+        <h1>Setup & diagnostics</h1>
+        <p class="subtitle">Finish the three essentials once. Everything else stays optional.</p>
+      </div>
+      <div id="guide-status" class="status tone-warn">Loading</div>
+    </header>
+
+    <section id="guide-overview" class="overview-strip"></section>
+
+    <section class="layout">
+      <div class="column column--main">
+        <section class="panel panel--fill">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Essentials</p>
+              <h2>Required before finish setup</h2>
+            </div>
+            <button id="finish-setup" class="button is-primary" type="button" disabled>Finish setup</button>
+          </div>
+
+          <div id="guide-essentials" class="row-list"></div>
+
+          <div class="panel-footer">
+            <div class="snippet-card">
+              <div>
+                <p class="section-kicker">iCUE</p>
+                <h3>Paste once</h3>
+              </div>
+              <pre id="guide-iframe-snippet" class="snippet-box"></pre>
+              <div class="actions">
+                <button id="guide-copy-button" class="button is-primary" type="button">Copy iframe</button>
+                <button id="guide-copy-url-button" class="button" type="button">Copy URL</button>
+              </div>
+              <p id="guide-finish-copy" class="compact-note">Finish setup hides this panel from the main picker, but Diagnostics still stays available later.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="column">
+        <section class="panel">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Optional</p>
+              <h2>Weather + Hue</h2>
+            </div>
+            <div class="pill tone-muted">Optional</div>
+          </div>
+
+          <div id="guide-optional" class="optional-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Advanced</p>
+              <h2>Extra widgets</h2>
+            </div>
+          </div>
+          <div id="guide-integrations" class="optional-list"></div>
+          <p class="empty-copy">These stay hidden until configured.</p>
+          <pre id="guide-advanced-url" class="url-box"></pre>
+          <div class="actions">
+            <button id="guide-copy-advanced" class="button" type="button">Copy advanced URL</button>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="../js/widget-core.js?v=20260425-4"></script>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var healthEndpoint = params.get("healthEndpoint") || "/api/health";
+      var configEndpoint = params.get("configEndpoint") || "/api/config";
+      var dashboardConfigEndpoint = params.get("dashboardConfigEndpoint") || "/api/config/dashboard";
+      var weatherConfigEndpoint = params.get("weatherConfigEndpoint") || "/api/config/weather";
+      var hueEndpoint = params.get("hueEndpoint") || "/api/hue";
+      var hueLinkEndpoint = params.get("hueLinkEndpoint") || "/api/hue/link";
+      var dashboardUrl = params.get("dashboardUrl") || window.location.href;
+      var advancedUrl = params.get("advancedUrl") || dashboardUrl;
+      var onboardingVersion = Number(params.get("onboardingVersion") || 1);
+      var settingsStorageKey = "xeneon-dashboard-settings";
+      var defaultDashboardSettings = {
+        unifiCameraEndpoint: "",
+        unifiCameraFeed: "",
+        unifiCameraRelayUrl: "",
+        unifiCameraSnapshot: "",
+        unifiCameraName: "",
+        unifiCameraLocation: "",
+        unifiCameraFeedType: "",
+        unifiNetworkEndpoint: "",
+        plexEndpoint: "",
+        plexUplink: "",
+        nasEndpoint: "",
+        automationEndpoint: "",
+        automationActionEndpoint: ""
+      };
+      var expandedSections = {
+        weather: false,
+        hue: false,
+        "unifi-network": false,
+        "unifi-camera": false,
+        plex: false,
+        nas: false,
+        automation: false
+      };
+      var integrationSchemas = [
+        {
+          id: "unifi-network",
+          title: "UniFi Network",
+          copy: "Built into Xenon. It checks your local network automatically.",
+          state: "Built in",
+          fields: []
+        },
+        {
+          id: "unifi-camera",
+          title: "UniFi Camera",
+          copy: "Native camera connector is planned. No relay URL is needed for setup.",
+          state: "Later",
+          fields: []
+        },
+        {
+          id: "plex",
+          title: "Plex Server",
+          copy: "Native Plex connector is planned. No extra helper app is needed for setup.",
+          state: "Later",
+          fields: []
+        },
+        {
+          id: "nas",
+          title: "NAS Storage",
+          copy: "Native NAS connector is planned. No extra helper app is needed for setup.",
+          state: "Later",
+          fields: []
+        },
+        {
+          id: "automation",
+          title: "Home Automation",
+          copy: "Native smart-home connector is planned. Endpoint setup is no longer part of first run.",
+          state: "Later",
+          fields: []
+        }
+      ];
+
+      function fetchJson(url, options) {
+        return fetch(url, options || { cache: "no-store" }).then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed");
+          }
+          return response.json();
+        });
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function getToneClass(state) {
+        if (state === "Ready" || state === "Detected" || state === "Built in") {
+          return "tone-good";
+        }
+        if (state === "Needs Setup") {
+          return "tone-warn";
+        }
+        return "tone-muted";
+      }
+
+      function setGuideStatus(text, tone) {
+        var node = document.getElementById("guide-status");
+        node.textContent = text;
+        node.className = "status " + getToneClass(tone || "Optional");
+      }
+
+      function notifyParent(kind) {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            type: "xeneon:setup-updated",
+            kind: kind || "config"
+          }, "*");
+        }
+      }
+
+      function renderSnippets() {
+        var iframeSnippet = '<iframe src="' + dashboardUrl + '" width="2560" height="720" loading="eager" scrolling="no" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border:0;overflow:hidden;background:#0b0f14;"></iframe>';
+        document.getElementById("guide-iframe-snippet").textContent = iframeSnippet;
+        document.getElementById("guide-advanced-url").textContent = advancedUrl;
+      }
+
+      function countState(items, state) {
+        return items.filter(function (item) {
+          return item && item.state === state;
+        }).length;
+      }
+
+      function renderOverview(setup) {
+        var essentials = [setup.items.bridge, setup.items.system, setup.items.network];
+        var optional = [setup.items.weather, setup.items.hue, setup.items.calendar, setup.items.unifi].filter(Boolean);
+        var autoDetected = [setup.items.unifi].filter(function (item) {
+          return item && (item.state === "Detected" || item.state === "Ready" || item.state === "Built in");
+        }).length;
+        var needsAttention = countState(essentials.concat(optional), "Needs Setup");
+        var optionalReady = optional.filter(function (item) {
+          return item && (item.state === "Ready" || item.state === "Detected");
+        }).length;
+
+        document.getElementById("guide-overview").innerHTML = [
+          '<div class="overview-chip"><strong>' + countState(essentials, "Ready") + '/3</strong><span>Essentials ready</span></div>',
+          '<div class="overview-chip"><strong>' + (needsAttention || 0) + '</strong><span>Need attention</span></div>',
+          '<div class="overview-chip"><strong>' + optionalReady + '/' + optional.length + '</strong><span>Optional live</span></div>',
+          '<div class="overview-chip"><strong>' + autoDetected + '/1</strong><span>Auto detected</span></div>'
+        ].join("");
+      }
+
+      function weatherDetail(config, item) {
+        var weather = config && config.weather ? config.weather : {};
+        if (item.state === "Ready") {
+          return (weather.city || "City") + " / " + ((weather.units || "metric") === "imperial" ? "Imperial" : "Metric");
+        }
+        return item.nextStep;
+      }
+
+      function hueDetail(hueSnapshot, item) {
+        if (item.state === "Ready") {
+          return (hueSnapshot.bridgeIp || "Bridge linked") + " / " + ((hueSnapshot.lights || []).length || 0) + " lights";
+        }
+        if (hueSnapshot.bridgeIp) {
+          return hueSnapshot.bridgeIp + " / link still needed";
+        }
+        return item.nextStep;
+      }
+
+      function renderEssentials(setup) {
+        var items = [setup.items.bridge, setup.items.system, setup.items.network];
+        document.getElementById("guide-essentials").innerHTML = items.map(function (item) {
+          return '' +
+            '<div class="setup-row">' +
+              '<div class="row-copy">' +
+                '<span class="row-label">' + escapeHtml(item.required ? "Required" : "Optional") + '</span>' +
+                '<strong>' + escapeHtml(item.label) + '</strong>' +
+                '<span class="detail">' + escapeHtml(item.nextStep) + '</span>' +
+              '</div>' +
+              '<div class="pill ' + getToneClass(item.state) + '">' + escapeHtml(item.state) + '</div>' +
+            '</div>';
+        }).join("");
+      }
+
+      function shouldExpandSection(itemId, state) {
+        return expandedSections[itemId] || state === "Needs Setup";
+      }
+
+      function renderOptional(config, hueSnapshot, setup) {
+        var optionalItems = [
+          {
+            id: "weather",
+            item: setup.items.weather,
+            body: '' +
+              '<form id="weather-form" class="form">' +
+                '<div class="field">' +
+                  '<label for="weather-api-key">API key</label>' +
+                  '<input id="weather-api-key" type="password" placeholder="Leave blank to keep the current key">' +
+                '</div>' +
+                '<div class="form-row">' +
+                  '<div class="field">' +
+                    '<label for="weather-city">City</label>' +
+                    '<input id="weather-city" type="text" placeholder="Indianapolis" value="' + escapeHtml(config.weather.city || "Indianapolis") + '">' +
+                  '</div>' +
+                  '<div class="field">' +
+                    '<label for="weather-units">Units</label>' +
+                    '<select id="weather-units">' +
+                      '<option value="metric"' + ((config.weather.units || "metric") === "metric" ? " selected" : "") + '>Metric (C)</option>' +
+                      '<option value="imperial"' + ((config.weather.units || "metric") === "imperial" ? " selected" : "") + '>Imperial (F)</option>' +
+                    '</select>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="actions">' +
+                  '<button class="button is-primary" type="submit">Save weather</button>' +
+                '</div>' +
+              '</form>'
+          },
+          {
+            id: "hue",
+            item: setup.items.hue,
+            body: '' +
+              '<form id="hue-form" class="form">' +
+                '<div class="field">' +
+                  '<label for="hue-bridge-ip">Bridge IP</label>' +
+                  '<input id="hue-bridge-ip" type="text" placeholder="192.168.1.50" value="' + escapeHtml(hueSnapshot.bridgeIp || "") + '">' +
+                '</div>' +
+                '<div class="actions">' +
+                  '<button class="button is-primary" type="submit">Link bridge</button>' +
+                '</div>' +
+                '<p id="hue-message" class="detail">' + escapeHtml(hueSnapshot.message || "Press the physical button on the Hue bridge before linking.") + '</p>' +
+              '</form>'
+          }
+        ];
+
+        document.getElementById("guide-optional").innerHTML = optionalItems.map(function (entry) {
+          var expanded = shouldExpandSection(entry.id, entry.item.state);
+          var detail = entry.id === "weather"
+            ? weatherDetail(config, entry.item)
+            : hueDetail(hueSnapshot, entry.item);
+          return '' +
+            '<div class="optional-card">' +
+              '<button class="row-head" type="button" data-expand="' + entry.id + '">' +
+                '<div class="row-copy">' +
+                  '<span class="row-label">Optional</span>' +
+                  '<strong>' + escapeHtml(entry.item.label) + '</strong>' +
+                  '<span class="detail">' + escapeHtml(detail) + '</span>' +
+                '</div>' +
+                '<div class="pill ' + getToneClass(entry.item.state) + '">' + escapeHtml(entry.item.state) + '</div>' +
+              '</button>' +
+              '<div class="row-body' + (expanded ? "" : " is-hidden") + '" id="optional-body-' + entry.id + '">' +
+                entry.body +
+              '</div>' +
+            '</div>';
+        }).join("");
+      }
+
+      function bindOptionalForms() {
+        document.querySelectorAll("#guide-optional [data-expand]").forEach(function (button) {
+          button.addEventListener("click", function () {
+            var key = button.getAttribute("data-expand");
+            expandedSections[key] = !expandedSections[key];
+            var body = document.getElementById("optional-body-" + key);
+            if (body) {
+              body.classList.toggle("is-hidden", !expandedSections[key]);
+            }
+          });
+        });
+
+        var weatherForm = document.getElementById("weather-form");
+        var hueForm = document.getElementById("hue-form");
+
+        if (weatherForm) {
+          weatherForm.addEventListener("submit", saveWeather);
+        }
+
+        if (hueForm) {
+          hueForm.addEventListener("submit", linkHue);
+        }
+      }
+
+      function readDashboardSettings() {
+        try {
+          var raw = window.localStorage.getItem(settingsStorageKey);
+          return Object.assign({}, defaultDashboardSettings, raw ? JSON.parse(raw) : {});
+        } catch (error) {
+          return Object.assign({}, defaultDashboardSettings);
+        }
+      }
+
+      function saveDashboardSettings(values) {
+        var current = readDashboardSettings();
+        var next = Object.assign({}, current, values || {});
+        window.localStorage.setItem(settingsStorageKey, JSON.stringify(next));
+        return next;
+      }
+
+      function summarizeIntegration(schema, settings) {
+        if (!schema.fields.length) {
+          return schema.copy;
+        }
+
+        if (schema.id === "unifi-camera") {
+          if (settings.unifiCameraEndpoint) { return "Endpoint saved"; }
+          if (settings.unifiCameraRelayUrl) { return "Relay saved"; }
+          if (settings.unifiCameraFeed) { return "Feed saved"; }
+          if (settings.unifiCameraSnapshot) { return "Snapshot saved"; }
+          return schema.copy;
+        }
+
+        if (schema.id === "automation") {
+          if (settings.automationActionEndpoint) { return "State + action saved"; }
+          if (settings.automationEndpoint) { return "State saved"; }
+          return schema.copy;
+        }
+
+        return settings[schema.fields[0].key] ? "Endpoint saved" : schema.copy;
+      }
+
+      function getIntegrationState(schema, settings) {
+        if (!schema.fields.length) {
+          return schema.state || "Later";
+        }
+
+        if (schema.id === "unifi-camera") {
+          return settings.unifiCameraEndpoint || settings.unifiCameraFeed || settings.unifiCameraRelayUrl || settings.unifiCameraSnapshot
+            ? "Ready"
+            : "Optional";
+        }
+
+        if (schema.id === "automation") {
+          return settings.automationEndpoint || settings.automationActionEndpoint
+            ? "Ready"
+            : "Optional";
+        }
+
+        return settings[schema.fields[0].key] ? "Ready" : "Optional";
+      }
+
+      function renderIntegrations() {
+        var settings = readDashboardSettings();
+        document.getElementById("guide-integrations").innerHTML = integrationSchemas.map(function (schema) {
+          var state = getIntegrationState(schema, settings);
+          var expanded = shouldExpandSection(schema.id, state);
+          return '' +
+            '<div class="optional-card">' +
+              '<button class="row-head" type="button" data-expand="' + schema.id + '">' +
+                '<div class="row-copy">' +
+                  '<span class="row-label">Optional</span>' +
+                  '<strong>' + escapeHtml(schema.title) + '</strong>' +
+                  '<span class="detail">' + escapeHtml(summarizeIntegration(schema, settings)) + '</span>' +
+                '</div>' +
+                '<div class="pill ' + getToneClass(state) + '">' + escapeHtml(state) + '</div>' +
+              '</button>' +
+              '<div class="row-body' + (expanded ? "" : " is-hidden") + '" id="optional-body-' + schema.id + '">' +
+                (!schema.fields.length
+                  ? '<p class="detail">' + escapeHtml(schema.copy) + '</p>'
+                  :
+                '<form class="form" data-settings-form="' + schema.id + '">' +
+                  schema.fields.map(function (field) {
+                    return '' +
+                      '<div class="field">' +
+                        '<label for="' + escapeHtml(schema.id + "-" + field.key) + '">' + escapeHtml(field.label) + '</label>' +
+                        '<input id="' + escapeHtml(schema.id + "-" + field.key) + '" name="' + escapeHtml(field.key) + '" type="text" value="' + escapeHtml(settings[field.key] || "") + '" placeholder="' + escapeHtml(field.placeholder || "") + '">' +
+                      '</div>';
+                  }).join("") +
+                  '<div class="actions">' +
+                    '<button class="button is-primary" type="submit">Save</button>' +
+                  '</div>' +
+                '</form>') +
+              '</div>' +
+            '</div>';
+        }).join("");
+      }
+
+      function bindIntegrationForms() {
+        document.querySelectorAll("#guide-integrations [data-expand]").forEach(function (button) {
+          button.addEventListener("click", function () {
+            var key = button.getAttribute("data-expand");
+            expandedSections[key] = !expandedSections[key];
+            var body = document.getElementById("optional-body-" + key);
+            if (body) {
+              body.classList.toggle("is-hidden", !expandedSections[key]);
+            }
+          });
+        });
+
+        document.querySelectorAll("[data-settings-form]").forEach(function (form) {
+          form.addEventListener("submit", function (event) {
+            event.preventDefault();
+            var formData = new FormData(form);
+            var values = {};
+            formData.forEach(function (value, key) {
+              values[key] = String(value || "");
+            });
+            saveDashboardSettings(values);
+            renderIntegrations();
+            bindIntegrationForms();
+            notifyParent("local-settings");
+            setGuideStatus("Saved", "Ready");
+          });
+        });
+      }
+
+      function renderCompletion(setup) {
+        var finishButton = document.getElementById("finish-setup");
+        var finishCopy = document.getElementById("guide-finish-copy");
+
+        if (setup.onboardingCompleted) {
+          finishButton.disabled = true;
+          finishButton.textContent = "Completed";
+          finishCopy.textContent = setup.onboardingCompletedAt
+            ? "Onboarding completed on " + new Date(setup.onboardingCompletedAt).toLocaleString() + ". Diagnostics stays available if anything breaks."
+            : "Onboarding completed. Diagnostics stays available if anything breaks.";
+          return;
+        }
+
+        finishButton.textContent = "Finish setup";
+        finishButton.disabled = !setup.essentialsReady;
+        finishCopy.textContent = setup.essentialsReady
+          ? "Everything required is ready. Finish setup once to hide this panel from the main picker."
+          : "Finish setup unlocks the normal dashboard flow after Local bridge, System Monitor, and Network Monitor are ready.";
+      }
+
+      async function refreshGuide() {
+        try {
+          setGuideStatus("Refreshing", "Optional");
+          var results = await Promise.all([
+            fetchJson(healthEndpoint, { cache: "no-store" }),
+            fetchJson(configEndpoint, { cache: "no-store" }),
+            fetchJson(hueEndpoint, { cache: "no-store" })
+          ]);
+
+          var health = results[0];
+          var config = results[1];
+          var hue = results[2];
+          var setup = health.setup;
+
+          renderSnippets();
+          renderOverview(setup);
+          renderEssentials(setup);
+          renderOptional(config, hue, setup);
+          renderIntegrations();
+          renderCompletion(setup);
+          bindOptionalForms();
+          bindIntegrationForms();
+          setGuideStatus(setup.needsAttention || !setup.onboardingCompleted ? "Needs Setup" : "Ready", setup.needsAttention || !setup.onboardingCompleted ? "Needs Setup" : "Ready");
+        } catch (error) {
+          setGuideStatus("Needs Setup", "Needs Setup");
+        }
+      }
+
+      async function saveWeather(event) {
+        event.preventDefault();
+        var payload = {
+          apiKey: document.getElementById("weather-api-key").value,
+          city: document.getElementById("weather-city").value,
+          units: document.getElementById("weather-units").value
+        };
+
+        setGuideStatus("Saving", "Optional");
+        try {
+          await fetchJson(weatherConfigEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          document.getElementById("weather-api-key").value = "";
+          expandedSections.weather = true;
+          await refreshGuide();
+          notifyParent("weather");
+        } catch (error) {
+          setGuideStatus("Needs Setup", "Needs Setup");
+        }
+      }
+
+      async function linkHue(event) {
+        event.preventDefault();
+        var bridgeIp = document.getElementById("hue-bridge-ip").value;
+
+        setGuideStatus("Linking", "Optional");
+        try {
+          await fetchJson(hueLinkEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bridgeIp: bridgeIp })
+          });
+        } catch (error) {
+          var message = document.getElementById("hue-message");
+          if (message) {
+            message.textContent = "Link failed. Press the physical button on the bridge and try again.";
+          }
+        }
+
+        expandedSections.hue = true;
+        await refreshGuide();
+        notifyParent("hue");
+      }
+
+      async function finishSetup() {
+        setGuideStatus("Saving", "Optional");
+        try {
+          await fetchJson(dashboardConfigEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              onboardingCompleted: true,
+              onboardingVersion: onboardingVersion
+            })
+          });
+          await refreshGuide();
+          notifyParent("dashboard");
+        } catch (error) {
+          setGuideStatus("Needs Setup", "Needs Setup");
+        }
+      }
+
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          setGuideStatus("Copied", "Ready");
+        } catch (error) {
+          setGuideStatus("Copy failed", "Needs Setup");
+        }
+      }
+
+      var widget = {
+        refreshInterval: 30000,
+        initWidget: function () {
+          document.getElementById("finish-setup").addEventListener("click", finishSetup);
+          document.getElementById("guide-copy-button").addEventListener("click", function () {
+            copyText(document.getElementById("guide-iframe-snippet").textContent);
+          });
+          document.getElementById("guide-copy-url-button").addEventListener("click", function () {
+            copyText(dashboardUrl);
+          });
+          document.getElementById("guide-copy-advanced").addEventListener("click", function () {
+            copyText(advancedUrl);
+          });
+        },
+        updateWidget: function () {
+          return refreshGuide();
+        },
+        destroyWidget: function () {
+          if (this.__interval) {
+            clearInterval(this.__interval);
+          }
+        }
+      };
+
+      WidgetCore.mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

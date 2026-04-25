@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plex Server Monitor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: rgba(27, 36, 48, 0.96);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --accent: #00e0ff;
+      --accent-2: #44f0c2;
+      --text: #e6edf3;
+      --muted: #8b9aab;
+      --border: rgba(255, 255, 255, 0.08);
+      --good: #44d17a;
+      --warn: #ffb347;
+      --danger: #ff6b6b;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      --radius: 24px;
+      --font: Inter, Roboto, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.13), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(68, 240, 194, 0.09), transparent 32%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    .widget {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 14px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      min-height: 180px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(14, 20, 28, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 38%);
+      pointer-events: none;
+    }
+
+    .header,
+    .title-group,
+    .status,
+    .badge,
+    .layout,
+    .section-head,
+    .stream-top,
+    .stream-footer {
+      display: flex;
+      align-items: center;
+    }
+
+    .header,
+    .section-head,
+    .stream-top,
+    .stream-footer {
+      justify-content: space-between;
+    }
+
+    .header--compact {
+      justify-content: flex-end;
+    }
+
+    .header,
+    .title-group,
+    .layout,
+    .section-head,
+    .stream-top,
+    .stream-footer {
+      gap: 12px;
+    }
+
+    .icon {
+      width: 50px;
+      height: 50px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: rgba(0, 224, 255, 0.16);
+      color: var(--accent);
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .subtitle,
+    .detail,
+    .stream-meta {
+      color: var(--muted);
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 0.92rem;
+    }
+
+    .status,
+    .badge {
+      min-height: 40px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .status[data-tone="good"],
+    .badge[data-tone="good"] {
+      color: #bfffe1;
+      background: rgba(68, 209, 122, 0.16);
+      border-color: rgba(68, 209, 122, 0.25);
+    }
+
+    .status[data-tone="warn"],
+    .badge[data-tone="warn"] {
+      color: #ffe4bd;
+      background: rgba(255, 179, 71, 0.16);
+      border-color: rgba(255, 179, 71, 0.24);
+    }
+
+    .status[data-tone="danger"],
+    .badge[data-tone="danger"] {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.16);
+      border-color: rgba(255, 107, 107, 0.24);
+    }
+
+    .layout {
+      min-height: 0;
+      height: 100%;
+      align-items: stretch;
+    }
+
+    .layout > * {
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+      gap: 12px;
+    }
+
+    .panel,
+    .metric-card,
+    .stream-item,
+    .load-card {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--panel-soft);
+    }
+
+    .panel {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .eyebrow,
+    .label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.72rem;
+    }
+
+    .server-title {
+      display: grid;
+      gap: 6px;
+    }
+
+    .server-name {
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 700;
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+    }
+
+    .detail {
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric-card {
+      display: grid;
+      gap: 6px;
+      padding: 12px;
+    }
+
+    .value {
+      font-size: clamp(1.4rem, 3vw, 2rem);
+      font-weight: 700;
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+    }
+
+    .meter {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .meter > span {
+      display: block;
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+
+    .load-card {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .stream-list {
+      display: grid;
+      gap: 8px;
+      min-height: 0;
+      align-content: start;
+    }
+
+    .stream-item {
+      display: grid;
+      gap: 8px;
+      padding: 12px 14px;
+    }
+
+    .stream-title {
+      font-size: 0.94rem;
+      font-weight: 700;
+    }
+
+    .stream-meta,
+    .stream-footer {
+      font-size: 0.76rem;
+      line-height: 1.35;
+    }
+
+    .stream-footer {
+      color: var(--muted);
+    }
+
+    .empty-state {
+      display: grid;
+      place-items: center;
+      min-height: 100%;
+      padding: 20px 14px;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    [data-size="large"] body,
+    [data-size="medium"] body,
+    [data-size="small"] body {
+      padding: 10px;
+    }
+
+    [data-size="large"] .widget,
+    [data-size="medium"] .widget,
+    [data-size="small"] .widget {
+      height: calc(100vh - 20px);
+      padding: 16px;
+      gap: 14px;
+    }
+
+    [data-size="large"] .layout,
+    [data-size="medium"] .layout,
+    [data-size="small"] .layout {
+      grid-template-columns: 1fr;
+    }
+
+    [data-size="medium"] .metrics,
+    [data-size="small"] .metrics {
+      gap: 10px;
+    }
+
+    [data-size="medium"] .icon,
+    [data-size="small"] .icon {
+      width: 42px;
+      height: 42px;
+      font-size: 0.82rem;
+    }
+
+    [data-size="medium"] h1,
+    [data-size="small"] h1 {
+      font-size: 1.1rem;
+    }
+
+    [data-size="medium"] .subtitle,
+    [data-size="small"] .subtitle {
+      font-size: 0.8rem;
+    }
+
+    [data-size="medium"] .status,
+    [data-size="small"] .status {
+      min-height: 34px;
+      padding: 8px 10px;
+      font-size: 0.72rem;
+    }
+
+    [data-size="medium"] .panel,
+    [data-size="small"] .panel,
+    [data-size="medium"] .metric-card,
+    [data-size="small"] .metric-card,
+    [data-size="medium"] .stream-item,
+    [data-size="small"] .stream-item,
+    [data-size="medium"] .load-card,
+    [data-size="small"] .load-card {
+      padding: 14px;
+      border-radius: 18px;
+    }
+
+    [data-size="small"] .header {
+      align-items: flex-start;
+    }
+
+    [data-size="small"] .metrics {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    [data-size="small"] .value {
+      font-size: 1.4rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="widget">
+    <header class="header header--compact">
+      <div id="plex-status" class="status" data-tone="good">Refreshing</div>
+    </header>
+
+    <section class="layout">
+      <article class="panel">
+        <div class="section-head">
+          <div class="server-title">
+            <div class="eyebrow">Server</div>
+            <div id="server-name" class="server-name">Plex Server</div>
+            <p id="server-copy" class="detail">Live sessions and bandwidth.</p>
+          </div>
+          <div id="server-health" class="badge" data-tone="good">Healthy</div>
+        </div>
+
+        <div class="metrics">
+          <article class="metric-card">
+            <div class="label">Active Streams</div>
+            <div id="stream-count" class="value">--</div>
+            <div id="stream-detail" class="detail">Watching now</div>
+          </article>
+
+          <article class="metric-card">
+            <div class="label">Bandwidth</div>
+            <div id="bandwidth-total" class="value">--</div>
+            <div id="bandwidth-detail" class="detail">Outgoing traffic</div>
+          </article>
+
+          <article class="metric-card">
+            <div class="label">Transcodes</div>
+            <div id="transcode-count" class="value">--</div>
+            <div id="transcode-detail" class="detail">Sessions converting</div>
+          </article>
+
+          <article class="metric-card">
+            <div class="label">Direct Play</div>
+            <div id="direct-count" class="value">--</div>
+            <div id="direct-detail" class="detail">Direct sessions</div>
+          </article>
+        </div>
+
+        <div class="load-card">
+          <div class="label">Bandwidth Headroom</div>
+          <div class="meter"><span id="bandwidth-bar"></span></div>
+          <div id="headroom-detail" class="detail">Watching uplink budget</div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Sessions</div>
+            <h2>Playback</h2>
+          </div>
+          <div id="session-badge" class="badge" data-tone="good">--</div>
+        </div>
+        <div id="stream-list" class="stream-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var size = params.get("size") || "full";
+      document.documentElement.setAttribute("data-size", size);
+
+      function getParam(name, fallback) {
+        var value = params.get(name);
+        return value === null || value === "" ? fallback : value;
+      }
+
+      function getNumberParam(name, fallback) {
+        var value = Number(getParam(name, ""));
+        return isFinite(value) ? value : fallback;
+      }
+
+      function getJsonParam(name, fallback) {
+        var raw = params.get(name);
+        if (!raw) {
+          return fallback;
+        }
+
+        try {
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn("Invalid JSON query payload:", error);
+          return fallback;
+        }
+      }
+
+      function buildHeaders() {
+        return {};
+      }
+
+      function fetchJson(url) {
+        return fetch(url, {
+          headers: buildHeaders(),
+          cache: "no-store"
+        }).then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed with status " + response.status);
+          }
+          return response.json();
+        });
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function formatMbps(value) {
+        return Number(value).toFixed(value >= 100 ? 0 : 1) + " Mbps";
+      }
+
+      function limitForSize() {
+        if (size === "small") {
+          return 1;
+        }
+        if (size === "medium") {
+          return 2;
+        }
+        if (size === "large") {
+          return 3;
+        }
+        return 4;
+      }
+
+      function mountWidget(widget) {
+        var intervalId = 0;
+        var busy = false;
+
+        function tick() {
+          if (busy) {
+            return;
+          }
+          busy = true;
+          Promise.resolve(widget.updateWidget()).then(function () {
+            busy = false;
+          }, function (error) {
+            busy = false;
+            console.warn(error);
+          });
+        }
+
+        if (typeof widget.initWidget === "function") {
+          widget.initWidget();
+        }
+
+        tick();
+
+        if (widget.refreshInterval) {
+          intervalId = window.setInterval(tick, widget.refreshInterval);
+        }
+
+        window.addEventListener("beforeunload", function () {
+          window.clearInterval(intervalId);
+          if (typeof widget.destroyWidget === "function") {
+            widget.destroyWidget();
+          }
+        });
+      }
+
+      function normalizeData(raw) {
+        var data = raw || {};
+        var streams = data.streams || [];
+        var bandwidthTotal = typeof data.totalBandwidthMbps === "number"
+          ? data.totalBandwidthMbps
+          : streams.reduce(function (sum, stream) { return sum + Number(stream.bandwidthMbps || 0); }, 0);
+        var transcodes = typeof data.transcodes === "number"
+          ? data.transcodes
+          : streams.filter(function (stream) { return String(stream.state || "").toLowerCase().indexOf("transcode") !== -1; }).length;
+        var directs = typeof data.directPlays === "number"
+          ? data.directPlays
+          : streams.filter(function (stream) { return String(stream.state || "").toLowerCase().indexOf("direct") !== -1; }).length;
+
+        return {
+          hasLiveData: !!(Object.keys(data).length || streams.length),
+          server: data.server || getParam("server", "Plex Server"),
+          source: data.source || (getParam("endpoint", "") ? "Plex API" : "Needs setup"),
+          copy: data.copy || getParam("copy", getParam("endpoint", "") ? "Sessions are live." : "Native Plex connector is planned."),
+          uplinkLimitMbps: typeof data.uplinkLimitMbps === "number" ? data.uplinkLimitMbps : getNumberParam("uplink", 120),
+          totalBandwidthMbps: bandwidthTotal,
+          transcodes: transcodes,
+          directPlays: directs,
+          activeStreams: typeof data.activeStreams === "number" ? data.activeStreams : streams.length,
+          remoteStreams: typeof data.remoteStreams === "number"
+            ? data.remoteStreams
+            : streams.filter(function (stream) { return !!stream.remote; }).length,
+          streams: streams
+        };
+      }
+
+      function emptyData() {
+        return normalizeData({
+          uplinkLimitMbps: getNumberParam("uplink", 120),
+          streams: []
+        });
+      }
+
+      function toneForServer(data, error) {
+        var load = data.totalBandwidthMbps / Math.max(1, data.uplinkLimitMbps);
+        if (error) {
+          return "danger";
+        }
+        if (!data.hasLiveData) {
+          return "warn";
+        }
+        if (data.transcodes >= 3 || load > 0.9) {
+          return "danger";
+        }
+        if (data.transcodes >= 1 || load > 0.65) {
+          return "warn";
+        }
+        return "good";
+      }
+
+      function toneForStream(stream) {
+        var state = String(stream.state || "").toLowerCase();
+        if (state.indexOf("transcode") !== -1) {
+          return "warn";
+        }
+        if (state.indexOf("error") !== -1) {
+          return "danger";
+        }
+        return "good";
+      }
+
+      function render(data, error) {
+        var tone = toneForServer(data, error);
+        var loadPercent = clamp((data.totalBandwidthMbps / Math.max(1, data.uplinkLimitMbps)) * 100, 0, 100);
+        var sessionCopy = !data.hasLiveData
+          ? "Native Plex connector is planned."
+          : data.remoteStreams > 0
+            ? data.remoteStreams + " remote / " + (data.activeStreams - data.remoteStreams) + " local"
+            : "All sessions are local";
+
+        document.getElementById("server-name").textContent = data.server;
+        document.getElementById("server-copy").textContent = data.copy;
+        document.getElementById("stream-count").textContent = String(data.activeStreams);
+        document.getElementById("stream-detail").textContent = sessionCopy;
+        document.getElementById("bandwidth-total").textContent = formatMbps(data.totalBandwidthMbps);
+        document.getElementById("bandwidth-detail").textContent = "Budget " + formatMbps(data.uplinkLimitMbps);
+        document.getElementById("transcode-count").textContent = String(data.transcodes);
+        document.getElementById("transcode-detail").textContent = !data.hasLiveData ? "Waiting for active sessions" : data.transcodes ? "Transcoding is active" : "No conversion load";
+        document.getElementById("direct-count").textContent = String(data.directPlays);
+        document.getElementById("direct-detail").textContent = !data.hasLiveData ? "No playback data yet" : data.directPlays ? "Direct sessions active" : "No direct sessions";
+        document.getElementById("headroom-detail").textContent = data.hasLiveData ? Math.round(loadPercent) + "% of uplink in use" : "Waiting for native connector";
+        document.getElementById("bandwidth-bar").style.width = loadPercent + "%";
+        document.getElementById("plex-status").textContent = error ? "Unavailable" : data.source;
+        document.getElementById("plex-status").setAttribute("data-tone", tone);
+        document.getElementById("server-health").textContent = !data.hasLiveData ? "Waiting" : tone === "good" ? "Healthy" : tone === "warn" ? "Busy" : "Saturated";
+        document.getElementById("server-health").setAttribute("data-tone", tone);
+        document.getElementById("session-badge").textContent = data.activeStreams ? data.activeStreams + " live" : data.hasLiveData ? "Idle" : "Needs setup";
+        document.getElementById("session-badge").setAttribute("data-tone", data.activeStreams ? tone : data.hasLiveData ? "good" : "warn");
+
+        if (!data.streams.length) {
+          document.getElementById("stream-list").innerHTML = '<div class="empty-state">' + (data.hasLiveData ? "No active streams. The server is idle." : "Plex will light up after the native connector is added.") + '</div>';
+          return;
+        }
+
+        document.getElementById("stream-list").innerHTML = data.streams.slice(0, limitForSize()).map(function (stream) {
+          var toneName = toneForStream(stream);
+          var progress = clamp(Number(stream.progress || 0), 0, 100);
+          return '' +
+            '<article class="stream-item">' +
+              '<div class="stream-top">' +
+                '<div>' +
+                  '<div class="stream-title">' + stream.title + '</div>' +
+                  '<div class="stream-meta">' + stream.user + ' • ' + stream.device + ' • ' + stream.quality + '</div>' +
+                '</div>' +
+                '<div class="badge" data-tone="' + toneName + '">' + stream.state + '</div>' +
+              '</div>' +
+              '<div class="meter"><span style="width:' + progress + '%"></span></div>' +
+              '<div class="stream-footer">' +
+                '<span>' + formatMbps(stream.bandwidthMbps) + '</span>' +
+                '<span>' + Math.round(progress) + '% watched</span>' +
+              '</div>' +
+            '</article>';
+        }).join("");
+      }
+
+      var widget = {
+        refreshInterval: getParam("endpoint", "") ? Math.max(5000, getNumberParam("refresh", 8000)) : 0,
+        initWidget: function () {},
+        updateWidget: function () {
+          var payload = getJsonParam("payload", null);
+          if (payload) {
+            render(normalizeData(payload));
+            return;
+          }
+
+          var endpoint = getParam("endpoint", "");
+          if (!endpoint) {
+            render(emptyData());
+            return;
+          }
+
+          return fetchJson(endpoint).then(function (data) {
+            render(normalizeData(data));
+          }, function (error) {
+            render(emptyData(), error);
+          });
+        },
+        destroyWidget: function () {}
+      };
+
+      mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

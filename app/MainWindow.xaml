@@ -1,0 +1,38 @@
+<Window
+    x:Class="XenonEdgeHost.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    Title="Xenon Edge Host">
+    <Grid Background="#0B0F14">
+        <controls:WebView2
+            x:Name="DashboardView"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch" />
+
+        <Border
+            x:Name="OverlayPanel"
+            Margin="24"
+            Padding="24"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            MaxWidth="640"
+            Background="#CC0B0F14"
+            BorderBrush="#3300E0FF"
+            BorderThickness="1"
+            CornerRadius="18">
+            <StackPanel Spacing="10">
+                <TextBlock
+                    Text="Xenon Edge Host"
+                    FontSize="28"
+                    FontWeight="SemiBold" />
+                <TextBlock
+                    x:Name="StatusText"
+                    Text="Starting bridge..."
+                    FontSize="16"
+                    Opacity="0.9"
+                    TextWrapping="WrapWholeWords" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

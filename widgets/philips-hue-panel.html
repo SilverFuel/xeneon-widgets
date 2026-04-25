@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Philips Hue Panel</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: rgba(18, 26, 38, 0.92);
+      --panel-soft: rgba(255, 255, 255, 0.05);
+      --text: #e6edf3;
+      --muted: #90a0b2;
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #00e0ff;
+      --accent-2: #44f0c2;
+      --good: #44d17a;
+      --warn: #ffb347;
+      --danger: #ff6b6b;
+      --shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
+      --radius: 24px;
+      --font: Inter, Roboto, system-ui, sans-serif;
+      --scene-a: rgba(0, 224, 255, 0.36);
+      --scene-b: rgba(68, 240, 194, 0.28);
+      --scene-c: rgba(255, 196, 120, 0.24);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.13), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(68, 240, 194, 0.09), transparent 32%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .widget {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 14px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      min-height: 180px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(13, 19, 28, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 34%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .widget > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .header,
+    .section-head,
+    .scene__content,
+    .scene__chips,
+    .status,
+    .badge,
+    .summary-strip,
+    .summary-chip,
+    .device-top,
+    .device-meta,
+    .brightness-row,
+    .diagnostics-toggle,
+    .diagnostics-toggle__meta,
+    .bridge-form,
+    .header-actions {
+      display: flex;
+      align-items: center;
+    }
+
+    .header,
+    .section-head,
+    .device-top,
+    .diagnostics-toggle {
+      justify-content: space-between;
+    }
+
+    .header,
+    .header-actions,
+    .section-head,
+    .scene__content,
+    .scene__chips,
+    .summary-strip,
+    .summary-chip,
+    .device-top,
+    .device-meta,
+    .brightness-row,
+    .diagnostics-toggle,
+    .diagnostics-toggle__meta,
+    .bridge-form {
+      gap: 12px;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(1.45rem, 3vw, 2.2rem);
+      line-height: 0.92;
+      letter-spacing: -0.04em;
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .eyebrow,
+    .label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .detail,
+    .device-subtitle,
+    .device-meta,
+    .bridge-note,
+    .diagnostics-copy,
+    .scene__text {
+      color: var(--muted);
+    }
+
+    .status,
+    .badge,
+    .action-button {
+      min-height: 40px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .status,
+    .badge {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .status[data-tone="good"],
+    .badge[data-tone="good"] {
+      color: #c8ffe3;
+      background: rgba(68, 209, 122, 0.16);
+      border-color: rgba(68, 209, 122, 0.24);
+    }
+
+    .status[data-tone="warn"],
+    .badge[data-tone="warn"] {
+      color: #ffe3ba;
+      background: rgba(255, 179, 71, 0.15);
+      border-color: rgba(255, 179, 71, 0.24);
+    }
+
+    .status[data-tone="danger"],
+    .badge[data-tone="danger"] {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.15);
+      border-color: rgba(255, 107, 107, 0.24);
+    }
+
+    .action-button {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.08);
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .action-button:hover,
+    .action-button:focus-visible,
+    .diagnostics-toggle:hover,
+    .diagnostics-toggle:focus-visible,
+    .toggle-button:hover,
+    .toggle-button:focus-visible {
+      border-color: rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.12);
+      outline: 0;
+    }
+
+    .action-button:active,
+    .toggle-button:active {
+      transform: scale(0.98);
+    }
+
+    .action-button:disabled,
+    .toggle-button:disabled,
+    .brightness-slider:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .action-button.is-primary,
+    .toggle-button[data-active="true"] {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-color: rgba(0, 224, 255, 0.34);
+      color: #031319;
+      font-weight: 700;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 12px 24px rgba(0, 224, 255, 0.18);
+    }
+
+    .header {
+      justify-content: flex-end;
+    }
+
+    .scene {
+      position: relative;
+      overflow: hidden;
+      min-height: 126px;
+      padding: 18px 20px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 16% 18%, var(--scene-a), transparent 30%),
+        radial-gradient(circle at 82% 26%, var(--scene-b), transparent 28%),
+        radial-gradient(circle at 62% 80%, var(--scene-c), transparent 30%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)),
+        linear-gradient(180deg, rgba(12, 19, 29, 0.94), rgba(12, 18, 28, 0.88));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .scene::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+      opacity: 0.08;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 82%);
+      pointer-events: none;
+    }
+    .scene__orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(18px);
+      opacity: 0.78;
+      mix-blend-mode: screen;
+      animation: hue-float 14s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    .scene__orb--a {
+      top: 14px;
+      left: 24px;
+      width: 180px;
+      height: 180px;
+      background: var(--scene-a);
+    }
+
+    .scene__orb--b {
+      top: 18px;
+      right: 72px;
+      width: 150px;
+      height: 150px;
+      background: var(--scene-b);
+      animation-delay: -4s;
+    }
+
+    .scene__orb--c {
+      bottom: -10px;
+      left: 44%;
+      width: 220px;
+      height: 220px;
+      background: var(--scene-c);
+      animation-delay: -8s;
+    }
+
+    .scene__wave {
+      position: absolute;
+      inset: auto 0 -26px 0;
+      height: 92px;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.15), transparent 32%),
+        radial-gradient(circle at 80% 50%, rgba(255, 255, 255, 0.1), transparent 26%);
+      opacity: 0.55;
+      filter: blur(8px);
+      transform: translate3d(0, 0, 0);
+      animation: hue-wave 12s linear infinite;
+      pointer-events: none;
+    }
+
+    .scene__content {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .scene__copy {
+      display: grid;
+      gap: 8px;
+      max-width: 620px;
+    }
+
+    .scene__text {
+      font-size: 0.9rem;
+      max-width: 480px;
+    }
+
+    .scene__chips {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-self: stretch;
+      max-width: 620px;
+    }
+
+    .scene-chip {
+      min-width: 116px;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(10, 17, 26, 0.44);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+    }
+
+    .scene-chip__value {
+      display: block;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .scene-chip__label {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .content-scroll {
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 6px;
+      touch-action: pan-y pinch-zoom;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.78fr);
+      gap: 14px;
+      align-items: start;
+      min-height: 100%;
+    }
+
+    .side-stack {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .panel,
+    .device-card,
+    .summary-chip {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(23, 32, 45, 0.9), rgba(13, 19, 28, 0.9));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .panel {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .section-head {
+      align-items: flex-start;
+    }
+
+    .device-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .device-grid--lights {
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+
+    .device-grid--rooms {
+      grid-template-columns: 1fr;
+    }
+
+    .device-card {
+      position: relative;
+      overflow: hidden;
+      padding: 14px;
+      background:
+        radial-gradient(circle at top right, var(--card-accent-aura, rgba(0, 224, 255, 0.16)), transparent 36%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+        rgba(12, 18, 28, 0.9);
+      transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .device-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+      background: linear-gradient(180deg, var(--card-accent, rgba(0, 224, 255, 0.6)), transparent);
+      opacity: 0.88;
+    }
+
+    .device-card[data-active="true"] {
+      border-color: var(--card-accent-soft, rgba(0, 224, 255, 0.24));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 18px 34px rgba(0, 0, 0, 0.2);
+    }
+
+    .device-card[data-active="true"] .device-swatch::after {
+      animation: hue-pulse 2.6s ease-in-out infinite;
+    }
+
+    .device-card:hover {
+      transform: translateY(-1px);
+    }
+
+    .device-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .device-name {
+      font-size: 0.96rem;
+      font-weight: 700;
+      line-height: 1.1;
+      word-break: break-word;
+    }
+
+    .device-subtitle {
+      margin-top: 4px;
+      margin-top: 3px;
+      font-size: 0.78rem;
+    }
+
+    .device-swatch {
+      position: relative;
+      width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
+      border-radius: 50%;
+      background: var(--card-accent, rgba(0, 224, 255, 0.6));
+      box-shadow: 0 0 0 3px var(--card-accent-soft, rgba(0, 224, 255, 0.16));
+    }
+
+    .device-swatch::after {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 1px solid var(--card-accent-soft, rgba(0, 224, 255, 0.2));
+      opacity: 0.7;
+    }
+
+    .toggle-button {
+      min-width: 76px;
+      min-height: 38px;
+      padding: 8px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .brightness-row {
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+
+    .brightness-value {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .brightness-slider {
+      width: 100%;
+      margin-top: 6px;
+      accent-color: var(--card-accent, #00e0ff);
+      cursor: pointer;
+    }
+
+    .device-meta {
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 0.8rem;
+      flex-wrap: wrap;
+    }
+
+    .device-meta__state {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .device-meta__state[data-tone="good"] {
+      color: #c8ffe3;
+      background: rgba(68, 209, 122, 0.15);
+    }
+
+    .device-meta__state[data-tone="warn"] {
+      color: #ffe3ba;
+      background: rgba(255, 179, 71, 0.15);
+    }
+
+    .device-meta__state[data-tone="danger"] {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.15);
+    }
+
+    .diagnostics-panel {
+      gap: 0;
+      overflow: hidden;
+    }
+
+    .diagnostics-toggle {
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+    }
+
+    .diagnostics-toggle__meta {
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      min-width: 160px;
+    }
+
+    .diagnostics-toggle__text {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .diagnostics-copy {
+      margin-top: 4px;
+      font-size: 0.9rem;
+    }
+
+    .diagnostics-body {
+      display: grid;
+      gap: 14px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .diagnostics-panel[data-expanded="false"] .diagnostics-body {
+      display: none;
+    }
+
+    .bridge-form {
+      align-items: stretch;
+    }
+
+    .bridge-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 42px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(7, 12, 20, 0.82);
+      color: var(--text);
+    }
+
+    .bridge-input:focus-visible,
+    .brightness-slider:focus-visible {
+      outline: 2px solid rgba(0, 224, 255, 0.42);
+      outline-offset: 2px;
+    }
+
+    .bridge-note {
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .summary-strip {
+      flex-wrap: wrap;
+    }
+
+    .summary-chip {
+      gap: 10px;
+      min-height: 44px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .summary-chip strong {
+      font-size: 0.94rem;
+      color: var(--text);
+    }
+
+    .empty-state {
+      padding: 18px 16px;
+      border: 1px dashed rgba(255, 255, 255, 0.14);
+      border-radius: 18px;
+      color: var(--muted);
+      text-align: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .content-scroll::-webkit-scrollbar {
+      width: 12px;
+    }
+
+    .content-scroll::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      border: 3px solid transparent;
+      background: rgba(255, 255, 255, 0.18);
+      background-clip: padding-box;
+    }
+
+    .content-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    @keyframes hue-float {
+      0%, 100% {
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+      50% {
+        transform: translate3d(14px, -10px, 0) scale(1.06);
+      }
+    }
+
+    @keyframes hue-wave {
+      0% {
+        transform: translateX(-3%);
+      }
+      50% {
+        transform: translateX(3%);
+      }
+      100% {
+        transform: translateX(-3%);
+      }
+    }
+
+    @keyframes hue-pulse {
+      0%, 100% {
+        transform: scale(0.98);
+        opacity: 0.6;
+      }
+      50% {
+        transform: scale(1.18);
+        opacity: 0.18;
+      }
+    }
+
+    @media (max-width: 1480px) {
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .scene__content {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .scene__chips {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      .bridge-form {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+    }
+
+    [data-size="medium"] .widget,
+    [data-size="small"] .widget {
+      padding: 14px;
+      gap: 12px;
+    }
+
+    [data-size="medium"] .scene,
+    [data-size="small"] .scene,
+    [data-size="medium"] .panel,
+    [data-size="small"] .panel {
+      border-radius: 18px;
+    }
+
+    [data-size="medium"] .scene,
+    [data-size="small"] .scene {
+      min-height: 112px;
+      padding: 16px;
+    }
+
+    [data-size="medium"] h1,
+    [data-size="small"] h1 {
+      font-size: 1.7rem;
+    }
+
+    [data-size="medium"] .status,
+    [data-size="small"] .status,
+    [data-size="medium"] .badge,
+    [data-size="small"] .badge,
+    [data-size="medium"] .action-button,
+    [data-size="small"] .action-button {
+      min-height: 34px;
+      padding: 8px 10px;
+      font-size: 0.72rem;
+    }
+
+    [data-size="medium"] .device-grid--lights,
+    [data-size="small"] .device-grid--lights {
+      grid-template-columns: 1fr;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="hue-widget" class="widget" data-size="full">
+    <header class="header">
+      <div class="header-actions">
+        <button id="bridge-refresh-button" class="action-button" type="button">Refresh</button>
+        <div id="hue-status" class="status" data-tone="warn">Loading</div>
+      </div>
+    </header>
+
+    <section id="hue-scene" class="scene" data-state="loading">
+      <div class="scene__orb scene__orb--a"></div>
+      <div class="scene__orb scene__orb--b"></div>
+      <div class="scene__orb scene__orb--c"></div>
+      <div class="scene__wave"></div>
+        <div class="scene__content">
+          <div class="scene__copy">
+            <div class="eyebrow">Live lights</div>
+            <h1 id="scene-title">Loading lights</h1>
+            <p id="scene-copy" class="scene__text">Connecting to the local Hue bridge.</p>
+          </div>
+          <div id="scene-chips" class="scene__chips"></div>
+        </div>
+    </section>
+
+    <section class="content-scroll">
+      <div class="content-grid">
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Lights</div>
+              <h2>Connected bulbs</h2>
+            </div>
+            <div id="light-badge" class="badge" data-tone="warn">--</div>
+          </div>
+          <div id="light-grid" class="device-grid device-grid--lights"></div>
+        </section>
+
+        <aside class="side-stack">
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <div class="eyebrow">Rooms</div>
+                <h2>Grouped control</h2>
+              </div>
+              <div id="room-badge" class="badge" data-tone="warn">--</div>
+            </div>
+            <div id="room-grid" class="device-grid device-grid--rooms"></div>
+          </section>
+
+          <section id="diagnostics-panel" class="panel diagnostics-panel" data-expanded="false">
+            <button id="diagnostics-toggle" class="diagnostics-toggle" type="button" aria-expanded="false">
+              <div>
+                <div class="eyebrow">Bridge tools</div>
+                <h2>Diagnostics</h2>
+                <p id="diagnostics-copy" class="diagnostics-copy">Hidden while Hue is healthy.</p>
+              </div>
+              <div class="diagnostics-toggle__meta">
+                <div id="diagnostics-badge" class="badge" data-tone="good">Ready</div>
+                <span id="diagnostics-toggle-text" class="diagnostics-toggle__text">Open</span>
+              </div>
+            </button>
+
+            <div class="diagnostics-body">
+              <div class="bridge-form">
+                <input id="bridge-ip-input" class="bridge-input" type="text" inputmode="decimal" placeholder="192.168.1.10" aria-label="Hue Bridge IP">
+                <button id="bridge-link-button" class="action-button is-primary" type="button">Link bridge</button>
+              </div>
+              <p id="bridge-note" class="bridge-note">Press the physical button on the Hue Bridge, then link it here within 30 seconds.</p>
+              <div id="hue-summary" class="summary-strip"></div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var size = params.get("size") || "full";
+      var endpoint = params.get("endpoint") || "../api/hue";
+      var linkEndpoint = params.get("linkEndpoint") || "../api/hue/link";
+      var actionBase = params.get("actionBase") || "../api/hue";
+      var refreshInterval = Math.max(5000, Number(params.get("refresh") || 10000));
+      var widgetNode = document.getElementById("hue-widget");
+      var sceneNode = document.getElementById("hue-scene");
+      var state = {
+        data: null,
+        statusTone: "warn",
+        statusText: "Loading",
+        bridgeIpInput: "",
+        busy: false,
+        interacting: false,
+        diagnosticsExpanded: null,
+        lastSignature: ""
+      };
+
+      widgetNode.setAttribute("data-size", size);
+      function fetchJson(url) {
+        return fetch(url, { cache: "no-store" }).then(function (response) {
+          return response.json().then(function (payload) {
+            if (!response.ok) {
+              throw new Error(payload.error || payload.message || "Request failed with status " + response.status);
+            }
+            return payload;
+          });
+        });
+      }
+
+      function postJson(url, body) {
+        return fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body || {})
+        }).then(function (response) {
+          return response.json().then(function (payload) {
+            if (!response.ok) {
+              throw new Error(payload.error || payload.message || "Request failed with status " + response.status);
+            }
+            return payload;
+          });
+        });
+      }
+
+      function cloneData(data) {
+        return JSON.parse(JSON.stringify(data));
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function hueToRgb(hue, saturation, lightness) {
+        var h = ((hue % 360) + 360) % 360;
+        var s = clamp(saturation, 0, 100) / 100;
+        var l = clamp(lightness, 0, 100) / 100;
+        var c = (1 - Math.abs((2 * l) - 1)) * s;
+        var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        var m = l - (c / 2);
+        var r = 0;
+        var g = 0;
+        var b = 0;
+
+        if (h < 60) {
+          r = c;
+          g = x;
+        } else if (h < 120) {
+          r = x;
+          g = c;
+        } else if (h < 180) {
+          g = c;
+          b = x;
+        } else if (h < 240) {
+          g = x;
+          b = c;
+        } else if (h < 300) {
+          r = x;
+          b = c;
+        } else {
+          r = c;
+          b = x;
+        }
+
+        return {
+          r: Math.round((r + m) * 255),
+          g: Math.round((g + m) * 255),
+          b: Math.round((b + m) * 255)
+        };
+      }
+
+      function kelvinToRgb(kelvin) {
+        var temperature = clamp(kelvin, 2000, 6500) / 100;
+        var red;
+        var green;
+        var blue;
+
+        if (temperature <= 66) {
+          red = 255;
+          green = 99.4708025861 * Math.log(temperature) - 161.1195681661;
+          blue = temperature <= 19 ? 0 : (138.5177312231 * Math.log(temperature - 10) - 305.0447927307);
+        } else {
+          red = 329.698727446 * Math.pow(temperature - 60, -0.1332047592);
+          green = 288.1221695283 * Math.pow(temperature - 60, -0.0755148492);
+          blue = 255;
+        }
+
+        return {
+          r: Math.round(clamp(red, 0, 255)),
+          g: Math.round(clamp(green, 0, 255)),
+          b: Math.round(clamp(blue, 0, 255))
+        };
+      }
+
+      function rgba(rgbValue, alpha) {
+        return "rgba(" + rgbValue.r + ", " + rgbValue.g + ", " + rgbValue.b + ", " + alpha + ")";
+      }
+
+      function rgb(rgbValue) {
+        return "rgb(" + rgbValue.r + ", " + rgbValue.g + ", " + rgbValue.b + ")";
+      }
+
+      function resolveColor(entity) {
+        var brightnessFactor = clamp(Number(entity && entity.brightness != null ? entity.brightness : 50), 0, 100);
+        var lightness = entity && entity.on ? clamp(34 + (brightnessFactor * 0.24), 38, 66) : 30;
+        var rgbValue;
+
+        if (entity && entity.colorMode === "hs" && entity.hue != null) {
+          rgbValue = hueToRgb(Math.round((entity.hue / 65535) * 360), entity.saturation == null ? 76 : entity.saturation, lightness);
+        } else if (entity && entity.colorMode === "ct" && entity.colorTemperature != null) {
+          rgbValue = kelvinToRgb(Math.round(1000000 / entity.colorTemperature));
+        } else if (entity && entity.on) {
+          rgbValue = kelvinToRgb(3200 + Math.round((brightnessFactor / 100) * 2200));
+        } else {
+          rgbValue = { r: 90, g: 104, b: 124 };
+        }
+
+        if (entity && entity.reachable === false) {
+          rgbValue = {
+            r: Math.round(rgbValue.r * 0.7),
+            g: Math.round(rgbValue.g * 0.7),
+            b: Math.round(rgbValue.b * 0.7)
+          };
+        }
+
+        return {
+          solid: rgb(rgbValue),
+          soft: rgba(rgbValue, entity && entity.on ? 0.18 : 0.12),
+          aura: rgba(rgbValue, entity && entity.on ? 0.34 : 0.18)
+        };
+      }
+
+      function sortLights(lights) {
+        return lights.slice().sort(function (left, right) {
+          if (left.on !== right.on) {
+            return left.on ? -1 : 1;
+          }
+          if (left.reachable !== right.reachable) {
+            return left.reachable ? -1 : 1;
+          }
+          return left.name.localeCompare(right.name);
+        });
+      }
+
+      function sortGroups(groups) {
+        return groups.slice().sort(function (left, right) {
+          if (left.on !== right.on) {
+            return left.on ? -1 : 1;
+          }
+          return left.name.localeCompare(right.name);
+        });
+      }
+
+      function findItem(collection, id) {
+        var index;
+        for (index = 0; index < collection.length; index += 1) {
+          if (collection[index].id === id) {
+            return collection[index];
+          }
+        }
+        return null;
+      }
+
+      function buildSignature(payload) {
+        return JSON.stringify({
+          configured: !!payload.configured,
+          linked: !!payload.linked,
+          bridgeIp: payload.bridgeIp || "",
+          bridgeName: payload.bridgeName || "",
+          message: payload.message || "",
+          lights: (payload.lights || []).map(function (light) {
+            return [light.id, !!light.on, light.brightness, light.reachable, light.colorMode, light.hue, light.saturation, light.colorTemperature];
+          }),
+          groups: (payload.groups || []).map(function (group) {
+            return [group.id, !!group.on, group.brightness, group.lights];
+          })
+        });
+      }
+
+      function setStatus(text, tone) {
+        state.statusText = text;
+        state.statusTone = tone;
+        document.getElementById("hue-status").textContent = text;
+        document.getElementById("hue-status").setAttribute("data-tone", tone);
+      }
+
+      function renderEmpty(containerId, text) {
+        document.getElementById(containerId).innerHTML = '<div class="empty-state">' + escapeHtml(text) + '</div>';
+      }
+
+      function getSafeData() {
+        return state.data || {
+          configured: false,
+          linked: false,
+          bridgeIp: "",
+          bridgeName: "Philips Hue",
+          lights: [],
+          groups: [],
+          source: "Hue unavailable",
+          message: "Connect to your local Hue Bridge through the localhost helper."
+        };
+      }
+
+      function resolveDiagnosticsExpanded(data) {
+        if (state.statusTone === "danger" || !data.configured || !data.linked) {
+          return true;
+        }
+        return state.diagnosticsExpanded === true;
+      }
+
+      function setScenePalette(colors) {
+        var fallback = [
+          "rgba(0, 224, 255, 0.32)",
+          "rgba(68, 240, 194, 0.24)",
+          "rgba(255, 196, 120, 0.2)"
+        ];
+        var values = colors.length ? colors : fallback;
+        sceneNode.style.setProperty("--scene-a", values[0] || fallback[0]);
+        sceneNode.style.setProperty("--scene-b", values[1] || values[0] || fallback[1]);
+        sceneNode.style.setProperty("--scene-c", values[2] || values[1] || values[0] || fallback[2]);
+      }
+      function renderScene(data, activeLights, activeRooms) {
+        var colors = sortLights(data.lights).filter(function (light) {
+          return light.on && light.reachable !== false;
+        }).slice(0, 3).map(function (light) {
+          return resolveColor(light).aura;
+        });
+        var sceneState = "setup";
+        var sceneTitle = "Bridge setup needed";
+        var sceneCopy = data.message || "Enter the Hue Bridge IP and link it once to unlock local light control.";
+        if (state.statusTone === "danger") {
+          sceneState = "danger";
+          sceneTitle = "Bridge issue";
+          sceneCopy = state.statusText + ". Open Diagnostics.";
+          setScenePalette([
+            "rgba(255, 107, 107, 0.34)",
+            "rgba(255, 179, 71, 0.22)",
+            "rgba(255, 255, 255, 0.12)"
+          ]);
+        } else if (data.configured && data.linked) {
+          sceneState = "connected";
+          sceneTitle = activeLights ? (activeLights + " bulbs live") : "Hue connected";
+          sceneCopy = activeLights
+            ? "Tap a bulb or drag brightness."
+            : "Bridge linked. Lights are ready.";
+          setScenePalette(colors);
+        } else if (data.bridgeIp) {
+          sceneState = "link";
+          sceneTitle = "Ready to link";
+          sceneCopy = data.message || "Press the bridge button, then finish linking in Diagnostics.";
+          setScenePalette([
+            "rgba(255, 179, 71, 0.3)",
+            "rgba(0, 224, 255, 0.22)",
+            "rgba(255, 255, 255, 0.12)"
+          ]);
+        } else {
+          sceneTitle = "Bridge setup needed";
+          sceneCopy = data.message || "Add the Hue bridge IP in Diagnostics once.";
+          setScenePalette([
+            "rgba(0, 224, 255, 0.32)",
+            "rgba(68, 240, 194, 0.22)",
+            "rgba(255, 255, 255, 0.12)"
+          ]);
+        }
+
+        sceneNode.setAttribute("data-state", sceneState);
+        document.getElementById("scene-title").textContent = sceneTitle;
+        document.getElementById("scene-copy").textContent = sceneCopy;
+        document.getElementById("scene-chips").innerHTML = [
+          '<div class="scene-chip"><span class="scene-chip__value">' + activeLights + '</span><span class="scene-chip__label">Bulbs on</span></div>',
+          '<div class="scene-chip"><span class="scene-chip__value">' + data.lights.length + '</span><span class="scene-chip__label">Bulbs linked</span></div>',
+          '<div class="scene-chip"><span class="scene-chip__value">' + activeRooms + '</span><span class="scene-chip__label">Rooms live</span></div>'
+        ].join("");
+      }
+
+      function renderLights(data) {
+        var lights = sortLights(data.lights);
+        var activeLights = lights.filter(function (light) { return light.on; }).length;
+        var controlsEnabled = data.configured && data.linked && !state.busy;
+        document.getElementById("light-badge").textContent = activeLights + "/" + lights.length + " on";
+        document.getElementById("light-badge").setAttribute("data-tone", activeLights ? "good" : (lights.length ? "warn" : "danger"));
+
+        if (!lights.length) {
+          renderEmpty("light-grid", data.configured ? "No Hue lights were returned by the bridge." : "Link the Hue Bridge to load local bulbs.");
+          return;
+        }
+
+        document.getElementById("light-grid").innerHTML = lights.map(function (light) {
+          var color = resolveColor(light);
+          var deviceStateTone = light.reachable === false ? "danger" : (light.on ? "good" : "warn");
+          return '' +
+            '<article class="device-card" data-active="' + light.on + '" style="--card-accent:' + color.solid + ';--card-accent-soft:' + color.soft + ';--card-accent-aura:' + color.aura + ';">' +
+              '<div class="device-top">' +
+                '<div class="device-title">' +
+                  '<span class="device-swatch" aria-hidden="true"></span>' +
+                  '<div>' +
+                    '<div class="device-name">' + escapeHtml(light.name) + '</div>' +
+                    '<div class="device-subtitle">' + escapeHtml(light.reachable ? light.type : 'Unavailable') + '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<button class="toggle-button" data-action="toggle-light" data-id="' + encodeURIComponent(light.id) + '" data-active="' + light.on + '"' + (controlsEnabled && light.reachable !== false ? '' : ' disabled') + '>' + (light.on ? 'On' : 'Off') + '</button>' +
+              '</div>' +
+              '<div class="brightness-row">' +
+                '<span class="label">Brightness</span>' +
+                '<span class="brightness-value">' + Math.round(light.brightness) + '%</span>' +
+              '</div>' +
+              '<input class="brightness-slider" data-action="brightness-light" data-id="' + encodeURIComponent(light.id) + '" type="range" min="0" max="100" value="' + Math.round(light.brightness) + '"' + (controlsEnabled && light.reachable !== false ? '' : ' disabled') + '>' +
+              '<div class="device-meta">' +
+                '<span class="device-meta__state" data-tone="' + deviceStateTone + '">' + (light.reachable ? 'Reachable' : 'Unavailable') + '</span>' +
+                '<span>' + (light.on ? 'Live' : 'Standby') + '</span>' +
+              '</div>' +
+            '</article>';
+        }).join("");
+      }
+
+      function renderRooms(data) {
+        var groups = sortGroups(data.groups);
+        var activeRooms = groups.filter(function (group) { return group.on; }).length;
+        var controlsEnabled = data.configured && data.linked && !state.busy;
+        document.getElementById("room-badge").textContent = activeRooms + "/" + groups.length + " active";
+        document.getElementById("room-badge").setAttribute("data-tone", activeRooms ? "good" : (groups.length ? "warn" : "danger"));
+
+        if (!groups.length) {
+          renderEmpty("room-grid", data.configured ? "No Hue rooms or zones were returned by the bridge." : "Rooms appear after the bridge is linked.");
+          return;
+        }
+
+        document.getElementById("room-grid").innerHTML = groups.map(function (group) {
+          var color = resolveColor(group);
+          return '' +
+            '<article class="device-card" data-active="' + group.on + '" style="--card-accent:' + color.solid + ';--card-accent-soft:' + color.soft + ';--card-accent-aura:' + color.aura + ';">' +
+              '<div class="device-top">' +
+                '<div class="device-title">' +
+                  '<span class="device-swatch" aria-hidden="true"></span>' +
+                  '<div>' +
+                    '<div class="device-name">' + escapeHtml(group.name) + '</div>' +
+                    '<div class="device-subtitle">' + group.lights + ' lights</div>' +
+                  '</div>' +
+                '</div>' +
+                '<button class="toggle-button" data-action="toggle-group" data-id="' + encodeURIComponent(group.id) + '" data-active="' + group.on + '"' + (controlsEnabled ? '' : ' disabled') + '>' + (group.on ? 'On' : 'Off') + '</button>' +
+              '</div>' +
+              '<div class="brightness-row">' +
+                '<span class="label">Brightness</span>' +
+                '<span class="brightness-value">' + Math.round(group.brightness) + '%</span>' +
+              '</div>' +
+              '<input class="brightness-slider" data-action="brightness-group" data-id="' + encodeURIComponent(group.id) + '" type="range" min="0" max="100" value="' + Math.round(group.brightness) + '"' + (controlsEnabled ? '' : ' disabled') + '>' +
+              '<div class="device-meta">' +
+                '<span class="device-meta__state" data-tone="' + (group.on ? 'good' : 'warn') + '">' + (group.on ? 'Live' : 'Standby') + '</span>' +
+                '<span>' + escapeHtml(group.type) + '</span>' +
+              '</div>' +
+            '</article>';
+        }).join("");
+      }
+
+      function renderDiagnostics(data) {
+        var expanded = resolveDiagnosticsExpanded(data);
+        var linked = Boolean(data.configured && data.linked);
+        var badgeTone = state.statusTone === "danger" ? "danger" : (linked ? "good" : "warn");
+        var badgeText = state.statusTone === "danger" ? "Issue" : (linked ? "Ready" : "Setup");
+        var note = data.message || "Press the physical button on the Hue Bridge, then link it here within 30 seconds.";
+        var copy = linked
+          ? "Hidden while Hue is healthy."
+          : (data.bridgeIp ? "Bridge IP saved. Press the hardware button, then link." : "Enter the bridge IP once, then link it.");
+
+        document.getElementById("diagnostics-panel").setAttribute("data-expanded", expanded ? "true" : "false");
+        document.getElementById("diagnostics-toggle").setAttribute("aria-expanded", expanded ? "true" : "false");
+        document.getElementById("diagnostics-toggle-text").textContent = expanded ? "Close" : "Open";
+        document.getElementById("diagnostics-copy").textContent = copy;
+        document.getElementById("diagnostics-badge").textContent = badgeText;
+        document.getElementById("diagnostics-badge").setAttribute("data-tone", badgeTone);
+        document.getElementById("bridge-note").textContent = note;
+        document.getElementById("bridge-ip-input").value = state.bridgeIpInput || data.bridgeIp || "";
+        document.getElementById("bridge-ip-input").disabled = state.busy;
+        document.getElementById("bridge-link-button").textContent = linked ? "Relink" : "Link";
+        document.getElementById("bridge-link-button").disabled = state.busy;
+        document.getElementById("bridge-refresh-button").disabled = state.busy;
+        document.getElementById("hue-summary").innerHTML = [
+          '<div class="summary-chip"><strong>' + escapeHtml(data.bridgeIp || "--") + '</strong><span>Bridge IP</span></div>',
+          '<div class="summary-chip"><strong>' + data.lights.length + '</strong><span>Linked lights</span></div>',
+          '<div class="summary-chip"><strong>' + data.groups.length + '</strong><span>Rooms and zones</span></div>'
+        ].join("");
+      }
+
+      function render() {
+        var data = getSafeData();
+        var activeLights = data.lights.filter(function (light) { return light.on; }).length;
+        var activeRooms = data.groups.filter(function (group) { return group.on; }).length;
+        renderScene(data, activeLights, activeRooms);
+        renderLights(data);
+        renderRooms(data);
+        renderDiagnostics(data);
+      }
+      function refreshData() {
+        return fetchJson(endpoint).then(function (payload) {
+          var nextSignature = buildSignature(payload);
+          var nextTone = payload.configured ? "good" : (payload.bridgeIp ? "warn" : "warn");
+          var nextText = payload.configured ? "Ready" : (payload.bridgeIp ? "Link needed" : "Needs setup");
+          state.bridgeIpInput = payload.bridgeIp || state.bridgeIpInput;
+          if (nextSignature === state.lastSignature && state.statusTone === nextTone && state.statusText === nextText) {
+            return;
+          }
+          state.lastSignature = nextSignature;
+          state.data = payload;
+          setStatus(nextText, nextTone);
+
+          render();
+        }, function (error) {
+          setStatus(error.message || "Unavailable", "danger");
+          state.lastSignature = "";
+          state.data = state.data || {
+            configured: false,
+            linked: false,
+            bridgeIp: state.bridgeIpInput,
+            bridgeName: "Philips Hue",
+            lights: [],
+            groups: [],
+            source: "Hue unavailable",
+            message: error.message || "Hue unavailable"
+          };
+          render();
+        });
+      }
+
+      function commit(url, payload, rollback) {
+        state.busy = true;
+        return postJson(url, payload).then(function () {
+          state.busy = false;
+          return refreshData();
+        }, function (error) {
+          state.busy = false;
+          if (rollback) {
+            rollback();
+          }
+          setStatus(error.message || "Action failed", "danger");
+          render();
+        });
+      }
+
+      function mountWidget(widget) {
+        var intervalId = 0;
+        var tickBusy = false;
+
+        function tick() {
+          if (tickBusy || state.busy || state.interacting) {
+            return;
+          }
+          tickBusy = true;
+          Promise.resolve(widget.updateWidget()).then(function () {
+            tickBusy = false;
+          }, function () {
+            tickBusy = false;
+          });
+        }
+
+        if (typeof widget.initWidget === "function") {
+          widget.initWidget();
+        }
+
+        tick();
+        intervalId = window.setInterval(tick, widget.refreshInterval);
+
+        window.addEventListener("beforeunload", function () {
+          window.clearInterval(intervalId);
+          if (typeof widget.destroyWidget === "function") {
+            widget.destroyWidget();
+          }
+        });
+      }
+
+      function wireEvents() {
+        document.getElementById("bridge-refresh-button").addEventListener("click", function () {
+          refreshData();
+        });
+
+        document.getElementById("diagnostics-toggle").addEventListener("click", function () {
+          var data = getSafeData();
+          if (state.statusTone === "danger" || !data.configured || !data.linked) {
+            state.diagnosticsExpanded = true;
+          } else {
+            state.diagnosticsExpanded = !resolveDiagnosticsExpanded(data);
+          }
+          render();
+        });
+
+        document.getElementById("bridge-link-button").addEventListener("click", function () {
+          var bridgeIp = document.getElementById("bridge-ip-input").value.trim();
+          state.bridgeIpInput = bridgeIp;
+          state.diagnosticsExpanded = true;
+          setStatus("Linking bridge", "warn");
+          render();
+          postJson(linkEndpoint, { bridgeIp: bridgeIp }).then(function () {
+            setStatus("Ready", "good");
+            state.diagnosticsExpanded = false;
+            return refreshData();
+          }, function (error) {
+            setStatus(error.message || "Link failed", "danger");
+            state.diagnosticsExpanded = true;
+            render();
+          });
+        });
+
+        document.getElementById("bridge-ip-input").addEventListener("input", function (event) {
+          state.bridgeIpInput = event.target.value;
+        });
+
+        document.body.addEventListener("click", function (event) {
+          var target = event.target.closest("[data-action]");
+          var action = target && target.getAttribute("data-action");
+          var snapshot;
+          var light;
+          var group;
+          var actionId;
+
+          if (!action || !state.data || state.busy || !state.data.configured || !state.data.linked) {
+            return;
+          }
+
+          snapshot = cloneData(state.data);
+          actionId = decodeURIComponent(target.getAttribute("data-id") || "");
+
+          if (action === "toggle-light") {
+            light = findItem(state.data.lights, actionId);
+            if (!light) {
+              return;
+            }
+            light.on = !light.on;
+            light.brightness = light.on ? Math.max(light.brightness || 0, 65) : 0;
+            render();
+            commit(actionBase + "/lights/" + encodeURIComponent(light.id) + "/toggle", {
+              state: light.on
+            }, function () {
+              state.data = snapshot;
+            });
+            return;
+          }
+
+          if (action === "toggle-group") {
+            group = findItem(state.data.groups, actionId);
+            if (!group) {
+              return;
+            }
+            group.on = !group.on;
+            group.brightness = group.on ? Math.max(group.brightness || 0, 65) : 0;
+            render();
+            commit(actionBase + "/groups/" + encodeURIComponent(group.id) + "/toggle", {
+              state: group.on
+            }, function () {
+              state.data = snapshot;
+            });
+          }
+        });
+
+        document.body.addEventListener("pointerdown", function (event) {
+          var action = event.target.getAttribute("data-action");
+          if (action === "brightness-light" || action === "brightness-group") {
+            state.interacting = true;
+          }
+        });
+
+        document.body.addEventListener("input", function (event) {
+          var action = event.target.getAttribute("data-action");
+          if ((action !== "brightness-light" && action !== "brightness-group") || !state.data) {
+            return;
+          }
+
+          state.interacting = true;
+          var card = event.target.closest(".device-card");
+          var valueNode = card && card.querySelector(".brightness-value");
+          if (valueNode) {
+            valueNode.textContent = Math.round(Number(event.target.value || 0)) + "%";
+          }
+        });
+
+        document.body.addEventListener("change", function (event) {
+          var snapshot;
+          var light;
+          var group;
+          var actionId;
+          var action = event.target.getAttribute("data-action");
+          var brightness;
+
+          if ((action !== "brightness-light" && action !== "brightness-group") || !state.data || state.busy) {
+            state.interacting = false;
+            return;
+          }
+
+          snapshot = cloneData(state.data);
+          actionId = decodeURIComponent(event.target.getAttribute("data-id") || "");
+          brightness = Number(event.target.value || 0);
+
+          if (action === "brightness-light") {
+            light = findItem(state.data.lights, actionId);
+            if (!light) {
+              state.interacting = false;
+              return;
+            }
+
+            light.brightness = brightness;
+            light.on = light.brightness > 0;
+            render();
+            commit(actionBase + "/lights/" + encodeURIComponent(light.id) + "/brightness", {
+              brightness: light.brightness
+            }, function () {
+              state.data = snapshot;
+            }).finally(function () {
+              state.interacting = false;
+            });
+            return;
+          }
+
+          group = findItem(state.data.groups, actionId);
+          if (!group) {
+            state.interacting = false;
+            return;
+          }
+
+          group.brightness = brightness;
+          group.on = group.brightness > 0;
+          render();
+          commit(actionBase + "/groups/" + encodeURIComponent(group.id) + "/brightness", {
+            brightness: group.brightness
+          }, function () {
+            state.data = snapshot;
+          }).finally(function () {
+            state.interacting = false;
+          });
+        });
+
+        document.body.addEventListener("pointerup", function () {
+          state.interacting = false;
+        });
+
+        document.body.addEventListener("pointercancel", function () {
+          state.interacting = false;
+        });
+      }
+
+      var widget = {
+        refreshInterval: refreshInterval,
+        initWidget: function () {
+          wireEvents();
+        },
+        updateWidget: function () {
+          return refreshData();
+        },
+        destroyWidget: function () {}
+      };
+
+      mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

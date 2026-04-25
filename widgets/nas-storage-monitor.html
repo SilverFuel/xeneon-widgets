@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NAS Storage Monitor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: rgba(27, 36, 48, 0.96);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --accent: #00e0ff;
+      --accent-2: #44f0c2;
+      --text: #e6edf3;
+      --muted: #8b9aab;
+      --border: rgba(255, 255, 255, 0.08);
+      --good: #44d17a;
+      --warn: #ffb347;
+      --danger: #ff6b6b;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      --radius: 24px;
+      --font: Inter, Roboto, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.13), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(68, 240, 194, 0.09), transparent 32%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    .widget {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 14px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      min-height: 180px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(14, 20, 28, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 38%);
+      pointer-events: none;
+    }
+
+    .header,
+    .title-group,
+    .status,
+    .badge,
+    .layout,
+    .section-head,
+    .insight-strip,
+    .insight-chip,
+    .drive-top,
+    .drive-meta {
+      display: flex;
+      align-items: center;
+    }
+
+    .header,
+    .section-head,
+    .drive-top {
+      justify-content: space-between;
+    }
+
+    .header--compact {
+      justify-content: flex-end;
+    }
+
+    .header,
+    .title-group,
+    .layout,
+    .section-head,
+    .insight-strip,
+    .insight-chip,
+    .drive-top,
+    .drive-meta {
+      gap: 12px;
+    }
+
+    .icon {
+      width: 50px;
+      height: 50px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: rgba(0, 224, 255, 0.16);
+      color: var(--accent);
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .subtitle,
+    .detail,
+    .drive-meta,
+    .pool-detail {
+      color: var(--muted);
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 0.92rem;
+    }
+
+    .status,
+    .badge {
+      min-height: 40px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .status[data-tone="good"],
+    .badge[data-tone="good"] {
+      color: #bfffe1;
+      background: rgba(68, 209, 122, 0.16);
+      border-color: rgba(68, 209, 122, 0.25);
+    }
+
+    .status[data-tone="warn"],
+    .badge[data-tone="warn"] {
+      color: #ffe4bd;
+      background: rgba(255, 179, 71, 0.16);
+      border-color: rgba(255, 179, 71, 0.24);
+    }
+
+    .status[data-tone="danger"],
+    .badge[data-tone="danger"] {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.16);
+      border-color: rgba(255, 107, 107, 0.24);
+    }
+
+    .layout {
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 0.88fr) minmax(340px, 1.12fr);
+      gap: 12px;
+    }
+
+    .panel,
+    .pool-card,
+    .drive-card,
+    .insight-chip {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--panel-soft);
+    }
+
+    .panel {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      min-height: 0;
+    }
+
+    .eyebrow,
+    .label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.72rem;
+    }
+
+    .nas-name {
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 700;
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+    }
+
+    .detail,
+    .pool-detail {
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+
+    .pool-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .pool-card {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .pool-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .pool-name {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .pool-usage {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .meter {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .meter > span {
+      display: block;
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+
+    .insight-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .insight-chip {
+      min-height: 38px;
+      padding: 8px 10px;
+      font-size: 0.78rem;
+      line-height: 1.2;
+    }
+
+    .insight-chip strong {
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+
+    .drive-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      min-height: 0;
+      align-content: start;
+    }
+
+    .drive-card {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .drive-card[data-tone="good"] {
+      border-color: rgba(68, 209, 122, 0.18);
+    }
+
+    .drive-card[data-tone="warn"] {
+      border-color: rgba(255, 179, 71, 0.18);
+    }
+
+    .drive-card[data-tone="danger"] {
+      border-color: rgba(255, 107, 107, 0.18);
+    }
+
+    .drive-name {
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .drive-temp {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .drive-meta {
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
+    .empty-state {
+      display: grid;
+      place-items: center;
+      min-height: 100%;
+      padding: 20px 14px;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    [data-size="large"] body,
+    [data-size="medium"] body,
+    [data-size="small"] body {
+      padding: 10px;
+    }
+
+    [data-size="large"] .widget,
+    [data-size="medium"] .widget,
+    [data-size="small"] .widget {
+      height: calc(100vh - 20px);
+      padding: 16px;
+      gap: 14px;
+    }
+
+    [data-size="large"] .layout,
+    [data-size="medium"] .layout,
+    [data-size="small"] .layout {
+      grid-template-columns: 1fr;
+    }
+
+    [data-size="medium"] .icon,
+    [data-size="small"] .icon {
+      width: 42px;
+      height: 42px;
+      font-size: 0.82rem;
+    }
+
+    [data-size="medium"] h1,
+    [data-size="small"] h1 {
+      font-size: 1.1rem;
+    }
+
+    [data-size="medium"] .subtitle,
+    [data-size="small"] .subtitle {
+      font-size: 0.8rem;
+    }
+
+    [data-size="medium"] .status,
+    [data-size="small"] .status {
+      min-height: 34px;
+      padding: 8px 10px;
+      font-size: 0.72rem;
+    }
+
+    [data-size="medium"] .panel,
+    [data-size="small"] .panel,
+    [data-size="medium"] .pool-card,
+    [data-size="small"] .pool-card,
+    [data-size="medium"] .drive-card,
+    [data-size="small"] .drive-card {
+      padding: 14px;
+      border-radius: 18px;
+    }
+
+    [data-size="medium"] .drive-grid,
+    [data-size="small"] .drive-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    [data-size="small"] .header {
+      align-items: flex-start;
+    }
+
+    [data-size="small"] .drive-grid {
+      gap: 8px;
+    }
+
+    [data-size="small"] .nas-name {
+      font-size: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="widget">
+    <header class="header header--compact">
+      <div id="nas-status" class="status" data-tone="good">Refreshing</div>
+    </header>
+
+    <section class="layout">
+      <article class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Array</div>
+            <div id="nas-name" class="nas-name">NAS Storage</div>
+            <p id="nas-copy" class="detail">Pools and drive health.</p>
+          </div>
+          <div id="nas-health" class="badge" data-tone="good">Healthy</div>
+        </div>
+
+        <div id="pool-grid" class="pool-grid"></div>
+        <div id="insight-strip" class="insight-strip"></div>
+      </article>
+
+      <article class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Drives</div>
+            <h2>Drive health</h2>
+          </div>
+          <div id="drive-summary" class="badge" data-tone="good">--</div>
+        </div>
+        <div id="drive-grid" class="drive-grid"></div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var size = params.get("size") || "full";
+      document.documentElement.setAttribute("data-size", size);
+
+      function getParam(name, fallback) {
+        var value = params.get(name);
+        return value === null || value === "" ? fallback : value;
+      }
+
+      function getNumberParam(name, fallback) {
+        var value = Number(getParam(name, ""));
+        return isFinite(value) ? value : fallback;
+      }
+
+      function getJsonParam(name, fallback) {
+        var raw = params.get(name);
+        if (!raw) {
+          return fallback;
+        }
+
+        try {
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn("Invalid JSON query payload:", error);
+          return fallback;
+        }
+      }
+
+      function buildHeaders() {
+        return {};
+      }
+
+      function fetchJson(url) {
+        return fetch(url, {
+          headers: buildHeaders(),
+          cache: "no-store"
+        }).then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed with status " + response.status);
+          }
+          return response.json();
+        });
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function limitForSize() {
+        if (size === "small") {
+          return 4;
+        }
+        if (size === "medium") {
+          return 6;
+        }
+        return 8;
+      }
+
+      function mountWidget(widget) {
+        var intervalId = 0;
+        var busy = false;
+
+        function tick() {
+          if (busy) {
+            return;
+          }
+          busy = true;
+          Promise.resolve(widget.updateWidget()).then(function () {
+            busy = false;
+          }, function (error) {
+            busy = false;
+            console.warn(error);
+          });
+        }
+
+        if (typeof widget.initWidget === "function") {
+          widget.initWidget();
+        }
+
+        tick();
+
+        if (widget.refreshInterval) {
+          intervalId = window.setInterval(tick, widget.refreshInterval);
+        }
+
+        window.addEventListener("beforeunload", function () {
+          window.clearInterval(intervalId);
+          if (typeof widget.destroyWidget === "function") {
+            widget.destroyWidget();
+          }
+        });
+      }
+
+      function poolLabel(value, fallback) {
+        return typeof value === "number" ? value.toFixed(1) + " TB" : fallback;
+      }
+
+      function normalizeData(raw) {
+        var data = raw || {};
+        return {
+          hasLiveData: !!(Object.keys(data).length || (data.pools || []).length || (data.drives || []).length),
+          system: data.system || data.nas || getParam("system", "NAS Storage"),
+          source: data.source || (getParam("endpoint", "") ? "NAS API" : "Needs setup"),
+          copy: data.copy || getParam("copy", getParam("endpoint", "") ? "Pools and drive health are live." : "Native NAS connector is planned."),
+          pools: (data.pools || []).map(function (pool) {
+            var totalTb = typeof pool.totalTb === "number" ? pool.totalTb : null;
+            var usedTb = typeof pool.usedTb === "number" ? pool.usedTb : null;
+            var usedPercent = typeof pool.usedPercent === "number"
+              ? pool.usedPercent
+              : totalTb && usedTb ? (usedTb / totalTb) * 100 : 0;
+            return {
+              name: pool.name,
+              usedPercent: usedPercent,
+              usedLabel: pool.usedLabel || poolLabel(usedTb, "--"),
+              totalLabel: pool.totalLabel || poolLabel(totalTb, "--"),
+              freeLabel: pool.freeLabel || (totalTb && usedTb ? (totalTb - usedTb).toFixed(1) + " TB free" : "--"),
+              health: pool.health || "Healthy"
+            };
+          }),
+          drives: (data.drives || []).map(function (drive) {
+            return {
+              name: drive.name,
+              health: drive.health || "Normal",
+              tempC: typeof drive.tempC === "number" ? drive.tempC : 0,
+              usagePercent: typeof drive.usagePercent === "number" ? drive.usagePercent : 0,
+              status: drive.status || "Online"
+            };
+          })
+        };
+      }
+
+      function emptyData() {
+        return normalizeData({
+          pools: [],
+          drives: []
+        });
+      }
+
+      function toneForHealth(health) {
+        var value = String(health || "").toLowerCase();
+        if (value.indexOf("fail") !== -1 || value.indexOf("critical") !== -1) {
+          return "danger";
+        }
+        if (value.indexOf("warn") !== -1 || value.indexOf("resync") !== -1) {
+          return "warn";
+        }
+        return "good";
+      }
+
+      function render(data, error) {
+        var hottestDrive = data.drives.reduce(function (hottest, drive) {
+          return !hottest || drive.tempC > hottest.tempC ? drive : hottest;
+        }, null);
+        var warningDrives = data.drives.filter(function (drive) {
+          return toneForHealth(drive.health) !== "good";
+        }).length;
+        var overallTone = error
+          ? "danger"
+          : !data.hasLiveData
+            ? "warn"
+          : warningDrives > 1 || (hottestDrive && hottestDrive.tempC >= 48)
+            ? "danger"
+            : warningDrives > 0 || (hottestDrive && hottestDrive.tempC >= 42)
+              ? "warn"
+              : "good";
+        var healthyCount = data.drives.length - warningDrives;
+
+        document.getElementById("nas-name").textContent = data.system;
+        document.getElementById("nas-copy").textContent = data.copy;
+        document.getElementById("nas-status").textContent = error ? "Unavailable" : data.source;
+        document.getElementById("nas-status").setAttribute("data-tone", overallTone);
+        document.getElementById("nas-health").textContent = !data.hasLiveData ? "Waiting" : overallTone === "good" ? "Healthy" : overallTone === "warn" ? "Watching" : "Attention";
+        document.getElementById("nas-health").setAttribute("data-tone", overallTone);
+        document.getElementById("drive-summary").textContent = data.drives.length ? healthyCount + "/" + data.drives.length + " healthy" : "No drive data";
+        document.getElementById("drive-summary").setAttribute("data-tone", overallTone);
+
+        document.getElementById("pool-grid").innerHTML = data.pools.length ? data.pools.map(function (pool) {
+          var tone = toneForHealth(pool.health);
+          return '' +
+            '<article class="pool-card">' +
+              '<div class="pool-top">' +
+                '<div>' +
+                  '<div class="pool-name">' + pool.name + '</div>' +
+                  '<div class="pool-detail">' + pool.health + '</div>' +
+                '</div>' +
+                '<div class="badge" data-tone="' + tone + '">' + Math.round(pool.usedPercent) + '% used</div>' +
+              '</div>' +
+              '<div class="pool-usage">' + pool.usedLabel + ' / ' + pool.totalLabel + '</div>' +
+              '<div class="meter"><span style="width:' + clamp(pool.usedPercent, 0, 100) + '%"></span></div>' +
+              '<div class="pool-detail">' + pool.freeLabel + '</div>' +
+            '</article>';
+        }).join("") : '<div class="empty-state">NAS storage will light up after the native connector is added.</div>';
+
+        document.getElementById("insight-strip").innerHTML = [
+          '<div class="insight-chip"><strong>' + (data.pools.length ? data.pools.map(function (pool) { return pool.usedLabel; }).join(" + ") : "--") + '</strong><span>Used</span></div>',
+          '<div class="insight-chip"><strong>' + (hottestDrive ? hottestDrive.name + " " + hottestDrive.tempC + "C" : "--") + '</strong><span>Hottest</span></div>',
+          '<div class="insight-chip"><strong>' + (data.drives.length ? healthyCount + '/' + data.drives.length : "--") + '</strong><span>Healthy</span></div>'
+        ].join("");
+
+        if (!data.drives.length) {
+          document.getElementById("drive-grid").innerHTML = '<div class="empty-state">' + (data.hasLiveData ? "No drive telemetry available." : "Drive health will light up after the native connector is added.") + '</div>';
+          return;
+        }
+
+        document.getElementById("drive-grid").innerHTML = data.drives.slice(0, limitForSize()).map(function (drive) {
+          var tone = drive.tempC >= 48 ? "danger" : drive.tempC >= 42 || toneForHealth(drive.health) === "warn" ? "warn" : toneForHealth(drive.health);
+          return '' +
+            '<article class="drive-card" data-tone="' + tone + '">' +
+              '<div class="drive-top">' +
+                '<div class="drive-name">' + drive.name + '</div>' +
+                '<div class="badge" data-tone="' + tone + '">' + drive.health + '</div>' +
+              '</div>' +
+              '<div class="drive-temp">' + drive.tempC + 'C</div>' +
+              '<div class="meter"><span style="width:' + clamp(drive.usagePercent, 0, 100) + '%"></span></div>' +
+              '<div class="drive-meta">' +
+                '<span>' + drive.status + '</span>' +
+                '<span>' + Math.round(drive.usagePercent) + '% utilized</span>' +
+              '</div>' +
+            '</article>';
+        }).join("");
+      }
+
+      var widget = {
+        refreshInterval: getParam("endpoint", "") ? Math.max(5000, getNumberParam("refresh", 10000)) : 0,
+        initWidget: function () {},
+        updateWidget: function () {
+          var payload = getJsonParam("payload", null);
+          if (payload) {
+            render(normalizeData(payload));
+            return;
+          }
+
+          var endpoint = getParam("endpoint", "");
+          if (!endpoint) {
+            render(emptyData());
+            return;
+          }
+
+          return fetchJson(endpoint).then(function (data) {
+            render(normalizeData(data));
+          }, function (error) {
+            render(emptyData(), error);
+          });
+        },
+        destroyWidget: function () {}
+      };
+
+      mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>
