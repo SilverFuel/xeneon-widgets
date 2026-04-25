@@ -2,7 +2,10 @@
 .env
 .env.*
 !.env.example
+!.env.release.example
 bridge/config.json
+*.p12
+*.pfx
 
 # Logs and generated scratch files
 *.log
@@ -24,6 +27,7 @@ bridge/AudioBridge.pdb
 
 # Node / web tooling
 node_modules/
+desktop/electron/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -40,3 +44,5 @@ app/obj/
 app/FixedRuntime/
 app/dist/
 app/installer-build/
+desktop/electron/dist/
+/release/

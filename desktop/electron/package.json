@@ -1,0 +1,80 @@
+{
+  "name": "xenon-edge-host-desktop",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Cross-platform desktop host for the XENEON Edge Host dashboard.",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check src/main.cjs",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac dmg zip",
+    "dist:win": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "dev.silverfuel.xenon-edge-host",
+    "productName": "XENEON Edge Host",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "build/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../dashboard.html",
+        "to": "web/dashboard.html"
+      },
+      {
+        "from": "../../hosted-dashboard.html",
+        "to": "web/hosted-dashboard.html"
+      },
+      {
+        "from": "../../index.html",
+        "to": "web/index.html"
+      },
+      {
+        "from": "../../css",
+        "to": "web/css"
+      },
+      {
+        "from": "../../js",
+        "to": "web/js"
+      },
+      {
+        "from": "../../widgets",
+        "to": "web/widgets"
+      },
+      {
+        "from": "../../assets",
+        "to": "web/assets"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {
+      "sign": false
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

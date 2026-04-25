@@ -1,0 +1,103 @@
+name: Release Artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate
+        run: npm run check
+
+      - name: Build installer
+        run: npm run installer
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            app/dist/*.exe
+            app/dist/*.sha256
+            app/dist/README-install.txt
+
+  mac:
+    name: macOS package
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Electron host dependencies
+        run: npm --prefix desktop/electron install
+
+      - name: Validate Electron host
+        run: npm --prefix desktop/electron run check
+
+      - name: Build macOS package
+        run: npm run mac:dist
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-package
+          path: |
+            desktop/electron/dist/*.dmg
+            desktop/electron/dist/*.zip
+            desktop/electron/dist/*.yml
+
+  github-release:
+    name: Draft GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - windows
+      - mac
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" release-assets/**/* --clobber
+          else
+            gh release create "$TAG_NAME" release-assets/**/* --draft --title "XENEON Edge Host $TAG_NAME" --notes-file CHANGELOG.md
+          fi
