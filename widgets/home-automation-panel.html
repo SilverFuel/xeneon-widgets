@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Home Automation Panel</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: rgba(27, 36, 48, 0.96);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --accent: #00e0ff;
+      --accent-2: #44f0c2;
+      --text: #e6edf3;
+      --muted: #8b9aab;
+      --border: rgba(255, 255, 255, 0.08);
+      --good: #44d17a;
+      --warn: #ffb347;
+      --danger: #ff6b6b;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      --radius: 24px;
+      --font: Inter, Roboto, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.13), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(68, 240, 194, 0.09), transparent 32%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .widget {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 14px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      min-height: 180px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(14, 20, 28, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 38%);
+      pointer-events: none;
+    }
+
+    .header,
+    .title-group,
+    .status,
+    .badge,
+    .layout,
+    .section-head,
+    .device-top,
+    .device-meta {
+      display: flex;
+      align-items: center;
+    }
+
+    .header,
+    .section-head,
+    .device-top {
+      justify-content: space-between;
+    }
+
+    .header--compact {
+      justify-content: flex-end;
+    }
+
+    .header,
+    .title-group,
+    .layout,
+    .section-head,
+    .device-top,
+    .device-meta {
+      gap: 12px;
+    }
+
+    .icon {
+      width: 50px;
+      height: 50px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: rgba(0, 224, 255, 0.16);
+      color: var(--accent);
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .subtitle,
+    .detail,
+    .device-meta,
+    .scene-copy,
+    .device-subtitle {
+      color: var(--muted);
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 0.92rem;
+    }
+
+    .status,
+    .badge {
+      min-height: 40px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .status[data-tone="good"],
+    .badge[data-tone="good"] {
+      color: #bfffe1;
+      background: rgba(68, 209, 122, 0.16);
+      border-color: rgba(68, 209, 122, 0.25);
+    }
+
+    .status[data-tone="warn"],
+    .badge[data-tone="warn"] {
+      color: #ffe4bd;
+      background: rgba(255, 179, 71, 0.16);
+      border-color: rgba(255, 179, 71, 0.24);
+    }
+
+    .status[data-tone="danger"],
+    .badge[data-tone="danger"] {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.16);
+      border-color: rgba(255, 107, 107, 0.24);
+    }
+
+    .layout {
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(300px, 0.88fr);
+      gap: 12px;
+    }
+
+    .panel,
+    .device-card,
+    .scene-button {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--panel-soft);
+    }
+
+    .panel {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      min-height: 0;
+    }
+
+    .panel--stack {
+      align-content: start;
+    }
+
+    .eyebrow,
+    .label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.72rem;
+    }
+
+    .device-grid,
+    .scene-grid {
+      display: grid;
+      gap: 10px;
+      min-height: 0;
+      align-content: start;
+    }
+
+    .device-card {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+    }
+
+    .device-card[data-active="true"] {
+      border-color: rgba(68, 209, 122, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(68, 209, 122, 0.08);
+    }
+
+    .device-name {
+      font-size: 0.94rem;
+      font-weight: 700;
+    }
+
+    .device-subtitle {
+      font-size: 0.76rem;
+    }
+
+    .device-meta {
+      justify-content: space-between;
+      font-size: 0.82rem;
+      line-height: 1.35;
+    }
+
+    .toggle-button,
+    .scene-button {
+      cursor: pointer;
+      border: 0;
+      color: var(--text);
+    }
+
+    .toggle-button {
+      min-width: 78px;
+      min-height: 38px;
+      padding: 8px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      transition: transform 120ms ease, background 160ms ease, color 160ms ease;
+    }
+
+    .toggle-button:active,
+    .scene-button:active {
+      transform: scale(0.98);
+    }
+
+    .toggle-button[data-active="true"],
+    .scene-button.is-primary {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      color: #041118;
+      font-weight: 700;
+    }
+
+    .brightness-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .brightness-slider {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .toggle-button:disabled,
+    .scene-button:disabled,
+    .brightness-slider:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+    }
+
+    .empty-state {
+      padding: 16px 14px;
+      border: 1px dashed rgba(255, 255, 255, 0.14);
+      border-radius: 18px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .scene-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .scene-button {
+      display: grid;
+      gap: 8px;
+      min-height: 90px;
+      padding: 14px;
+      border-radius: 18px;
+      text-align: left;
+      background: rgba(255, 255, 255, 0.05);
+      transition: transform 120ms ease, border-color 160ms ease;
+    }
+
+    .scene-button strong {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .scene-copy {
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    .section-stack {
+      display: grid;
+      gap: 12px;
+      min-height: 0;
+      align-content: start;
+    }
+
+    [data-size="large"] body,
+    [data-size="medium"] body,
+    [data-size="small"] body {
+      padding: 10px;
+    }
+
+    [data-size="large"] .widget,
+    [data-size="medium"] .widget,
+    [data-size="small"] .widget {
+      height: calc(100vh - 20px);
+      padding: 16px;
+      gap: 14px;
+    }
+
+    [data-size="large"] .layout,
+    [data-size="medium"] .layout,
+    [data-size="small"] .layout {
+      grid-template-columns: 1fr;
+    }
+
+    [data-size="medium"] .scene-grid,
+    [data-size="small"] .scene-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    [data-size="medium"] .icon,
+    [data-size="small"] .icon {
+      width: 42px;
+      height: 42px;
+      font-size: 0.82rem;
+    }
+
+    [data-size="medium"] h1,
+    [data-size="small"] h1 {
+      font-size: 1.1rem;
+    }
+
+    [data-size="medium"] .subtitle,
+    [data-size="small"] .subtitle {
+      font-size: 0.8rem;
+    }
+
+    [data-size="medium"] .status,
+    [data-size="small"] .status {
+      min-height: 34px;
+      padding: 8px 10px;
+      font-size: 0.72rem;
+    }
+
+    [data-size="medium"] .panel,
+    [data-size="small"] .panel,
+    [data-size="medium"] .device-card,
+    [data-size="small"] .device-card,
+    [data-size="medium"] .scene-button,
+    [data-size="small"] .scene-button {
+      padding: 14px;
+      border-radius: 18px;
+    }
+
+    [data-size="small"] .header {
+      align-items: flex-start;
+    }
+
+    [data-size="small"] .scene-grid {
+      grid-template-columns: 1fr;
+    }
+  </style>
+</head>
+<body>
+  <main class="widget">
+    <header class="header header--compact">
+      <div id="automation-status" class="status" data-tone="warn">Needs setup</div>
+    </header>
+
+    <section class="layout">
+      <article class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Lights</div>
+            <h2>Lights</h2>
+          </div>
+          <div id="active-badge" class="badge" data-tone="good">--</div>
+        </div>
+        <div id="light-grid" class="device-grid"></div>
+      </article>
+
+      <article class="panel panel--stack">
+        <div class="section-stack">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Switches</div>
+              <h2>Switches</h2>
+            </div>
+            <div id="sync-badge" class="badge" data-tone="warn">Read only</div>
+          </div>
+          <div id="switch-grid" class="device-grid"></div>
+        </div>
+
+        <div class="section-stack">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Scenes</div>
+              <h2>Scenes</h2>
+            </div>
+            <div id="scene-badge" class="badge" data-tone="good">Ready</div>
+          </div>
+          <div id="scene-grid" class="scene-grid"></div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var size = params.get("size") || "full";
+      var hasEndpoint = !!params.get("endpoint");
+      var hasActionEndpoint = !!params.get("actionEndpoint");
+      document.documentElement.setAttribute("data-size", size);
+
+      function getParam(name, fallback) {
+        var value = params.get(name);
+        return value === null || value === "" ? fallback : value;
+      }
+
+      function getNumberParam(name, fallback) {
+        var value = Number(getParam(name, ""));
+        return isFinite(value) ? value : fallback;
+      }
+
+      function getJsonParam(name, fallback) {
+        var raw = params.get(name);
+        if (!raw) {
+          return fallback;
+        }
+
+        try {
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn("Invalid JSON query payload:", error);
+          return fallback;
+        }
+      }
+
+      function buildHeaders(includeJson) {
+        var headers = includeJson ? { "Content-Type": "application/json" } : {};
+        return headers;
+      }
+
+      function fetchJson(url) {
+        return fetch(url, {
+          headers: buildHeaders(false),
+          cache: "no-store"
+        }).then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed with status " + response.status);
+          }
+          return response.json();
+        });
+      }
+
+      function postJson(url, body) {
+        return fetch(url, {
+          method: getParam("actionMethod", "POST"),
+          headers: buildHeaders(true),
+          body: JSON.stringify(body)
+        }).then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed with status " + response.status);
+          }
+          return response.json().catch(function () {
+            return {};
+          });
+        });
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function formatTime(date) {
+        return date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        });
+      }
+
+      function mountWidget(widget) {
+        var intervalId = 0;
+        var busy = false;
+
+        function tick() {
+          if (busy) {
+            return;
+          }
+          busy = true;
+          Promise.resolve(widget.updateWidget()).then(function () {
+            busy = false;
+          }, function (error) {
+            busy = false;
+            console.warn(error);
+          });
+        }
+
+        if (typeof widget.initWidget === "function") {
+          widget.initWidget();
+        }
+
+        tick();
+
+        if (widget.refreshInterval) {
+          intervalId = window.setInterval(tick, widget.refreshInterval);
+        }
+
+        window.addEventListener("beforeunload", function () {
+          window.clearInterval(intervalId);
+          if (typeof widget.destroyWidget === "function") {
+            widget.destroyWidget();
+          }
+        });
+      }
+
+      function normalizeData(raw) {
+        var data = raw || {};
+        return {
+          hasLiveData: !!(Object.keys(data).length || (data.lights || []).length || (data.switches || []).length || (data.scenes || []).length),
+          source: data.source || (hasEndpoint ? "Automation API" : "Needs setup"),
+          lights: (data.lights || []).map(function (light) {
+            return {
+              id: light.id,
+              name: light.name,
+              on: !!light.on,
+              brightness: typeof light.brightness === "number" ? light.brightness : 0
+            };
+          }),
+          switches: (data.switches || []).map(function (item) {
+            return {
+              id: item.id,
+              name: item.name,
+              on: !!item.on,
+              detail: item.detail || "Smart switch"
+            };
+          }),
+          scenes: (data.scenes || []).map(function (scene) {
+            return {
+              id: scene.id,
+              name: scene.name,
+              description: scene.description || ""
+            };
+          })
+        };
+      }
+
+      function emptyData() {
+        return normalizeData({
+          lights: [],
+          switches: [],
+          scenes: []
+        });
+      }
+
+      var state = {
+        data: null,
+        syncTone: hasActionEndpoint ? "good" : "warn",
+        syncText: hasActionEndpoint ? "Writable" : hasEndpoint ? "Read only" : "Add endpoint",
+        sceneText: hasActionEndpoint ? "Ready" : hasEndpoint ? "Read only" : "Waiting",
+        sourceText: hasEndpoint ? "Automation API" : "Needs setup"
+      };
+
+      function cloneData(data) {
+        return JSON.parse(JSON.stringify(data));
+      }
+
+      function findItem(collection, id) {
+        var index;
+        for (index = 0; index < collection.length; index += 1) {
+          if (collection[index].id === id) {
+            return collection[index];
+          }
+        }
+        return null;
+      }
+
+      function render() {
+        var data = state.data || emptyData();
+        var writable = hasActionEndpoint;
+        var activeDevices = data.lights.filter(function (light) { return light.on; }).length +
+          data.switches.filter(function (item) { return item.on; }).length;
+
+        document.getElementById("automation-status").textContent = state.sourceText;
+        document.getElementById("automation-status").setAttribute("data-tone", state.syncTone);
+        document.getElementById("active-badge").textContent = activeDevices + " active";
+        document.getElementById("active-badge").setAttribute("data-tone", activeDevices ? "good" : "warn");
+        document.getElementById("sync-badge").textContent = state.syncText;
+        document.getElementById("sync-badge").setAttribute("data-tone", state.syncTone);
+        document.getElementById("scene-badge").textContent = state.sceneText;
+        document.getElementById("scene-badge").setAttribute("data-tone", state.syncTone);
+
+        document.getElementById("light-grid").innerHTML = data.lights.length ? data.lights.map(function (light) {
+          return '' +
+            '<article class="device-card" data-active="' + light.on + '">' +
+              '<div class="device-top">' +
+                '<div>' +
+                  '<div class="device-name">' + escapeHtml(light.name) + '</div>' +
+                  '<div class="device-subtitle">Light</div>' +
+                '</div>' +
+                '<button class="toggle-button" data-action="toggle-light" data-id="' + escapeHtml(light.id) + '" data-active="' + light.on + '"' + (writable ? '' : ' disabled') + '>' + (light.on ? 'On' : 'Off') + '</button>' +
+              '</div>' +
+              '<div class="brightness-row">' +
+                '<span class="label">Brightness</span>' +
+                '<span class="brightness-value">' + Math.round(light.brightness) + '%</span>' +
+              '</div>' +
+              '<input class="brightness-slider" data-action="brightness" data-id="' + escapeHtml(light.id) + '" type="range" min="0" max="100" value="' + Math.round(light.brightness) + '"' + (writable ? '' : ' disabled') + '>' +
+            '</article>';
+        }).join("") : '<div class="empty-state">Smart-home controls will light up after the native connector is added.</div>';
+
+        document.getElementById("switch-grid").innerHTML = data.switches.length ? data.switches.map(function (item) {
+          return '' +
+            '<article class="device-card" data-active="' + item.on + '">' +
+              '<div class="device-top">' +
+                '<div>' +
+                  '<div class="device-name">' + escapeHtml(item.name) + '</div>' +
+                  '<div class="device-subtitle">' + escapeHtml(item.detail) + '</div>' +
+                '</div>' +
+                '<button class="toggle-button" data-action="toggle-switch" data-id="' + escapeHtml(item.id) + '" data-active="' + item.on + '"' + (writable ? '' : ' disabled') + '>' + (item.on ? 'On' : 'Off') + '</button>' +
+              '</div>' +
+              '<div class="device-meta">' +
+                '<span>' + (item.on ? 'On' : 'Off') + '</span>' +
+                '<span>' + (writable ? 'Writable' : 'Read only') + '</span>' +
+              '</div>' +
+            '</article>';
+        }).join("") : '<div class="empty-state">Switch controls will light up after the native connector is added.</div>';
+
+        document.getElementById("scene-grid").innerHTML = data.scenes.length ? data.scenes.slice(0, 4).map(function (scene, index) {
+          return '' +
+            '<button class="scene-button' + (index === 0 ? ' is-primary' : '') + '" data-action="scene" data-id="' + escapeHtml(scene.id) + '"' + (writable ? '' : ' disabled') + '>' +
+              '<strong>' + escapeHtml(scene.name) + '</strong>' +
+              '<span class="scene-copy">' + escapeHtml(scene.description) + '</span>' +
+            '</button>';
+        }).join("") : '<div class="empty-state">Scenes will light up after the native connector is added.</div>';
+      }
+
+      function applyScene(sceneId) {
+        var lights = state.data.lights;
+        var switches = state.data.switches;
+        var desk = findItem(lights, "desk_strip");
+        var rack = findItem(lights, "rack_glow");
+        var studio = findItem(lights, "studio_spots");
+        var amp = findItem(switches, "amp");
+        var display = findItem(switches, "display_wall");
+        var bench = findItem(switches, "bench");
+
+        if (sceneId === "focus") {
+          if (desk) { desk.on = true; desk.brightness = 92; }
+          if (rack) { rack.on = true; rack.brightness = 54; }
+          if (studio) { studio.on = true; studio.brightness = 68; }
+          if (amp) { amp.on = true; }
+          if (display) { display.on = true; }
+          if (bench) { bench.on = false; }
+        } else if (sceneId === "movie") {
+          if (desk) { desk.on = false; desk.brightness = 0; }
+          if (rack) { rack.on = true; rack.brightness = 24; }
+          if (studio) { studio.on = false; studio.brightness = 0; }
+          if (amp) { amp.on = true; }
+          if (display) { display.on = true; }
+          if (bench) { bench.on = false; }
+        } else if (sceneId === "night") {
+          if (desk) { desk.on = false; desk.brightness = 0; }
+          if (rack) { rack.on = true; rack.brightness = 12; }
+          if (studio) { studio.on = false; studio.brightness = 0; }
+          if (amp) { amp.on = false; }
+          if (display) { display.on = false; }
+          if (bench) { bench.on = false; }
+        }
+      }
+
+      function commitAction(payload, rollback) {
+        var actionEndpoint = getParam("actionEndpoint", "");
+        state.syncText = actionEndpoint ? "Sending..." : hasEndpoint ? "Read only" : "Add endpoint";
+        state.syncTone = actionEndpoint ? "warn" : "warn";
+        state.sceneText = payload.action === "scene" ? "Applying " + payload.sceneId : state.sceneText;
+        render();
+
+        if (!actionEndpoint) {
+          state.syncText = hasEndpoint ? "Read only" : "Add endpoint";
+          state.syncTone = "warn";
+          state.sourceText = hasEndpoint ? "Automation API" : "Needs setup";
+          state.sceneText = hasEndpoint ? "Read only" : "Waiting";
+          render();
+          return Promise.resolve();
+        }
+
+        return postJson(actionEndpoint, payload).then(function () {
+          state.syncText = "Synced " + formatTime(new Date());
+          state.syncTone = "good";
+          state.sourceText = getParam("endpoint", "") ? "Automation API" : "Remote control";
+          state.sceneText = payload.action === "scene" ? "Applied " + payload.sceneId : "Ready";
+          render();
+        }, function () {
+          if (rollback) {
+            rollback();
+          }
+          state.syncText = "Action failed";
+          state.syncTone = "danger";
+          state.sceneText = "Retry needed";
+          render();
+        });
+      }
+
+      function wireEvents() {
+        document.body.addEventListener("click", function (event) {
+          var target = event.target.closest("[data-action]");
+          var action = target && target.getAttribute("data-action");
+          var snapshot;
+          var light;
+          var item;
+          var sceneId;
+
+          if (!action || !state.data) {
+            return;
+          }
+
+          snapshot = cloneData(state.data);
+
+          if (action === "toggle-light") {
+            light = findItem(state.data.lights, target.getAttribute("data-id"));
+            if (!light) {
+              return;
+            }
+            light.on = !light.on;
+            light.brightness = light.on ? Math.max(light.brightness || 0, 65) : 0;
+            state.sceneText = "Ready";
+            render();
+            commitAction({
+              kind: "light",
+              action: "toggle",
+              id: light.id,
+              state: light.on,
+              brightness: light.brightness
+            }, function () {
+              state.data = snapshot;
+            });
+          } else if (action === "toggle-switch") {
+            item = findItem(state.data.switches, target.getAttribute("data-id"));
+            if (!item) {
+              return;
+            }
+            item.on = !item.on;
+            state.sceneText = "Ready";
+            render();
+            commitAction({
+              kind: "switch",
+              action: "toggle",
+              id: item.id,
+              state: item.on
+            }, function () {
+              state.data = snapshot;
+            });
+          } else if (action === "scene") {
+            sceneId = target.getAttribute("data-id");
+            applyScene(sceneId);
+            render();
+            commitAction({
+              kind: "scene",
+              action: "scene",
+              sceneId: sceneId
+            }, function () {
+              state.data = snapshot;
+            });
+          }
+        });
+
+        document.body.addEventListener("input", function (event) {
+          if (event.target.getAttribute("data-action") !== "brightness") {
+            return;
+          }
+          var card = event.target.closest(".device-card");
+          if (!card) {
+            return;
+          }
+          var valueNode = card.querySelector(".brightness-value");
+          if (valueNode) {
+            valueNode.textContent = Math.round(Number(event.target.value || 0)) + "%";
+          }
+        });
+
+        document.body.addEventListener("change", function (event) {
+          if (event.target.getAttribute("data-action") !== "brightness" || !state.data) {
+            return;
+          }
+
+          var light = findItem(state.data.lights, event.target.getAttribute("data-id"));
+          var snapshot = cloneData(state.data);
+          if (!light) {
+            return;
+          }
+
+          light.brightness = Number(event.target.value || 0);
+          light.on = light.brightness > 0;
+          render();
+          commitAction({
+            kind: "light",
+            action: "brightness",
+            id: light.id,
+            state: light.on,
+            brightness: light.brightness
+          }, function () {
+            state.data = snapshot;
+          });
+        });
+      }
+
+      var widget = {
+        refreshInterval: getParam("endpoint", "") ? Math.max(6000, getNumberParam("refresh", 10000)) : 0,
+        initWidget: function () {
+          wireEvents();
+        },
+        updateWidget: function () {
+          var payload = getJsonParam("payload", null);
+          if (payload) {
+            state.data = normalizeData(payload);
+            state.sourceText = state.data.source;
+            state.syncText = hasActionEndpoint ? "Writable" : "Read only";
+            state.syncTone = hasActionEndpoint ? "good" : "warn";
+            state.sceneText = hasActionEndpoint ? "Ready" : "Read only";
+            render();
+            return;
+          }
+
+          var endpoint = getParam("endpoint", "");
+          if (!endpoint) {
+            if (!state.data) {
+              state.data = emptyData();
+            }
+            state.sourceText = "Needs setup";
+            state.syncText = hasActionEndpoint ? "Writable" : "Add endpoint";
+            state.syncTone = hasActionEndpoint ? "good" : "warn";
+            state.sceneText = hasActionEndpoint ? "Ready" : "Waiting";
+            render();
+            return;
+          }
+
+          return fetchJson(endpoint).then(function (data) {
+            state.data = normalizeData(data);
+            state.sourceText = state.data.source;
+            if (!getParam("actionEndpoint", "")) {
+              state.syncText = "Read only";
+              state.syncTone = "warn";
+              state.sceneText = "Read only";
+            } else {
+              state.syncText = "Writable";
+              state.syncTone = "good";
+              state.sceneText = "Ready";
+            }
+            render();
+          }, function () {
+            if (!state.data || !state.data.hasLiveData) {
+              state.data = emptyData();
+            }
+            state.sourceText = "Unavailable";
+            state.syncTone = "danger";
+            state.syncText = hasActionEndpoint ? "Connection issue" : "Read only";
+            state.sceneText = "Retry needed";
+            render();
+          });
+        },
+        destroyWidget: function () {}
+      };
+
+      mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

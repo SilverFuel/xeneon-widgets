@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UniFi Network Dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1016;
+      --panel: rgba(19, 27, 38, 0.96);
+      --text: #e7eef6;
+      --muted: #8fa0b3;
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #3eb5ff;
+      --accent-2: #9b6dff;
+      --good: #49d17d;
+      --warn: #ffbf69;
+      --danger: #ff6b6b;
+      --shadow: 0 22px 42px rgba(0, 0, 0, 0.34);
+      --radius: 24px;
+      --font: Inter, Roboto, system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(62, 181, 255, 0.12), transparent 26%),
+        radial-gradient(circle at bottom right, rgba(155, 109, 255, 0.08), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body { padding: 12px; }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3, p { margin: 0; }
+
+    .widget {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(22, 31, 44, 0.97), rgba(11, 17, 25, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 35%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .widget > * { position: relative; z-index: 1; }
+    .header, .header-actions, .site-strip, .site-strip__item, .stat-row, .toolbar, .toolbar__group, .toggle, .chart-meta, .chip-list, .chip, .icon-list, .icon-chip, .health-row { display: flex; align-items: center; gap: 10px; }
+    .header, .toolbar, .stat-row, .chart-meta { justify-content: space-between; }
+    .header { justify-content: flex-end; }
+
+    .status, .badge, .toggle button, .range button {
+      min-height: 38px;
+      padding: 9px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+
+    .status[data-tone="good"], .badge[data-tone="good"] { color: #c8ffe4; background: rgba(73, 209, 125, 0.16); border-color: rgba(73, 209, 125, 0.2); }
+    .status[data-tone="warn"], .badge[data-tone="warn"] { color: #ffe5c3; background: rgba(255, 191, 105, 0.16); border-color: rgba(255, 191, 105, 0.22); }
+    .status[data-tone="danger"], .badge[data-tone="danger"] { color: #ffd5d5; background: rgba(255, 107, 107, 0.16); border-color: rgba(255, 107, 107, 0.22); }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .rail, .board { min-height: 0; overflow: auto; padding-right: 6px; }
+    .rail { display: grid; gap: 12px; align-content: start; }
+    .board { display: grid; gap: 12px; align-content: start; }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 42%),
+        var(--panel);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      overflow: hidden;
+    }
+
+    .card__body { padding: 14px; }
+    .eyebrow, .label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .gateway-name { margin-top: 8px; font-size: clamp(1.65rem, 2.8vw, 2.35rem); line-height: 0.95; letter-spacing: -0.05em; }
+    .gateway-copy, .muted, .site-strip__item span:last-child, .stat-detail, .chart-note, .legend-value small { color: var(--muted); }
+
+    .site-strip { flex-wrap: wrap; margin-top: 12px; }
+    .site-strip__item {
+      min-height: 38px;
+      padding: 8px 10px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 0.78rem;
+    }
+    .site-strip__item strong { color: var(--text); font-size: 0.92rem; }
+
+    .stats-card { display: grid; gap: 12px; }
+    .stat-row strong { font-size: 1rem; }
+    .stat-detail { font-size: 0.84rem; }
+
+    .throughput {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .metric-box {
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .metric-box__value { margin-top: 6px; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.03em; }
+    .metric-box__detail { margin-top: 6px; font-size: 0.78rem; color: var(--muted); }
+
+    .meter {
+      width: 100%;
+      height: 10px;
+      margin-top: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .meter > span { display: block; height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #7ed1ff); }
+
+    .health-grid { display: grid; gap: 12px; }
+    .health-group { display: grid; gap: 10px; }
+    .health-row { justify-content: space-between; font-size: 0.84rem; }
+    .health-bar { position: relative; height: 14px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.06); }
+    .health-bar > span { display: block; height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, #ff8f8f, #ffd280, #86d9a4); }
+
+    .toolbar-card .card__body { display: grid; gap: 12px; }
+    .toolbar { flex-wrap: wrap; }
+    .toolbar__title { font-size: 1rem; font-weight: 700; }
+    .toolbar__meta { color: var(--muted); font-size: 0.82rem; }
+
+    .toggle, .range { flex-wrap: wrap; }
+    .toggle button, .range button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-color: rgba(255, 255, 255, 0.08);
+      transition: background 160ms ease, border-color 160ms ease;
+    }
+    .toggle button[data-active="true"], .range button[data-active="true"] { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.2); }
+    .toggle-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .chart-card .card__body { display: grid; gap: 12px; }
+    .chart-shell {
+      position: relative;
+      height: 270px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
+        rgba(7, 12, 18, 0.72);
+      overflow: hidden;
+    }
+    .chart-svg { width: 100%; height: 100%; display: block; }
+    .chart-labels {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .chart-labels span:last-child { text-align: right; }
+
+    .legend { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .legend-value {
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .legend-value strong { display: block; font-size: 1.1rem; }
+
+    .insight-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .list-card .card__body { display: grid; gap: 10px; min-height: 170px; }
+    .list-head { display: grid; gap: 4px; }
+    .list-title { font-size: 1rem; font-weight: 700; }
+
+    .list-items { display: grid; gap: 8px; }
+    .list-item {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .list-rank {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .list-item__title { font-size: 0.9rem; font-weight: 700; }
+    .list-item__meta { margin-top: 3px; font-size: 0.76rem; color: var(--muted); }
+    .list-item__value { text-align: right; font-size: 0.88rem; }
+    .list-item__badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .list-item__badge[data-tone="good"] { color: #c8ffe4; background: rgba(73, 209, 125, 0.15); }
+    .list-item__badge[data-tone="warn"] { color: #ffe5c3; background: rgba(255, 191, 105, 0.15); }
+    .list-item__badge[data-tone="danger"] { color: #ffd5d5; background: rgba(255, 107, 107, 0.15); }
+
+    .chip-card .card__body { display: grid; gap: 10px; }
+    .chip-list, .icon-list { flex-wrap: wrap; }
+    .chip, .icon-chip {
+      min-height: 38px;
+      padding: 8px 10px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 0.78rem;
+    }
+    .chip strong, .icon-chip strong { color: var(--text); }
+    .icon-chip__glyph {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: rgba(62, 181, 255, 0.14);
+      color: var(--accent);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+    .empty { color: var(--muted); font-size: 0.88rem; }
+
+    .rail::-webkit-scrollbar, .board::-webkit-scrollbar { width: 12px; }
+    .rail::-webkit-scrollbar-thumb, .board::-webkit-scrollbar-thumb {
+      border: 3px solid transparent;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      background-clip: padding-box;
+    }
+    .rail::-webkit-scrollbar-track, .board::-webkit-scrollbar-track { background: transparent; }
+
+    @media (max-width: 1560px) {
+      .shell { grid-template-columns: 1fr; }
+      .insight-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 1100px) {
+      .throughput, .legend { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="widget">
+    <header class="header">
+      <div id="network-status" class="status" data-tone="warn">Loading</div>
+    </header>
+
+    <section class="shell">
+      <aside class="rail">
+        <article class="card">
+          <div class="card__body">
+            <div class="eyebrow">Gateway</div>
+            <h1 id="gateway-name" class="gateway-name">Loading</h1>
+            <p id="gateway-copy" class="gateway-copy">Preparing the site view.</p>
+            <div id="site-strip" class="site-strip"></div>
+          </div>
+        </article>
+
+        <article class="card stats-card">
+          <div class="card__body">
+            <div class="stat-row"><span class="label">WAN</span><strong id="wan-name">--</strong></div>
+            <div class="stat-row"><span class="muted">Monthly usage</span><strong id="monthly-usage">--</strong></div>
+            <div class="throughput">
+              <div class="metric-box">
+                <div class="label">Download</div>
+                <div id="wan-download" class="metric-box__value">--</div>
+                <div id="wan-download-detail" class="metric-box__detail">Waiting for throughput data.</div>
+                <div class="meter"><span id="wan-download-bar"></span></div>
+              </div>
+              <div class="metric-box">
+                <div class="label">Upload</div>
+                <div id="wan-upload" class="metric-box__value">--</div>
+                <div id="wan-upload-detail" class="metric-box__detail">Waiting for throughput data.</div>
+                <div class="meter"><span id="wan-upload-bar"></span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card__body health-grid">
+            <div class="health-group">
+              <div class="stat-row"><span class="label">Client mix</span><strong id="client-total">--</strong></div>
+              <div id="client-mix" class="chip-list"></div>
+            </div>
+            <div class="health-group">
+              <div class="stat-row"><span class="label">Radio retries</span><strong id="radio-summary">--</strong></div>
+              <div id="radio-health"></div>
+            </div>
+            <div class="health-group">
+              <div class="stat-row"><span class="label">WiFi connectivity</span><strong id="connectivity-summary">--</strong></div>
+              <div id="connectivity-health"></div>
+            </div>
+          </div>
+        </article>
+      </aside>
+
+      <section class="board">
+        <article class="card toolbar-card">
+          <div class="card__body">
+            <div class="toolbar">
+              <div>
+                <div class="toolbar__title">Internet Activity</div>
+                <div id="toolbar-copy" class="toolbar__meta">WAN, latency, and clients.</div>
+              </div>
+              <div class="toolbar__group">
+                <div id="site-badge" class="badge" data-tone="good">All WANs</div>
+                <div class="range"><button type="button" data-range="1D" data-active="true">1D</button></div>
+              </div>
+            </div>
+            <div class="toolbar">
+              <div id="series-toggles" class="toggle"></div>
+              <div id="chart-note" class="chart-note">Waiting for controller data.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card chart-card">
+          <div class="card__body">
+            <div class="chart-meta">
+              <div>
+                <div class="label">Trend window</div>
+                <div id="chart-title" class="toolbar__title">Live WAN activity</div>
+              </div>
+              <div id="ap-summary" class="badge" data-tone="warn">--</div>
+            </div>
+            <div class="chart-shell"><svg id="chart-svg" class="chart-svg" viewBox="0 0 1120 310" preserveAspectRatio="none"></svg></div>
+            <div id="chart-labels" class="chart-labels"></div>
+            <div id="legend-values" class="legend"></div>
+          </div>
+        </article>
+        <div class="insight-grid">
+          <article class="card list-card">
+            <div class="card__body">
+              <div class="list-head">
+                <div class="eyebrow">Top APs</div>
+                <div class="list-title">Access points</div>
+              </div>
+              <div id="ap-list" class="list-items"></div>
+            </div>
+          </article>
+
+          <article class="card list-card">
+            <div class="card__body">
+              <div class="list-head">
+                <div class="eyebrow">Top clients</div>
+                <div class="list-title">Active devices</div>
+              </div>
+              <div id="client-list" class="list-items"></div>
+            </div>
+          </article>
+
+          <article class="card list-card">
+            <div class="card__body">
+              <div class="list-head">
+                <div class="eyebrow">Top apps</div>
+                <div class="list-title">Traffic categories</div>
+              </div>
+              <div id="app-list" class="list-items"></div>
+            </div>
+          </article>
+        </div>
+
+        <article class="card chip-card">
+          <div class="card__body">
+            <div class="list-head">
+              <div class="eyebrow">Common devices</div>
+              <div class="list-title">Device footprint</div>
+            </div>
+            <div id="device-strip" class="icon-list"></div>
+          </div>
+        </article>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var size = params.get("size") || "full";
+      var endpoint = params.get("endpoint") || "/api/unifi/network";
+      var refresh = endpoint ? Math.max(5000, Number(params.get("refresh") || 8000)) : 0;
+      var seriesState = { activity: true, latency: true, loss: false, connections: false };
+
+      function getParam(name, fallback) { var value = params.get(name); return value === null || value === "" ? fallback : value; }
+      function getNumber(value, fallback) { value = Number(value); return isFinite(value) ? value : fallback; }
+      function getJsonParam(name, fallback) { try { return params.get(name) ? JSON.parse(params.get(name)) : fallback; } catch (error) { return fallback; } }
+      function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+      function escapeHtml(value) { return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;"); }
+      function initials(value) { return String(value || "?").split(/[^A-Za-z0-9]+/).filter(Boolean).slice(0, 2).map(function (part) { return part.charAt(0).toUpperCase(); }).join("") || "?"; }
+      function formatMbps(value) { return value == null ? "--" : Number(value).toFixed(value >= 100 ? 0 : 1) + " Mbps"; }
+      function formatMs(value) { return value == null ? "--" : Math.round(value) + " ms"; }
+      function formatPercent(value) { return value == null ? "--" : Number(value).toFixed(value >= 10 ? 0 : 1) + "%"; }
+      function formatGb(value) { return value == null ? "--" : Number(value).toFixed(value >= 100 ? 0 : 1) + " GB"; }
+      function toneForStatus(status) { if (status === "offline") { return "danger"; } if (status === "degraded") { return "warn"; } return "good"; }
+
+      function buildHeaders() {
+        return {};
+      }
+
+      function fetchJson(url) {
+        return fetch(url, { headers: buildHeaders(), cache: "no-store" }).then(function (response) {
+          if (!response.ok) { throw new Error("Request failed with status " + response.status); }
+          return response.json();
+        });
+      }
+
+      function normalizeSeries(raw, fallback) {
+        var values = Array.isArray(raw) ? raw.map(function (point) {
+          if (typeof point === "number") { return point; }
+          if (point && typeof point.value === "number") { return point.value; }
+          if (point && typeof point.y === "number") { return point.y; }
+          return 0;
+        }).filter(function (value) { return isFinite(value); }) : [];
+        return values.length ? values : fallback;
+      }
+
+      function normalizeAps(list) {
+        return (Array.isArray(list) ? list : []).map(function (ap, index) {
+          return {
+            name: ap.name || ("Access Point " + (index + 1)),
+            status: ap.status || "online",
+            clients: getNumber(ap.clients, 0),
+            uplink: ap.uplink || "1 GbE",
+            channel: ap.channel || "5 GHz / 80 MHz",
+            throughputMbps: getNumber(ap.throughputMbps, getNumber(ap.throughput, 0)),
+            model: ap.model || ""
+          };
+        });
+      }
+
+      function normalizeNamedList(list, defaults) {
+        var source = Array.isArray(list) && list.length ? list : defaults;
+        return source.map(function (item, index) {
+          return {
+            name: item.name || item.label || ("Item " + (index + 1)),
+            detail: item.detail || item.meta || "",
+            value: item.value || item.throughput || item.usage || "",
+            tone: item.tone || "good"
+          };
+        });
+      }
+
+      function normalizeDeviceFamilies(list, fallback) {
+        var source = Array.isArray(list) && list.length ? list : fallback;
+        return source.map(function (item, index) {
+          return {
+            name: item.name || item.label || ("Device " + (index + 1)),
+            count: getNumber(item.count, 1)
+          };
+        });
+      }
+
+      function normalizeHealth(list, fallback) {
+        var source = Array.isArray(list) && list.length ? list : fallback;
+        return source.map(function (item, index) {
+          return {
+            label: item.label || ("Metric " + (index + 1)),
+            value: clamp(getNumber(item.value, 0), 0, 100)
+          };
+        });
+      }
+
+      function optionalNumber(value) {
+        if (value == null || value === "") {
+          return null;
+        }
+        value = Number(value);
+        return isFinite(value) ? value : null;
+      }
+
+      function firstNumber() {
+        var index;
+        for (index = 0; index < arguments.length; index += 1) {
+          var value = optionalNumber(arguments[index]);
+          if (value != null) {
+            return value;
+          }
+        }
+        return null;
+      }
+
+      function zeroSeries(length) {
+        return Array.apply(null, Array(length)).map(function () { return 0; });
+      }
+
+      function normalizeData(raw) {
+        var data = raw || {};
+        var wan = data.wan || {};
+        var clients = data.clients || {};
+        var aps = normalizeAps(data.aps || []);
+        var topClients = normalizeNamedList(data.topClients, []);
+        var topApps = normalizeNamedList(data.topApps, []);
+        var commonDevices = normalizeDeviceFamilies(data.commonDevices || data.devices, []);
+        var radioRetries = normalizeHealth(data.radioRetries || data.radios, []);
+        var connectivity = normalizeHealth(data.connectivity, []);
+        var chart = data.chart || data.charts || {};
+        var activity = normalizeSeries(chart.activity || data.internetActivity, zeroSeries(24));
+        var latency = normalizeSeries(chart.latency || data.latencySeries, zeroSeries(24));
+        var loss = normalizeSeries(chart.loss || data.lossSeries || data.packetLossSeries, zeroSeries(24));
+        var connections = normalizeSeries(chart.connections || data.connectionsSeries, zeroSeries(24));
+        var hasChartData = activity.some(function (value) { return value > 0; }) ||
+          latency.some(function (value) { return value > 0; }) ||
+          loss.some(function (value) { return value > 0; }) ||
+          connections.some(function (value) { return value > 0; });
+        var hasLiveData = !!(Object.keys(data).length || aps.length || topClients.length || topApps.length || commonDevices.length || radioRetries.length || connectivity.length || hasChartData);
+        var monthlyUsageGb = firstNumber(data.monthlyUsageGb, data.monthlyUsage, wan.monthlyUsageGb);
+        var downloadMbps = firstNumber(wan.downloadMbps, data.downloadMbps);
+        var uploadMbps = firstNumber(wan.uploadMbps, data.uploadMbps);
+        var capacityDownMbps = firstNumber(wan.capacityDownMbps, data.capacityDownMbps);
+        var capacityUpMbps = firstNumber(wan.capacityUpMbps, data.capacityUpMbps);
+
+        return {
+          hasLiveData: hasLiveData,
+          hasChartData: hasChartData,
+          gateway: data.gateway || getParam("gateway", "UniFi Network"),
+          gatewayCopy: data.gatewayCopy || getParam("copy", endpoint ? "Xenon is checking for UniFi locally." : "Xenon has a built-in UniFi detector."),
+          source: data.source || (endpoint ? "Xenon UniFi detector" : "Needs setup"),
+          provider: data.provider || data.internetName || wan.name || "WAN",
+          gatewayIp: data.gatewayIp || wan.gatewayIp || "",
+          wanIp: data.wanIp || wan.ip || "",
+          uptime: data.uptime || "",
+          osVersion: data.osVersion || "",
+          networkVersion: data.networkVersion || "",
+          monthlyUsageGb: monthlyUsageGb,
+          wan: {
+            name: wan.name || data.provider || "Primary WAN",
+            downloadMbps: downloadMbps,
+            uploadMbps: uploadMbps,
+            capacityDownMbps: Math.max(1, capacityDownMbps != null ? capacityDownMbps : 1000),
+            capacityUpMbps: Math.max(1, capacityUpMbps != null ? capacityUpMbps : 100)
+          },
+          clients: {
+            total: getNumber(clients.total, 0),
+            wifi: getNumber(clients.wifi, 0),
+            wired: getNumber(clients.wired, 0),
+            guests: getNumber(clients.guests, 0)
+          },
+          latencyMs: optionalNumber(data.latencyMs),
+          packetLoss: optionalNumber(data.packetLoss),
+          connections: optionalNumber(data.connections),
+          aps: aps,
+          topClients: topClients,
+          topApps: topApps,
+          commonDevices: commonDevices,
+          radioRetries: radioRetries,
+          connectivity: connectivity,
+          chart: {
+            activity: activity,
+            latency: latency,
+            loss: loss,
+            connections: connections
+          }
+        };
+      }
+
+      function emptyData() {
+        return normalizeData(getJsonParam("payload", null) || {});
+      }
+
+      function buildPath(values, width, height) {
+        var max = Math.max.apply(null, values.concat([1]));
+        return values.map(function (value, index) {
+          var x = (index / Math.max(1, values.length - 1)) * width;
+          var y = height - ((value / max) * (height - 20)) - 10;
+          return (index === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2);
+        }).join(" ");
+      }
+
+      function buildArea(values, width, height) {
+        var max = Math.max.apply(null, values.concat([1]));
+        var path = values.map(function (value, index) {
+          var x = (index / Math.max(1, values.length - 1)) * width;
+          var y = height - ((value / max) * (height - 20)) - 10;
+          return (index === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2);
+        }).join(" ");
+        return path + " L " + width + " " + height + " L 0 " + height + " Z";
+      }
+      function renderChart(data) {
+        var width = 1120;
+        var height = 310;
+        var svg = ['<defs><linearGradient id="activity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(62,181,255,0.28)"></stop><stop offset="100%" stop-color="rgba(62,181,255,0)"></stop></linearGradient></defs>'];
+        var index;
+        var keys = ["activity", "latency", "loss", "connections"];
+        var styles = {
+          activity: { color: "#3eb5ff" },
+          latency: { color: "#9b6dff" },
+          loss: { color: "#ff6b6b" },
+          connections: { color: "#c8d4e2" }
+        };
+
+        for (index = 0; index < 6; index += 1) {
+          var y = 10 + ((height - 20) / 5) * index;
+          svg.push('<line x1="0" y1="' + y + '" x2="' + width + '" y2="' + y + '" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>');
+        }
+        for (index = 0; index < 8; index += 1) {
+          var x = (width / 7) * index;
+          svg.push('<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + height + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"></line>');
+        }
+        if (!data.hasChartData) {
+          svg.push('<text x="' + (width / 2) + '" y="' + (height / 2) + '" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="18">Xenon will add richer UniFi charts after credentials are connected.</text>');
+          document.getElementById("chart-svg").innerHTML = svg.join("");
+          document.getElementById("chart-labels").innerHTML = "";
+          document.getElementById("legend-values").innerHTML = [
+            { label: "Activity", value: "--" },
+            { label: "Latency", value: "--" },
+            { label: "Loss", value: "--" },
+            { label: "Connections", value: "--" }
+          ].map(function (item) {
+            return '<div class="legend-value"><small class="label">' + item.label + '</small><strong>' + item.value + '</strong></div>';
+          }).join("");
+          return;
+        }
+        if (seriesState.activity) {
+          svg.push('<path d="' + buildArea(data.chart.activity, width, height) + '" fill="url(#activity-fill)"></path>');
+        }
+        keys.forEach(function (key) {
+          if (!seriesState[key]) { return; }
+          svg.push('<path d="' + buildPath(data.chart[key], width, height) + '" fill="none" stroke="' + styles[key].color + '" stroke-width="' + (key === "activity" ? 3 : 2) + '" stroke-linecap="round" stroke-linejoin="round"></path>');
+        });
+
+        document.getElementById("chart-svg").innerHTML = svg.join("");
+        document.getElementById("chart-labels").innerHTML = ["22:00", "02:00", "06:00", "10:00", "14:00", "Now"].map(function (label) {
+          return "<span>" + label + "</span>";
+        }).join("");
+        document.getElementById("legend-values").innerHTML = [
+          { label: "Activity", value: formatMbps(data.chart.activity[data.chart.activity.length - 1]) },
+          { label: "Latency", value: formatMs(data.chart.latency[data.chart.latency.length - 1]) },
+          { label: "Loss", value: formatPercent(data.chart.loss[data.chart.loss.length - 1]) },
+          { label: "Connections", value: String(Math.round(data.chart.connections[data.chart.connections.length - 1])) }
+        ].map(function (item) {
+          return '<div class="legend-value"><small class="label">' + item.label + '</small><strong>' + item.value + '</strong></div>';
+        }).join("");
+      }
+
+      function renderList(nodeId, items, formatter) {
+        document.getElementById(nodeId).innerHTML = items.length ? items.map(formatter).join("") : '<div class="empty">No data from the endpoint yet.</div>';
+      }
+
+      function renderHealthRows(items) {
+        return items.map(function (item) {
+          return '<div class="health-group"><div class="health-row"><span>' + escapeHtml(item.label) + '</span><strong>' + Math.round(item.value) + '%</strong></div><div class="health-bar"><span style="width:' + item.value + '%"></span></div></div>';
+        }).join("");
+      }
+
+      function radioSummary(items) {
+        if (!items.length) { return "No radio data"; }
+        var average = items.reduce(function (sum, item) { return sum + item.value; }, 0) / Math.max(1, items.length);
+        return Math.round(average) + "% retry window";
+      }
+
+      function connectivitySummary(items) {
+        if (!items.length) { return "No health data"; }
+        var average = items.reduce(function (sum, item) { return sum + item.value; }, 0) / Math.max(1, items.length);
+        return Math.round(average) + "% healthy";
+      }
+
+      function render(data, error) {
+        var onlineAps = data.aps.filter(function (ap) { return ap.status === "online"; }).length;
+        var degradedAps = data.aps.filter(function (ap) { return ap.status === "degraded"; }).length;
+        var overallTone = error
+          ? "danger"
+          : !data.hasLiveData
+            ? "warn"
+            : data.packetLoss > 2 || data.latencyMs > 45
+              ? "danger"
+              : degradedAps
+                ? "warn"
+                : "good";
+        var downPercent = data.wan.downloadMbps == null ? 0 : clamp((data.wan.downloadMbps / data.wan.capacityDownMbps) * 100, 0, 100);
+        var upPercent = data.wan.uploadMbps == null ? 0 : clamp((data.wan.uploadMbps / data.wan.capacityUpMbps) * 100, 0, 100);
+
+        document.getElementById("network-status").textContent = error ? "Unavailable" : data.source;
+        document.getElementById("network-status").setAttribute("data-tone", overallTone);
+        document.getElementById("gateway-name").textContent = data.gateway;
+        document.getElementById("gateway-copy").textContent = data.gatewayCopy;
+        document.getElementById("wan-name").textContent = data.provider;
+        document.getElementById("monthly-usage").textContent = formatGb(data.monthlyUsageGb);
+        document.getElementById("wan-download").textContent = formatMbps(data.wan.downloadMbps);
+        document.getElementById("wan-upload").textContent = formatMbps(data.wan.uploadMbps);
+        document.getElementById("wan-download-detail").textContent = data.wan.downloadMbps == null ? "Waiting for WAN download telemetry" : Math.round(downPercent) + "% of " + formatMbps(data.wan.capacityDownMbps) + " capacity";
+        document.getElementById("wan-upload-detail").textContent = data.wan.uploadMbps == null ? "Waiting for WAN upload telemetry" : Math.round(upPercent) + "% of " + formatMbps(data.wan.capacityUpMbps) + " capacity";
+        document.getElementById("wan-download-bar").style.width = downPercent + "%";
+        document.getElementById("wan-upload-bar").style.width = upPercent + "%";
+        document.getElementById("site-badge").textContent = data.provider;
+        document.getElementById("site-badge").setAttribute("data-tone", overallTone);
+        document.getElementById("chart-title").textContent = data.provider + " trend";
+        document.getElementById("toolbar-copy").textContent = data.hasLiveData ? data.gateway + " / " + data.clients.total + " clients / " + data.aps.length + " APs" : "Waiting for controller data";
+        document.getElementById("chart-note").textContent = data.hasLiveData ? "Latency " + formatMs(data.latencyMs) + " / Loss " + formatPercent(data.packetLoss) + " / Connections " + (data.connections == null ? "--" : Math.round(data.connections)) : "Xenon has a built-in UniFi detector.";
+        document.getElementById("ap-summary").textContent = data.aps.length ? onlineAps + "/" + data.aps.length + " APs healthy" : "No AP data";
+        document.getElementById("ap-summary").setAttribute("data-tone", overallTone);
+        document.getElementById("client-total").textContent = data.clients.total ? data.clients.total + " total" : "No client data";
+        document.getElementById("client-mix").innerHTML = [
+          '<div class="chip"><strong>' + data.clients.wifi + '</strong><span> WiFi</span></div>',
+          '<div class="chip"><strong>' + data.clients.wired + '</strong><span> wired</span></div>',
+          '<div class="chip"><strong>' + data.clients.guests + '</strong><span> guest</span></div>'
+        ].join("");
+        var siteItems = [
+          data.gatewayIp ? '<div class="site-strip__item"><strong>' + escapeHtml(data.gatewayIp) + '</strong><span>Gateway IP</span></div>' : '',
+          data.wanIp ? '<div class="site-strip__item"><strong>' + escapeHtml(data.wanIp) + '</strong><span>WAN IP</span></div>' : '',
+          data.uptime ? '<div class="site-strip__item"><strong>' + escapeHtml(data.uptime) + '</strong><span>System uptime</span></div>' : '',
+          data.osVersion ? '<div class="site-strip__item"><strong>' + escapeHtml(data.osVersion) + '</strong><span>OS</span></div>' : '',
+          data.networkVersion ? '<div class="site-strip__item"><strong>' + escapeHtml(data.networkVersion) + '</strong><span>Network</span></div>' : ''
+        ].filter(Boolean);
+        document.getElementById("site-strip").innerHTML = siteItems.length ? siteItems.join("") : '<div class="empty">Controller details will appear here once the endpoint responds.</div>';
+
+        document.getElementById("radio-summary").textContent = radioSummary(data.radioRetries);
+        document.getElementById("radio-health").innerHTML = data.radioRetries.length ? renderHealthRows(data.radioRetries) : '<div class="empty">No radio retry data yet.</div>';
+        document.getElementById("connectivity-summary").textContent = connectivitySummary(data.connectivity);
+        document.getElementById("connectivity-health").innerHTML = data.connectivity.length ? renderHealthRows(data.connectivity) : '<div class="empty">No client health data yet.</div>';
+
+        renderChart(data);
+        renderList("ap-list", data.aps.slice(0, 4), function (ap, index) {
+          return '<div class="list-item"><div class="list-rank">' + (index + 1) + '</div><div><div class="list-item__title">' + escapeHtml(ap.name) + '</div><div class="list-item__meta">' + escapeHtml(ap.channel) + ' / ' + escapeHtml(ap.uplink) + ' / ' + ap.clients + ' clients</div></div><div class="list-item__value"><div class="list-item__badge" data-tone="' + toneForStatus(ap.status) + '">' + escapeHtml(ap.status) + '</div><div class="list-item__meta">' + formatMbps(ap.throughputMbps) + '</div></div></div>';
+        });
+        renderList("client-list", data.topClients.slice(0, 4), function (item, index) {
+          return '<div class="list-item"><div class="list-rank">' + (index + 1) + '</div><div><div class="list-item__title">' + escapeHtml(item.name) + '</div><div class="list-item__meta">' + escapeHtml(item.detail) + '</div></div><div class="list-item__value"><div class="list-item__badge" data-tone="' + escapeHtml(item.tone || "good") + '">' + escapeHtml(item.value || "--") + '</div></div></div>';
+        });
+        renderList("app-list", data.topApps.slice(0, 4), function (item, index) {
+          return '<div class="list-item"><div class="list-rank">' + (index + 1) + '</div><div><div class="list-item__title">' + escapeHtml(item.name) + '</div><div class="list-item__meta">' + escapeHtml(item.detail) + '</div></div><div class="list-item__value"><div class="list-item__badge" data-tone="' + escapeHtml(item.tone || "good") + '">' + escapeHtml(item.value || "--") + '</div></div></div>';
+        });
+        document.getElementById("device-strip").innerHTML = data.commonDevices.length ? data.commonDevices.slice(0, 6).map(function (item) {
+          return '<div class="icon-chip"><span class="icon-chip__glyph">' + escapeHtml(initials(item.name)) + '</span><span><strong>' + item.count + '</strong> ' + escapeHtml(item.name) + '</span></div>';
+        }).join("") : '<div class="empty">No common device mix yet.</div>';
+      }
+
+      function renderSeriesToggles() {
+        var meta = [
+          { key: "activity", label: "Internet Activity", color: "#3eb5ff" },
+          { key: "latency", label: "Avg. Latency", color: "#9b6dff" },
+          { key: "loss", label: "Packet Loss", color: "#ff6b6b" },
+          { key: "connections", label: "Connections", color: "#c8d4e2" }
+        ];
+        document.getElementById("series-toggles").innerHTML = meta.map(function (item) {
+          return '<button type="button" data-series="' + item.key + '" data-active="' + seriesState[item.key] + '"><span class="toggle-dot" style="color:' + item.color + '"></span>' + item.label + '</button>';
+        }).join("");
+      }
+
+      function mountWidget(widget) {
+        var intervalId = 0;
+        var busy = false;
+        function tick() {
+          if (busy) { return; }
+          busy = true;
+          Promise.resolve(widget.updateWidget()).then(function () { busy = false; }, function () { busy = false; });
+        }
+        if (typeof widget.initWidget === "function") { widget.initWidget(); }
+        tick();
+        intervalId = window.setInterval(tick, widget.refreshInterval);
+        window.addEventListener("beforeunload", function () {
+          window.clearInterval(intervalId);
+          if (typeof widget.destroyWidget === "function") { widget.destroyWidget(); }
+        });
+      }
+
+      var widget = {
+        refreshInterval: refresh,
+        initWidget: function () {
+          document.body.addEventListener("click", function (event) {
+            var toggle = event.target.closest("[data-series]");
+            if (!toggle) { return; }
+            var key = toggle.getAttribute("data-series");
+            seriesState[key] = !seriesState[key];
+            if (!seriesState.activity && !seriesState.latency && !seriesState.loss && !seriesState.connections) { seriesState[key] = true; }
+            renderSeriesToggles();
+            this.updateWidget();
+          }.bind(this));
+          renderSeriesToggles();
+        },
+        updateWidget: function () {
+          var payload = getJsonParam("payload", null);
+          if (payload) {
+            render(normalizeData(payload));
+            return;
+          }
+          if (!endpoint) {
+            render(emptyData());
+            return;
+          }
+          return fetchJson(endpoint).then(function (data) {
+            render(normalizeData(data));
+          }, function (error) {
+            render(emptyData(), error);
+          });
+        },
+        destroyWidget: function () {}
+      };
+
+      document.body.setAttribute("data-size", size);
+      mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

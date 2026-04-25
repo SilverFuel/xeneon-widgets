@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UniFi Camera Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: rgba(27, 36, 48, 0.96);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --panel-strong: rgba(255, 255, 255, 0.07);
+      --accent: #00e0ff;
+      --accent-2: #44f0c2;
+      --text: #e6edf3;
+      --muted: #8b9aab;
+      --border: rgba(255, 255, 255, 0.08);
+      --good: #44d17a;
+      --warn: #ffb347;
+      --danger: #ff6b6b;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      --radius: 24px;
+      --font: Inter, Roboto, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.13), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(68, 240, 194, 0.1), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    .widget {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 18px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      min-height: 180px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(14, 20, 28, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 38%);
+      pointer-events: none;
+    }
+
+    .header,
+    .title-group,
+    .frame-top,
+    .frame-bottom,
+    .status,
+    .chip {
+      display: flex;
+      align-items: center;
+    }
+
+    .header,
+    .frame-top,
+    .frame-bottom {
+      justify-content: space-between;
+    }
+
+    .header--compact {
+      justify-content: flex-end;
+    }
+
+    .header,
+    .title-group,
+    .frame-top,
+    .frame-bottom {
+      gap: 12px;
+    }
+
+    .icon {
+      width: 50px;
+      height: 50px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: rgba(0, 224, 255, 0.16);
+      color: var(--accent);
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+
+    h1,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .muted,
+    .helper-copy {
+      color: var(--muted);
+    }
+
+    .status,
+    .chip {
+      min-height: 40px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .status[data-tone="good"],
+    .chip[data-tone="good"] {
+      color: #bfffe1;
+      background: rgba(68, 209, 122, 0.16);
+      border-color: rgba(68, 209, 122, 0.25);
+    }
+
+    .status[data-tone="warn"],
+    .chip[data-tone="warn"] {
+      color: #ffe4bd;
+      background: rgba(255, 179, 71, 0.16);
+      border-color: rgba(255, 179, 71, 0.24);
+    }
+
+    .status[data-tone="danger"],
+    .chip[data-tone="danger"] {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.16);
+      border-color: rgba(255, 107, 107, 0.24);
+    }
+
+    .chip {
+      min-height: 34px;
+      padding: 8px 12px;
+      font-size: 0.74rem;
+      background: rgba(7, 14, 22, 0.72);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .content,
+    .viewer-layout,
+    .sidebar {
+      min-height: 0;
+    }
+
+    .viewer-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.8fr);
+      gap: 16px;
+      height: 100%;
+    }
+
+    .frame-card,
+    .panel,
+    .stat-card {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--panel-soft);
+    }
+
+    .frame-card,
+    .panel {
+      overflow: hidden;
+    }
+
+    .viewer-frame {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 240px;
+      border-radius: 22px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(0, 224, 255, 0.08), transparent 48%),
+        #050b12;
+    }
+
+    .viewer-frame video,
+    .viewer-frame img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #081019;
+    }
+
+    .overlay {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      z-index: 3;
+      padding: 14px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      background: rgba(7, 14, 22, 0.84);
+      backdrop-filter: blur(10px);
+      font-size: 0.9rem;
+      line-height: 1.4;
+      color: var(--text);
+    }
+
+    .frame-top,
+    .frame-bottom {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      z-index: 3;
+    }
+
+    .frame-top {
+      top: 18px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .frame-bottom {
+      bottom: 18px;
+    }
+
+    .frame-label {
+      display: grid;
+      gap: 4px;
+      padding: 10px 14px;
+      border-radius: 16px;
+      background: rgba(7, 14, 22, 0.7);
+      backdrop-filter: blur(10px);
+    }
+
+    .frame-label strong {
+      font-size: 0.96rem;
+      font-weight: 700;
+    }
+
+    .frame-label span {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .live-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: var(--good);
+      box-shadow: 0 0 0 8px rgba(68, 209, 122, 0.12);
+    }
+
+    .sidebar {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 12px;
+    }
+
+    .panel {
+      padding: 18px;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .hero {
+      margin-top: 6px;
+      font-size: clamp(1.35rem, 2.5vw, 2rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+
+    .panel .muted {
+      margin-top: 6px;
+      font-size: 0.84rem;
+      line-height: 1.4;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+    }
+
+    .stat-card span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-card strong {
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .helper-copy {
+      margin-top: 8px;
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    [data-size="large"] body,
+    [data-size="medium"] body,
+    [data-size="small"] body {
+      padding: 10px;
+    }
+
+    [data-size="large"] .widget,
+    [data-size="medium"] .widget,
+    [data-size="small"] .widget {
+      height: calc(100vh - 20px);
+      padding: 16px;
+      gap: 14px;
+    }
+
+    [data-size="large"] h1,
+    [data-size="medium"] h1,
+    [data-size="small"] h1 {
+      font-size: 1.1rem;
+    }
+
+    [data-size="large"] .viewer-layout,
+    [data-size="medium"] .viewer-layout,
+    [data-size="small"] .viewer-layout {
+      grid-template-columns: 1fr;
+    }
+
+    [data-size="large"] .stats-grid,
+    [data-size="medium"] .stats-grid,
+    [data-size="small"] .stats-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    [data-size="medium"] .icon,
+    [data-size="small"] .icon {
+      width: 42px;
+      height: 42px;
+      font-size: 0.82rem;
+    }
+
+    [data-size="medium"] .status,
+    [data-size="small"] .status {
+      min-height: 34px;
+      padding: 8px 10px;
+      font-size: 0.72rem;
+    }
+
+    [data-size="medium"] .panel,
+    [data-size="small"] .panel {
+      padding: 14px;
+      border-radius: 18px;
+    }
+
+    [data-size="medium"] .viewer-frame,
+    [data-size="small"] .viewer-frame {
+      min-height: 172px;
+    }
+
+    [data-size="small"] .header {
+      align-items: flex-start;
+    }
+
+    [data-size="small"] .hero {
+      font-size: 1.5rem;
+    }
+
+    [data-size="small"] .stats-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  </style>
+</head>
+<body>
+  <main class="widget">
+    <header class="header header--compact">
+      <div id="viewer-status" class="status" data-tone="warn">Connecting</div>
+    </header>
+
+    <section class="content">
+      <div class="viewer-layout">
+        <article class="frame-card">
+          <div class="viewer-frame">
+            <video id="camera-video" autoplay muted playsinline></video>
+            <img id="camera-image" alt="Camera preview">
+            <div class="frame-top">
+              <div id="camera-feed-type" class="chip" data-tone="warn">Waiting for feed</div>
+              <div id="camera-feed-note" class="chip">Snapshot standby</div>
+            </div>
+            <div class="frame-bottom">
+              <div class="frame-label">
+                <strong id="camera-frame-name">Front Door</strong>
+                <span id="camera-timestamp">--</span>
+              </div>
+              <div id="camera-live-dot" class="live-dot"></div>
+            </div>
+            <div id="camera-overlay" class="overlay">Waiting for a camera feed or snapshot endpoint.</div>
+          </div>
+        </article>
+
+        <aside class="sidebar">
+          <section class="panel">
+            <div class="eyebrow">Camera</div>
+            <div id="camera-name" class="hero">Front Door</div>
+            <p id="camera-location" class="muted">UniFi Protect / South entry</p>
+            <p id="camera-helper" class="helper-copy">Add a relay URL, feed URL, or snapshot in Diagnostics.</p>
+          </section>
+
+          <section class="stats-grid">
+            <article class="stat-card">
+              <span>Connection</span>
+              <strong id="camera-connection">--</strong>
+            </article>
+            <article class="stat-card">
+              <span>Transport</span>
+              <strong id="camera-transport">--</strong>
+            </article>
+            <article class="stat-card">
+              <span>Latency</span>
+              <strong id="camera-latency">--</strong>
+            </article>
+            <article class="stat-card">
+              <span>Updated</span>
+              <strong id="camera-updated">--</strong>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="eyebrow">Feed path</div>
+            <div id="camera-path" class="hero">Snapshot</div>
+            <p id="camera-path-copy" class="muted">Browser-ready video or a still image is enough for this panel.</p>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      document.documentElement.setAttribute("data-size", params.get("size") || "full");
+
+      function getParam(name, fallback) {
+        var value = params.get(name);
+        return value === null || value === "" ? fallback : value;
+      }
+
+      function getNumberParam(name, fallback) {
+        var value = Number(getParam(name, ""));
+        return isFinite(value) ? value : fallback;
+      }
+
+      function getJsonParam(name, fallback) {
+        var raw = params.get(name);
+        if (!raw) {
+          return fallback;
+        }
+
+        try {
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn("Invalid JSON for query param:", name, error);
+          return fallback;
+        }
+      }
+
+      function buildHeaders() {
+        return {};
+      }
+
+      function fetchJson(url) {
+        return fetch(url, {
+          headers: buildHeaders(),
+          cache: "no-store"
+        }).then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed with status " + response.status);
+          }
+
+          return response.json();
+        });
+      }
+
+      function formatTime(value) {
+        var date = value ? new Date(value) : new Date();
+        if (isNaN(date.getTime())) {
+          date = new Date();
+        }
+
+        return date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        });
+      }
+
+      function formatAge(value) {
+        var date = value ? new Date(value) : new Date();
+        if (isNaN(date.getTime())) {
+          return "--";
+        }
+
+        var diff = Math.max(0, Date.now() - date.getTime());
+        var seconds = Math.round(diff / 1000);
+        if (seconds < 5) {
+          return "just now";
+        }
+        if (seconds < 60) {
+          return seconds + "s ago";
+        }
+        if (seconds < 3600) {
+          return Math.round(seconds / 60) + "m ago";
+        }
+
+        return Math.round(seconds / 3600) + "h ago";
+      }
+
+      function appendCacheBuster(url) {
+        if (!url) {
+          return "";
+        }
+
+        return url + (url.indexOf("?") === -1 ? "?" : "&") + "_ts=" + Date.now();
+      }
+
+      function escapeSvg(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+      }
+
+      function buildPoster(name, timestamp, label) {
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">' +
+          '<defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">' +
+          '<stop offset="0%" stop-color="#071018"/><stop offset="100%" stop-color="#132737"/></linearGradient></defs>' +
+          '<rect width="1600" height="900" fill="#050b12"/>' +
+          '<rect x="40" y="40" width="1520" height="820" rx="44" fill="url(#bg)" stroke="#00e0ff" stroke-opacity=".18"/>' +
+          '<path d="M120 760 L380 460 L620 610 L870 340 L1080 470 L1320 240 L1480 360 L1480 810 L120 810 Z" fill="#00e0ff" fill-opacity=".12"/>' +
+          '<rect x="160" y="180" width="980" height="420" rx="28" fill="#06111b" stroke="#00e0ff" stroke-opacity=".18"/>' +
+          '<circle cx="1280" cy="300" r="88" fill="#00e0ff" fill-opacity=".12"/>' +
+          '<circle cx="1280" cy="300" r="32" fill="#00e0ff" fill-opacity=".68"/>' +
+          '<text x="160" y="120" fill="#8b9aab" font-family="Inter,Roboto,system-ui,sans-serif" font-size="34" letter-spacing="10">UNIFI CAMERA</text>' +
+          '<text x="160" y="700" fill="#e6edf3" font-family="Inter,Roboto,system-ui,sans-serif" font-size="72" font-weight="700">' + escapeSvg(name) + '</text>' +
+          '<text x="160" y="760" fill="#8b9aab" font-family="Inter,Roboto,system-ui,sans-serif" font-size="32">' + escapeSvg(label) + '</text>' +
+          '<text x="160" y="812" fill="#8b9aab" font-family="Inter,Roboto,system-ui,sans-serif" font-size="26">' + escapeSvg(timestamp) + '</text>' +
+          '</svg>';
+
+        return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+      }
+
+      function detectFeedType(data) {
+        var url = (data.feedUrl || data.relayUrl || "").toLowerCase();
+        if ((data.feedType || "").toLowerCase()) {
+          return String(data.feedType).toLowerCase();
+        }
+        if (url.indexOf("rtsp://") === 0) {
+          return "rtsp";
+        }
+        if (/\.m3u8($|\?)/.test(url)) {
+          return "hls";
+        }
+        if (url) {
+          return "browser";
+        }
+        return "snapshot";
+      }
+
+      function normalizeData(raw) {
+        var data = raw || {};
+        var feedUrl = data.feedUrl || data.url || getParam("feed", "");
+        var relayUrl = data.relayUrl || getParam("relayUrl", "");
+        var feedType = detectFeedType({
+          feedType: data.feedType || getParam("feedType", ""),
+          feedUrl: feedUrl,
+          relayUrl: relayUrl
+        });
+        return {
+          name: data.name || data.cameraName || getParam("name", "Front Door"),
+          location: data.location || data.site || getParam("location", "UniFi Protect / South entry"),
+          feedType: feedType,
+          feedUrl: feedUrl,
+          relayUrl: relayUrl,
+          snapshotUrl: data.snapshotUrl || data.snapshot || getParam("snapshot", ""),
+          connection: String(data.connection || data.status || getParam("connection", "online")).toLowerCase(),
+          latencyMs: typeof data.latencyMs === "number" ? data.latencyMs : getNumberParam("latency", 16),
+          timestamp: data.timestamp || data.updatedAt || new Date().toISOString(),
+          source: data.source || (getParam("endpoint", "") ? "Endpoint feed" : (feedUrl || relayUrl || getParam("snapshot", "")) ? "Manual config" : "Needs setup"),
+          note: data.note || ((feedUrl || relayUrl || getParam("snapshot", "")) ? "" : "Add a relay URL, feed URL, or snapshot in Diagnostics.")
+        };
+      }
+
+      function emptyData() {
+        return normalizeData({
+          connection: String(getParam("connection", getParam("feedType", "hls") === "rtsp" ? "relay-required" : "online")).toLowerCase()
+        });
+      }
+
+      function toneForConnection(connection) {
+        if (connection === "offline" || connection === "error") {
+          return "danger";
+        }
+        if (connection === "relay-required" || connection === "degraded") {
+          return "warn";
+        }
+        return "good";
+      }
+
+      function labelForConnection(connection) {
+        if (connection === "relay-required") {
+          return "Relay required";
+        }
+        if (connection === "offline") {
+          return "Offline";
+        }
+        if (connection === "degraded") {
+          return "Degraded";
+        }
+        if (connection === "error") {
+          return "Feed error";
+        }
+        return "Online";
+      }
+
+      function transportLabel(data) {
+        if (data.feedType === "rtsp" && data.relayUrl) {
+          return "RTSP via relay";
+        }
+        if (data.feedType === "rtsp") {
+          return "Raw RTSP";
+        }
+        if (data.feedType === "hls") {
+          return "HLS";
+        }
+        if (data.feedType === "browser") {
+          return "Browser stream";
+        }
+        return "Snapshot";
+      }
+
+      function mountWidget(widget) {
+        var intervalId = 0;
+        var busy = false;
+
+        function tick() {
+          if (busy) {
+            return;
+          }
+
+          busy = true;
+          Promise.resolve(widget.updateWidget()).then(function () {
+            busy = false;
+          }, function (error) {
+            busy = false;
+            console.warn(error);
+          });
+        }
+
+        if (typeof widget.initWidget === "function") {
+          widget.initWidget();
+        }
+
+        tick();
+
+        if (widget.refreshInterval) {
+          intervalId = window.setInterval(tick, widget.refreshInterval);
+        }
+
+        window.addEventListener("beforeunload", function () {
+          window.clearInterval(intervalId);
+          if (typeof widget.destroyWidget === "function") {
+            widget.destroyWidget();
+          }
+        });
+      }
+
+      var statusNode = document.getElementById("viewer-status");
+      var feedTypeNode = document.getElementById("camera-feed-type");
+      var feedNoteNode = document.getElementById("camera-feed-note");
+      var overlayNode = document.getElementById("camera-overlay");
+      var liveDotNode = document.getElementById("camera-live-dot");
+      var videoNode = document.getElementById("camera-video");
+      var imageNode = document.getElementById("camera-image");
+      var state = {
+        feedKey: ""
+      };
+
+      function setStatus(text, tone) {
+        statusNode.textContent = text;
+        statusNode.setAttribute("data-tone", tone);
+      }
+
+      function showImage(imageUrl, message, tone) {
+        if (videoNode.getAttribute("src")) {
+          videoNode.pause();
+          videoNode.removeAttribute("src");
+          videoNode.load();
+        }
+        videoNode.style.display = "none";
+        imageNode.style.display = "block";
+        imageNode.src = imageUrl;
+        overlayNode.textContent = message;
+        overlayNode.style.display = "block";
+        feedNoteNode.textContent = "Snapshot fallback";
+        feedTypeNode.setAttribute("data-tone", tone);
+      }
+
+      function tryVideo(playableUrl, fallbackImage, fallbackMessage, tone) {
+        if (state.feedKey !== playableUrl) {
+          state.feedKey = playableUrl;
+          videoNode.pause();
+          videoNode.src = playableUrl;
+          videoNode.load();
+        }
+
+        imageNode.style.display = "none";
+        videoNode.style.display = "block";
+        overlayNode.style.display = "none";
+        feedNoteNode.textContent = "Video active";
+        feedTypeNode.setAttribute("data-tone", tone);
+        videoNode.play().catch(function () {
+          showImage(fallbackImage, fallbackMessage, tone);
+        });
+      }
+
+      function render(data, error) {
+        var tone = error ? "danger" : data.source === "Needs setup" ? "warn" : toneForConnection(data.connection);
+        var snapshotUrl = data.snapshotUrl ? appendCacheBuster(data.snapshotUrl) : buildPoster(data.name, formatTime(data.timestamp), data.location);
+        var feedLabel = transportLabel(data);
+        var playableUrl = data.relayUrl || data.feedUrl || "";
+        var feedType = data.feedType;
+        var canNativeHls = !!videoNode.canPlayType("application/vnd.apple.mpegurl");
+        var helperText = data.note;
+
+        document.getElementById("camera-name").textContent = data.name;
+        document.getElementById("camera-frame-name").textContent = data.name;
+        document.getElementById("camera-location").textContent = data.location;
+        document.getElementById("camera-connection").textContent = labelForConnection(data.connection);
+        document.getElementById("camera-transport").textContent = feedLabel;
+        document.getElementById("camera-latency").textContent = data.latencyMs != null ? Math.round(data.latencyMs) + " ms" : "--";
+        document.getElementById("camera-updated").textContent = formatAge(data.timestamp);
+        document.getElementById("camera-timestamp").textContent = "Updated " + formatTime(data.timestamp);
+        feedTypeNode.textContent = feedLabel;
+        document.getElementById("camera-path").textContent = feedLabel;
+        liveDotNode.style.background = tone === "good" ? "var(--good)" : tone === "warn" ? "var(--warn)" : "var(--danger)";
+        liveDotNode.style.boxShadow = tone === "good"
+          ? "0 0 0 8px rgba(68, 209, 122, 0.12)"
+          : tone === "warn"
+            ? "0 0 0 8px rgba(255, 179, 71, 0.12)"
+            : "0 0 0 8px rgba(255, 107, 107, 0.12)";
+
+        if (error) {
+          setStatus("Unavailable", "danger");
+        } else {
+          setStatus(data.source, tone);
+        }
+
+        if (data.connection === "offline" || data.connection === "error") {
+          showImage(snapshotUrl, "Camera is offline. Snapshot mode will resume when the endpoint recovers.", tone);
+          helperText = helperText || "The upstream camera is offline or returning an error.";
+        } else if (feedType === "rtsp" && !data.relayUrl) {
+          showImage(snapshotUrl, "Raw RTSP is not browser-playable. Provide a relay URL or snapshot endpoint.", "warn");
+          helperText = helperText || "Use a browser relay or still snapshot for RTSP feeds.";
+        } else if (feedType === "hls" && playableUrl && /\.m3u8($|\?)/i.test(playableUrl) && !canNativeHls) {
+          showImage(snapshotUrl, "Native HLS is unavailable in this browser. Snapshot mode is active.", "warn");
+          helperText = helperText || "This browser needs a relay or still snapshot for HLS playback.";
+        } else if (playableUrl) {
+          tryVideo(playableUrl, snapshotUrl, "Playback failed. Snapshot fallback is active.", tone);
+          helperText = helperText || "Browser-compatible stream is live.";
+        } else {
+          showImage(snapshotUrl, "Waiting for `feed`, `relayUrl`, or `snapshot` configuration.", "warn");
+          helperText = helperText || "Add a feed, relay URL, or snapshot in Diagnostics.";
+        }
+
+        feedNoteNode.textContent = overlayNode.style.display === "none" ? "Video active" : "Snapshot fallback";
+        document.getElementById("camera-helper").textContent = helperText;
+        document.getElementById("camera-path-copy").textContent = overlayNode.style.display === "none"
+          ? "Live browser playback is active."
+          : "Still-image mode stays visible when playback is unavailable.";
+      }
+
+      var widget = {
+        refreshInterval: getParam("endpoint", "") ? Math.max(5000, getNumberParam("refresh", 8000)) : 0,
+        initWidget: function () {
+          videoNode.addEventListener("error", function () {
+            if (imageNode.getAttribute("src")) {
+              videoNode.style.display = "none";
+              imageNode.style.display = "block";
+              overlayNode.textContent = "Playback failed. Snapshot fallback is active.";
+              overlayNode.style.display = "block";
+              feedNoteNode.textContent = "Snapshot fallback";
+              feedTypeNode.setAttribute("data-tone", "warn");
+            }
+          });
+        },
+        updateWidget: function () {
+          var payload = getJsonParam("payload", null);
+          if (payload) {
+            render(normalizeData(payload));
+            return;
+          }
+
+          var endpoint = getParam("endpoint", "");
+          if (!endpoint) {
+            render(emptyData());
+            return;
+          }
+
+          return fetchJson(endpoint).then(function (data) {
+            render(normalizeData(data));
+          }, function (error) {
+            render(emptyData(), error);
+          });
+        },
+        destroyWidget: function () {
+          if (videoNode.getAttribute("src")) {
+            videoNode.pause();
+            videoNode.removeAttribute("src");
+            videoNode.load();
+          }
+        }
+      };
+      mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

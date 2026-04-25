@@ -7,22 +7,102 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/widgets.css">
-</head>
-<body class="widget-page">
-  <main class="widget-shell">
-    <header class="widget-header">
-      <div class="widget-title-group">
-        <div class="widget-icon">🖥</div>
-        <div>
-          <h1 class="widget-title">System Monitor</h1>
-          <p class="widget-subtitle">Browser-accessible or simulated metrics</p>
-        </div>
-      </div>
+  <link rel="stylesheet" href="../css/theme.css?v=20260425-4">
+  <link rel="stylesheet" href="../css/widgets.css?v=20260425-4">
+  <style>
+    .widget-header--compact {
+      justify-content: flex-end;
+    }
+
+    .system-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .system-process-card {
+      grid-column: span 2;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .system-process-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .system-process-copy {
+      color: var(--color-text-dim);
+      font-size: 0.82rem;
+      line-height: 1.3;
+    }
+
+    .system-process-list {
+      min-height: 0;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .system-process-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .system-process-name {
+      min-width: 0;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .system-process-stat {
+      color: var(--color-text-dim);
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+
+    .system-process-empty {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--color-text-dim);
+      font-size: 0.82rem;
+      line-height: 1.35;
+    }
+
+    [data-size="medium"] .system-process-card,
+    [data-size="small"] .system-process-card {
+      grid-column: span 2;
+    }
+
+    [data-size="medium"] .system-process-item,
+    [data-size="small"] .system-process-item {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    [data-size="medium"] .system-process-stat:last-child,
+    [data-size="small"] .system-process-stat:last-child {
+      grid-column: 1 / -1;
+    }
+  </style>
+  </head>
+  <body class="widget-page">
+    <main class="widget-shell">
+    <header class="widget-header widget-header--compact">
       <div id="system-status" class="widget-status">Refreshing</div>
     </header>
-    <section class="widget-content metric-grid">
+    <section class="widget-content metric-grid system-grid">
       <article class="metric-card">
         <div class="metric-label">CPU Usage</div>
         <div id="cpu-usage" class="metric-value">--%</div>
@@ -47,28 +127,98 @@
         <div class="bar"><span id="disk-bar" style="width:0%"></span></div>
         <div class="metric-detail">Active utilization</div>
       </article>
+      <article class="list-card system-process-card">
+        <div class="system-process-head">
+          <div>
+            <div class="metric-label">Top System Hits</div>
+            <div class="system-process-copy">Top five live processes by CPU load, with memory usage for context.</div>
+          </div>
+        </div>
+        <div id="system-process-list" class="system-process-list">
+          <div class="system-process-empty">Loading process activity.</div>
+        </div>
+      </article>
     </section>
   </main>
-  <script src="../js/widget-core.js"></script>
-  <script src="../js/system-stats.js"></script>
+  <script src="../js/widget-core.js?v=20260425-4"></script>
+  <script src="../js/system-stats.js?v=20260425-4"></script>
   <script>
     (function () {
+      var params = new URLSearchParams(window.location.search);
+      var endpoint = params.get("endpoint") || "";
+
+      function fetchJson(url) {
+        return fetch(url, { cache: "no-store" }).then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed with status " + response.status);
+          }
+
+          return response.json();
+        });
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function renderTopProcesses(processes) {
+        var node = document.getElementById("system-process-list");
+        var list = Array.isArray(processes) ? processes.slice(0, 5) : [];
+
+        if (!list.length) {
+          node.innerHTML = '<div class="system-process-empty">Process breakdown unavailable for this data source.</div>';
+          return;
+        }
+
+        node.innerHTML = list.map(function (process) {
+          var cpu = typeof process.cpu === "number" ? Math.round(process.cpu) + "%" : "--";
+          var memory = typeof process.memoryMB === "number"
+            ? process.memoryMB + " MB"
+            : (typeof process.memoryPercent === "number" ? Math.round(process.memoryPercent) + "% RAM" : "--");
+
+          return '' +
+            '<div class="system-process-item">' +
+              '<div class="system-process-name" title="' + escapeHtml(process.name || "Unknown") + '">' + escapeHtml(process.name || "Unknown") + '</div>' +
+              '<div class="system-process-stat">CPU ' + escapeHtml(cpu) + '</div>' +
+              '<div class="system-process-stat">RAM ' + escapeHtml(memory) + '</div>' +
+            '</div>';
+        }).join("");
+      }
+
+      function renderMetric(valueId, barId, value) {
+        document.getElementById(valueId).textContent = WidgetCore.formatPercent(value);
+        document.getElementById(barId).style.width = typeof value === "number" && isFinite(value) ? value + "%" : "0%";
+      }
+
       var widget = {
-        refreshInterval: 2000,
+        refreshInterval: 4000,
         initWidget: function () {},
         updateWidget: async function () {
-          var stats = await SystemStats.getSystemStats();
-          document.getElementById("cpu-usage").textContent = WidgetCore.formatPercent(stats.cpu);
-          document.getElementById("gpu-usage").textContent = WidgetCore.formatPercent(stats.gpu);
-          document.getElementById("ram-usage").textContent = WidgetCore.formatPercent(stats.ram);
-          document.getElementById("disk-usage").textContent = WidgetCore.formatPercent(stats.disk);
-          document.getElementById("cpu-temp").textContent = Math.round(stats.cpuTemp) + " C";
-          document.getElementById("gpu-temp").textContent = Math.round(stats.gpuTemp) + " C";
-          document.getElementById("cpu-bar").style.width = stats.cpu + "%";
-          document.getElementById("gpu-bar").style.width = stats.gpu + "%";
-          document.getElementById("ram-bar").style.width = stats.ram + "%";
-          document.getElementById("disk-bar").style.width = stats.disk + "%";
+          var stats;
+
+          if (endpoint) {
+            try {
+              stats = await fetchJson(endpoint);
+            } catch (error) {
+              stats = await SystemStats.getSystemStats();
+            }
+          } else {
+            stats = await SystemStats.getSystemStats();
+          }
+
+          renderMetric("cpu-usage", "cpu-bar", stats.cpu);
+          renderMetric("gpu-usage", "gpu-bar", stats.gpu);
+          renderMetric("ram-usage", "ram-bar", stats.ram);
+          renderMetric("disk-usage", "disk-bar", stats.disk);
+          document.getElementById("cpu-temp").textContent = stats.cpuTemp == null ? "CPU temp unavailable" : Math.round(stats.cpuTemp) + " C";
+          document.getElementById("gpu-temp").textContent = stats.gpuTemp == null ? "GPU temp unavailable" : Math.round(stats.gpuTemp) + " C";
           document.getElementById("system-status").textContent = stats.source;
+          renderTopProcesses(stats.topProcesses);
         },
         destroyWidget: function () {
           if (this.__interval) {

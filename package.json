@@ -1,9 +1,21 @@
 {
   "name": "xeneon-widgets",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SilverFuel/xeneon-widgets.git"
+  },
   "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File .\\start-xeneon.ps1",
+    "check": "npm run check:js && npm run check:app",
+    "check:js": "node scripts/check-js.mjs",
+    "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
+    "installer": "powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1",
     "bridge": "node bridge/server.mjs",
     "bridge:install": "powershell -ExecutionPolicy Bypass -File .\\bridge\\install-bridge.ps1",
     "bridge:uninstall": "powershell -ExecutionPolicy Bypass -File .\\bridge\\uninstall-bridge.ps1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

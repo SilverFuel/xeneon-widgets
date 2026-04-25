@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Output Panel</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: rgba(18, 26, 38, 0.92);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --panel-strong: rgba(255, 255, 255, 0.06);
+      --text: #e6edf3;
+      --muted: #90a0b2;
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #00e0ff;
+      --accent-2: #44f0c2;
+      --good: #44d17a;
+      --warn: #ffb347;
+      --danger: #ff6b6b;
+      --shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
+      --radius: 24px;
+      --font: Inter, Roboto, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.12), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(68, 240, 194, 0.1), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .widget {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 12px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      min-height: 180px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(12, 18, 28, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 34%);
+    }
+
+    .widget > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .header,
+    .header-actions,
+    .hero,
+    .hero-actions,
+    .hero-meta,
+    .section-head,
+    .route-card__top,
+    .route-card__meta,
+    .session-row__head,
+    .session-row__meta,
+    .status,
+    .pill,
+    .button {
+      display: flex;
+      align-items: center;
+    }
+
+    .header,
+    .section-head,
+    .route-card__top,
+    .session-row__head {
+      justify-content: space-between;
+    }
+
+    .header,
+    .header-actions,
+    .hero,
+    .hero-actions,
+    .hero-meta,
+    .section-head,
+    .route-card__top,
+    .route-card__meta,
+    .session-row__head,
+    .session-row__meta {
+      gap: 12px;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(1.65rem, 3.6vw, 2.45rem);
+      line-height: 0.92;
+      letter-spacing: -0.04em;
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .eyebrow,
+    .label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    .detail,
+    .hero-copy,
+    .hero-meta span,
+    .route-card__subtitle,
+    .session-row__detail,
+    .empty-state {
+      color: var(--muted);
+    }
+
+    .status,
+    .pill,
+    .button {
+      min-height: 36px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      font-size: 0.76rem;
+    }
+
+    .status,
+    .pill {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .status[data-tone="good"],
+    .pill[data-tone="good"] {
+      color: #c8ffe3;
+      background: rgba(68, 209, 122, 0.16);
+      border-color: rgba(68, 209, 122, 0.22);
+    }
+
+    .status[data-tone="warn"],
+    .pill[data-tone="warn"] {
+      color: #ffe3ba;
+      background: rgba(255, 179, 71, 0.16);
+      border-color: rgba(255, 179, 71, 0.24);
+    }
+
+    .status[data-tone="danger"],
+    .pill[data-tone="danger"] {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.16);
+      border-color: rgba(255, 107, 107, 0.24);
+    }
+
+    .button {
+      border-color: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      transition: transform 140ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.12);
+      outline: 0;
+    }
+
+    .button:active {
+      transform: scale(0.985);
+    }
+
+    .button.is-primary {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      color: #041118;
+      font-weight: 700;
+      border-color: rgba(0, 224, 255, 0.3);
+    }
+
+    .button.is-muted {
+      min-width: 92px;
+      justify-content: center;
+    }
+
+    .hero {
+      min-height: 0;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.18), transparent 30%),
+        radial-gradient(circle at 82% 22%, rgba(68, 240, 194, 0.14), transparent 24%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+        rgba(12, 18, 28, 0.9);
+    }
+
+    .hero-copy {
+      display: none;
+    }
+
+    .hero-meta {
+      flex-wrap: wrap;
+      margin-top: 10px;
+      gap: 8px;
+    }
+
+    .hero-meta span {
+      min-height: 30px;
+      padding: 0 10px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 0.74rem;
+    }
+
+    .hero-meta strong {
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .hero-actions {
+      min-width: 320px;
+      justify-content: flex-end;
+      align-items: stretch;
+    }
+
+    .master-card {
+      min-width: 300px;
+      display: grid;
+      gap: 10px;
+      padding: 14px 16px;
+      border-radius: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(7, 13, 21, 0.48);
+      backdrop-filter: blur(12px);
+    }
+
+    .master-card__top,
+    .master-card__volume,
+    .session-row__controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .master-card__value {
+      font-size: 2.2rem;
+      line-height: 0.92;
+      font-weight: 700;
+      letter-spacing: -0.05em;
+    }
+
+    .content {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(290px, 0.72fr);
+      gap: 12px;
+    }
+
+    .panel {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(23, 32, 45, 0.92), rgba(12, 18, 28, 0.92));
+      overflow: hidden;
+    }
+
+    .section-copy {
+      display: none;
+    }
+
+    .route-grid,
+    .session-list {
+      min-height: 0;
+      overflow: auto;
+      padding-right: 6px;
+    }
+
+    .route-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px;
+      align-content: start;
+    }
+
+    .route-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at top right, var(--card-aura, rgba(0, 224, 255, 0.12)), transparent 34%),
+        rgba(255, 255, 255, 0.03);
+      transition: transform 150ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .route-card[data-kind="speaker"] {
+      --card-aura: rgba(68, 240, 194, 0.16);
+    }
+
+    .route-card[data-kind="headphones"] {
+      --card-aura: rgba(0, 224, 255, 0.18);
+    }
+
+    .route-card[data-kind="display"] {
+      --card-aura: rgba(255, 179, 71, 0.16);
+    }
+
+    .route-card[data-kind="digital"] {
+      --card-aura: rgba(120, 160, 255, 0.18);
+    }
+
+    .route-card[data-default="true"] {
+      border-color: rgba(0, 224, 255, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(0, 224, 255, 0.14);
+    }
+
+    .route-card:hover {
+      transform: translateY(-1px);
+    }
+
+    .route-card__icon {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+    }
+
+    .route-card__name {
+      font-size: 0.92rem;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+
+    .route-card__subtitle {
+      display: none;
+    }
+
+    .route-card__meta {
+      justify-content: space-between;
+      flex-wrap: wrap;
+      font-size: 0.74rem;
+    }
+
+    .session-list {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .session-row {
+      display: grid;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .session-row[data-active="true"] {
+      border-color: rgba(0, 224, 255, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(0, 224, 255, 0.08);
+    }
+
+    .session-row__name {
+      font-size: 0.88rem;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .session-row__detail {
+      display: none;
+    }
+
+    .session-row__controls {
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .session-row__controls .label {
+      flex: 0 0 auto;
+    }
+
+    .session-row__controls strong {
+      min-width: 42px;
+    }
+
+    .session-row__meta {
+      display: none;
+    }
+
+    .range {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .range:focus-visible {
+      outline: 2px solid rgba(0, 224, 255, 0.42);
+      outline-offset: 2px;
+    }
+
+    .empty-state {
+      padding: 22px 18px;
+      border-radius: 18px;
+      border: 1px dashed rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.02);
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    .route-grid::-webkit-scrollbar,
+    .session-list::-webkit-scrollbar {
+      width: 12px;
+    }
+
+    .route-grid::-webkit-scrollbar-thumb,
+    .session-list::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      border: 3px solid transparent;
+      background: rgba(255, 255, 255, 0.18);
+      background-clip: padding-box;
+    }
+
+    .route-grid::-webkit-scrollbar-track,
+    .session-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    [data-size="medium"] .widget,
+    [data-size="small"] .widget {
+      padding: 14px;
+      gap: 12px;
+    }
+
+    [data-size="medium"] .content,
+    [data-size="small"] .content {
+      grid-template-columns: 1fr;
+    }
+
+    [data-size="medium"] .hero,
+    [data-size="small"] .hero {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    [data-size="medium"] .hero-actions,
+    [data-size="small"] .hero-actions {
+      min-width: 0;
+      justify-content: flex-start;
+    }
+
+    [data-size="medium"] .master-card,
+    [data-size="small"] .master-card {
+      min-width: 0;
+      width: 100%;
+    }
+
+    [data-size="medium"] .route-grid,
+    [data-size="small"] .route-grid {
+      grid-template-columns: 1fr;
+    }
+
+    [data-size="small"] h1 {
+      font-size: 1.55rem;
+    }
+
+    [data-size="small"] .status,
+    [data-size="small"] .button,
+    [data-size="small"] .pill {
+      min-height: 36px;
+      padding: 8px 10px;
+      font-size: 0.74rem;
+    }
+
+    @media (max-width: 1480px) {
+      .hero,
+      .content {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-actions {
+        min-width: 0;
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="widget">
+    <header class="header">
+      <div>
+        <div class="eyebrow">Audio Control</div>
+        <h1>Sound output routing</h1>
+      </div>
+      <div class="header-actions">
+        <button id="audio-refresh-button" class="button" type="button">Refresh</button>
+        <div id="audio-status" class="status" data-tone="warn">Loading</div>
+      </div>
+    </header>
+
+    <section class="hero">
+        <div>
+          <div class="eyebrow">Current route</div>
+          <h2 id="audio-default-device">Loading output</h2>
+          <p id="audio-hero-copy" class="hero-copy">Reading playback devices and live session controls from the local bridge.</p>
+          <div id="audio-hero-meta" class="hero-meta"></div>
+      </div>
+      <div class="hero-actions">
+        <article class="master-card">
+          <div class="master-card__top">
+            <div>
+              <div class="eyebrow">Master output</div>
+              <h2>Default device volume</h2>
+            </div>
+            <div id="audio-master-pill" class="pill" data-tone="good">Live</div>
+          </div>
+          <div class="master-card__volume">
+            <div>
+              <div id="audio-master-value" class="master-card__value">--%</div>
+              <div id="audio-master-copy" class="detail">Waiting for the bridge</div>
+            </div>
+            <button id="audio-master-mute" class="button is-muted" type="button">Mute</button>
+          </div>
+          <input id="audio-master-slider" class="range" type="range" min="0" max="100" value="0">
+        </article>
+      </div>
+    </section>
+
+    <section class="content">
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Outputs</div>
+            <h2>Playback devices</h2>
+            <p class="section-copy">Tap any route and Windows will switch the default playback target immediately.</p>
+          </div>
+          <div id="audio-device-badge" class="pill" data-tone="warn">--</div>
+        </div>
+        <div id="audio-device-grid" class="route-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Live apps</div>
+            <h2>App mix</h2>
+            <p class="section-copy">Active apps stay pinned first so you can trim levels without leaving the dashboard.</p>
+          </div>
+          <div id="audio-session-badge" class="pill" data-tone="warn">--</div>
+        </div>
+        <div id="audio-session-list" class="session-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var size = params.get("size") || "full";
+      var endpoint = params.get("endpoint") || "http://127.0.0.1:8976/api/audio";
+      var actionBase = params.get("actionBase") || endpoint;
+      var refreshInterval = Math.max(2500, Number(params.get("refresh") || 4000));
+
+      document.documentElement.setAttribute("data-size", size);
+
+      var state = {
+        busy: false,
+        data: null,
+        interacting: false,
+        lastRenderSignature: "",
+        statusText: "Loading",
+        statusTone: "warn"
+      };
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function fetchJson(url) {
+        return fetch(url, {
+          cache: "no-store"
+        }).then(function (response) {
+          if (!response.ok) {
+            return response.json().catch(function () {
+              return {};
+            }).then(function (payload) {
+              throw new Error(payload.error || ("Request failed with status " + response.status));
+            });
+          }
+          return response.json();
+        });
+      }
+
+      function postJson(url, body) {
+        return fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body || {})
+        }).then(function (response) {
+          if (!response.ok) {
+            return response.json().catch(function () {
+              return {};
+            }).then(function (payload) {
+              throw new Error(payload.error || ("Request failed with status " + response.status));
+            });
+          }
+          return response.json().catch(function () {
+            return {};
+          });
+        });
+      }
+
+      function setStatus(text, tone) {
+        state.statusText = text;
+        state.statusTone = tone;
+        document.getElementById("audio-status").textContent = text;
+        document.getElementById("audio-status").setAttribute("data-tone", tone);
+      }
+
+      function getIconLabel(kind) {
+        if (kind === "headphones") {
+          return "HP";
+        }
+        if (kind === "display") {
+          return "TV";
+        }
+        if (kind === "digital") {
+          return "DIG";
+        }
+        return "SPK";
+      }
+
+      function getFallbackData() {
+        return {
+          defaultDeviceId: "",
+          masterVolume: 0,
+          muted: false,
+          devices: [],
+          sessions: [],
+          source: "local bridge"
+        };
+      }
+
+      function getCurrentData() {
+        return state.data || getFallbackData();
+      }
+
+      function buildRenderSignature(data) {
+        return JSON.stringify({
+          defaultDeviceId: data.defaultDeviceId || "",
+          masterVolume: Math.round(Number(data.masterVolume || 0)),
+          muted: Boolean(data.muted),
+          devices: (data.devices || []).map(function (device) {
+            return {
+              id: device.id,
+              isDefault: Boolean(device.isDefault),
+              state: device.state,
+              availability: device.availability
+            };
+          }),
+          sessions: (data.sessions || []).slice(0, 6).map(function (session) {
+            return {
+              id: session.id,
+              volume: Math.round(Number(session.volume || 0)),
+              muted: Boolean(session.muted),
+              active: Boolean(session.active),
+              state: session.state
+            };
+          })
+        });
+      }
+
+      function updateHeader(data) {
+        var defaultDevice = null;
+        var activeSessions = data.sessions.filter(function (session) {
+          return session.active;
+        });
+
+        data.devices.forEach(function (device) {
+          if (device.isDefault) {
+            defaultDevice = device;
+          }
+        });
+
+        document.getElementById("audio-default-device").textContent = defaultDevice ? defaultDevice.name : "No default playback device";
+        document.getElementById("audio-hero-copy").textContent = defaultDevice
+          ? "Switch outputs and control volume without leaving the dashboard."
+          : "The bridge could not find a default playback device.";
+        document.getElementById("audio-hero-meta").innerHTML = [
+          '<span><strong>' + data.devices.length + '</strong> outputs</span>',
+          '<span><strong>' + activeSessions.length + '</strong> active apps</span>'
+        ].join("");
+
+        document.getElementById("audio-master-value").textContent = Math.round(data.masterVolume || 0) + "%";
+        document.getElementById("audio-master-copy").textContent = data.muted
+          ? "Master output is muted"
+          : "Master output is live";
+        document.getElementById("audio-master-slider").value = String(Math.round(data.masterVolume || 0));
+        document.getElementById("audio-master-mute").textContent = data.muted ? "Unmute" : "Mute";
+        document.getElementById("audio-master-pill").textContent = data.muted ? "Muted" : "Live";
+        document.getElementById("audio-master-pill").setAttribute("data-tone", data.muted ? "warn" : "good");
+      }
+
+      function renderDevices(data) {
+        var badge = document.getElementById("audio-device-badge");
+        var grid = document.getElementById("audio-device-grid");
+
+        badge.textContent = data.devices.length + " devices";
+        badge.setAttribute("data-tone", data.devices.length ? "good" : "danger");
+
+        if (!data.devices.length) {
+          grid.innerHTML = '<div class="empty-state">No playback devices were returned by the bridge.</div>';
+          return;
+        }
+
+        grid.innerHTML = data.devices.map(function (device) {
+          var routeButtonLabel = device.isDefault ? "Current" : "Use";
+          return '' +
+            '<article class="route-card" data-kind="' + escapeHtml(device.kind || "output") + '" data-default="' + device.isDefault + '">' +
+              '<div class="route-card__top">' +
+                '<div class="header-actions">' +
+                  '<div class="route-card__icon">' + escapeHtml(getIconLabel(device.kind)) + '</div>' +
+                  '<div>' +
+                    '<div class="route-card__name">' + escapeHtml(device.name) + '</div>' +
+                    '<div class="route-card__subtitle">' + escapeHtml(device.availability || device.state) + '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="pill" data-tone="' + (device.isDefault ? "good" : "warn") + '">' + (device.isDefault ? "Default" : "Ready") + '</div>' +
+              '</div>' +
+              '<div class="route-card__meta">' +
+                '<span></span>' +
+                '<button class="button' + (device.isDefault ? "" : " is-primary") + '" type="button" data-action="switch-device" data-device-id="' + escapeHtml(device.id) + '"' + (device.isDefault ? ' disabled' : '') + '>' + escapeHtml(routeButtonLabel) + '</button>' +
+              '</div>' +
+            '</article>';
+        }).join("");
+      }
+
+      function renderSessions(data) {
+        var badge = document.getElementById("audio-session-badge");
+        var list = document.getElementById("audio-session-list");
+        var sessions = data.sessions.slice(0, 6);
+        var activeCount = data.sessions.filter(function (session) {
+          return session.active;
+        }).length;
+
+        badge.textContent = activeCount ? (activeCount + " active") : (data.sessions.length + " tracked");
+        badge.setAttribute("data-tone", data.sessions.length ? (activeCount ? "good" : "warn") : "warn");
+
+        if (!sessions.length) {
+          list.innerHTML = '<div class="empty-state">No application audio sessions are active on the current output right now.</div>';
+          return;
+        }
+
+        list.innerHTML = sessions.map(function (session) {
+          return '' +
+            '<article class="session-row" data-active="' + session.active + '">' +
+              '<div class="session-row__head">' +
+                '<div>' +
+                  '<div class="session-row__name">' + escapeHtml(session.name) + '</div>' +
+                  '<div class="session-row__detail">' + escapeHtml(session.detail) + '</div>' +
+                '</div>' +
+                '<div class="pill" data-tone="' + (session.active ? "good" : "warn") + '">' + escapeHtml(session.active ? "Live" : session.state) + '</div>' +
+              '</div>' +
+              '<div class="session-row__controls">' +
+                '<span class="label">Level</span>' +
+                '<strong>' + Math.round(session.volume || 0) + '%</strong>' +
+                '<button class="button" type="button" data-action="toggle-session-mute" data-session-id="' + escapeHtml(session.id) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
+              '</div>' +
+              '<input class="range" type="range" min="0" max="100" value="' + Math.round(session.volume || 0) + '" data-action="session-volume" data-session-id="' + escapeHtml(session.id) + '">' +
+              '<div class="session-row__meta">' +
+                '<span class="detail">' + (session.muted ? "Muted" : "Audible") + '</span>' +
+              '</div>' +
+            '</article>';
+        }).join("");
+      }
+
+      function render() {
+        var data = getCurrentData();
+        updateHeader(data);
+        renderDevices(data);
+        renderSessions(data);
+        state.lastRenderSignature = buildRenderSignature(data);
+      }
+
+      function refreshData() {
+        return fetchJson(endpoint).then(function (payload) {
+          var nextSignature = buildRenderSignature(payload);
+          var sameRender = nextSignature === state.lastRenderSignature;
+          state.data = payload;
+          setStatus("Live", "good");
+          if (!sameRender || state.statusText !== "Live" || state.statusTone !== "good") {
+            render();
+          }
+        }, function (error) {
+          if (!state.data) {
+            state.data = getFallbackData();
+          }
+          setStatus(error.message || "Bridge unavailable", "danger");
+          render();
+        });
+      }
+
+      function commit(url, payload, rollback) {
+        state.busy = true;
+        return postJson(url, payload).then(function () {
+          state.busy = false;
+          return refreshData();
+        }, function (error) {
+          state.busy = false;
+          if (typeof rollback === "function") {
+            rollback();
+          }
+          setStatus(error.message || "Action failed", "danger");
+          render();
+        });
+      }
+
+      function findDevice(deviceId) {
+        return getCurrentData().devices.filter(function (device) {
+          return device.id === deviceId;
+        })[0] || null;
+      }
+
+      function findSession(sessionId) {
+        return getCurrentData().sessions.filter(function (session) {
+          return session.id === sessionId;
+        })[0] || null;
+      }
+
+      function wireEvents() {
+        document.getElementById("audio-refresh-button").addEventListener("click", function () {
+          refreshData();
+        });
+
+        document.getElementById("audio-master-mute").addEventListener("click", function () {
+          var snapshot = JSON.parse(JSON.stringify(getCurrentData()));
+          var nextMuted = !snapshot.muted;
+          state.data.muted = nextMuted;
+          render();
+          commit(actionBase + "/master-mute", {
+            muted: nextMuted
+          }, function () {
+            state.data = snapshot;
+          });
+        });
+
+        document.getElementById("audio-master-slider").addEventListener("input", function (event) {
+          if (!state.data) {
+            return;
+          }
+          state.interacting = true;
+          state.data.masterVolume = Number(event.target.value || 0);
+          if (state.data.masterVolume > 0) {
+            state.data.muted = false;
+          }
+          render();
+        });
+
+        document.getElementById("audio-master-slider").addEventListener("change", function (event) {
+          var snapshot = JSON.parse(JSON.stringify(getCurrentData()));
+          state.data.masterVolume = Number(event.target.value || 0);
+          if (state.data.masterVolume > 0) {
+            state.data.muted = false;
+          }
+          render();
+          commit(actionBase + "/master-volume", {
+            volume: state.data.masterVolume
+          }, function () {
+            state.data = snapshot;
+          }).finally(function () {
+            state.interacting = false;
+          });
+        });
+
+        document.body.addEventListener("pointerdown", function (event) {
+          if (event.target && event.target.getAttribute("data-action") === "session-volume") {
+            state.interacting = true;
+          }
+        });
+
+        document.body.addEventListener("click", function (event) {
+          var target = event.target.closest("[data-action]");
+          var action = target && target.getAttribute("data-action");
+          var snapshot;
+          var device;
+          var session;
+
+          if (!action || state.busy || !state.data) {
+            return;
+          }
+
+          snapshot = JSON.parse(JSON.stringify(getCurrentData()));
+
+          if (action === "switch-device") {
+            device = findDevice(target.getAttribute("data-device-id"));
+            if (!device || device.isDefault) {
+              return;
+            }
+            state.data.devices.forEach(function (item) {
+              item.isDefault = item.id === device.id;
+            });
+            render();
+            commit(actionBase + "/default-device", {
+              deviceId: device.id
+            }, function () {
+              state.data = snapshot;
+            });
+            return;
+          }
+
+          if (action === "toggle-session-mute") {
+            session = findSession(target.getAttribute("data-session-id"));
+            if (!session) {
+              return;
+            }
+            session.muted = !session.muted;
+            render();
+            commit(actionBase + "/session-mute", {
+              sessionId: session.id,
+              muted: session.muted
+            }, function () {
+              state.data = snapshot;
+            });
+          }
+        });
+
+        document.body.addEventListener("input", function (event) {
+          if (event.target.getAttribute("data-action") !== "session-volume" || !state.data) {
+            return;
+          }
+
+          state.interacting = true;
+          var session = findSession(event.target.getAttribute("data-session-id"));
+          if (!session) {
+            return;
+          }
+
+          session.volume = Number(event.target.value || 0);
+          if (session.volume > 0) {
+            session.muted = false;
+          }
+          render();
+        });
+
+        document.body.addEventListener("change", function (event) {
+          if (event.target.getAttribute("data-action") !== "session-volume" || !state.data) {
+            state.interacting = false;
+            return;
+          }
+
+          var snapshot = JSON.parse(JSON.stringify(getCurrentData()));
+          var session = findSession(event.target.getAttribute("data-session-id"));
+          if (!session) {
+            state.interacting = false;
+            return;
+          }
+
+          session.volume = Number(event.target.value || 0);
+          if (session.volume > 0) {
+            session.muted = false;
+          }
+          render();
+          commit(actionBase + "/session-volume", {
+            sessionId: session.id,
+            volume: session.volume
+          }, function () {
+            state.data = snapshot;
+          }).finally(function () {
+            state.interacting = false;
+          });
+        });
+
+        document.body.addEventListener("pointerup", function () {
+          state.interacting = false;
+        });
+
+        document.body.addEventListener("pointercancel", function () {
+          state.interacting = false;
+        });
+      }
+
+      function mountWidget() {
+        var tickBusy = false;
+
+        function tick() {
+          if (tickBusy || state.busy || state.interacting) {
+            return;
+          }
+
+          tickBusy = true;
+          refreshData().finally(function () {
+            tickBusy = false;
+          });
+        }
+
+        wireEvents();
+        tick();
+        window.setInterval(tick, refreshInterval);
+      }
+
+      mountWidget();
+    }());
+  </script>
+</body>
+</html>

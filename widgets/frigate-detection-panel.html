@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frigate Detection Panel</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: rgba(27, 36, 48, 0.96);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --accent: #00e0ff;
+      --accent-2: #44f0c2;
+      --text: #e6edf3;
+      --muted: #8b9aab;
+      --border: rgba(255, 255, 255, 0.08);
+      --good: #44d17a;
+      --warn: #ffb347;
+      --danger: #ff6b6b;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      --radius: 24px;
+      --font: Inter, Roboto, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(0, 224, 255, 0.13), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(68, 240, 194, 0.09), transparent 32%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    .widget {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 18px;
+      width: 100%;
+      height: calc(100vh - 24px);
+      min-height: 180px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(14, 20, 28, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 38%);
+      pointer-events: none;
+    }
+
+    .header,
+    .status,
+    .badge,
+    .layout,
+    .section-head,
+    .overlay,
+    .summary-strip,
+    .summary-chip,
+    .alert-top,
+    .alert-meta {
+      display: flex;
+      align-items: center;
+    }
+
+    .header,
+    .section-head,
+    .alert-top {
+      justify-content: space-between;
+    }
+
+    .header--compact {
+      justify-content: flex-end;
+    }
+
+    .header,
+    .layout,
+    .section-head,
+    .overlay,
+    .summary-strip,
+    .summary-chip,
+    .alert-top,
+    .alert-meta {
+      gap: 12px;
+    }
+
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .detail,
+    .alert-meta,
+    .summary-chip {
+      color: var(--muted);
+    }
+
+    .status,
+    .badge {
+      min-height: 40px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .status[data-tone="good"],
+    .badge[data-tone="good"] {
+      color: #bfffe1;
+      background: rgba(68, 209, 122, 0.16);
+      border-color: rgba(68, 209, 122, 0.25);
+    }
+
+    .status[data-tone="warn"],
+    .badge[data-tone="warn"] {
+      color: #ffe4bd;
+      background: rgba(255, 179, 71, 0.16);
+      border-color: rgba(255, 179, 71, 0.24);
+    }
+
+    .status[data-tone="danger"],
+    .badge[data-tone="danger"] {
+      color: #ffd0d0;
+      background: rgba(255, 107, 107, 0.16);
+      border-color: rgba(255, 107, 107, 0.24);
+    }
+
+    .layout {
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 16px;
+    }
+
+    .panel,
+    .summary-chip,
+    .alert-item {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--panel-soft);
+    }
+
+    .panel {
+      display: grid;
+      gap: 16px;
+      padding: 18px;
+      min-height: 0;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.72rem;
+    }
+
+    .snapshot-frame {
+      position: relative;
+      min-height: 260px;
+      border-radius: 22px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(0, 224, 255, 0.08), transparent 48%),
+        #050b12;
+    }
+
+    .snapshot-frame img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #081019;
+    }
+
+    .overlay {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      z-index: 2;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(7, 14, 22, 0.82);
+      backdrop-filter: blur(10px);
+      line-height: 1.35;
+    }
+
+    .overlay strong {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .summary-strip {
+      flex-wrap: wrap;
+    }
+
+    .summary-chip {
+      min-height: 42px;
+      padding: 10px 14px;
+      font-size: 0.84rem;
+      line-height: 1.2;
+    }
+
+    .summary-chip strong {
+      color: var(--text);
+      font-size: 1rem;
+    }
+
+    .alert-list {
+      display: grid;
+      gap: 10px;
+      min-height: 0;
+      align-content: start;
+    }
+
+    .alert-item {
+      display: grid;
+      gap: 10px;
+      padding: 14px 16px;
+    }
+
+    .alert-title {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .alert-meta {
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
+    .empty-state {
+      display: grid;
+      place-items: center;
+      min-height: 100%;
+      padding: 28px 16px;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    [data-size="large"] body,
+    [data-size="medium"] body,
+    [data-size="small"] body {
+      padding: 10px;
+    }
+
+    [data-size="large"] .widget,
+    [data-size="medium"] .widget,
+    [data-size="small"] .widget {
+      height: calc(100vh - 20px);
+      padding: 16px;
+      gap: 14px;
+    }
+
+    [data-size="large"] .layout,
+    [data-size="medium"] .layout,
+    [data-size="small"] .layout {
+      grid-template-columns: 1fr;
+    }
+
+    [data-size="medium"] .status,
+    [data-size="small"] .status {
+      min-height: 34px;
+      padding: 8px 10px;
+      font-size: 0.72rem;
+    }
+
+    [data-size="medium"] .panel,
+    [data-size="small"] .panel,
+    [data-size="medium"] .alert-item,
+    [data-size="small"] .alert-item,
+    [data-size="medium"] .summary-chip,
+    [data-size="small"] .summary-chip {
+      padding: 14px;
+      border-radius: 18px;
+    }
+
+    [data-size="medium"] .snapshot-frame,
+    [data-size="small"] .snapshot-frame {
+      min-height: 180px;
+    }
+
+    [data-size="small"] .header {
+      align-items: flex-start;
+    }
+  </style>
+</head>
+<body>
+  <main class="widget">
+    <header class="header header--compact">
+      <div id="frigate-status" class="status" data-tone="good">Monitoring</div>
+    </header>
+
+    <section class="layout">
+      <article class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Current</div>
+            <h2 id="snapshot-camera">Driveway</h2>
+          </div>
+          <div id="snapshot-badge" class="badge" data-tone="good">No alerts</div>
+        </div>
+
+        <div class="snapshot-frame">
+          <img id="snapshot-image" alt="Frigate snapshot">
+          <div class="overlay">
+            <div>
+              <strong id="overlay-title">No detections</strong>
+              <div id="overlay-detail" class="detail">Waiting for object events</div>
+            </div>
+            <div id="overlay-score" class="badge" data-tone="good">Standby</div>
+          </div>
+        </div>
+
+        <div id="summary-strip" class="summary-strip"></div>
+      </article>
+
+      <article class="panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Alerts</div>
+            <h2>Recent alerts</h2>
+          </div>
+          <div id="alert-badge" class="badge" data-tone="good">--</div>
+        </div>
+
+        <div id="alert-list" class="alert-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var size = params.get("size") || "full";
+      document.documentElement.setAttribute("data-size", size);
+
+      function getParam(name, fallback) {
+        var value = params.get(name);
+        return value === null || value === "" ? fallback : value;
+      }
+
+      function getNumberParam(name, fallback) {
+        var value = Number(getParam(name, ""));
+        return isFinite(value) ? value : fallback;
+      }
+
+      function getJsonParam(name, fallback) {
+        var raw = params.get(name);
+        if (!raw) {
+          return fallback;
+        }
+
+        try {
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn("Invalid JSON query payload:", error);
+          return fallback;
+        }
+      }
+
+      function buildHeaders() {
+        return {};
+      }
+
+      function fetchJson(url) {
+        return fetch(url, {
+          headers: buildHeaders(),
+          cache: "no-store"
+        }).then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed with status " + response.status);
+          }
+          return response.json();
+        });
+      }
+
+      function formatAgo(value) {
+        var date = new Date(value);
+        if (isNaN(date.getTime())) {
+          return "--";
+        }
+        var diff = Math.max(0, Date.now() - date.getTime());
+        var seconds = Math.round(diff / 1000);
+        if (seconds < 5) {
+          return "just now";
+        }
+        if (seconds < 60) {
+          return seconds + "s ago";
+        }
+        if (seconds < 3600) {
+          return Math.round(seconds / 60) + "m ago";
+        }
+        return Math.round(seconds / 3600) + "h ago";
+      }
+
+      function appendCacheBuster(url) {
+        if (!url) {
+          return "";
+        }
+        return url + (url.indexOf("?") === -1 ? "?" : "&") + "_ts=" + Date.now();
+      }
+
+      function escapeSvg(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+      }
+
+      function buildSnapshot(camera, label, zone, timeLabel) {
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">' +
+          '<defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">' +
+          '<stop offset="0%" stop-color="#071018"/><stop offset="100%" stop-color="#132737"/></linearGradient></defs>' +
+          '<rect width="1600" height="900" fill="#050b12"/>' +
+          '<rect x="40" y="40" width="1520" height="820" rx="44" fill="url(#bg)" stroke="#00e0ff" stroke-opacity=".18"/>' +
+          '<rect x="270" y="220" width="340" height="360" rx="20" fill="none" stroke="#44f0c2" stroke-width="10" stroke-opacity=".8"/>' +
+          '<rect x="900" y="250" width="260" height="290" rx="20" fill="none" stroke="#00e0ff" stroke-width="10" stroke-opacity=".8"/>' +
+          '<text x="120" y="120" fill="#8b9aab" font-family="Inter,Roboto,system-ui,sans-serif" font-size="34" letter-spacing="10">FRIGATE SNAPSHOT</text>' +
+          '<text x="120" y="720" fill="#e6edf3" font-family="Inter,Roboto,system-ui,sans-serif" font-size="72" font-weight="700">' + escapeSvg(camera) + '</text>' +
+          '<text x="120" y="785" fill="#8b9aab" font-family="Inter,Roboto,system-ui,sans-serif" font-size="32">' + escapeSvg(label + " / " + zone) + '</text>' +
+          '<text x="120" y="835" fill="#8b9aab" font-family="Inter,Roboto,system-ui,sans-serif" font-size="26">' + escapeSvg(timeLabel) + '</text>' +
+          '</svg>';
+        return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+      }
+
+      function limitForSize() {
+        if (size === "small") {
+          return 3;
+        }
+        if (size === "medium") {
+          return 4;
+        }
+        return 6;
+      }
+
+      function mountWidget(widget) {
+        var intervalId = 0;
+        var busy = false;
+
+        function tick() {
+          if (busy) {
+            return;
+          }
+          busy = true;
+          Promise.resolve(widget.updateWidget()).then(function () {
+            busy = false;
+          }, function (error) {
+            busy = false;
+            console.warn(error);
+          });
+        }
+
+        if (typeof widget.initWidget === "function") {
+          widget.initWidget();
+        }
+
+        tick();
+
+        if (widget.refreshInterval) {
+          intervalId = window.setInterval(tick, widget.refreshInterval);
+        }
+
+        window.addEventListener("beforeunload", function () {
+          window.clearInterval(intervalId);
+          if (typeof widget.destroyWidget === "function") {
+            widget.destroyWidget();
+          }
+        });
+      }
+
+      function normalizeData(raw) {
+        var data = raw || {};
+        var alerts = data.alerts || [];
+        return {
+          hasLiveData: !!(Object.keys(data).length || alerts.length),
+          source: data.source || (getParam("endpoint", "") ? "Frigate API" : "Needs setup"),
+          camera: data.camera || getParam("camera", "Driveway"),
+          snapshotUrl: data.snapshotUrl || getParam("snapshot", ""),
+          alerts: alerts,
+          lastDetection: data.lastDetection || alerts[0] || null,
+          counts: data.counts || {
+            lastHour: alerts.length,
+            activeCameras: alerts.reduce(function (list, alert) {
+              if (list.indexOf(alert.camera) === -1) {
+                list.push(alert.camera);
+              }
+              return list;
+            }, []).length
+          }
+        };
+      }
+
+      function emptyData() {
+        return normalizeData({
+          alerts: []
+        });
+      }
+
+      function toneForScore(score) {
+        if (score >= 0.92) {
+          return "good";
+        }
+        if (score >= 0.78) {
+          return "warn";
+        }
+        return "danger";
+      }
+
+      function render(data, error) {
+        var last = data.lastDetection;
+        var alertCount = data.alerts.length;
+        var topTone = error ? "danger" : !data.hasLiveData ? "warn" : alertCount ? toneForScore(Number(last && last.score || 0.8)) : "good";
+        var snapshot = data.snapshotUrl
+          ? appendCacheBuster(data.snapshotUrl)
+          : buildSnapshot(data.camera, last ? last.label : "No detections", last ? last.zone : "standby", last ? formatAgo(last.time) : "Standby");
+
+        document.getElementById("frigate-status").textContent = error ? "Unavailable" : data.source;
+        document.getElementById("frigate-status").setAttribute("data-tone", topTone);
+        document.getElementById("snapshot-camera").textContent = last ? last.camera : data.camera;
+        document.getElementById("snapshot-image").src = snapshot;
+        document.getElementById("snapshot-badge").textContent = alertCount ? alertCount + " active" : "Calm";
+        document.getElementById("snapshot-badge").setAttribute("data-tone", topTone);
+        document.getElementById("alert-badge").textContent = alertCount ? alertCount + " alerts" : "No alerts";
+        document.getElementById("alert-badge").setAttribute("data-tone", topTone);
+        document.getElementById("overlay-title").textContent = last ? last.label + " on " + last.camera : "No detections";
+        document.getElementById("overlay-detail").textContent = last ? last.zone + " • " + formatAgo(last.time) : "Waiting for object events";
+        document.getElementById("overlay-score").textContent = last ? Math.round(last.score * 100) + "% confidence" : "Standby";
+        document.getElementById("overlay-score").setAttribute("data-tone", topTone);
+
+        document.getElementById("summary-strip").innerHTML = [
+          '<div class="summary-chip"><strong>' + data.counts.lastHour + '</strong><span>Last hour</span></div>',
+          '<div class="summary-chip"><strong>' + data.counts.activeCameras + '</strong><span>Active cameras</span></div>',
+          '<div class="summary-chip"><strong>' + (last ? last.label : "None") + '</strong><span>Latest object</span></div>'
+        ].join("");
+
+        if (!data.alerts.length) {
+          document.getElementById("alert-list").innerHTML = '<div class="empty-state">' + (data.hasLiveData ? "No motion or object alerts right now." : "Camera alerts will light up after the native connector is added.") + '</div>';
+          return;
+        }
+
+        document.getElementById("alert-list").innerHTML = data.alerts.slice(0, limitForSize()).map(function (alert) {
+          var tone = toneForScore(Number(alert.score || 0.7));
+          return '' +
+            '<article class="alert-item">' +
+              '<div class="alert-top">' +
+                '<div class="alert-title">' + alert.label + ' on ' + alert.camera + '</div>' +
+                '<div class="badge" data-tone="' + tone + '">' + Math.round(Number(alert.score || 0) * 100) + '%</div>' +
+              '</div>' +
+              '<div class="alert-meta">' +
+                '<span>' + alert.zone + '</span>' +
+                '<span>' + formatAgo(alert.time) + '</span>' +
+              '</div>' +
+            '</article>';
+        }).join("");
+      }
+
+      var widget = {
+        refreshInterval: getParam("endpoint", "") ? Math.max(3000, getNumberParam("refresh", 5000)) : 0,
+        initWidget: function () {},
+        updateWidget: function () {
+          var payload = getJsonParam("payload", null);
+          if (payload) {
+            render(normalizeData(payload));
+            return;
+          }
+
+          var endpoint = getParam("endpoint", "");
+          if (!endpoint) {
+            render(emptyData());
+            return;
+          }
+
+          return fetchJson(endpoint).then(function (data) {
+            render(normalizeData(data));
+          }, function (error) {
+            render(emptyData(), error);
+          });
+        },
+        destroyWidget: function () {}
+      };
+
+      mountWidget(widget);
+    }());
+  </script>
+</body>
+</html>

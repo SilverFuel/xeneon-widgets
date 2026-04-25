@@ -1,0 +1,27 @@
+* text=auto
+
+*.cmd text eol=crlf
+
+*.gitignore text eol=lf
+*.cs text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.ps1 text eol=lf
+*.xaml text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+
+*.dll binary
+*.exe binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.pdb binary
+*.png binary
+*.pri binary
+*.webp binary
+*.xbf binary
