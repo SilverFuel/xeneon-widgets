@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 
-const roots = ["bridge", "js"];
-const extensions = new Set([".js", ".mjs"]);
+const roots = ["bridge", "js", "desktop/electron/src"];
+const extensions = new Set([".js", ".mjs", ".cjs"]);
 const files = [];
 
 function collectFiles(directory) {
@@ -23,7 +23,9 @@ function collectFiles(directory) {
 }
 
 for (const root of roots) {
-  collectFiles(root);
+  if (existsSync(root)) {
+    collectFiles(root);
+  }
 }
 
 for (const file of files.sort()) {

@@ -12,6 +12,10 @@
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
     "clean": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clean-workspace.ps1",
     "installer": "powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1",
+    "release:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-release.ps1",
+    "mac:install": "npm --prefix desktop/electron install",
+    "mac:start": "npm --prefix desktop/electron start",
+    "mac:dist": "npm --prefix desktop/electron run dist:mac",
     "bridge": "node bridge/server.mjs",
     "bridge:install": "powershell -ExecutionPolicy Bypass -File .\\bridge\\install-bridge.ps1",
     "bridge:uninstall": "powershell -ExecutionPolicy Bypass -File .\\bridge\\uninstall-bridge.ps1"

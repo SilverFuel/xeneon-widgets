@@ -2,7 +2,9 @@
 
 XENEON Edge Host is a native Windows dashboard for the CORSAIR XENEON EDGE. It serves a 2560x720 local control surface with system telemetry, network stats, audio routing, media controls, weather, calendar, Hue lights, launchers, clipboard history, and optional home-lab panels.
 
-The product is the native host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only.
+The primary product is the native Windows host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only. A macOS beta host lives in `desktop/electron` because the Windows app uses WinUI 3 and WebView2, which do not run on macOS.
+
+XENEON Edge Host is an independent product. It is not an official CORSAIR app unless a separate written agreement says otherwise.
 
 ## Product Layer
 
@@ -70,11 +72,45 @@ The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, crea
 
 Before selling it, treat these as release blockers:
 
-- replace development branding with a clear product name
-- add a license, privacy note, support email, and release notes
 - sign the installer and executable
 - test first-run setup on a clean Windows machine
+- replace placeholder support and security inboxes
 - avoid presenting the app as an official CORSAIR product unless you have permission
+
+Release docs now live in `docs/release`.
+
+## Windows Public Release
+
+Build the Windows release locally with:
+
+```powershell
+npm run release:windows
+```
+
+Sign the installer before public upload:
+
+```powershell
+powershell -File scripts\sign-windows.ps1 -Path app\dist\<installer>.exe -CertificatePath C:\path\to\certificate.pfx
+```
+
+See `docs/release/WINDOWS-SIGNING.md`.
+
+## macOS Beta
+
+The Mac version is an Electron host around the same dashboard. Build it on a Mac:
+
+```bash
+npm run mac:install
+npm run mac:dist
+```
+
+Before selling or posting it publicly, sign with an Apple Developer ID certificate and notarize it:
+
+```bash
+scripts/notarize-macos.sh desktop/electron/dist/<package>.dmg
+```
+
+See `docs/release/MACOS-RELEASE.md`.
 
 ## Repository Map
 
@@ -84,8 +120,18 @@ Before selling it, treat these as release blockers:
 - `app/Models/` - app configuration/request models
 - `widgets/` - standalone dashboard panels embedded by the host
 - `js/` and `css/` - shared dashboard runtime and styling
-- `docs/` - planning and product notes
+- `desktop/electron/` - macOS beta host and packaging scaffold
+- `docs/` - planning, release, signing, privacy, and product notes
 - `bridge/` - legacy browser/iCUE bridge kept out of the normal product path
+
+## Release Paperwork
+
+- `LICENSE.md` - proprietary license placeholder for selling
+- `PRIVACY.md` - local-first privacy notes
+- `SECURITY.md` - supported versions and vulnerability contact placeholder
+- `SUPPORT.md` - customer support checklist and placeholder inbox
+- `CHANGELOG.md` - release notes
+- `docs/release/PUBLIC-RELEASE-CHECKLIST.md` - plain go/no-go checklist
 
 ## First-Run Checklist
 
