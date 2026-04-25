@@ -14,6 +14,9 @@
 - Added app-served support and refund/license pages.
 - Moved update checks behind the local host and added release asset links for customer downloads.
 - Added a Windows clean install smoke-test helper.
+- Hid advanced connector setup from normal onboarding.
+- Added a Start Menu uninstall cleanup path for local app data.
+- Added an automated release readiness gate.
 
 ## 0.1.0-preview
 

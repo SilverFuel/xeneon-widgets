@@ -36,6 +36,6 @@ macOS beta data is stored under the app's standard Electron user-data folder.
 
 ## Data Removal
 
-Use Reset all app data from the in-app Privacy or Setup panel to remove local dashboard settings and protected integration secrets for the current user.
+Use Reset all app data from the in-app Privacy or Setup panel to remove local dashboard settings and protected integration secrets for the current user. The Windows Start Menu also includes an Uninstall and Remove Local Data cleanup shortcut.
 
 Uninstalling removes the installed app. Local settings can remain so the dashboard keeps user preferences across upgrades, so reset local app data first if the machine is being sold, returned, or handed to another person.

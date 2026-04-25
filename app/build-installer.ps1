@@ -208,9 +208,11 @@ Creates:
   - Desktop shortcut
   - current-user auto-start entry
   - Apps & Features uninstall entry
+  - Start Menu cleanup shortcut that removes local app data
 
 Uninstall:
   Windows Settings > Apps > Installed apps > XENEON Edge Host
+  Or Start Menu > XENEON Edge Host > Uninstall and Remove Local Data
 
 SHA256:
   $hash

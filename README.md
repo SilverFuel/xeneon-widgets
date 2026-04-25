@@ -11,6 +11,7 @@ XENEON Edge Host is an independent product. It is not an official CORSAIR app un
 The dashboard now includes the pieces that make it feel like an installable product:
 
 - first-run diagnostics and setup
+- normal setup that hides advanced connector plumbing
 - dashboard profiles for command, gaming, streaming, home-lab, and minimal modes
 - Theme Studio with accent, opacity, and animation controls
 - drag-and-drop layout ordering
@@ -20,6 +21,7 @@ The dashboard now includes the pieces that make it feel like an installable prod
 - marketplace-style widget packs
 - installer readiness panel
 - local-first privacy and trust screen
+- app data reset from setup/privacy and from the uninstall cleanup shortcut
 
 The update, streaming, and marketplace panels are product-ready foundations. Before charging customers for those specific features, wire them to a signed updater service, authenticated OBS commands, and hosted pack manifests.
 
@@ -101,6 +103,12 @@ Run the clean install smoke helper on a fresh Windows profile or VM:
 powershell -File scripts\test-windows-install.ps1 -InstallerPath app\dist\<installer>.exe -RunInstall -RunUninstall
 ```
 
+Run the release gate before uploading:
+
+```powershell
+npm run release:ready
+```
+
 Use the in-app Privacy or Setup panel to reset local dashboard settings and protected integration secrets before uninstalling or handing a machine to someone else.
 
 ## macOS Beta
@@ -142,6 +150,7 @@ See `docs/release/MACOS-RELEASE.md`.
 - `support.html` - customer-facing support page served by the app
 - `refund-policy.html` - customer-facing refund and license page served by the app
 - `docs/release/PUBLIC-RELEASE-CHECKLIST.md` - plain go/no-go checklist
+- `scripts/assert-release-ready.ps1` - automated release gate for the obvious blockers
 
 ## First-Run Checklist
 
