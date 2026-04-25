@@ -206,7 +206,7 @@ dotnet publish app/XenonEdgeHost/XenonEdgeHost.csproj -c Release -r win-x64
 # Key files: XenonEdgeHost.exe, *.dll, WebView2Loader.dll
 ```
 
-No MSIX/packaging required — `WindowsPackageType=None` gives a plain `.exe`. Users can run it directly or use the existing `Start XENEON Widgets.cmd` modified to launch the app instead.
+No MSIX/packaging required — `WindowsPackageType=None` gives a plain `.exe`. Users can run it directly or use `Start XENEON Edge Host.cmd` to launch the app.
 
 ### 1.8 Phase 1 Acceptance Criteria
 
@@ -481,7 +481,7 @@ Modify App.xaml.cs:
 
 ### Task 6: Update Start Script
 ```
-Modify Start XENEON Widgets.cmd:
+Modify Start XENEON Edge Host.cmd:
 - If XenonEdgeHost.exe exists, launch it instead of the PowerShell start script
 - Otherwise fall back to existing behavior (backward compatible)
 ```
@@ -574,9 +574,9 @@ xeneon-widgets/
   hosted-dashboard.html
   index.html
   package.json
-  Start XENEON Widgets.cmd
+  Start XENEON Edge Host.cmd
   start-xeneon.ps1
-  XENEON-EDGE-APP-PLAN.md
+  docs/XENEON-EDGE-APP-PLAN.md
 ```
 
 ---

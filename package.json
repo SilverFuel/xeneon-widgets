@@ -10,6 +10,7 @@
     "check": "npm run check:js && npm run check:app",
     "check:js": "node scripts/check-js.mjs",
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
+    "clean": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clean-workspace.ps1",
     "installer": "powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1",
     "bridge": "node bridge/server.mjs",
     "bridge:install": "powershell -ExecutionPolicy Bypass -File .\\bridge\\install-bridge.ps1",

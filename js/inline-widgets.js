@@ -4153,7 +4153,7 @@
         state.statusText,
         state.statusTone,
         '<div class="inline-grid inline-grid--3">' +
-          metricCard("Setup EXE", "app\\dist", "XenonEdgeHost-Setup.exe", null) +
+          metricCard("Setup EXE", "app\\dist", "Versioned setup EXE", null) +
           metricCard("Install path", "%LOCALAPPDATA%", "Per-user install", null) +
           metricCard("Edition", edition === "signed" ? "Signed" : "Unsigned", "Release status", edition === "signed" ? 100 : 55) +
         '</div>' +
