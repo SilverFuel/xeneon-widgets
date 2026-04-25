@@ -74,6 +74,15 @@ public sealed class SecretStore
         }
     }
 
+    public void Clear()
+    {
+        lock (_sync)
+        {
+            _secrets.Clear();
+            Save();
+        }
+    }
+
     private Dictionary<string, string> Load()
     {
         try

@@ -51,6 +51,8 @@
     <EmbeddedResource Include="..\dashboard.html" Link="WebAssets\dashboard.html" LogicalName="WebAssets/dashboard.html" />
     <EmbeddedResource Include="..\hosted-dashboard.html" Link="WebAssets\hosted-dashboard.html" LogicalName="WebAssets/hosted-dashboard.html" />
     <EmbeddedResource Include="..\index.html" Link="WebAssets\index.html" LogicalName="WebAssets/index.html" />
+    <EmbeddedResource Include="..\support.html" Link="WebAssets\support.html" LogicalName="WebAssets/support.html" />
+    <EmbeddedResource Include="..\refund-policy.html" Link="WebAssets\refund-policy.html" LogicalName="WebAssets/refund-policy.html" />
     <EmbeddedResource Include="..\css\**\*" Link="WebAssets\css\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/css/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\js\**\*" Link="WebAssets\js\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/js/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\widgets\**\*" Link="WebAssets\widgets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/widgets/%(RecursiveDir)%(Filename)%(Extension)" />

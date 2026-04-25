@@ -9,11 +9,13 @@
 
 ## Reporting A Vulnerability
 
-Before selling publicly, replace this placeholder with a monitored security contact:
+Use GitHub Security Advisories for private vulnerability reports:
 
 ```text
-security@example.com
+https://github.com/SilverFuel/xeneon-widgets/security/advisories/new
 ```
+
+Before a paid public launch, add a monitored security inbox to `support.html`, checkout receipts, and release notes.
 
 Please include:
 
@@ -30,3 +32,4 @@ Do not publish exploit details until a fix is available.
 - Public macOS releases must be Developer ID signed and notarized.
 - API keys and integration secrets must stay out of plain JSON config.
 - Local API endpoints should remain bound to `127.0.0.1`.
+- Customers must be able to reset local app data without editing files by hand.

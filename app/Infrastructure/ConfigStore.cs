@@ -49,6 +49,22 @@ public sealed class ConfigStore
         }
     }
 
+    public AppConfig ResetLocalData(bool keepPort = true)
+    {
+        lock (_sync)
+        {
+            var port = keepPort ? Current.Port : 8976;
+            _secretStore.Clear();
+            Current = Normalize(new AppConfig
+            {
+                Port = port
+            });
+            Save(Current);
+            _logger.Info("Local dashboard config and protected secrets were reset.");
+            return Clone(Current);
+        }
+    }
+
     private AppConfig Load()
     {
         try

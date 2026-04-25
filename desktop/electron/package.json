@@ -35,6 +35,14 @@
         "to": "web/index.html"
       },
       {
+        "from": "../../support.html",
+        "to": "web/support.html"
+      },
+      {
+        "from": "../../refund-policy.html",
+        "to": "web/refund-policy.html"
+      },
+      {
         "from": "../../css",
         "to": "web/css"
       },

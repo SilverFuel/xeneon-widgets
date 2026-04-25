@@ -7,8 +7,10 @@ const { URL } = require("node:url");
 
 const productName = "XENEON Edge Host";
 const defaultPort = 8976;
-const assetRevision = "20260425-5";
+const assetRevision = "20260425-6";
 const maxJsonBodyBytes = 256 * 1024;
+const releasesUrl = "https://github.com/SilverFuel/xeneon-widgets/releases";
+const latestReleaseApiUrl = "https://api.github.com/repos/SilverFuel/xeneon-widgets/releases/latest";
 
 let mainWindow = null;
 let server = null;
@@ -102,6 +104,15 @@ function saveConfig(config) {
   return normalized;
 }
 
+function resetLocalData(keepPort) {
+  const port = keepPort ? activePort : defaultPort;
+  saveSecrets({});
+  return saveConfig({
+    ...createDefaultConfig(),
+    port
+  });
+}
+
 function normalizeLauncher(entry) {
   const displayName = text(entry && entry.displayName, "");
   const executablePath = text(entry && entry.executablePath, "");
@@ -175,6 +186,71 @@ function nowIso() {
 
 function setupItem(id, label, state, required, nextStep) {
   return { id, label, state, required, nextStep };
+}
+
+function findReleaseAsset(assets, predicate) {
+  return assets.find(predicate) || null;
+}
+
+async function releaseSnapshot() {
+  const currentVersion = app.getVersion();
+
+  try {
+    const response = await fetch(latestReleaseApiUrl, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": `XenonEdgeHost/${currentVersion}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub returned HTTP ${response.status}.`);
+    }
+
+    const payload = await response.json();
+    const assets = Array.isArray(payload.assets)
+      ? payload.assets
+        .filter((asset) => asset && asset.name && asset.browser_download_url)
+        .map((asset) => ({
+          name: String(asset.name),
+          downloadUrl: String(asset.browser_download_url),
+          size: Number.isFinite(asset.size) ? asset.size : 0
+        }))
+      : [];
+    const windowsAsset = findReleaseAsset(assets, (asset) => /setup/i.test(asset.name) && /\.exe$/i.test(asset.name));
+    const macAsset = findReleaseAsset(assets, (asset) => /\.dmg$/i.test(asset.name) || /mac|darwin/i.test(asset.name));
+    const latestVersion = String(payload.tag_name || payload.name || "");
+
+    return {
+      supported: true,
+      configured: true,
+      status: "live",
+      currentVersion,
+      latestVersion,
+      htmlUrl: String(payload.html_url || releasesUrl),
+      installerUrl: windowsAsset ? windowsAsset.downloadUrl : "",
+      macUrl: macAsset ? macAsset.downloadUrl : "",
+      assets,
+      source: "GitHub Releases",
+      sampledAt: nowIso(),
+      message: latestVersion ? `Latest public release is ${latestVersion}.` : "Release feed is reachable, but no public release tag was found."
+    };
+  } catch (error) {
+    return {
+      supported: true,
+      configured: true,
+      status: "error",
+      currentVersion,
+      latestVersion: "",
+      htmlUrl: releasesUrl,
+      installerUrl: "",
+      macUrl: "",
+      assets: [],
+      source: "GitHub Releases",
+      sampledAt: nowIso(),
+      message: error && error.message ? error.message : "Release check failed."
+    };
+  }
 }
 
 function buildConfigSnapshot() {
@@ -549,6 +625,20 @@ async function handleApi(request, response, requestUrl) {
     config.dashboard.onboardingCompletedAt = config.dashboard.onboardingCompleted ? nowIso() : "";
     saveConfig(config);
     return sendJson(response, 200, buildConfigSnapshot());
+  }
+
+  if (route === "/api/config/reset" && method === "POST") {
+    resetLocalData(true);
+    return sendJson(response, 200, {
+      ok: true,
+      message: "Local settings and protected secrets were reset.",
+      config: buildConfigSnapshot(),
+      health: buildHealthPayload()
+    });
+  }
+
+  if (route === "/api/releases/latest") {
+    return sendJson(response, 200, await releaseSnapshot());
   }
 
   if (route === "/api/config/weather" && method === "POST") {
