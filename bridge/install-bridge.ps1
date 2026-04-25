@@ -62,4 +62,4 @@ if ($taskInstalled) {
 }
 
 Write-Host "The bridge will start automatically at logon."
-Write-Host "iCUE URL: http://127.0.0.1:8976/dashboard.html?v=20260425-4"
+Write-Host "iCUE URL: http://127.0.0.1:8976/dashboard.html?v=20260425-5"

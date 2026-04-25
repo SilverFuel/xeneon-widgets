@@ -1,21 +1,16 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$bridgeDir = Join-Path $repoRoot "bridge"
-$installScript = Join-Path $bridgeDir "install-bridge.ps1"
-$runScript = Join-Path $bridgeDir "run-bridge.ps1"
-$configPath = Join-Path $bridgeDir "config.json"
-$exampleConfigPath = Join-Path $bridgeDir "config.example.json"
-$dashboardUrl = "http://127.0.0.1:8976/dashboard.html?v=20260425-4"
-$healthUrl = "http://127.0.0.1:8976/api/health"
-$frameSnippet = '<iframe src="http://127.0.0.1:8976/dashboard.html?v=20260425-4" width="2560" height="720" loading="eager" scrolling="no" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border:0;overflow:hidden;background:#0b0f14;"></iframe>'
+$publishedExe = Join-Path $repoRoot "publish\XenonEdgeHost.exe"
+$installedExe = Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost\XenonEdgeHost.exe"
+$dashboardUrl = "http://127.0.0.1:8976/dashboard.html?v=20260425-5"
 
 function Write-Step($message) {
   Write-Host ""
   Write-Host "== $message ==" -ForegroundColor Cyan
 }
 
-function Wait-ForBridge {
+function Wait-ForDashboard {
   param(
     [string]$Url,
     [int]$Attempts = 20,
@@ -37,63 +32,28 @@ function Wait-ForBridge {
   return $false
 }
 
-Write-Step "XENEON Widgets Quick Start"
+Write-Step "XENEON Edge Host Quick Start"
 
-try {
-  $null = Get-Command node -ErrorAction Stop
-} catch {
-  Write-Host "Node.js is required and was not found." -ForegroundColor Red
-  Write-Host "Install Node.js LTS from https://nodejs.org/ and then run this file again."
+if (Test-Path $publishedExe) {
+  $exePath = $publishedExe
+} elseif (Test-Path $installedExe) {
+  $exePath = $installedExe
+} else {
+  Write-Host "XENEON Edge Host was not found." -ForegroundColor Red
+  Write-Host "Run Build XENEON Installer.cmd, or publish it with app\publish.ps1."
   exit 1
 }
 
-if (-not (Test-Path $configPath)) {
-  Copy-Item $exampleConfigPath $configPath
+Write-Step "Starting native app"
+Start-Process $exePath
+
+if (Wait-ForDashboard -Url "http://127.0.0.1:8976/api/health") {
+  Write-Step "Opening dashboard"
+  Start-Process $dashboardUrl
+} else {
+  Write-Host "The app started, but the local dashboard did not answer yet." -ForegroundColor Yellow
+  Write-Host "Use the tray icon and choose Show EDGE Window."
 }
-
-Write-Step "Installing auto-start"
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installScript
-
-Write-Step "Starting local bridge"
-Start-Process -FilePath powershell.exe -ArgumentList @(
-  "-NoProfile",
-  "-WindowStyle",
-  "Hidden",
-  "-ExecutionPolicy",
-  "Bypass",
-  "-File",
-  $runScript
-) -WindowStyle Hidden | Out-Null
-
-if (-not (Wait-ForBridge -Url $healthUrl)) {
-  Write-Host "The local bridge did not start correctly." -ForegroundColor Red
-  Write-Host "Check bridge/bridge.log for details."
-  exit 1
-}
-
-try {
-  Set-Clipboard -Value $frameSnippet
-  $copiedUrl = $true
-} catch {
-  $copiedUrl = $false
-}
-
-Write-Step "Opening dashboard"
-Start-Process $dashboardUrl
 
 Write-Host "Local dashboard:"
 Write-Host $dashboardUrl -ForegroundColor Green
-Write-Host ""
-Write-Host "Paste this into an iCUE iFrame widget:"
-Write-Host $frameSnippet -ForegroundColor Yellow
-Write-Host ""
-
-if ($copiedUrl) {
-  Write-Host "The full iCUE iframe code was copied to your clipboard."
-}
-
-Write-Host "Fast path:"
-Write-Host "1. Open iCUE."
-Write-Host "2. Add an iFrame widget on the XENEON EDGE."
-Write-Host "3. Paste the iframe code above."
-Write-Host "4. Resize it to fill the display."

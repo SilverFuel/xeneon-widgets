@@ -2,7 +2,7 @@
 
 XENEON Edge Host is a native Windows dashboard for the CORSAIR XENEON EDGE. It serves a 2560x720 local control surface with system telemetry, network stats, audio routing, media controls, weather, calendar, Hue lights, launchers, clipboard history, and optional home-lab panels.
 
-The product is now the native host in `app`, not the old iCUE iframe flow.
+The product is the native host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only.
 
 ## Product Layer
 
@@ -26,7 +26,7 @@ The update, streaming, and marketplace panels are product-ready foundations. Bef
 1. Open PowerShell in `app`.
 2. Run `powershell -File publish.ps1`.
 3. Launch `..\publish\XenonEdgeHost.exe`.
-4. Optional: run `powershell -File install.ps1` to register auto-start at login.
+4. Optional: run `powershell -File install.ps1` from the `app` folder to register auto-start at login.
 
 The native host:
 
@@ -76,6 +76,17 @@ Before selling it, treat these as release blockers:
 - test first-run setup on a clean Windows machine
 - avoid presenting the app as an official CORSAIR product unless you have permission
 
+## Repository Map
+
+- `app/` - native Windows host, installer scripts, and local APIs
+- `app/Services/` - system, network, audio, weather, Hue, UniFi, and media services
+- `app/Infrastructure/` - config, logging, embedded assets, secure secrets, and WebView helpers
+- `app/Models/` - app configuration/request models
+- `widgets/` - standalone dashboard panels embedded by the host
+- `js/` and `css/` - shared dashboard runtime and styling
+- `docs/` - planning and product notes
+- `bridge/` - legacy browser/iCUE bridge kept out of the normal product path
+
 ## First-Run Checklist
 
 - `System Monitor` renders
@@ -87,18 +98,10 @@ Before selling it, treat these as release blockers:
 - tray icon appears on the primary display
 - `install.ps1` creates the `XenonEdgeHost` logon task
 
-## Legacy Bridge
+## Cleanup
 
-`bridge/server.mjs` is now legacy-only.
+Generated build folders and local logs are ignored by Git. To clean the working folder after a build, use:
 
-It is kept for the old browser/iCUE iframe workflow and compatibility testing, but the native WinUI host does not use it. If you are shipping or installing the current app, use the native host in `app` and ignore the legacy bridge scripts unless you are specifically testing the old path.
-
-## Legacy iCUE Path
-
-If you still want the old iframe flow for comparison, use `Start XENEON Widgets.cmd` and point iCUE at:
-
-```html
-<iframe src="http://127.0.0.1:8976/dashboard.html" width="2560" height="720" loading="eager" scrolling="no" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border:0;overflow:hidden;background:#0b0f14;"></iframe>
+```powershell
+powershell -File scripts\clean-workspace.ps1
 ```
-
-That path depends on the legacy bridge and is no longer the default.

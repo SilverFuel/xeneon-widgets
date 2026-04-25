@@ -9,8 +9,10 @@ set EXITCODE=%ERRORLEVEL%
 
 if %EXITCODE% EQU 0 (
   echo.
-  echo Installer created:
-  echo   %~dp0app\dist\XenonEdgeHost-Setup.exe
+  echo Installer created in:
+  echo   %~dp0app\dist
+  echo.
+  echo The file name includes the app version and build time.
   echo.
 )
 
