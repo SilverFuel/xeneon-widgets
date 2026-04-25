@@ -14,7 +14,7 @@ The dashboard now includes the pieces that make it feel like an installable prod
 - dashboard profiles for command, gaming, streaming, home-lab, and minimal modes
 - Theme Studio with accent, opacity, and animation controls
 - drag-and-drop layout ordering
-- release channel and GitHub release checks
+- release channel and local-hosted GitHub release checks
 - OBS/streaming panel foundation
 - Game Mode profile and launcher handoff
 - marketplace-style widget packs
@@ -74,7 +74,7 @@ Before selling it, treat these as release blockers:
 
 - sign the installer and executable
 - test first-run setup on a clean Windows machine
-- replace placeholder support and security inboxes
+- add monitored support and security inboxes, or keep GitHub Issues and Security Advisories as the published support path
 - avoid presenting the app as an official CORSAIR product unless you have permission
 
 Release docs now live in `docs/release`.
@@ -94,6 +94,14 @@ powershell -File scripts\sign-windows.ps1 -Path app\dist\<installer>.exe -Certif
 ```
 
 See `docs/release/WINDOWS-SIGNING.md`.
+
+Run the clean install smoke helper on a fresh Windows profile or VM:
+
+```powershell
+powershell -File scripts\test-windows-install.ps1 -InstallerPath app\dist\<installer>.exe -RunInstall -RunUninstall
+```
+
+Use the in-app Privacy or Setup panel to reset local dashboard settings and protected integration secrets before uninstalling or handing a machine to someone else.
 
 ## macOS Beta
 
@@ -126,11 +134,13 @@ See `docs/release/MACOS-RELEASE.md`.
 
 ## Release Paperwork
 
-- `LICENSE.md` - proprietary license placeholder for selling
+- `LICENSE.md` - proprietary license terms for distribution
 - `PRIVACY.md` - local-first privacy notes
-- `SECURITY.md` - supported versions and vulnerability contact placeholder
-- `SUPPORT.md` - customer support checklist and placeholder inbox
+- `SECURITY.md` - supported versions and private vulnerability reporting path
+- `SUPPORT.md` - customer support checklist and live GitHub support path
 - `CHANGELOG.md` - release notes
+- `support.html` - customer-facing support page served by the app
+- `refund-policy.html` - customer-facing refund and license page served by the app
 - `docs/release/PUBLIC-RELEASE-CHECKLIST.md` - plain go/no-go checklist
 
 ## First-Run Checklist

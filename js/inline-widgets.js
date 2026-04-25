@@ -701,11 +701,12 @@
           '<div>' +
             '<div class="eyebrow">Diagnostics</div>' +
             '<h3 class="inline-title">Setup and diagnostics</h3>' +
-            '<p class="inline-copy">Everything needed to finish onboarding without leaving the dashboard surface.</p>' +
+            '<p class="inline-copy">Install, open, finish setup. Optional extras can wait until the dashboard is working.</p>' +
           '</div>' +
           '<div class="inline-actions">' +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
             '<button class="inline-button is-primary" type="button" data-action="finish-setup"' + (essentialsReady && !onboardingCompleted ? "" : " disabled") + '>' + (onboardingCompleted ? "Completed" : "Finish setup") + '</button>' +
+            '<button class="inline-button" type="button" data-action="reset-local-data"' + (state.busy ? " disabled" : "") + '>' + (state.confirmReset ? "Confirm reset" : "Reset local data") + '</button>' +
             statusPill(state.statusText, state.statusTone) +
           '</div>' +
         '</div>' +
@@ -798,7 +799,8 @@
       hue: (env.bridgeConfig && env.bridgeConfig.hue) || {},
       statusText: "Loading",
       statusTone: "warn",
-      busy: false
+      busy: false,
+      confirmReset: false
     };
 
     function redraw() {
@@ -831,6 +833,7 @@
       }
 
       if (action === "refresh") {
+        state.confirmReset = false;
         refresh();
         return;
       }
@@ -854,6 +857,41 @@
         }, function (error) {
           state.busy = false;
           state.statusText = error.message || "Save failed";
+          state.statusTone = "danger";
+          redraw();
+        });
+        return;
+      }
+
+      if (action === "reset-local-data") {
+        if (!state.confirmReset) {
+          state.confirmReset = true;
+          state.statusText = "Tap again";
+          state.statusTone = "warn";
+          redraw();
+          return;
+        }
+
+        if (typeof env.resetAllLocalData !== "function") {
+          state.statusText = "Reset unavailable";
+          state.statusTone = "danger";
+          state.confirmReset = false;
+          redraw();
+          return;
+        }
+
+        state.busy = true;
+        state.statusText = "Resetting";
+        state.statusTone = "warn";
+        redraw();
+        env.resetAllLocalData().then(function () {
+          state.busy = false;
+          state.confirmReset = false;
+          return refresh();
+        }, function (error) {
+          state.busy = false;
+          state.confirmReset = false;
+          state.statusText = error.message || "Reset failed";
           state.statusTone = "danger";
           redraw();
         });
@@ -3763,6 +3801,9 @@
     var state = {
       latest: "",
       latestUrl: "https://github.com/SilverFuel/xeneon-widgets/releases",
+      downloadUrl: "",
+      macUrl: "",
+      message: "Check the release feed when you are ready to update.",
       statusText: "Ready",
       statusTone: "good",
       busy: false
@@ -3773,13 +3814,13 @@
       container.innerHTML = productShell(
         "Auto-update foundation",
         "Updates",
-        "Choose the release channel and check the GitHub release feed before packaging a customer build.",
+        "Check the public release feed from the local host so customers have one clear update path.",
         state.statusText,
         state.statusTone,
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Current build", env.assetRevision || "local", "Dashboard asset revision", null) +
-          metricCard("Channel", channel.charAt(0).toUpperCase() + channel.slice(1), "Saved locally", null) +
-          metricCard("Latest release", state.latest || "Not checked", "GitHub releases", null) +
+          metricCard("Latest release", state.latest || "Not checked", state.message, null) +
+          metricCard("Installer", state.downloadUrl ? "Found" : "Not checked", state.macUrl ? "Windows and Mac assets" : "Windows asset expected", null) +
         '</div>' +
         '<form class="inline-form product-control-panel" data-form="updates">' +
           '<label class="inline-field"><span>Release channel</span><select class="inline-select" name="updateChannel">' +
@@ -3790,10 +3831,12 @@
         '</form>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="check-release"' + (state.busy ? " disabled" : "") + '>Check releases</button>' +
+          (state.downloadUrl ? '<a class="inline-button" href="' + escapeHtml(state.downloadUrl) + '" target="_blank" rel="noreferrer">Windows installer</a>' : '') +
+          (state.macUrl ? '<a class="inline-button" href="' + escapeHtml(state.macUrl) + '" target="_blank" rel="noreferrer">Mac package</a>' : '') +
           '<a class="inline-button" href="' + escapeHtml(state.latestUrl) + '" target="_blank" rel="noreferrer">Open releases</a>' +
         '</div>' +
         '<div class="product-checklist">' +
-          '<span>Signed installer</span><span>Release notes</span><span>Versioned setup EXE</span><span>Rollback notes</span>' +
+          '<span>Signed installer</span><span>Release notes</span><span>Versioned setup EXE</span><span>Rollback download</span>' +
         '</div>'
       );
     }
@@ -3804,19 +3847,21 @@
       state.statusTone = "warn";
       redraw();
 
-      requestJson("https://api.github.com/repos/SilverFuel/xeneon-widgets/releases/latest", {
-        headers: { Accept: "application/vnd.github+json" }
-      }, 8000).then(function (payload) {
+      requestJson(buildBridgeUrl(env, "/api/releases/latest"), {}, 10000).then(function (payload) {
         state.busy = false;
-        state.latest = text(payload && (payload.tag_name || payload.name), "No release tag");
-        state.latestUrl = text(payload && payload.html_url, state.latestUrl);
-        state.statusText = "Release feed ready";
-        state.statusTone = "good";
+        state.latest = text(payload && (payload.latestVersion || payload.tag_name || payload.name), "No release tag");
+        state.latestUrl = text(payload && (payload.htmlUrl || payload.html_url), state.latestUrl);
+        state.downloadUrl = text(payload && payload.installerUrl, "");
+        state.macUrl = text(payload && payload.macUrl, "");
+        state.message = text(payload && payload.message, "Release feed checked.");
+        state.statusText = payload && payload.status === "live" ? "Release feed ready" : "Check failed";
+        state.statusTone = payload && payload.status === "live" ? "good" : "danger";
         redraw();
       }, function (error) {
         state.busy = false;
         state.statusText = error.message || "Check failed";
         state.statusTone = "danger";
+        state.message = state.statusText;
         redraw();
       });
     }
@@ -4219,7 +4264,8 @@
     var cleanups = [];
     var state = {
       statusText: "Local-only",
-      statusTone: "good"
+      statusTone: "good",
+      confirmReset: false
     };
 
     function redraw() {
@@ -4238,11 +4284,13 @@
         '<div class="product-privacy-list">' +
           '<div><strong>Stays on this PC</strong><span>Dashboard preferences, widget endpoints, profiles, layout, OBS target, and installer readiness.</span></div>' +
           '<div><strong>Requires permission</strong><span>Weather keys, calendar feeds, Hue bridge pairing, and optional connectors you enable.</span></div>' +
-          '<div><strong>Sales note</strong><span>Ship a license, privacy note, support contact, and a clear statement that this is independent software.</span></div>' +
+          '<div><strong>Independent software</strong><span>This app is not an official CORSAIR product and is not endorsed by integration providers unless a written agreement says otherwise.</span></div>' +
         '</div>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="export-settings">Copy settings JSON</button>' +
           '<button class="inline-button" type="button" data-action="reset-settings">Reset local settings</button>' +
+          '<button class="inline-button" type="button" data-action="reset-all-local-data">' + (state.confirmReset ? "Confirm reset" : "Reset all app data") + '</button>' +
+          '<a class="inline-button" href="/support.html" target="_blank" rel="noreferrer">Support</a>' +
         '</div>' +
         '<div class="product-code-preview">' + escapeHtml(JSON.stringify(settings, null, 2).slice(0, 520)) + '</div>'
       );
@@ -4270,7 +4318,28 @@
         env.resetSettings();
         state.statusText = "Settings reset";
         state.statusTone = "warn";
+        state.confirmReset = false;
         redraw();
+      } else if (target.getAttribute("data-action") === "reset-all-local-data" && typeof env.resetAllLocalData === "function") {
+        if (!state.confirmReset) {
+          state.confirmReset = true;
+          state.statusText = "Tap again";
+          state.statusTone = "warn";
+          redraw();
+          return;
+        }
+
+        env.resetAllLocalData().then(function () {
+          state.statusText = "App data reset";
+          state.statusTone = "warn";
+          state.confirmReset = false;
+          redraw();
+        }, function (error) {
+          state.statusText = error.message || "Reset failed";
+          state.statusTone = "danger";
+          state.confirmReset = false;
+          redraw();
+        });
       }
     });
 

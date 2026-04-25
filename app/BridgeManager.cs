@@ -6,7 +6,7 @@ namespace XenonEdgeHost;
 
 public sealed class BridgeManager : IDisposable
 {
-    private const string DashboardAssetRevision = "20260425-5";
+    private const string DashboardAssetRevision = "20260425-6";
     private const int MaxJsonBodyBytes = 256 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -24,6 +24,7 @@ public sealed class BridgeManager : IDisposable
     private readonly CalendarService _calendarService;
     private readonly HueService _hueService;
     private readonly UniFiService _uniFiService;
+    private readonly ReleaseService _releaseService;
     private readonly MediaService _mediaService;
     private readonly LauncherService _launcherService;
     private readonly SystemActionsService _systemActionsService;
@@ -50,6 +51,7 @@ public sealed class BridgeManager : IDisposable
         _calendarService = new CalendarService(_weatherHttpClient, _logger);
         _hueService = new HueService(_configStore, _logger);
         _uniFiService = new UniFiService(_logger);
+        _releaseService = new ReleaseService(_weatherHttpClient);
         _mediaService = new MediaService(_logger);
         _launcherService = new LauncherService();
         _systemActionsService = new SystemActionsService(_logger);
@@ -266,6 +268,12 @@ public sealed class BridgeManager : IDisposable
                 case "/api/config/dashboard" when request.HttpMethod == "POST":
                     await HandleDashboardConfigUpdateAsync(request, response, cancellationToken);
                     return;
+                case "/api/config/reset" when request.HttpMethod == "POST":
+                    await HandleConfigResetAsync(response, cancellationToken);
+                    return;
+                case "/api/releases/latest":
+                    await WriteJsonAsync(response, 200, await _releaseService.GetLatestReleaseAsync(cancellationToken), cancellationToken);
+                    return;
                 case "/api/config/weather" when request.HttpMethod == "POST":
                     await HandleWeatherConfigUpdateAsync(request, response, cancellationToken);
                     return;
@@ -452,6 +460,18 @@ public sealed class BridgeManager : IDisposable
         });
 
         await WriteJsonAsync(response, 200, BuildConfigSnapshot(), cancellationToken);
+    }
+
+    private async Task HandleConfigResetAsync(HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        _configStore.ResetLocalData();
+        await WriteJsonAsync(response, 200, new
+        {
+            ok = true,
+            message = "Local settings and protected secrets were reset.",
+            config = BuildConfigSnapshot(),
+            health = await BuildHealthPayloadAsync(cancellationToken)
+        }, cancellationToken);
     }
 
     private async Task HandleWeatherConfigUpdateAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)

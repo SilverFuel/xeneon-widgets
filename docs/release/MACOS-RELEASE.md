@@ -38,6 +38,6 @@ scripts/notarize-macos.sh desktop/electron/dist/XENEON\ Edge\ Host-0.2.0.dmg
 
 ## Current Mac Scope
 
-The macOS host is a beta path. It opens the dashboard, serves local files, stores settings locally, protects secrets with Electron safe storage when available, and provides graceful "not available on macOS yet" responses for Windows-specific controls.
+The macOS host is a beta path. It opens the dashboard, serves local files, stores settings locally, protects secrets with Electron safe storage when available, serves the support and refund pages, checks GitHub Releases through the local host, and provides graceful "not available on macOS yet" responses for Windows-specific controls.
 
 Before selling a Mac version, test it on a clean Intel Mac and Apple silicon Mac.

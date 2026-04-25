@@ -33,5 +33,7 @@ XENEON Edge Host 0.2.0
 - Windows installer is signed.
 - macOS package is signed and notarized.
 - SHA256 files match the uploaded files.
-- Support and security contacts are real.
+- `support.html` and `refund-policy.html` are included in the app package.
+- GitHub Issues and Security Advisories are enabled, or monitored support/security inboxes are published.
+- The in-app Updates panel can see this release and expose installer links.
 - Release notes list known limitations plainly.

@@ -10,6 +10,10 @@
 - Cleaned repository structure into app models, services, and infrastructure folders.
 - Added release, privacy, support, security, signing, and macOS release documentation.
 - Added an Electron macOS beta host scaffold for building a Mac package from the shared dashboard.
+- Added in-app Reset all app data for local settings and protected secrets.
+- Added app-served support and refund/license pages.
+- Moved update checks behind the local host and added release asset links for customer downloads.
+- Added a Windows clean install smoke-test helper.
 
 ## 0.1.0-preview
 

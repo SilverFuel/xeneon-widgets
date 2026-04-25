@@ -3,7 +3,7 @@
   var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
-  var assetRevision = "20260425-5";
+  var assetRevision = "20260425-6";
   var onboardingVersion = 1;
   var showAdvanced = params.get("advanced") === "1";
   var stageWidth = 2560;
@@ -631,6 +631,28 @@
       }
       return response.json();
     }), timeoutMs || 5000);
+  }
+
+  function postJson(url, body, timeoutMs) {
+    return withTimeout(fetch(url, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body || {})
+    }).then(function (response) {
+      if (!response.ok) {
+        return response.json().catch(function () {
+          return {};
+        }).then(function (payload) {
+          throw new Error(payload.error || payload.message || ("Request failed with status " + response.status));
+        });
+      }
+      return response.json().catch(function () {
+        return {};
+      });
+    }), timeoutMs || 8000);
   }
 
   function fetchBridgeHealth() {
@@ -1360,6 +1382,34 @@
     renderSettings(getWidgetById(currentWidgetId || "privacy"));
   }
 
+  function clearDashboardBrowserStorage() {
+    try {
+      window.localStorage.removeItem(settingsStorageKey);
+      window.localStorage.removeItem(widgetStorageKey);
+      window.localStorage.removeItem(lastPrimaryWidgetStorageKey);
+    } catch (error) {
+      console.warn("Unable to clear dashboard browser storage", error);
+    }
+
+    storedSettings = {};
+    dashboardSettings = Object.assign({}, defaultSettings);
+    currentWidgetId = "setup";
+    lastBridgeSnapshotKey = "";
+    applyDashboardPresentation();
+  }
+
+  function resetAllLocalData() {
+    return postJson(buildUrl(bridgeOrigin, "/api/config/reset"), {}, 10000).then(function () {
+      clearDashboardBrowserStorage();
+      return refreshBridgeState({
+        resolveInitialWidget: true,
+        preferredWidgetId: "setup",
+        explicitWidgetParam: true,
+        reloadLocalSettings: true
+      });
+    });
+  }
+
   function summarizeInlineWidget(widget) {
     return {
       id: widget.id,
@@ -1396,6 +1446,7 @@
       productThemes: productThemePresets.slice(),
       saveSettings: saveDashboardSettings,
       resetSettings: resetLocalDashboardSettings,
+      resetAllLocalData: resetAllLocalData,
       selectWidget: selectWidget,
       handleSetupUpdate: handleInlineSetupUpdate
     };
