@@ -97,8 +97,12 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG_NAME" --jq .id)"
+            gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id/assets" --jq '.[].id' | while read asset_id; do
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id"
+            done
             gh release edit "$TAG_NAME" --prerelease --title "XENEON Edge Host $TAG_NAME Free Public Beta" --notes-file docs/release/FREE-BETA-RELEASE-NOTES.md
-            gh release upload "$TAG_NAME" release-assets/**/* --clobber
+            gh release upload "$TAG_NAME" release-assets/**/*
           else
             gh release create "$TAG_NAME" release-assets/**/* --prerelease --title "XENEON Edge Host $TAG_NAME Free Public Beta" --notes-file docs/release/FREE-BETA-RELEASE-NOTES.md
           fi
