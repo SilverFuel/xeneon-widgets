@@ -7,7 +7,7 @@ const { URL } = require("node:url");
 
 const productName = "XENEON Edge Host";
 const defaultPort = 8976;
-const assetRevision = "20260425-7";
+const assetRevision = "20260425-8";
 const maxJsonBodyBytes = 256 * 1024;
 const releasesUrl = "https://github.com/SilverFuel/xeneon-widgets/releases";
 const latestReleaseApiUrl = "https://api.github.com/repos/SilverFuel/xeneon-widgets/releases/latest";

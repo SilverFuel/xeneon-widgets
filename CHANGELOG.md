@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Improved touch handling so scroll gestures do not accidentally trigger taps.
+- Added touch-specific pressed feedback and scroll-area behavior for the dashboard.
+
 ## 0.2.0 - 2026-04-25
 
 - Prepared the first free public beta release path.

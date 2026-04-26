@@ -1,14 +1,12 @@
 (function () {
-  function bindButtonState(button) {
-    ["pointerdown", "pointerup", "pointercancel", "pointerleave"].forEach(function (eventName) {
-      button.addEventListener(eventName, function () {
-        button.style.transform = eventName === "pointerdown" ? "scale(0.98)" : "";
-      });
-    });
-  }
-
   function enhanceControls(selector) {
-    document.querySelectorAll(selector).forEach(bindButtonState);
+    if (window.WidgetCore && typeof window.WidgetCore.installTouchControls === "function") {
+      window.WidgetCore.installTouchControls();
+    }
+
+    document.querySelectorAll(selector).forEach(function (button) {
+      button.classList.add("touch-control");
+    });
   }
 
   window.TouchControls = {
