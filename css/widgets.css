@@ -2,6 +2,77 @@ body.widget-page {
   padding: 18px;
 }
 
+button,
+a[href],
+[role="button"],
+[data-action],
+[data-widget-id],
+[data-profile],
+[data-theme],
+[data-pack],
+[data-layout-action],
+.touch-control,
+.router-diagnostics,
+.router-picker__button,
+.router-settings__button,
+.inline-button,
+.inline-action-button,
+.inline-launcher-hit,
+.inline-list-item--button,
+.product-card--button,
+.product-swatch {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+input[type="range"],
+.inline-range {
+  touch-action: pan-x;
+}
+
+.landing-page,
+.router-picker,
+.router-settings__body,
+.router-inline-widget,
+.inline-list,
+.product-layout-list,
+.product-privacy-list,
+.product-code-preview {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+  touch-action: pan-y;
+}
+
+button.is-touch-pressing:not(:disabled),
+a.is-touch-pressing,
+[role="button"].is-touch-pressing,
+[data-action].is-touch-pressing,
+[data-widget-id].is-touch-pressing,
+[data-profile].is-touch-pressing,
+[data-theme].is-touch-pressing,
+[data-pack].is-touch-pressing,
+[data-layout-action].is-touch-pressing,
+.touch-control.is-touch-pressing,
+.router-diagnostics.is-touch-pressing,
+.router-picker__button.is-touch-pressing,
+.router-settings__button.is-touch-pressing,
+.inline-button.is-touch-pressing,
+.inline-action-button.is-touch-pressing,
+.inline-launcher-hit.is-touch-pressing,
+.inline-list-item--button.is-touch-pressing,
+.product-card--button.is-touch-pressing,
+.product-swatch.is-touch-pressing {
+  transform: scale(0.985);
+}
+
 .widget-shell {
   position: relative;
   width: 100%;

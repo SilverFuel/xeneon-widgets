@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $publishedExe = Join-Path $repoRoot "publish\XenonEdgeHost.exe"
 $installedExe = Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost\XenonEdgeHost.exe"
-$dashboardUrl = "http://127.0.0.1:8976/dashboard.html?v=20260425-5"
+$dashboardUrl = "http://127.0.0.1:8976/dashboard.html?v=20260425-8"
 
 function Write-Step($message) {
   Write-Host ""
