@@ -218,7 +218,7 @@ SHA256:
   $hash
 
 Note:
-  This installer is unsigned until you add a code-signing step. Windows may show a SmartScreen warning for unsigned public releases.
+  Free beta installers may be unsigned. Windows can show a SmartScreen warning unless you add code signing.
 "@ | Set-Content -Path $distReadmePath -Encoding ASCII
 
 Write-Host ""

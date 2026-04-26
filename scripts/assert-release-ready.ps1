@@ -64,6 +64,7 @@ try {
   Assert-File "PRIVACY.md" | Out-Null
   Assert-File "docs\release\CLEAN-INSTALL-TEST.md" | Out-Null
   Assert-File "docs\release\REFUND-LICENSE-POLICY.md" | Out-Null
+  Assert-File "docs\release\FREE-BETA-RELEASE-NOTES.md" | Out-Null
 
   $csprojPath = Assert-File "app\XenonEdgeHost.csproj"
   [xml]$csproj = Get-Content $csprojPath
@@ -127,9 +128,9 @@ try {
   $csprojText = Read-Text "app\XenonEdgeHost.csproj"
   $electronPackageText = Read-Text "desktop\electron\package.json"
   if ($csprojText -match "support\.html" -and $csprojText -match "refund-policy\.html" -and $electronPackageText -match "support\.html" -and $electronPackageText -match "refund-policy\.html") {
-    Add-Pass "Support and refund pages are packaged"
+    Add-Pass "Support and license pages are packaged"
   } else {
-    Add-Failure "Support/refund pages are not included in every app package."
+    Add-Failure "Support/license pages are not included in every app package."
   }
 
   $removeScriptText = Read-Text "app\installer\Remove-XenonEdgeHost.ps1"

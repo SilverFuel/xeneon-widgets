@@ -4,7 +4,7 @@
 
 | Version | Status |
 | --- | --- |
-| 0.2.x | Release candidate / beta support |
+| 0.2.x | Free public beta support |
 | 0.1.x | Unsupported preview |
 
 ## Reporting A Vulnerability
@@ -28,8 +28,8 @@ Do not publish exploit details until a fix is available.
 
 ## Security Expectations
 
-- Public Windows releases must be code-signed.
-- Public macOS releases must be Developer ID signed and notarized.
+- Paid/stable Windows releases must be code-signed. Unsigned free beta builds must be labeled clearly.
+- Paid/stable macOS releases must be Developer ID signed and notarized. Unsigned Mac beta builds must be labeled clearly.
 - API keys and integration secrets must stay out of plain JSON config.
 - Local API endpoints should remain bound to `127.0.0.1`.
 - Customers must be able to reset local app data without editing files by hand.

@@ -1,5 +1,15 @@
 # XENEON Edge Host
 
+## Free Public Beta
+
+XENEON Edge Host 0.2.0 is being released as a free public beta first. Do not charge for this build yet. Use GitHub Releases as the download page, mark the release as a pre-release/beta, and keep the limitations visible:
+
+- the Windows installer is unsigned unless you add code signing
+- Windows may show a SmartScreen warning on first install
+- the macOS host is still a beta scaffold and should not be advertised as a finished Mac product
+- support is handled through GitHub Issues and GitHub Security Advisories for now
+- this is independent software, not an official CORSAIR product
+
 XENEON Edge Host is a native Windows dashboard for the CORSAIR XENEON EDGE. It serves a 2560x720 local control surface with system telemetry, network stats, audio routing, media controls, weather, calendar, Hue lights, launchers, clipboard history, and optional home-lab panels.
 
 The primary product is the native Windows host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only. A macOS beta host lives in `desktop/electron` because the Windows app uses WinUI 3 and WebView2, which do not run on macOS.
@@ -72,7 +82,7 @@ That creates:
 
 The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, creates Start Menu and Desktop shortcuts, registers auto-start, and adds an Apps & Features uninstall entry.
 
-Before selling it, treat these as release blockers:
+Before selling a paid/stable version, treat these as release blockers:
 
 - sign the installer and executable
 - test first-run setup on a clean Windows machine
@@ -81,15 +91,15 @@ Before selling it, treat these as release blockers:
 
 Release docs now live in `docs/release`.
 
-## Windows Public Release
+## Windows Free Beta Release
 
-Build the Windows release locally with:
+Build the Windows free beta locally with:
 
 ```powershell
-npm run release:windows
+npm run release:free-beta
 ```
 
-Sign the installer before public upload:
+For the free beta, upload the installer only with clear "unsigned beta" wording and the SHA256 file. For a paid/stable release, sign the installer before public upload:
 
 ```powershell
 powershell -File scripts\sign-windows.ps1 -Path app\dist\<installer>.exe -CertificatePath C:\path\to\certificate.pfx
@@ -103,11 +113,13 @@ Run the clean install smoke helper on a fresh Windows profile or VM:
 powershell -File scripts\test-windows-install.ps1 -InstallerPath app\dist\<installer>.exe -RunInstall -RunUninstall
 ```
 
-Run the release gate before uploading:
+Run the release gate separately before uploading if needed:
 
 ```powershell
 npm run release:ready
 ```
+
+For the beta release asset list and wording, see `docs/release/FREE-BETA-RELEASE-NOTES.md` and `docs/release/GITHUB-RELEASE.md`.
 
 Use the in-app Privacy or Setup panel to reset local dashboard settings and protected integration secrets before uninstalling or handing a machine to someone else.
 
@@ -120,7 +132,7 @@ npm run mac:install
 npm run mac:dist
 ```
 
-Before selling or posting it publicly, sign with an Apple Developer ID certificate and notarize it:
+Before selling it or calling it a finished Mac product, sign with an Apple Developer ID certificate and notarize it:
 
 ```bash
 scripts/notarize-macos.sh desktop/electron/dist/<package>.dmg
@@ -142,13 +154,13 @@ See `docs/release/MACOS-RELEASE.md`.
 
 ## Release Paperwork
 
-- `LICENSE.md` - proprietary license terms for distribution
+- `LICENSE.md` - free public beta license terms
 - `PRIVACY.md` - local-first privacy notes
 - `SECURITY.md` - supported versions and private vulnerability reporting path
 - `SUPPORT.md` - customer support checklist and live GitHub support path
 - `CHANGELOG.md` - release notes
 - `support.html` - customer-facing support page served by the app
-- `refund-policy.html` - customer-facing refund and license page served by the app
+- `refund-policy.html` - free beta license page served by the app
 - `docs/release/PUBLIC-RELEASE-CHECKLIST.md` - plain go/no-go checklist
 - `scripts/assert-release-ready.ps1` - automated release gate for the obvious blockers
 
