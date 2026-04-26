@@ -1,18 +1,16 @@
-# Refund And License Policy
+# Free Beta License Policy
 
-Use this as the customer-facing policy for the first paid release, then have it reviewed before checkout goes live.
+Use this for the first free public beta. Replace it with a reviewed refund and license policy before checkout goes live.
 
-## Refunds
+## Cost
 
-Customers may request a refund within 14 days of purchase if XENEON Edge Host cannot be installed, cannot open the local dashboard, or does not work on a supported Windows setup after reasonable troubleshooting.
-
-Refunds can be declined for abuse, chargeback fraud, unsupported modified builds, redistribution, or requests made after the refund window.
+XENEON Edge Host 0.2.x is free public beta software. There is no purchase, checkout, license key, or refund process for this beta.
 
 ## License
 
-A purchase grants one person a non-transferable license to install and use XENEON Edge Host on their own devices.
+Users may download and use official beta builds published by SilverFuel. Users may share links to the official GitHub repository or official GitHub Releases page.
 
-The app may not be resold, redistributed, rented, sublicensed, or bundled into another paid product without written permission.
+The app may not be sold, repackaged, re-uploaded, redistributed, rented, sublicensed, or bundled into another product without written permission.
 
 ## Independence
 
@@ -20,4 +18,4 @@ XENEON Edge Host is independent software. It is not an official CORSAIR product 
 
 ## Support
 
-Support starts at `support.html`. A paid public release should add monitored support and security inboxes before checkout goes live.
+Support starts at `support.html`. The free beta uses GitHub Issues and GitHub Security Advisories. A paid public release should add monitored support and security inboxes before checkout goes live.

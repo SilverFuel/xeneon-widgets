@@ -1,6 +1,6 @@
 # Windows Signing
 
-Public Windows releases need a trusted signature so customers do not see the worst SmartScreen experience.
+Paid/stable Windows releases need a trusted signature so customers do not see the worst SmartScreen experience. A free public beta can be unsigned only if the GitHub Release and installer notes say that clearly.
 
 Microsoft documents current signing options for Windows apps in "Code signing options for Windows app developers" and recommends Trusted Signing for many app developers. Microsoft also documents `signtool.exe`, which is included with the Windows SDK.
 
@@ -42,4 +42,4 @@ powershell -File scripts\sign-windows.ps1 `
 
 ## Release Rule
 
-Do not upload an unsigned installer as a public customer release.
+Do not upload an unsigned installer as a paid/stable customer release. For a free beta, label it as unsigned, publish the SHA256 file, and expect Windows SmartScreen warnings.

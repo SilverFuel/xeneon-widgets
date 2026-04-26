@@ -2,11 +2,11 @@
 
 Customer support starts in the app at `support.html`.
 
-Current public support path:
+Current free beta support path:
 
 - GitHub Issues: https://github.com/SilverFuel/xeneon-widgets/issues/new/choose
 - Downloads and release notes: https://github.com/SilverFuel/xeneon-widgets/releases
-- Refund and license policy: `refund-policy.html`
+- Free beta license policy: `refund-policy.html`
 
 Before a paid public launch, add monitored `support@...` and `security@...` inboxes to the support page and checkout emails. Do not invent inboxes that are not actually monitored.
 

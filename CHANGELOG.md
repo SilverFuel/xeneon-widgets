@@ -2,6 +2,7 @@
 
 ## 0.2.0 - 2026-04-25
 
+- Prepared the first free public beta release path.
 - Added Windows installer packaging with versioned setup output and SHA256 files.
 - Moved Weather and Hue secrets out of plain dashboard config into protected local storage.
 - Removed token-in-URL UniFi setup behavior.
@@ -11,7 +12,7 @@
 - Added release, privacy, support, security, signing, and macOS release documentation.
 - Added an Electron macOS beta host scaffold for building a Mac package from the shared dashboard.
 - Added in-app Reset all app data for local settings and protected secrets.
-- Added app-served support and refund/license pages.
+- Added app-served support and free beta license pages.
 - Moved update checks behind the local host and added release asset links for customer downloads.
 - Added a Windows clean install smoke-test helper.
 - Hid advanced connector setup from normal onboarding.

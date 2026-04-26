@@ -12,6 +12,7 @@
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
     "clean": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clean-workspace.ps1",
     "installer": "powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1",
+    "release:free-beta": "powershell -ExecutionPolicy Bypass -File .\\scripts\\prepare-free-beta-release.ps1",
     "release:ready": "powershell -ExecutionPolicy Bypass -File .\\scripts\\assert-release-ready.ps1 -AllowGitHubSupportPath",
     "release:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-release.ps1",
     "mac:install": "npm --prefix desktop/electron install",
