@@ -143,13 +143,21 @@ try {
     $resolvedInstaller = Resolve-Path -LiteralPath $InstallerPath
     Add-Pass "Installer found: $($resolvedInstaller.Path)"
 
-    $signature = Get-AuthenticodeSignature -LiteralPath $resolvedInstaller.Path
-    if ($signature.Status -eq "Valid") {
-      Add-Pass "Installer signature is valid"
-    } elseif ($RequireSignedInstaller) {
-      Add-Failure "Installer signature is not valid: $($signature.Status)"
-    } else {
-      Add-Warning "Installer is not signed: $($signature.Status)"
+    try {
+      $signature = Get-AuthenticodeSignature -LiteralPath $resolvedInstaller.Path -ErrorAction Stop
+      if ($signature.Status -eq "Valid") {
+        Add-Pass "Installer signature is valid"
+      } elseif ($RequireSignedInstaller) {
+        Add-Failure "Installer signature is not valid: $($signature.Status)"
+      } else {
+        Add-Warning "Installer is not signed: $($signature.Status)"
+      }
+    } catch {
+      if ($RequireSignedInstaller) {
+        Add-Failure "Installer signature could not be checked: $($_.Exception.Message)"
+      } else {
+        Add-Warning "Installer signature check is unavailable on this machine: $($_.Exception.Message)"
+      }
     }
 
     $hashPath = "$($resolvedInstaller.Path).sha256"
