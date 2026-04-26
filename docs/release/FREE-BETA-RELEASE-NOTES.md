@@ -2,9 +2,9 @@
 
 This is the first free public beta for XENEON Edge Host.
 
-## Download
+## Downloads
 
-Upload these two files to the GitHub Release:
+Use the Windows installer asset and matching SHA256 checksum:
 
 - `XenonEdgeHost-Setup-0.2.0-<date>.exe`
 - `XenonEdgeHost-Setup-0.2.0-<date>.exe.sha256`
