@@ -97,6 +97,7 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --prerelease --title "XENEON Edge Host $TAG_NAME Free Public Beta" --notes-file docs/release/FREE-BETA-RELEASE-NOTES.md
             gh release upload "$TAG_NAME" release-assets/**/* --clobber
           else
             gh release create "$TAG_NAME" release-assets/**/* --prerelease --title "XENEON Edge Host $TAG_NAME Free Public Beta" --notes-file docs/release/FREE-BETA-RELEASE-NOTES.md
