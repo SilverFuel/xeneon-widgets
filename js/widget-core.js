@@ -5,9 +5,15 @@
     until: 0,
     target: null
   };
-  var touchMoveThresholdPx = 14;
-  var touchPressDelayMs = 55;
-  var touchClickBlockMs = 450;
+  var recentScroll = {
+    until: 0,
+    target: null
+  };
+  var touchMoveThresholdPx = 20;
+  var touchScrollThresholdPx = 7;
+  var touchAxisBiasPx = 3;
+  var touchPressDelayMs = 135;
+  var touchClickBlockMs = 850;
   var touchInteractiveSelector = [
     "button",
     "a[href]",
@@ -43,6 +49,20 @@
     "select",
     "textarea",
     "[contenteditable='true']"
+  ].join(",");
+  var touchScrollSelector = [
+    ".landing-page",
+    ".router-picker",
+    ".router-settings__body",
+    ".router-inline-widget",
+    ".inline-list",
+    ".audio-route-strip",
+    ".audio-session-stack",
+    ".game-mode-steam-grid",
+    ".product-layout-list",
+    ".product-privacy-list",
+    ".product-code-preview",
+    ".dashboard-native-page--browser"
   ].join(",");
 
   function elementFromTarget(target) {
@@ -83,6 +103,74 @@
     return Math.sqrt((dx * dx) + (dy * dy));
   }
 
+  function pointerDeltaFromStart(state, event) {
+    return {
+      x: (event.clientX || 0) - state.startX,
+      y: (event.clientY || 0) - state.startY
+    };
+  }
+
+  function isWindowScroller(element) {
+    return element === document.body || element === document.documentElement || element === window;
+  }
+
+  function getScrollPosition(element) {
+    if (!element) {
+      return { left: 0, top: 0 };
+    }
+
+    if (isWindowScroller(element)) {
+      return {
+        left: window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0,
+        top: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+      };
+    }
+
+    return {
+      left: element.scrollLeft || 0,
+      top: element.scrollTop || 0
+    };
+  }
+
+  function canScroll(element) {
+    var style;
+    var overflowY;
+    var overflowX;
+
+    if (!element || element === window) {
+      return false;
+    }
+
+    if (isWindowScroller(element)) {
+      return document.documentElement.scrollHeight > window.innerHeight + 2
+        || document.documentElement.scrollWidth > window.innerWidth + 2;
+    }
+
+    style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+    overflowY = style ? style.overflowY : "";
+    overflowX = style ? style.overflowX : "";
+    return ((element.scrollHeight > element.clientHeight + 2) && /auto|scroll|overlay/i.test(overflowY))
+      || ((element.scrollWidth > element.clientWidth + 2) && /auto|scroll|overlay/i.test(overflowX));
+  }
+
+  function closestTouchScrollable(target) {
+    var element = closestElement(target, touchScrollSelector);
+
+    if (element && canScroll(element)) {
+      return element;
+    }
+
+    element = elementFromTarget(target);
+    while (element && element !== document.body) {
+      if (canScroll(element)) {
+        return element;
+      }
+      element = element.parentElement;
+    }
+
+    return canScroll(document.documentElement) ? document.documentElement : null;
+  }
+
   function clearTouchPress(state) {
     var touch = state || activeTouch;
     if (!touch) {
@@ -100,6 +188,19 @@
     }
   }
 
+  function clearTouchScrolling(state) {
+    var touch = state || activeTouch;
+    if (!touch) {
+      return;
+    }
+
+    if (touch.scrollTarget) {
+      touch.scrollTarget.classList.remove("is-touch-scrolling");
+    }
+
+    document.documentElement.classList.remove("is-touch-scrolling");
+  }
+
   function markTouchClickSuppressed(target) {
     if (!target) {
       return;
@@ -109,6 +210,11 @@
     suppressedTouchClick.target = target;
   }
 
+  function markRecentScroll(target) {
+    recentScroll.until = Date.now() + touchClickBlockMs;
+    recentScroll.target = elementFromTarget(target) || document.documentElement;
+  }
+
   function isRelatedTouchTarget(reference, eventTarget) {
     var target = elementFromTarget(eventTarget);
     return Boolean(reference && target && (reference === target || reference.contains(target) || target.contains(reference)));
@@ -116,19 +222,29 @@
 
   function handlePointerDown(event) {
     var interactive;
+    var scrollPosition;
+    var scrollTarget;
 
     if (!isTouchPointer(event) || event.isPrimary === false) {
       return;
     }
 
+    document.documentElement.classList.add("is-touch-input");
     clearTouchPress();
+    clearTouchScrolling();
     interactive = closestTouchInteractive(event.target);
+    scrollTarget = closestTouchScrollable(event.target);
+    scrollPosition = getScrollPosition(scrollTarget);
     activeTouch = {
       pointerId: event.pointerId,
       startX: event.clientX || 0,
       startY: event.clientY || 0,
+      startScrollLeft: scrollPosition.left,
+      startScrollTop: scrollPosition.top,
       moved: false,
+      scrolling: false,
       interactive: interactive,
+      scrollTarget: scrollTarget,
       pressTarget: null,
       pressTimer: 0
     };
@@ -144,13 +260,37 @@
   }
 
   function handlePointerMove(event) {
+    var delta;
+    var scrollDelta;
+    var scrollPosition;
+    var scrollMoved;
+    var verticalScrollIntent;
+    var horizontalScrollIntent;
+
     if (!activeTouch || activeTouch.pointerId !== event.pointerId) {
       return;
     }
 
-    if (!activeTouch.moved && pointerDistanceFromStart(activeTouch, event) >= touchMoveThresholdPx) {
+    delta = pointerDeltaFromStart(activeTouch, event);
+    scrollPosition = getScrollPosition(activeTouch.scrollTarget);
+    scrollDelta = Math.abs(scrollPosition.top - activeTouch.startScrollTop)
+      + Math.abs(scrollPosition.left - activeTouch.startScrollLeft);
+    scrollMoved = scrollDelta > 1;
+    verticalScrollIntent = Math.abs(delta.y) >= touchScrollThresholdPx
+      && Math.abs(delta.y) >= Math.abs(delta.x) + touchAxisBiasPx;
+    horizontalScrollIntent = Math.abs(delta.x) >= touchScrollThresholdPx
+      && Math.abs(delta.x) >= Math.abs(delta.y) + touchAxisBiasPx;
+
+    if (!activeTouch.moved
+      && (pointerDistanceFromStart(activeTouch, event) >= touchMoveThresholdPx
+        || (activeTouch.scrollTarget && (scrollMoved || verticalScrollIntent || horizontalScrollIntent)))) {
       activeTouch.moved = true;
+      activeTouch.scrolling = Boolean(activeTouch.scrollTarget && (scrollMoved || verticalScrollIntent || horizontalScrollIntent));
       clearTouchPress(activeTouch);
+      if (activeTouch.scrolling) {
+        activeTouch.scrollTarget.classList.add("is-touch-scrolling");
+        document.documentElement.classList.add("is-touch-scrolling");
+      }
     }
   }
 
@@ -168,10 +308,11 @@
 
     interactive = touch.interactive || closestTouchInteractive(event.target);
     clearTouchPress(touch);
+    clearTouchScrolling(touch);
     activeTouch = null;
 
     if (touch.moved) {
-      markTouchClickSuppressed(interactive);
+      markTouchClickSuppressed(interactive || touch.scrollTarget || document.documentElement);
     }
   }
 
@@ -181,11 +322,20 @@
     }
 
     clearTouchPress(activeTouch);
+    clearTouchScrolling(activeTouch);
     activeTouch = null;
   }
 
   function handleClickCapture(event) {
     var now = Date.now();
+
+    if (recentScroll.until && now <= recentScroll.until && isRelatedTouchTarget(recentScroll.target, event.target)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      recentScroll.until = 0;
+      recentScroll.target = null;
+      return;
+    }
 
     if (!suppressedTouchClick.until || now > suppressedTouchClick.until) {
       suppressedTouchClick.until = 0;
@@ -201,6 +351,10 @@
     }
   }
 
+  function handleScrollCapture(event) {
+    markRecentScroll(event.target || document.documentElement);
+  }
+
   function installTouchControls() {
     if (touchControlsInstalled || typeof document === "undefined") {
       return;
@@ -211,6 +365,7 @@
     document.addEventListener("pointermove", handlePointerMove, { capture: true, passive: true });
     document.addEventListener("pointerup", handlePointerEnd, { capture: true, passive: true });
     document.addEventListener("pointercancel", handlePointerCancel, { capture: true, passive: true });
+    document.addEventListener("scroll", handleScrollCapture, { capture: true, passive: true });
     document.addEventListener("click", handleClickCapture, true);
   }
 

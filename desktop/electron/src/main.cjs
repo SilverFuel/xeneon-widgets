@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, clipboard, safeStorage, shell } = require("electron");
+const { app, BrowserWindow, Menu, clipboard, safeStorage, shell, screen } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
@@ -7,7 +7,7 @@ const { URL } = require("node:url");
 
 const productName = "XENEON Edge Host";
 const defaultPort = 8976;
-const assetRevision = "20260425-8";
+const assetRevision = "20260425-25";
 const maxJsonBodyBytes = 256 * 1024;
 const releasesUrl = "https://github.com/SilverFuel/xeneon-widgets/releases";
 const latestReleaseApiUrl = "https://api.github.com/repos/SilverFuel/xeneon-widgets/releases/latest";
@@ -23,7 +23,7 @@ function createDefaultConfig() {
   return {
     port: defaultPort,
     weather: {
-      city: "Indianapolis",
+      city: "",
       units: "metric"
     },
     calendar: {
@@ -372,6 +372,46 @@ function unsupported(message) {
   };
 }
 
+function primaryDisplaySnapshot() {
+  try {
+    const display = screen.getPrimaryDisplay();
+    const bounds = display && display.bounds ? display.bounds : {};
+    const refreshRate = Number.isFinite(Number(display && display.displayFrequency))
+      ? Number(display.displayFrequency)
+      : null;
+    return {
+      supported: true,
+      status: refreshRate ? "live" : "partial",
+      name: text(display && (display.label || display.name), "Primary display"),
+      deviceName: String(display && display.id ? display.id : ""),
+      primary: true,
+      width: Number.isFinite(Number(bounds.width)) ? Number(bounds.width) : null,
+      height: Number.isFinite(Number(bounds.height)) ? Number(bounds.height) : null,
+      refreshRate,
+      fps: refreshRate,
+      bitsPerPixel: Number.isFinite(Number(display && display.colorDepth)) ? Number(display.colorDepth) : null,
+      scaleFactor: Number.isFinite(Number(display && display.scaleFactor)) ? Number(display.scaleFactor) : null,
+      source: "Electron display API",
+      sampledAt: nowIso(),
+      message: refreshRate
+        ? "Primary display FPS is the current display refresh rate."
+        : "This Mac beta host did not report a display refresh rate."
+    };
+  } catch (error) {
+    return {
+      supported: false,
+      status: "unavailable",
+      name: "Primary display",
+      primary: true,
+      refreshRate: null,
+      fps: null,
+      source: "Electron display API",
+      sampledAt: nowIso(),
+      message: error && error.message ? error.message : "Primary display is unavailable."
+    };
+  }
+}
+
 function systemSnapshot() {
   const total = os.totalmem();
   const free = os.freemem();
@@ -388,8 +428,8 @@ function systemSnapshot() {
     gpuTemp: null,
     ram: total ? Math.round(((total - free) / total) * 100) : null,
     disk: null,
+    primaryDisplay: primaryDisplaySnapshot(),
     topProcesses: [],
-    machine: os.hostname(),
     platform: `${os.type()} ${os.release()}`
   };
 }
@@ -407,15 +447,12 @@ function networkSnapshot() {
     stale: false,
     source: "macOS beta host",
     interfaceName: first ? first.name : "macOS",
-    localIp: first ? first.entry.address : "",
     downloadMbps: 0,
     uploadMbps: 0,
     latencyMs: null,
     packetLossPercent: null,
     adapters: interfaces.map((item) => ({
-      name: item.name,
-      address: item.entry.address,
-      mac: item.entry.mac
+      name: item.name
     }))
   };
 }
@@ -513,6 +550,21 @@ function launchersSnapshot() {
   };
 }
 
+function steamGamesSnapshot() {
+  return {
+    supported: false,
+    configured: false,
+    status: "optional",
+    stale: false,
+    sampledAt: nowIso(),
+    source: "macOS beta host",
+    message: "Local Steam game scanning is available in the Windows host. Mac Steam scanning is planned for the Mac beta.",
+    steamDetected: false,
+    libraryCount: 0,
+    games: []
+  };
+}
+
 function clipboardSnapshot() {
   const value = clipboard.readText();
   return {
@@ -526,8 +578,7 @@ function clipboardSnapshot() {
     entries: value
       ? [{
           id: "current",
-          label: value.slice(0, 48),
-          text: value,
+          label: "Current text",
           preview: value.slice(0, 160),
           time: "Now"
         }]
@@ -721,6 +772,17 @@ async function handleApi(request, response, requestUrl) {
     return sendJson(response, error ? 500 : 200, { ok: !error, message: error || "Launcher opened." });
   }
 
+  if (route === "/api/steam/games" && method === "GET") {
+    return sendJson(response, 200, steamGamesSnapshot());
+  }
+
+  if (route === "/api/steam/games/launch" && method === "POST") {
+    return sendJson(response, 501, {
+      ok: false,
+      message: "Steam game launch is available in the Windows host. Mac Steam launch support is planned for the Mac beta."
+    });
+  }
+
   if (route === "/api/quick-actions") {
     return sendJson(response, 200, quickActionsSnapshot());
   }
@@ -748,18 +810,54 @@ async function handleApi(request, response, requestUrl) {
   return false;
 }
 
-function sendJson(response, statusCode, payload) {
+function sendJson(response, statusCode, payload, corsOrigin = "") {
   const body = Buffer.from(`${JSON.stringify(payload)}\n`, "utf8");
-  response.writeHead(statusCode, {
+  const headers = {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": body.length,
-    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Cache-Control": "no-store"
-  });
+  };
+
+  if (corsOrigin) {
+    headers["Access-Control-Allow-Origin"] = corsOrigin;
+    headers.Vary = "Origin";
+  }
+
+  response.writeHead(statusCode, headers);
   response.end(body);
   return true;
+}
+
+function corsOriginForRequest(request) {
+  const origin = typeof request.headers.origin === "string" ? request.headers.origin.trim() : "";
+  if (!origin) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(origin);
+    const hostname = parsed.hostname.toLowerCase();
+    const port = parsed.port ? Number(parsed.port) : 80;
+    if (parsed.protocol === "http:" && port === activePort && (hostname === "127.0.0.1" || hostname === "localhost")) {
+      return parsed.origin;
+    }
+  } catch {
+  }
+
+  return null;
+}
+
+function applyCorsHeaders(response, corsOrigin) {
+  if (!corsOrigin) {
+    return;
+  }
+
+  response.setHeader("Access-Control-Allow-Origin", corsOrigin);
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Vary", "Origin");
 }
 
 function sendText(response, statusCode, body) {
@@ -805,8 +903,15 @@ function resolveStaticPath(requestUrl) {
 
 async function handleRequest(request, response) {
   try {
+    const corsOrigin = corsOriginForRequest(request);
+    if (corsOrigin === null) {
+      return sendJson(response, 403, { ok: false, error: "Origin not allowed." });
+    }
+
+    applyCorsHeaders(response, corsOrigin);
+
     if (request.method === "OPTIONS") {
-      return sendJson(response, 204, {});
+      return sendJson(response, 204, {}, corsOrigin);
     }
 
     const requestUrl = new URL(request.url || "/", `http://127.0.0.1:${activePort}`);

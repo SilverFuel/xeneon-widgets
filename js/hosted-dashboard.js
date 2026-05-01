@@ -8,7 +8,7 @@
   }
 
   function renderEmptyState(message) {
-    var city = ApiUtils.getQueryParam("city", "Indianapolis");
+    var city = ApiUtils.getQueryParam("city", "");
     document.getElementById("hosted-weather-source").textContent = message || "Unavailable";
     document.getElementById("hosted-weather-empty").classList.remove("is-hidden");
     document.getElementById("hosted-weather-live").classList.add("is-hidden");

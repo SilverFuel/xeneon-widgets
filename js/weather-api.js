@@ -55,7 +55,7 @@
   }
 
   async function fetchWeather() {
-    var city = ApiUtils.getQueryParam("city", "Indianapolis");
+    var city = ApiUtils.getQueryParam("city", "");
     var units = ApiUtils.getQueryParam("units", "metric");
     var endpoint = ApiUtils.getQueryParam("endpoint", "");
 

@@ -3,7 +3,7 @@
   var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
-  var assetRevision = "20260425-8";
+  var assetRevision = "20260501-1";
   var onboardingVersion = 1;
   var showAdvanced = params.get("advanced") === "1";
   var stageWidth = 2560;
@@ -19,6 +19,12 @@
   var retryNode = null;
   var diagnosticsRailNode = null;
   var diagnosticsInlineNode = null;
+  var settingsPanelNode = null;
+  var settingsToggleNode = null;
+  var touchLockToggleNode = null;
+  var touchUnlockNode = null;
+  var nowStripNode = null;
+  var touchFeedbackNode = null;
   var inlineWidgetController = null;
   var activeInlineWidgetId = "";
   var lastBridgeSnapshotKey = "";
@@ -44,7 +50,7 @@
   var bridgeConfig = {
     weather: {
       configured: false,
-      city: "Indianapolis",
+      city: "",
       units: "metric"
     },
     calendar: {
@@ -67,36 +73,26 @@
     }
   };
   var bridgeSetup = createBootSetupSummary();
+  var settingsDrawerOpen = false;
+  var touchFeedbackTimerId = 0;
+  var nowStripTimerId = 0;
   var defaultSettings = {
     dashboardOpacity: "100",
     profileId: "command",
     themeId: "edge",
-    animationIntensity: "100",
+    animationIntensity: "0",
     accentColor: "",
+    touchLockMode: "0",
     layoutOrder: "",
-    marketplacePack: "core",
-    updateChannel: "stable",
-    obsEndpoint: "ws://127.0.0.1:4455",
-    streamScene: "Main",
-    gameModeEnabled: "false",
+    gameModeProfile: "custom",
     gameModeGame: "",
-    installerEdition: "unsigned",
-    privacyConsent: "local-only",
-    city: "Indianapolis",
+    gameModeThemeId: "",
+    gameModeAccent: "",
+    gameModeSecondary: "",
+    gameModeMood: "",
+    city: "",
     units: "metric",
-    unifiCameraEndpoint: "",
-    unifiCameraFeed: "",
-    unifiCameraRelayUrl: "",
-    unifiCameraSnapshot: "",
-    unifiCameraName: "",
-    unifiCameraLocation: "",
-    unifiCameraFeedType: "",
-    unifiNetworkEndpoint: "",
-    plexEndpoint: "",
-    plexUplink: "",
-    nasEndpoint: "",
-    automationEndpoint: "",
-    automationActionEndpoint: ""
+    unifiNetworkEndpoint: ""
   };
   var settingSchemas = {
     weather: {
@@ -106,7 +102,7 @@
         {
           key: "city",
           label: "City",
-          placeholder: "Indianapolis",
+          placeholder: "City or ZIP",
           help: "Sent to the bridge weather endpoint."
         },
         {
@@ -121,29 +117,9 @@
         }
       ]
     },
-    "unifi-camera": {
-      title: "UniFi Camera",
-      copy: "Native camera connector is planned. The normal setup no longer asks for relay URLs.",
-      fields: []
-    },
     "unifi-network": {
       title: "UniFi Network",
       copy: "Built in. Xenon detects the local UniFi console through the native host.",
-      fields: []
-    },
-    plex: {
-      title: "Plex Server",
-      copy: "Native Plex connector is planned. No local JSON service is required in the normal setup.",
-      fields: []
-    },
-    nas: {
-      title: "NAS Storage",
-      copy: "Native NAS connector is planned. The normal setup stays endpoint-free.",
-      fields: []
-    },
-    automation: {
-      title: "Home Automation",
-      copy: "Native Home Assistant style connector is planned. Endpoint setup is no longer part of first run.",
       fields: []
     }
   };
@@ -185,17 +161,7 @@
       copy: "Green-forward telemetry with brighter status accents."
     }
   ];
-  var localProductWidgetIds = [
-    "profiles",
-    "theme-studio",
-    "layout-editor",
-    "updates",
-    "streaming",
-    "game-mode",
-    "marketplace",
-    "installer",
-    "privacy"
-  ];
+  var localProductWidgetIds = ["game-mode"];
 
   function createSetupItem(label, state, required, nextStep) {
     return { label: label, state: state, required: required, nextStep: nextStep };
@@ -260,6 +226,18 @@
   }
 
   function setScale() {
+    var browserLayout = !perfMode
+      && (window.innerWidth < 1100 || (window.innerWidth / Math.max(window.innerHeight, 1)) < 2.4);
+
+    if (document.body) {
+      document.body.classList.toggle("dashboard-native-page--browser", browserLayout);
+    }
+
+    if (browserLayout) {
+      document.documentElement.style.setProperty("--dashboard-scale", "1");
+      return;
+    }
+
     if (perfMode) {
       document.documentElement.style.setProperty("--dashboard-scale", "1");
       return;
@@ -280,8 +258,14 @@
     var lanes = [];
     var pulses = [];
     var rafId = 0;
+    var ambientGraphicsEnabled = false;
 
-    if (!canvas || !shell || perfMode || reducedMotion) {
+    if (!ambientGraphicsEnabled && canvas) {
+      canvas.style.display = "none";
+      return;
+    }
+
+    if (!canvas || !shell || perfMode || reducedMotion || getAnimationIntensityPercent() === 0) {
       return;
     }
 
@@ -484,17 +468,20 @@
 
   function applyDashboardPresentation() {
     var theme = getProductTheme();
-    var accent = parseHexColor(getSetting("accentColor")) || theme.accent;
+    var gameAccent = hasValue("gameModeGame") ? parseHexColor(getSetting("gameModeAccent")) : null;
+    var gameSecondary = hasValue("gameModeGame") ? parseHexColor(getSetting("gameModeSecondary")) : null;
+    var accent = gameAccent || parseHexColor(getSetting("accentColor")) || theme.accent;
+    var secondary = gameSecondary || theme.secondary;
     var intensity = getAnimationIntensityPercent();
 
     applyDashboardOpacity();
     document.documentElement.style.setProperty("--color-accent", accent);
     document.documentElement.style.setProperty("--color-accent-soft", rgbaFromHex(accent, 0.18));
     document.documentElement.style.setProperty("--dashboard-accent", accent);
-    document.documentElement.style.setProperty("--dashboard-secondary", theme.secondary);
+    document.documentElement.style.setProperty("--dashboard-secondary", secondary);
     document.documentElement.style.setProperty("--dashboard-warm", theme.warm);
     document.documentElement.style.setProperty("--dashboard-accent-glow", rgbaFromHex(accent, 0.12));
-    document.documentElement.style.setProperty("--dashboard-secondary-glow", rgbaFromHex(theme.secondary, 0.1));
+    document.documentElement.style.setProperty("--dashboard-secondary-glow", rgbaFromHex(secondary, 0.1));
     document.documentElement.style.setProperty("--dashboard-warm-glow", rgbaFromHex(theme.warm, 0.1));
     document.documentElement.style.setProperty("--dashboard-theme-bg", theme.background);
     document.documentElement.style.setProperty("--dashboard-aura-opacity", String(intensity / 100));
@@ -504,6 +491,8 @@
       document.body.classList.toggle("dashboard-native-page--motion-low", intensity > 0 && intensity <= 35);
       document.body.classList.toggle("dashboard-native-page--motion-off", intensity === 0);
     }
+
+    renderDashboardChromeState();
   }
 
   function getParam(name) {
@@ -518,6 +507,10 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function text(value, fallback) {
+    return typeof value === "string" && value.trim() ? value.trim() : fallback;
   }
 
   function setText(nodeId, value) {
@@ -538,6 +531,86 @@
     } else {
       node.removeAttribute("data-tone");
     }
+  }
+
+  function isTouchLockEnabled() {
+    return String(getSetting("touchLockMode") || "") === "1";
+  }
+
+  function renderDashboardChromeState() {
+    var locked = isTouchLockEnabled();
+    if (locked) {
+      settingsDrawerOpen = false;
+    }
+
+    if (document.body) {
+      document.body.classList.toggle("dashboard-native-page--settings-open", settingsDrawerOpen && !locked);
+      document.body.classList.toggle("dashboard-native-page--settings-closed", !settingsDrawerOpen || locked);
+      document.body.classList.toggle("dashboard-native-page--touch-locked", locked);
+    }
+
+    if (settingsPanelNode) {
+      settingsPanelNode.classList.toggle("is-open", settingsDrawerOpen && !locked);
+      settingsPanelNode.classList.toggle("is-collapsed", !settingsDrawerOpen || locked);
+    }
+
+    if (settingsToggleNode) {
+      settingsToggleNode.textContent = settingsDrawerOpen && !locked ? "Hide Settings" : "Settings";
+      settingsToggleNode.setAttribute("aria-expanded", settingsDrawerOpen && !locked ? "true" : "false");
+      settingsToggleNode.classList.toggle("is-active", settingsDrawerOpen && !locked);
+    }
+
+    if (touchLockToggleNode) {
+      touchLockToggleNode.textContent = locked ? "Touch Locked" : "Touch Lock";
+      touchLockToggleNode.classList.toggle("is-active", locked);
+      touchLockToggleNode.setAttribute("data-tone", locked ? "good" : "muted");
+    }
+
+    if (touchUnlockNode) {
+      touchUnlockNode.classList.toggle("is-hidden", !locked);
+    }
+  }
+
+  function setTouchLockEnabled(enabled) {
+    dashboardSettings.touchLockMode = enabled ? "1" : "0";
+    storedSettings.touchLockMode = dashboardSettings.touchLockMode;
+    persistSettings();
+    renderDashboardChromeState();
+    showTouchFeedback(enabled ? "Touch locked" : "Touch unlocked");
+  }
+
+  function toggleSettingsDrawer() {
+    if (isTouchLockEnabled()) {
+      return;
+    }
+    settingsDrawerOpen = !settingsDrawerOpen;
+    renderDashboardChromeState();
+    showTouchFeedback(settingsDrawerOpen ? "Settings open" : "Settings tucked away");
+  }
+
+  function showTouchFeedback(message) {
+    if (!message) {
+      return;
+    }
+
+    if (!touchFeedbackNode) {
+      touchFeedbackNode = document.getElementById("dashboard-touch-feedback");
+    }
+    if (!touchFeedbackNode) {
+      return;
+    }
+
+    window.clearTimeout(touchFeedbackTimerId);
+    touchFeedbackNode.textContent = message;
+    touchFeedbackNode.classList.remove("is-hidden");
+    touchFeedbackNode.classList.remove("is-active");
+    void touchFeedbackNode.offsetWidth;
+    touchFeedbackNode.classList.add("is-active");
+
+    touchFeedbackTimerId = window.setTimeout(function () {
+      touchFeedbackNode.classList.remove("is-active");
+      touchFeedbackNode.classList.add("is-hidden");
+    }, 1100);
   }
 
   function formatDashboardError(error) {
@@ -663,6 +736,87 @@
     return fetchJson(buildUrl(bridgeOrigin, "/api/config"), 5000);
   }
 
+  function setNowStrip(targetWidget, label, title, detail) {
+    if (!nowStripNode) {
+      return;
+    }
+
+    nowStripNode.dataset.targetWidget = targetWidget || "";
+    nowStripNode.innerHTML = '' +
+      '<span class="dashboard-now-strip__label">' + escapeHtml(label || "Now") + '</span>' +
+      '<strong>' + escapeHtml(title || "Ready") + '</strong>' +
+      '<small>' + escapeHtml(detail || "") + '</small>';
+    nowStripNode.classList.remove("is-hidden");
+  }
+
+  function hideNowStrip() {
+    if (nowStripNode) {
+      nowStripNode.classList.add("is-hidden");
+      nowStripNode.dataset.targetWidget = "";
+    }
+  }
+
+  function findAudioDeviceName(payload) {
+    var devices = Array.isArray(payload && payload.devices) ? payload.devices : [];
+    var defaultId = payload && payload.defaultDeviceId ? String(payload.defaultDeviceId) : "";
+    var device = devices.filter(function (entry) {
+      return entry && ((defaultId && String(entry.id || "") === defaultId) || entry.isDefault);
+    })[0] || devices[0] || {};
+    return text(device.name || payload && payload.defaultDeviceName, "System audio");
+  }
+
+  function updateNowPlayingStrip() {
+    if (!nowStripNode || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin()) {
+      hideNowStrip();
+      return;
+    }
+
+    fetchJson(buildUrl(bridgeOrigin, "/api/media"), 2600).then(function (payload) {
+      var title = text(payload && payload.title, "");
+      var artist = text(payload && payload.artist, "");
+      var status = text(payload && payload.playbackStatus, text(payload && payload.status, ""));
+      if (title || artist) {
+        setNowStrip(
+          "media",
+          status && status !== "idle" ? status.replace(/-/g, " ") : "Now playing",
+          title || artist,
+          artist && title ? artist : text(payload && payload.message, "Media controls ready")
+        );
+        return;
+      }
+
+      throw new Error("No active media");
+    }).catch(function () {
+      return fetchJson(buildUrl(bridgeOrigin, "/api/audio"), 2600).then(function (payload) {
+        var parsedVolume = Number(payload && payload.masterVolume);
+        var volume = Number.isFinite(parsedVolume) ? parsedVolume : null;
+        var muted = Boolean(payload && payload.muted);
+        var volumeText = muted ? "Muted" : (volume == null ? "Ready" : Math.round(volume) + "%");
+        setNowStrip("audio", "Audio", findAudioDeviceName(payload), volumeText);
+      }, function () {
+        hideNowStrip();
+      });
+    });
+  }
+
+  function initNowPlayingStrip() {
+    if (!nowStripNode) {
+      return;
+    }
+
+    nowStripNode.addEventListener("click", function () {
+      var targetWidget = nowStripNode.dataset.targetWidget || "";
+      if (targetWidget) {
+        selectWidget(targetWidget, true);
+        showTouchFeedback(targetWidget === "media" ? "Media opened" : "Audio opened");
+      }
+    });
+
+    updateNowPlayingStrip();
+    window.clearInterval(nowStripTimerId);
+    nowStripTimerId = window.setInterval(updateNowPlayingStrip, 5000);
+  }
+
   function readStoredSettings() {
     try {
       var raw = window.localStorage.getItem(settingsStorageKey);
@@ -747,13 +901,6 @@
     return String(getSetting(key) || "").trim() !== "";
   }
 
-  function hasUniFiCameraConfig() {
-    return hasValue("unifiCameraEndpoint") ||
-      hasValue("unifiCameraFeed") ||
-      hasValue("unifiCameraRelayUrl") ||
-      hasValue("unifiCameraSnapshot");
-  }
-
   function getUniFiNetworkEndpoint() {
     return hasValue("unifiNetworkEndpoint")
       ? getSetting("unifiNetworkEndpoint")
@@ -765,24 +912,8 @@
       return getWidgetState(widgetId) !== "Optional";
     }
 
-    if (widgetId === "unifi-camera") {
-      return hasUniFiCameraConfig();
-    }
-
     if (widgetId === "unifi-network") {
       return true;
-    }
-
-    if (widgetId === "plex") {
-      return hasValue("plexEndpoint");
-    }
-
-    if (widgetId === "nas") {
-      return hasValue("nasEndpoint");
-    }
-
-    if (widgetId === "automation") {
-      return hasValue("automationEndpoint") || hasValue("automationActionEndpoint");
     }
 
     return true;
@@ -901,10 +1032,14 @@
 
   function shouldShowWidget(widget) {
     if (widget.id === "setup") {
-      return !perfMode && (!bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention);
+      return !perfMode && (currentWidgetId === "setup" || !bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention);
     }
 
-    if (widget.tier === "product" || isLocalProductWidget(widget.id)) {
+    if (widget.tier === "product") {
+      return isLocalProductWidget(widget.id);
+    }
+
+    if (isLocalProductWidget(widget.id)) {
       return true;
     }
 
@@ -916,8 +1051,16 @@
       return isWidgetSupported("audio");
     }
 
-    if (widget.id === "launchers" || widget.id === "quick-actions" || widget.id === "shortcuts" || widget.id === "clipboard") {
+    if (widget.id === "launchers") {
+      return isWidgetSupported("launchers") && getWidgetState("launchers") === "Ready";
+    }
+
+    if (widget.id === "quick-actions" || widget.id === "shortcuts") {
       return isWidgetSupported(widget.id);
+    }
+
+    if (widget.id === "clipboard") {
+      return false;
     }
 
     if (widget.id === "media") {
@@ -929,7 +1072,7 @@
     }
 
     if (widget.tier === "advanced") {
-      return showAdvanced || isWidgetConfigured(widget.id);
+      return isWidgetConfigured(widget.id);
     }
 
     return true;
@@ -996,88 +1139,23 @@
             hueEndpoint: buildUrl(bridgeOrigin, "/api/hue"),
             hueLinkEndpoint: buildUrl(bridgeOrigin, "/api/hue/link"),
             dashboardUrl: buildUrl(bridgeOrigin, "/dashboard.html", { v: assetRevision }),
-            advancedUrl: buildUrl(bridgeOrigin, "/dashboard.html", { v: assetRevision, advanced: "1" }),
             advanced: showAdvanced ? "1" : "",
             onboardingVersion: onboardingVersion
           });
         }
       },
       {
-        id: "profiles",
-        title: "Profiles",
-        tier: "product",
-        kicker: "Product layer",
-        copy: "Switch the dashboard between gaming, streaming, work, home-lab, and minimal modes.",
-        viewerLabel: "Local profile"
-      },
-      {
-        id: "theme-studio",
-        title: "Theme Studio",
-        tier: "product",
-        kicker: "Visual polish",
-        copy: "Tune the dashboard theme, accent color, opacity, and animation intensity.",
-        viewerLabel: "Local style"
-      },
-      {
-        id: "layout-editor",
-        title: "Layout Editor",
-        tier: "product",
-        kicker: "Control surface",
-        copy: "Reorder dashboard panels and save the exact picker flow for the current install.",
-        viewerLabel: "Local layout"
-      },
-      {
-        id: "updates",
-        title: "Updates",
-        tier: "product",
-        kicker: "Release channel",
-        copy: "Choose a release channel and check the GitHub release feed before shipping.",
-        viewerLabel: "GitHub releases"
-      },
-      {
-        id: "streaming",
-        title: "Streaming",
-        tier: "product",
-        kicker: "OBS panel",
-        copy: "Keep stream status, scene intent, and OBS connection health on the EDGE.",
-        viewerLabel: "Local OBS"
-      },
-      {
         id: "game-mode",
         title: "Game Mode",
         tier: "product",
         kicker: "Launch mode",
-        copy: "Prepare a focused dashboard profile for games, telemetry, audio, and launchers.",
-        viewerLabel: "Local preset"
-      },
-      {
-        id: "marketplace",
-        title: "Widget Packs",
-        tier: "product",
-        kicker: "Expansion",
-        copy: "Apply curated packs for core telemetry, streaming, creator, and home-lab setups.",
-        viewerLabel: "Local packs"
-      },
-      {
-        id: "installer",
-        title: "Installer",
-        tier: "product",
-        kicker: "Packaging",
-        copy: "Track the setup EXE, install path, shortcuts, signing, and selling readiness.",
-        viewerLabel: "Windows setup"
-      },
-      {
-        id: "privacy",
-        title: "Privacy",
-        tier: "product",
-        kicker: "Trust",
-        copy: "Show what stays local, what optional services are used, and reset local settings.",
-        viewerLabel: "Local trust"
+        copy: "Launch installed Steam games and watch live display FPS without extra setup.",
+        viewerLabel: "Steam games"
       },
       {
         id: "system",
         title: "System Monitor",
-        copy: "CPU, GPU, RAM, and disk telemetry from the local bridge.",
+        copy: "CPU, GPU, and RAM telemetry from the local bridge.",
         getViewerLabel: function () {
           return "Local bridge";
         },
@@ -1085,16 +1163,17 @@
           return buildUrl(widgetBase, "/widgets/system-monitor.html", {
             size: "full",
             rev: assetRevision,
-            endpoint: buildUrl(bridgeOrigin, "/api/system")
+            endpoint: buildUrl(bridgeOrigin, "/api/system"),
+            gpuPowerEndpoint: buildUrl(bridgeOrigin, "/api/gpu-power")
           });
         }
       },
         {
           id: "network",
           title: "Network Monitor",
-          copy: "Throughput, ping, and UniFi detection from the local bridge.",
+          copy: "Download, upload, ping, and connection health from the local bridge.",
           getViewerLabel: function () {
-            return "Local bridge + UniFi";
+            return "Network essentials";
           },
           buildSrc: function () {
             return buildUrl(widgetBase, "/widgets/network-widget.html", {
@@ -1108,9 +1187,9 @@
       {
         id: "audio",
         title: "Audio",
-        copy: "Switch playback outputs, set master volume, and trim live app sessions from the local bridge.",
+        copy: "Quick master volume, output switching, and active app audio only.",
         getViewerLabel: function () {
-          return "Local bridge";
+          return "Quick audio";
         },
         buildSrc: function () {
           return buildUrl(widgetBase, "/widgets/audio-output-panel.html", {
@@ -1205,94 +1284,6 @@
         }
       },
       {
-        id: "unifi-camera",
-        title: "UniFi Camera",
-        tier: "advanced",
-        copy: "Full-screen browser relay or snapshot view.",
-        getViewerLabel: function () {
-          return isWidgetConfigured("unifi-camera") ? "Configured endpoint" : "Optional";
-        },
-        buildSrc: function () {
-          return buildUrl(widgetBase, "/widgets/unifi-camera-viewer.html", {
-            size: "full",
-            rev: assetRevision,
-            endpoint: getSetting("unifiCameraEndpoint"),
-            feed: getSetting("unifiCameraFeed"),
-            relayUrl: getSetting("unifiCameraRelayUrl"),
-            snapshot: getSetting("unifiCameraSnapshot"),
-            name: getSetting("unifiCameraName"),
-            location: getSetting("unifiCameraLocation"),
-            feedType: getSetting("unifiCameraFeedType")
-          });
-        }
-      },
-      {
-        id: "unifi-network",
-        title: "UniFi Network",
-          tier: "advanced",
-          copy: "Gateway, WAN trends, AP health, clients, and app activity.",
-          getViewerLabel: function () {
-            return hasValue("unifiNetworkEndpoint") ? "Custom endpoint" : "Built in";
-          },
-          buildSrc: function () {
-            return buildUrl(widgetBase, "/widgets/unifi-network-dashboard.html", {
-              size: "full",
-              rev: assetRevision,
-              endpoint: getUniFiNetworkEndpoint()
-            });
-          }
-        },
-      {
-        id: "plex",
-        title: "Plex Server",
-        tier: "advanced",
-        copy: "Active streams, bandwidth load, and transcode pressure.",
-        getViewerLabel: function () {
-          return isWidgetConfigured("plex") ? "Configured endpoint" : "Optional";
-        },
-        buildSrc: function () {
-          return buildUrl(widgetBase, "/widgets/plex-server-monitor.html", {
-            size: "full",
-            rev: assetRevision,
-            endpoint: getSetting("plexEndpoint"),
-            uplink: getSetting("plexUplink")
-          });
-        }
-      },
-      {
-        id: "nas",
-        title: "NAS Storage",
-        tier: "advanced",
-        copy: "Pool usage, drive health, and temperatures.",
-        getViewerLabel: function () {
-          return isWidgetConfigured("nas") ? "Configured endpoint" : "Optional";
-        },
-        buildSrc: function () {
-          return buildUrl(widgetBase, "/widgets/nas-storage-monitor.html", {
-            size: "full",
-            rev: assetRevision,
-            endpoint: getSetting("nasEndpoint")
-          });
-        }
-      },
-      {
-        id: "automation",
-        title: "Home Automation",
-        tier: "advanced",
-        copy: "Touch controls for lights, switches, and scenes.",
-        getViewerLabel: function () {
-          return isWidgetConfigured("automation") ? "Configured endpoint" : "Optional";
-        },
-        buildSrc: function () {
-          return buildUrl(widgetBase, "/widgets/home-automation-panel.html", {
-            size: "full",
-            rev: assetRevision,
-            endpoint: getSetting("automationEndpoint"),
-            actionEndpoint: getSetting("automationActionEndpoint")
-          });
-        }
-      },
-      {
         id: "hue",
         title: "Philips Hue",
         copy: "Direct local light control with compact bridge diagnostics.",
@@ -1380,7 +1371,7 @@
     widgets = createWidgets();
     renderPicker();
     renderDiagnostics();
-    renderSettings(getWidgetById(currentWidgetId || "privacy"));
+    renderSettings(getWidgetById(currentWidgetId || "system"));
   }
 
   function clearDashboardBrowserStorage() {
@@ -1450,6 +1441,7 @@
       resetSettings: resetLocalDashboardSettings,
       resetAllLocalData: resetAllLocalData,
       selectWidget: selectWidget,
+      showTouchFeedback: showTouchFeedback,
       handleSetupUpdate: handleInlineSetupUpdate
     };
   }
@@ -1530,7 +1522,7 @@
         : "System and Network stay front and center. Diagnostics remains available if anything changes.";
 
     if (showAdvanced) {
-      copy = "Advanced mode is open. Core widgets stay visible while optional and advanced panels can be configured.";
+      copy = "Core widgets stay visible. Optional panels appear only after they are set up.";
     }
 
     setText("dashboard-rail-copy", copy);
@@ -1589,7 +1581,7 @@
     }
 
     if (widget.tier === "product" || isLocalProductWidget(widget.id)) {
-      return "This product panel stores its choices locally and works even when the bridge is offline.";
+      return "Game Mode keeps its recent Steam choice on this dashboard.";
     }
 
     return "This widget uses bridge defaults and does not need local dashboard settings.";
@@ -1648,7 +1640,8 @@
 
   function renderSettings(widget) {
     if (perfMode) {
-      settingsNode.innerHTML = '<div class="router-settings__note">Display mode keeps the EDGE surface lean. Use the tray icon or <code>?advanced=1</code> for full configuration.</div>';
+      settingsNode.innerHTML = '<div class="router-settings__note">Display mode keeps the EDGE surface lean.</div>';
+      renderDashboardChromeState();
       return;
     }
 
@@ -1664,9 +1657,9 @@
         renderGlobalSettings() +
         '<div class="router-settings__empty">' +
           '<div class="router-settings__note">' + escapeHtml(renderNoSettingsCopy(widget)) + '</div>' +
-          (showAdvanced ? '' : '<div class="router-settings__note">Advanced panels stay hidden until they are useful. Built-in connectors appear automatically when Xenon can detect them.</div>') +
         '</div>';
       bindGlobalSettings();
+      renderDashboardChromeState();
       return;
     }
 
@@ -1677,6 +1670,7 @@
           '<div class="router-settings__note">' + escapeHtml(schema.copy) + '</div>' +
         '</div>';
       bindGlobalSettings();
+      renderDashboardChromeState();
       return;
     }
 
@@ -1712,6 +1706,7 @@
 
     bindGlobalSettings();
     bindSettingsForm(widget, schema);
+    renderDashboardChromeState();
   }
 
   function bindSettingsForm(widget, schema) {
@@ -1999,6 +1994,12 @@
       retryNode = document.getElementById("dashboard-widget-retry");
       diagnosticsRailNode = document.getElementById("dashboard-diagnostics-rail");
       diagnosticsInlineNode = document.getElementById("dashboard-diagnostics-inline");
+      settingsPanelNode = document.getElementById("dashboard-settings-panel");
+      settingsToggleNode = document.getElementById("dashboard-settings-toggle");
+      touchLockToggleNode = document.getElementById("dashboard-touch-lock-toggle");
+      touchUnlockNode = document.getElementById("dashboard-touch-unlock");
+      nowStripNode = document.getElementById("dashboard-now-strip");
+      touchFeedbackNode = document.getElementById("dashboard-touch-feedback");
       document.body.classList.toggle("dashboard-native-page--perf", perfMode);
       dashboardSettings = buildInitialSettings();
       widgets = createWidgets();
@@ -2019,6 +2020,22 @@
         selectWidget("setup", false);
       });
 
+      if (settingsToggleNode) {
+        settingsToggleNode.addEventListener("click", toggleSettingsDrawer);
+      }
+
+      if (touchLockToggleNode) {
+        touchLockToggleNode.addEventListener("click", function () {
+          setTouchLockEnabled(!isTouchLockEnabled());
+        });
+      }
+
+      if (touchUnlockNode) {
+        touchUnlockNode.addEventListener("click", function () {
+          setTouchLockEnabled(false);
+        });
+      }
+
       setStatus("dashboard-origin-status", "Loading", "warn");
       setText("dashboard-selection-status", "Preparing dashboard");
       setRailCopy();
@@ -2038,6 +2055,7 @@
           "The dashboard could not finish starting."
         );
       });
+      initNowPlayingStrip();
 
       window.setInterval(function () {
         refreshBridgeState({

@@ -1,41 +1,5 @@
 (function () {
-  var advancedSetupSchemas = [
-    {
-      id: "unifi-network",
-      title: "UniFi Network",
-      copy: "Built in. Xenon detects the local UniFi console through the native host.",
-      state: "Built in",
-      fields: []
-    },
-    {
-      id: "unifi-camera",
-      title: "UniFi Camera",
-      copy: "Native camera connector is planned. The normal setup no longer asks for relay URLs.",
-      state: "Later",
-      fields: []
-    },
-    {
-      id: "plex",
-      title: "Plex Server",
-      copy: "Native Plex connector is planned. No local JSON service is required in the normal setup.",
-      state: "Later",
-      fields: []
-    },
-    {
-      id: "nas",
-      title: "NAS Storage",
-      copy: "Native NAS connector is planned. The normal setup stays endpoint-free.",
-      state: "Later",
-      fields: []
-    },
-    {
-      id: "automation",
-      title: "Home Automation",
-      copy: "Native Home Assistant style connector is planned. Endpoint setup is no longer part of first run.",
-      state: "Later",
-      fields: []
-    }
-  ];
+  var advancedSetupSchemas = [];
 
   function escapeHtml(value) {
     return String(value == null ? "" : value)
@@ -75,12 +39,21 @@
 
   function formatTemp(value) {
     var parsed = optionalNumber(value);
-    return parsed == null ? "--" : Math.round(parsed) + " C";
+    return parsed == null || parsed <= 0 ? "Unavailable" : Math.round(parsed) + " C";
   }
 
   function formatValue(value, suffix) {
     var parsed = optionalNumber(value);
     return parsed == null ? "--" : Math.round(parsed) + (suffix || "");
+  }
+
+  function formatFps(value) {
+    var parsed = optionalNumber(value);
+    return parsed == null ? "--" : Math.round(parsed) + " FPS";
+  }
+
+  function primaryDisplayFromSystem(data) {
+    return (data && (data.primaryDisplay || data.display)) || {};
   }
 
   function formatStorage(value, unit) {
@@ -354,6 +327,12 @@
     }
   }
 
+  function emitTouchFeedback(env, message) {
+    if (env && typeof env.showTouchFeedback === "function") {
+      env.showTouchFeedback(message);
+    }
+  }
+
   function setupUpdate(env, kind) {
     if (typeof env.handleSetupUpdate === "function") {
       return env.handleSetupUpdate(kind);
@@ -409,14 +388,15 @@
   }
 
   function renderSystemWidget(data, statusText, statusTone) {
-    var processes = Array.isArray(data.topProcesses) ? data.topProcesses.slice(0, 6) : [];
+    var gpuPower = data.gpuPower || normalizeGpuPowerPayload({});
+    var gpuPowerList = gpuPower.alerts.length ? gpuPower.alerts : gpuPower.pins.concat(gpuPower.rails, gpuPower.power);
     return '' +
       '<div class="inline-widget-shell">' +
         '<div class="inline-toolbar">' +
           '<div>' +
             '<div class="eyebrow">Local bridge</div>' +
             '<h3 class="inline-title">System monitor</h3>' +
-            '<p class="inline-copy">Native CPU, GPU, RAM, and disk telemetry without the iframe layer.</p>' +
+            '<p class="inline-copy">Native CPU, GPU, RAM, and connector telemetry without the iframe layer.</p>' +
           '</div>' +
           statusPill(statusText, statusTone) +
         '</div>' +
@@ -424,55 +404,61 @@
           metricCard("CPU", formatPercent(data.cpu), formatTemp(data.cpuTemp), data.cpu) +
           metricCard("GPU", formatPercent(data.gpu), data.gpuTemp != null ? formatTemp(data.gpuTemp) : "Unavailable", data.gpu) +
           metricCard("RAM", formatPercent(data.ram), text(data.source, "Memory pressure"), data.ram) +
-          metricCard("Disk", formatPercent(data.disk), data.disk == null ? "Unavailable" : "Active utilization", data.disk) +
+          metricCard("GPU Power", sensorValue(gpuPower.totalPower, "--"), gpuPower.totalPower ? text(gpuPower.totalPower.label, "Board draw") : "No power draw yet") +
         '</div>' +
-        '<article class="list-card inline-card">' +
-          '<div class="inline-card-header">' +
-            '<div>' +
-              '<div class="metric-label">Top Processes</div>' +
-              '<div class="router-inline-copy">' + escapeHtml(text(data.source, "Live process breakdown")) + '</div>' +
-            '</div>' +
-          '</div>' +
-          '<div class="inline-list">' + (processes.length ? processes.map(function (process) {
-            var cpu = optionalNumber(process.cpu);
-            var memory = optionalNumber(process.memoryMB);
-            return '' +
-              '<div class="inline-list-item inline-list-item--split">' +
-                '<div>' +
-                  '<div class="inline-list-title">' + escapeHtml(text(process.name, "Unknown")) + '</div>' +
-                  '<div class="inline-list-copy">CPU ' + escapeHtml(cpu == null ? "--" : Math.round(cpu) + "%") + '</div>' +
-                '</div>' +
-                '<div class="inline-list-meta">' + escapeHtml(memory == null ? "--" : Math.round(memory) + " MB") + '</div>' +
-              '</div>';
-          }).join("") : emptyState("No process data", "Process telemetry is unavailable for this source.")) + '</div>' +
-        '</article>' +
+        '<div class="inline-grid inline-grid--2 gpu-power-detail-grid">' +
+          '<article class="list-card inline-card">' +
+            '<div class="inline-card-header"><div><div class="metric-label">Connector Pins</div><div class="router-inline-copy">' + escapeHtml(gpuPower.pins.length ? gpuPower.pins.length + " readings live" : "Per-pin telemetry appears when exposed.") + '</div></div></div>' +
+            renderGpuPowerSensorList(gpuPower.pins, "No per-pin readings", "HWiNFO/GPU tools may expose these only on specific card and driver combinations.", 8) +
+          '</article>' +
+          '<article class="list-card inline-card">' +
+            '<div class="inline-card-header"><div><div class="metric-label">Rails & Power</div><div class="router-inline-copy">' + escapeHtml(gpuPower.source) + '</div></div></div>' +
+            renderGpuPowerSensorList(gpuPowerList, gpuPower.alerts.length ? "No alerts" : "No rail readings", gpuPower.alerts.length ? "All exposed GPU power sensors look normal." : "Start a supported local sensor source to populate this list.", 8) +
+          '</article>' +
+        '</div>' +
       '</div>';
   }
 
   function mountSystemWidget(widget, container, env) {
     var state = {
       data: {},
+      gpuPower: normalizeGpuPowerPayload({}),
       statusText: "Loading",
       statusTone: "warn"
     };
 
     function redraw() {
+      state.data.gpuPower = state.gpuPower;
       container.innerHTML = renderSystemWidget(state.data, state.statusText, state.statusTone);
     }
 
     function refresh() {
-      return requestJson(buildBridgeUrl(env, "/api/system"), {}, 5000).then(function (payload) {
+      var systemRequest = requestJson(buildBridgeUrl(env, "/api/system"), {}, 5000).then(function (payload) {
         state.data = payload || {};
         state.statusText = statusTextFromPayload(payload, "Live");
         state.statusTone = statusToneFromPayload(payload, "live");
-        redraw();
       }, function (error) {
         state.data = {
-          source: error.message || "Unavailable",
-          topProcesses: []
+          source: error.message || "Unavailable"
         };
         state.statusText = error.message || "Unavailable";
         state.statusTone = "danger";
+      });
+
+      var gpuPowerRequest = requestJson(buildBridgeUrl(env, "/api/gpu-power"), {}, 5000).then(function (payload) {
+        state.gpuPower = normalizeGpuPowerPayload(payload);
+        if (state.gpuPower.alerts.length) {
+          state.statusText = "GPU Alert";
+          state.statusTone = "danger";
+        }
+      }, function (error) {
+        state.gpuPower = normalizeGpuPowerPayload({
+          status: "error",
+          message: error.message || "GPU power unavailable"
+        });
+      });
+
+      return Promise.all([systemRequest, gpuPowerRequest]).then(function () {
         redraw();
       });
     }
@@ -490,89 +476,113 @@
     };
   }
 
+  function normalizeGpuPowerPayload(payload) {
+    payload = payload || {};
+    return {
+      supported: payload.supported !== false,
+      status: text(payload.status, "starting"),
+      stale: Boolean(payload.stale),
+      source: text(payload.source, "Waiting for GPU sensor source"),
+      message: text(payload.message, ""),
+      gpuNames: Array.isArray(payload.gpuNames) ? payload.gpuNames : [],
+      rtx50SeriesDetected: Boolean(payload.rtx50SeriesDetected),
+      sensors: Array.isArray(payload.sensors) ? payload.sensors : [],
+      pins: Array.isArray(payload.pins) ? payload.pins : [],
+      rails: Array.isArray(payload.rails) ? payload.rails : [],
+      power: Array.isArray(payload.power) ? payload.power : [],
+      temperatures: Array.isArray(payload.temperatures) ? payload.temperatures : [],
+      alerts: Array.isArray(payload.alerts) ? payload.alerts : [],
+      totalPower: payload.totalPower || null,
+      hottestTemperature: payload.hottestTemperature || null
+    };
+  }
+
+  function sensorValue(sensor, fallback) {
+    if (!sensor) {
+      return fallback || "--";
+    }
+
+    return text(sensor.displayValue, text(sensor.rawValue, optionalNumber(sensor.value) == null ? (fallback || "--") : String(sensor.value)));
+  }
+
+  function renderGpuPowerSensorList(items, emptyTitle, emptyCopy, limit) {
+    var list = Array.isArray(items) ? items.slice(0, limit || 8) : [];
+    if (!list.length) {
+      return emptyState(emptyTitle, emptyCopy);
+    }
+
+    return '<div class="inline-list gpu-power-list">' + list.map(function (sensor) {
+      return '' +
+        '<div class="inline-list-item inline-list-item--split gpu-power-sensor" data-tone="' + escapeHtml(text(sensor.status, "good")) + '">' +
+          '<div>' +
+            '<div class="inline-list-title">' + escapeHtml(text(sensor.label, "GPU sensor")) + '</div>' +
+            '<div class="inline-list-copy">' + escapeHtml(text(sensor.detail, text(sensor.source, "Local sensor"))) + '</div>' +
+          '</div>' +
+          '<div class="inline-list-meta">' + escapeHtml(sensorValue(sensor)) + '</div>' +
+        '</div>';
+    }).join("") + '</div>';
+  }
+
   function normalizeUnifiSnapshot(raw) {
     var data = raw || {};
     var clients = data.clients || {};
+    var aps = Array.isArray(data.aps) ? data.aps : [];
     return {
       gateway: text(data.gateway, "UniFi Gateway"),
       source: text(data.source, "UniFi network"),
       status: text(data.status, ""),
       message: text(data.message, ""),
       detected: Boolean(data.detected),
-      latencyMs: optionalNumber(data.latencyMs),
-      packetLoss: optionalNumber(data.packetLoss),
       provider: text(data.provider, ""),
-      monthlyUsageGb: optionalNumber(data.monthlyUsageGb),
       clients: {
         total: optionalNumber(clients.total) || 0,
         wifi: optionalNumber(clients.wifi) || 0,
         wired: optionalNumber(clients.wired) || 0,
         guests: optionalNumber(clients.guests) || 0
       },
-      aps: Array.isArray(data.aps) ? data.aps : [],
-      topClients: Array.isArray(data.topClients) ? data.topClients : [],
-      topApps: Array.isArray(data.topApps) ? data.topApps : []
+      aps: aps
     };
   }
 
   function renderNetworkWidget(bridgeData, unifiData, statusText, statusTone) {
-    var aps = unifiData && Array.isArray(unifiData.aps) ? unifiData.aps.slice(0, 4) : [];
+    var connectionCopy = unifiData && unifiData.provider ? unifiData.provider : text(bridgeData.source, "Native host");
+    var unifiCard = unifiData && unifiData.detected
+      ? '<div class="inline-grid inline-grid--2">' +
+          '<article class="list-card inline-card inline-card--span-2">' +
+            '<div class="inline-card-header">' +
+              '<div>' +
+                '<div class="metric-label">UniFi</div>' +
+                '<div class="router-inline-copy">' + escapeHtml(unifiData.gateway) + '</div>' +
+              '</div>' +
+              statusPill("Detected", "good") +
+            '</div>' +
+            '<div class="inline-kpis">' +
+              '<div class="inline-kpi"><strong>' + escapeHtml(String(unifiData.clients.total)) + '</strong><span>Clients</span></div>' +
+              '<div class="inline-kpi"><strong>' + escapeHtml(String(unifiData.clients.wifi)) + '</strong><span>Wi-Fi</span></div>' +
+              '<div class="inline-kpi"><strong>' + escapeHtml(String(unifiData.clients.wired)) + '</strong><span>Wired</span></div>' +
+              '<div class="inline-kpi"><strong>' + escapeHtml(String(unifiData.aps.length)) + '</strong><span>APs</span></div>' +
+            '</div>' +
+          '</article>' +
+        '</div>'
+      : "";
+
     return '' +
       '<div class="inline-widget-shell">' +
         '<div class="inline-toolbar">' +
           '<div>' +
             '<div class="eyebrow">Connectivity</div>' +
             '<h3 class="inline-title">Network monitor</h3>' +
-            '<p class="inline-copy">' + escapeHtml(unifiData ? "Local bridge throughput plus UniFi gateway context." : "Live throughput and latency from the native host.") + '</p>' +
+            '<p class="inline-copy">Download, upload, ping, and connection health.</p>' +
           '</div>' +
           statusPill(statusText, statusTone) +
         '</div>' +
         '<div class="inline-grid inline-grid--4">' +
-          metricCard("Download", formatRate(bridgeData.download), text(bridgeData.source, "Live throughput")) +
-          metricCard("Upload", formatRate(bridgeData.upload), text(bridgeData.type, "Live throughput")) +
+          metricCard("Download", formatRate(bridgeData.download), "Live throughput") +
+          metricCard("Upload", formatRate(bridgeData.upload), "Live throughput") +
           metricCard("Ping", formatValue(bridgeData.ping, " ms"), "Round-trip latency") +
-          metricCard("Connection", text(bridgeData.type, "--"), unifiData && unifiData.provider ? unifiData.provider : text(bridgeData.source, "Bridge telemetry")) +
+          metricCard("Connection", text(bridgeData.type, "--"), connectionCopy) +
         '</div>' +
-        '<div class="inline-grid inline-grid--2">' +
-          '<article class="list-card inline-card">' +
-            '<div class="inline-card-header">' +
-              '<div>' +
-                '<div class="metric-label">Site Overview</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(unifiData ? unifiData.gateway : "Native host only") + '</div>' +
-              '</div>' +
-            '</div>' +
-            '<div class="inline-kpis">' +
-              '<div class="inline-kpi"><strong>' + escapeHtml(unifiData ? String(unifiData.clients.total) : "--") + '</strong><span>Clients</span></div>' +
-              '<div class="inline-kpi"><strong>' + escapeHtml(unifiData ? String(unifiData.clients.wifi) : "--") + '</strong><span>Wi-Fi</span></div>' +
-              '<div class="inline-kpi"><strong>' + escapeHtml(unifiData ? String(unifiData.clients.wired) : "--") + '</strong><span>Wired</span></div>' +
-              '<div class="inline-kpi"><strong>' + escapeHtml(unifiData && unifiData.monthlyUsageGb != null ? Math.round(unifiData.monthlyUsageGb) + " GB" : "--") + '</strong><span>Usage</span></div>' +
-            '</div>' +
-            '<div class="inline-list">' + (aps.length ? aps.map(function (ap) {
-              return '' +
-                '<div class="inline-list-item inline-list-item--split">' +
-                  '<div>' +
-                    '<div class="inline-list-title">' + escapeHtml(text(ap.name, "Access Point")) + '</div>' +
-                    '<div class="inline-list-copy">' + escapeHtml(text(ap.status, "online")) + '</div>' +
-                  '</div>' +
-                  '<div class="inline-list-meta">' + escapeHtml(String(optionalNumber(ap.clients) || 0) + " clients") + '</div>' +
-                '</div>';
-            }).join("") : emptyState("UniFi is checking", "Gateway details appear automatically when Xenon can see the local UniFi console.")) + '</div>' +
-          '</article>' +
-          '<article class="list-card inline-card">' +
-            '<div class="inline-card-header">' +
-              '<div>' +
-                '<div class="metric-label">Latency</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(unifiData && unifiData.latencyMs != null ? Math.round(unifiData.latencyMs) + " ms gateway latency" : "ICMP latency from the native host.") + '</div>' +
-              '</div>' +
-            '</div>' +
-            '<div class="inline-list">' +
-              '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">Ping</div><div class="inline-list-copy">Bridge telemetry</div></div><div class="inline-list-meta">' + escapeHtml(formatValue(bridgeData.ping, " ms")) + '</div></div>' +
-              '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">Packet loss</div><div class="inline-list-copy">Gateway sample</div></div><div class="inline-list-meta">' + escapeHtml(unifiData && unifiData.packetLoss != null ? unifiData.packetLoss.toFixed(1) + "%" : "--") + '</div></div>' +
-              '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">Top clients</div><div class="inline-list-copy">Heavy talkers</div></div><div class="inline-list-meta">' + escapeHtml(unifiData ? String(unifiData.topClients.length) : "--") + '</div></div>' +
-              '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">Top apps</div><div class="inline-list-copy">Traffic categories</div></div><div class="inline-list-meta">' + escapeHtml(unifiData ? String(unifiData.topApps.length) : "--") + '</div></div>' +
-            '</div>' +
-          '</article>' +
-        '</div>' +
+        unifiCard +
       '</div>';
   }
 
@@ -599,8 +609,8 @@
 
       return Promise.all([bridgeRequest, unifiRequest]).then(function (results) {
         state.bridge = results[0] || {};
-        state.unifi = results[1];
-        state.statusText = state.unifi ? (state.unifi.detected ? "UniFi detected" : "Bridge + UniFi") : statusTextFromPayload(state.bridge, "Live");
+        state.unifi = results[1] && results[1].detected ? results[1] : null;
+        state.statusText = state.unifi ? "UniFi detected" : statusTextFromPayload(state.bridge, "Live");
         state.statusTone = state.unifi ? toneForState(state.unifi.status || "live") : statusToneFromPayload(state.bridge, "live");
         redraw();
       }, function (error) {
@@ -689,60 +699,35 @@
     var weatherItem = optionalItems.weather || { label: "Weather", state: "Optional", nextStep: "Add an OpenWeather key if you want weather." };
     var calendarItem = optionalItems.calendar || { label: "Calendar", state: "Optional", nextStep: "Add an ICS feed if you want the Calendar widget." };
     var hueItem = optionalItems.hue || { label: "Philips Hue", state: "Optional", nextStep: "Link Hue only if you want lighting controls." };
-    var uniFiItem = optionalItems.unifi || { label: "UniFi Network", state: "Optional", nextStep: "Xenon can auto-detect UniFi locally." };
+    var uniFiItem = optionalItems.unifi || { label: "UniFi Network", state: "Optional", nextStep: "Xenon checks for UniFi automatically." };
     var essentialsReady = Boolean(setup.essentialsReady);
     var onboardingCompleted = Boolean(setup.onboardingCompleted);
     var weatherConfig = config.weather || {};
     var calendarConfig = config.calendar || {};
-    var advancedSetupUrl = buildBridgeUrl(env, "/dashboard.html", {
-      widget: "setup",
-      advanced: "1",
-      v: env.assetRevision || ""
+    var optionalNeedsAttention = [weatherItem, calendarItem, hueItem].some(function (item) {
+      return item && item.state !== "Optional";
     });
-    var advancedSetupBlock = env.showAdvanced
-      ? '<div class="inline-grid inline-grid--2">' + renderAdvancedSetupForms(env) + '</div>'
-      : '<article class="list-card inline-card">' +
-          '<div class="inline-card-header">' +
-            '<div>' +
-              '<div class="metric-label">Advanced connectors</div>' +
-              '<div class="router-inline-copy">Hidden from normal setup.</div>' +
-            '</div>' +
-            statusPill("Optional", "muted") +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<a class="inline-button" href="' + escapeHtml(advancedSetupUrl) + '">Open advanced</a>' +
-          '</div>' +
-        '</article>';
-
-    return '' +
-      '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
+    var optionalSetupVisible = Boolean(state.showOptional || optionalNeedsAttention);
+    var supportUrl = buildBridgeUrl(env, "/support.html");
+    var supportBundleUrl = buildBridgeUrl(env, "/api/support/bundle");
+    var advancedSetupHtml = env.showAdvanced
+      ? '' +
+        '<div class="inline-card-header setup-optional-head">' +
           '<div>' +
-            '<div class="eyebrow">Diagnostics</div>' +
-            '<h3 class="inline-title">Setup and diagnostics</h3>' +
-            '<p class="inline-copy">Install, open, finish setup. Optional extras can wait until the dashboard is working.</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
-            '<button class="inline-button is-primary" type="button" data-action="finish-setup"' + (essentialsReady && !onboardingCompleted ? "" : " disabled") + '>' + (onboardingCompleted ? "Completed" : "Finish setup") + '</button>' +
-            '<button class="inline-button" type="button" data-action="reset-local-data"' + (state.busy ? " disabled" : "") + '>' + (state.confirmReset ? "Confirm reset" : "Reset local data") + '</button>' +
-            statusPill(state.statusText, state.statusTone) +
+            '<div class="metric-label">Advanced setup</div>' +
+            '<div class="router-inline-copy">Hidden from normal setup. Use this only for compatibility testing or old widget paths.</div>' +
           '</div>' +
         '</div>' +
-        '<div class="inline-grid inline-grid--4">' +
-          items.map(function (item) {
-            return '' +
-              '<article class="metric-card inline-card">' +
-                '<div class="metric-label">' + escapeHtml(item.label) + '</div>' +
-                '<div class="metric-value">' + escapeHtml(item.state) + '</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(item.nextStep) + '</div>' +
-              '</article>';
-          }).join("") +
-          '<article class="metric-card inline-card">' +
-            '<div class="metric-label">' + escapeHtml(mediaItem.label) + '</div>' +
-            '<div class="metric-value">' + escapeHtml(mediaItem.state) + '</div>' +
-            '<div class="router-inline-copy">' + escapeHtml(mediaItem.nextStep) + '</div>' +
-          '</article>' +
+        renderAdvancedSetupForms(env)
+      : "";
+    var optionalSetupHtml = optionalSetupVisible
+      ? '' +
+        '<div class="inline-card-header setup-optional-head">' +
+          '<div>' +
+            '<div class="metric-label">Optional extras</div>' +
+            '<div class="router-inline-copy">Only adjust these when you actually want Weather, Calendar, Hue, or UniFi details.</div>' +
+          '</div>' +
+          '<button class="inline-button" type="button" data-action="toggle-optional-setup">Hide extras</button>' +
         '</div>' +
         '<div class="inline-grid inline-grid--3">' +
           '<article class="list-card inline-card">' +
@@ -759,7 +744,7 @@
                 '<label class="inline-field"><span>Units</span><select class="inline-select" name="units"><option value="metric"' + ((weatherConfig.units || "metric") === "metric" ? " selected" : "") + '>Metric (C)</option><option value="imperial"' + ((weatherConfig.units || "metric") === "imperial" ? " selected" : "") + '>Imperial (F)</option></select></label>' +
               '</div>' +
               '<div class="inline-form-grid">' +
-                '<label class="inline-field"><span>City</span><input class="inline-input" type="text" name="city" value="' + escapeHtml(text(weatherConfig.city, "Indianapolis")) + '" placeholder="Indianapolis"></label>' +
+                '<label class="inline-field"><span>City</span><input class="inline-input" type="text" name="city" value="' + escapeHtml(text(weatherConfig.city, "")) + '" placeholder="City or ZIP"></label>' +
               '</div>' +
               '<div class="inline-actions"><button class="inline-button is-primary" type="submit">Save weather</button></div>' +
             '</form>' +
@@ -788,7 +773,7 @@
               '</div>' +
               statusPill(uniFiItem.state, toneForState(uniFiItem.state)) +
             '</div>' +
-            '<div class="router-inline-copy">No separate JSON server needed. Xenon checks the local UniFi console automatically and richer stats can be connected later.</div>' +
+              '<div class="router-inline-copy">Xenon checks the local UniFi console automatically.</div>' +
           '</article>' +
           '<article class="list-card inline-card">' +
             '<div class="inline-card-header">' +
@@ -800,13 +785,57 @@
             '</div>' +
             '<form class="inline-form" data-form="hue">' +
               '<div class="inline-form-grid">' +
-                '<label class="inline-field"><span>Bridge IP</span><input class="inline-input" type="text" name="bridgeIp" value="' + escapeHtml(text(hue.bridgeIp, "")) + '" placeholder="192.168.1.50"></label>' +
+                '<label class="inline-field"><span>Bridge IP</span><input class="inline-input" type="text" name="bridgeIp" value="' + escapeHtml(text(hue.bridgeIp, "")) + '" placeholder="Local bridge IP"></label>' +
               '</div>' +
               '<div class="inline-actions"><button class="inline-button is-primary" type="submit">Link bridge</button></div>' +
             '</form>' +
           '</article>' +
+        '</div>'
+      : '' +
+        '<article class="list-card inline-card inline-card--span-2 setup-optional-card">' +
+          '<div class="inline-card-header">' +
+            '<div>' +
+              '<div class="metric-label">Optional extras</div>' +
+              '<div class="router-inline-copy">Weather, Calendar, Hue, and UniFi stay hidden until you ask for them.</div>' +
+            '</div>' +
+            '<button class="inline-button" type="button" data-action="toggle-optional-setup">Show extras</button>' +
+          '</div>' +
+        '</article>';
+
+    return '' +
+      '<div class="inline-widget-shell">' +
+        '<div class="inline-toolbar">' +
+          '<div>' +
+            '<div class="eyebrow">Diagnostics</div>' +
+            '<h3 class="inline-title">Setup and diagnostics</h3>' +
+            '<p class="inline-copy">Install, open, finish setup. Optional extras can wait until the dashboard is working.</p>' +
+          '</div>' +
+          '<div class="inline-actions">' +
+            '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
+            '<button class="inline-button is-primary" type="button" data-action="finish-setup"' + (essentialsReady && !onboardingCompleted ? "" : " disabled") + '>' + (onboardingCompleted ? "Completed" : "Finish setup") + '</button>' +
+            '<button class="inline-button" type="button" data-action="reset-local-data"' + (state.busy ? " disabled" : "") + '>' + (state.confirmReset ? "Confirm reset" : "Reset local data") + '</button>' +
+            '<a class="inline-button" href="' + escapeHtml(supportBundleUrl) + '" target="_blank" rel="noreferrer">Support bundle</a>' +
+            '<a class="inline-button" href="' + escapeHtml(supportUrl) + '" target="_blank" rel="noreferrer">Support</a>' +
+            statusPill(state.statusText, state.statusTone) +
+          '</div>' +
         '</div>' +
-        advancedSetupBlock +
+        '<div class="inline-grid inline-grid--4">' +
+          items.map(function (item) {
+            return '' +
+              '<article class="metric-card inline-card">' +
+                '<div class="metric-label">' + escapeHtml(item.label) + '</div>' +
+                '<div class="metric-value">' + escapeHtml(item.state) + '</div>' +
+                '<div class="router-inline-copy">' + escapeHtml(item.nextStep) + '</div>' +
+              '</article>';
+          }).join("") +
+          '<article class="metric-card inline-card">' +
+            '<div class="metric-label">' + escapeHtml(mediaItem.label) + '</div>' +
+            '<div class="metric-value">' + escapeHtml(mediaItem.state) + '</div>' +
+            '<div class="router-inline-copy">' + escapeHtml(mediaItem.nextStep) + '</div>' +
+          '</article>' +
+        '</div>' +
+        optionalSetupHtml +
+        advancedSetupHtml +
       '</div>';
   }
 
@@ -819,7 +848,8 @@
       statusText: "Loading",
       statusTone: "warn",
       busy: false,
-      confirmReset: false
+      confirmReset: false,
+      showOptional: false
     };
 
     function redraw() {
@@ -854,6 +884,13 @@
       if (action === "refresh") {
         state.confirmReset = false;
         refresh();
+        return;
+      }
+
+      if (action === "toggle-optional-setup") {
+        state.showOptional = !state.showOptional;
+        state.confirmReset = false;
+        redraw();
         return;
       }
 
@@ -1040,68 +1077,95 @@
     };
   }
 
+  function getAudioSessionLabel(session) {
+    var name = text(session && session.name, "Application");
+    if (name.length > 64) {
+      return name.slice(0, 61) + "...";
+    }
+    return name;
+  }
+
+  function isUsefulAudioSession(session) {
+    var name = text(session && session.name, "").toLowerCase();
+    return Boolean(session && session.active && name.indexOf("microphone") === -1 && name.indexOf("line in") === -1);
+  }
+
   function renderAudioWidget(state) {
     var data = state.data;
-    var devices = data.devices.slice(0, 6);
-    var sessions = data.sessions.slice(0, 6);
-    var defaultDevice = devices.filter(function (device) {
+    var defaultDevice = data.devices.filter(function (device) {
       return device.isDefault;
-    })[0] || null;
+    })[0] || data.devices[0] || null;
+    var routeDevices = data.devices.filter(function (device) {
+      return !device.isDefault;
+    }).slice(0, 4);
+    var activeSessions = data.sessions.filter(isUsefulAudioSession);
+    var visibleSessions = activeSessions.slice(0, 3);
 
     return '' +
-      '<div class="inline-widget-shell">' +
+      '<div class="inline-widget-shell inline-widget-shell--audio">' +
         '<div class="inline-toolbar">' +
           '<div>' +
             '<div class="eyebrow">Audio</div>' +
-            '<h3 class="inline-title">Output routing</h3>' +
-            '<p class="inline-copy">' + escapeHtml(text(data.source, "Switch playback devices and adjust app mix.")) + '</p>' +
+            '<h3 class="inline-title">Audio control</h3>' +
+            '<p class="inline-copy">Current output, volume, and active apps only.</p>' +
           '</div>' +
           '<div class="inline-actions">' +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
             statusPill(state.statusText, state.statusTone) +
           '</div>' +
         '</div>' +
-        '<div class="inline-grid inline-grid--2">' +
-          '<article class="list-card inline-card">' +
+        '<article class="list-card inline-card audio-master-card">' +
+          '<div class="inline-card-header">' +
+            '<div>' +
+              '<div class="metric-label">Now playing through</div>' +
+              '<div class="audio-current-output">' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '</div>' +
+              '<div class="router-inline-copy">' + escapeHtml(data.muted ? "Master output is muted" : text(defaultDevice && (defaultDevice.kind || defaultDevice.availability), text(data.source, "Windows audio"))) + '</div>' +
+            '</div>' +
+            '<button class="inline-button" type="button" data-action="master-mute">' + (data.muted ? "Unmute" : "Mute") + '</button>' +
+          '</div>' +
+          '<div class="audio-master-row">' +
+            '<strong>' + escapeHtml(Math.round(data.masterVolume) + "%") + '</strong>' +
+            '<input class="inline-range" type="range" min="0" max="100" value="' + Math.round(data.masterVolume) + '" data-action="master-volume">' +
+          '</div>' +
+        '</article>' +
+        '<div class="inline-grid inline-grid--2 audio-quick-grid">' +
+          '<article class="list-card inline-card audio-route-card">' +
             '<div class="inline-card-header">' +
               '<div>' +
-                '<div class="metric-label">Master output</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '</div>' +
+                '<div class="metric-label">Switch output</div>' +
+                '<div class="router-inline-copy">' + escapeHtml(routeDevices.length ? "Tap a route to move Windows audio." : "Only one output is available.") + '</div>' +
               '</div>' +
-              '<button class="inline-button" type="button" data-action="master-mute">' + (data.muted ? "Unmute" : "Mute") + '</button>' +
+              statusPill(String(data.devices.length) + " outputs", data.devices.length ? "good" : "warn") +
             '</div>' +
-            '<div class="inline-slider-row"><strong>' + escapeHtml(Math.round(data.masterVolume) + "%") + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(data.masterVolume) + '" data-action="master-volume"></div>' +
-            '<div class="inline-list">' + (devices.length ? devices.map(function (device) {
+            '<div class="audio-route-strip">' + (routeDevices.length ? routeDevices.map(function (device) {
               return '' +
-                '<div class="inline-list-item inline-list-item--split">' +
-                  '<div>' +
-                    '<div class="inline-list-title">' + escapeHtml(text(device.name, "Output")) + '</div>' +
-                    '<div class="inline-list-copy">' + escapeHtml(text(device.kind || device.state, "Playback device")) + '</div>' +
-                  '</div>' +
-                  '<button class="inline-button' + (device.isDefault ? "" : " is-primary") + '" type="button" data-action="switch-device" data-device-id="' + escapeHtml(text(device.id, "")) + '"' + (device.isDefault ? " disabled" : "") + '>' + (device.isDefault ? "Current" : "Use") + '</button>' +
-                '</div>';
-            }).join("") : emptyState("Audio routing unavailable", "Native audio routing is not implemented yet in this host.")) + '</div>' +
+                '<button class="inline-button audio-route-button" type="button" data-action="switch-device" data-device-id="' + escapeHtml(text(device.id, "")) + '">' +
+                  '<strong>' + escapeHtml(text(device.kind, "output")) + '</strong>' +
+                  '<span>' + escapeHtml(text(device.name, "Output")) + '</span>' +
+                '</button>';
+            }).join("") : emptyState("No other outputs", defaultDevice ? "The current output is the only active route." : "No playback devices were returned by Windows.")) + '</div>' +
           '</article>' +
-          '<article class="list-card inline-card">' +
+          '<article class="list-card inline-card audio-session-card">' +
             '<div class="inline-card-header">' +
               '<div>' +
-                '<div class="metric-label">Sessions</div>' +
-                '<div class="router-inline-copy">Trim app volumes without leaving the dashboard.</div>' +
+                '<div class="metric-label">Apps playing</div>' +
+                '<div class="router-inline-copy">Only active audio shows here.</div>' +
               '</div>' +
+              statusPill(activeSessions.length ? String(activeSessions.length) + " active" : "Quiet", activeSessions.length ? "good" : "muted") +
             '</div>' +
-            '<div class="inline-list">' + (sessions.length ? sessions.map(function (session) {
+            '<div class="audio-session-stack">' + (visibleSessions.length ? visibleSessions.map(function (session) {
               return '' +
-                '<div class="inline-list-item">' +
-                  '<div class="inline-list-item--split">' +
+                '<div class="audio-session-row">' +
+                  '<div class="inline-list-item--split audio-session-row__top">' +
                     '<div>' +
-                      '<div class="inline-list-title">' + escapeHtml(text(session.name, "Application")) + '</div>' +
-                      '<div class="inline-list-copy">' + escapeHtml(session.active ? "Live session" : text(session.state, "Tracked")) + '</div>' +
+                      '<div class="inline-list-title">' + escapeHtml(getAudioSessionLabel(session)) + '</div>' +
+                      '<div class="inline-list-copy">' + escapeHtml(session.muted ? "Muted" : "Live") + '</div>' +
                     '</div>' +
                     '<button class="inline-button" type="button" data-action="session-mute" data-session-id="' + escapeHtml(text(session.id, "")) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
                   '</div>' +
-                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(session.volume)) + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(optionalNumber(session.volume) || 0) + '" data-action="session-volume" data-session-id="' + escapeHtml(text(session.id, "")) + '"></div>' +
+                  '<div class="audio-session-row__level"><strong>' + escapeHtml(formatPercent(session.volume)) + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(optionalNumber(session.volume) || 0) + '" data-action="session-volume" data-session-id="' + escapeHtml(text(session.id, "")) + '"></div>' +
                 '</div>';
-            }).join("") : emptyState("No live sessions", "No application audio sessions are active right now.")) + '</div>' +
+            }).join("") : emptyState("No apps playing", "App controls appear only when something is actively making sound.")) + '</div>' +
           '</article>' +
         '</div>' +
       '</div>';
@@ -1144,6 +1208,7 @@
         body: body
       }, 8000).then(function () {
         state.busy = false;
+        emitTouchFeedback(env, "Audio updated");
         return refresh();
       }, function (error) {
         state.busy = false;
@@ -1415,7 +1480,7 @@
             '<div class="inline-card-header"><div><div class="metric-label">Diagnostics</div><div class="router-inline-copy">Press the hardware bridge button, then link here.</div></div></div>' +
             '<form class="inline-form" data-form="hue-link">' +
               '<div class="inline-form-grid">' +
-                '<label class="inline-field"><span>Bridge IP</span><input class="inline-input" type="text" name="bridgeIp" value="' + escapeHtml(data.bridgeIp) + '" placeholder="192.168.1.50"></label>' +
+                '<label class="inline-field"><span>Bridge IP</span><input class="inline-input" type="text" name="bridgeIp" value="' + escapeHtml(data.bridgeIp) + '" placeholder="Local bridge IP"></label>' +
               '</div>' +
               '<div class="inline-actions"><button class="inline-button is-primary" type="submit">' + (data.linked ? "Relink bridge" : "Link bridge") + '</button></div>' +
             '</form>' +
@@ -3413,7 +3478,7 @@
       copy: "Balanced daily dashboard with setup, telemetry, style, and packaging close at hand.",
       themeId: "edge",
       pack: "core",
-      layout: ["profiles", "system", "network", "audio", "media", "theme-studio", "layout-editor", "updates", "installer", "privacy"]
+      layout: ["system", "network", "audio", "media", "theme-studio", "layout-editor", "updates", "installer", "privacy"]
     },
     {
       id: "gaming",
@@ -3421,7 +3486,7 @@
       copy: "System pressure, network state, audio, launchers, and game mode first.",
       themeId: "deepcore",
       pack: "gaming",
-      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "media", "theme-studio", "profiles", "updates"]
+      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "media", "theme-studio", "updates"]
     },
     {
       id: "streaming",
@@ -3429,7 +3494,7 @@
       copy: "OBS, media transport, audio routing, system load, and release confidence.",
       themeId: "afterburn",
       pack: "streamer",
-      layout: ["streaming", "media", "audio", "system", "network", "quick-actions", "theme-studio", "profiles", "updates", "privacy"]
+      layout: ["streaming", "media", "audio", "system", "network", "quick-actions", "theme-studio", "updates", "privacy"]
     },
     {
       id: "homelab",
@@ -3445,7 +3510,7 @@
       copy: "A clean product demo surface with the essentials and privacy visible.",
       themeId: "edge",
       pack: "core",
-      layout: ["system", "network", "profiles", "theme-studio", "privacy", "installer", "updates"]
+      layout: ["system", "network", "theme-studio", "privacy", "installer", "updates"]
     }
   ];
 
@@ -3454,19 +3519,19 @@
       id: "core",
       name: "Core Owner",
       copy: "System, network, audio, media, setup, and trust panels for a normal install.",
-      layout: ["profiles", "system", "network", "audio", "media", "theme-studio", "layout-editor", "installer", "privacy"]
+      layout: ["system", "network", "audio", "media", "theme-studio", "layout-editor", "installer", "privacy"]
     },
     {
       id: "gaming",
       name: "Gaming Desk",
       copy: "Telemetry, launchers, audio, media, and game mode for a player-focused panel.",
-      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "media", "profiles", "theme-studio"]
+      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "media", "theme-studio"]
     },
     {
       id: "streamer",
       name: "Streamer",
       copy: "OBS, media, audio, quick actions, update checks, and privacy up front.",
-      layout: ["streaming", "media", "audio", "quick-actions", "system", "network", "updates", "privacy", "profiles"]
+      layout: ["streaming", "media", "audio", "quick-actions", "system", "network", "updates", "privacy"]
     },
     {
       id: "homelab",
@@ -3474,6 +3539,37 @@
       copy: "NAS, Plex, UniFi, cameras, automation, Hue, and network health.",
       layout: ["network", "nas", "plex", "unifi-network", "unifi-camera", "automation", "hue", "system", "marketplace"]
     }
+  ];
+
+  var customGameModeProfile = {
+    id: "custom",
+    name: "Custom",
+    themeId: "edge",
+    accent: "#00e0ff",
+    secondary: "#44f0c2",
+    mood: "Dashboard theme"
+  };
+  var gameThemeKeywords = [
+    { match: ["counter-strike", "cs2"], accent: "#f0b13e", secondary: "#4b7bff", mood: "Tactical amber" },
+    { match: ["dota"], accent: "#c83c36", secondary: "#f0b13e", mood: "Ancient red" },
+    { match: ["apex"], accent: "#ff5a36", secondary: "#23d0ff", mood: "Arena rush" },
+    { match: ["elden", "dark souls", "sekiro"], accent: "#d6aa57", secondary: "#7c5cff", mood: "Boss fight" },
+    { match: ["baldur"], accent: "#b455ff", secondary: "#ffcf5a", mood: "Arcane party" },
+    { match: ["cyberpunk"], accent: "#f7ec39", secondary: "#00e0ff", mood: "Night city" },
+    { match: ["helldivers"], accent: "#f5d742", secondary: "#2d7dff", mood: "Drop ready" },
+    { match: ["rust"], accent: "#d36b3d", secondary: "#44f0c2", mood: "Survival" },
+    { match: ["destiny"], accent: "#d7e6ff", secondary: "#7a5cff", mood: "Lightfall" },
+    { match: ["warframe"], accent: "#20d6ff", secondary: "#f06cff", mood: "Void sprint" },
+    { match: ["monster hunter"], accent: "#55d27a", secondary: "#ffb547", mood: "Hunt ready" },
+    { match: ["stardew"], accent: "#7fd15f", secondary: "#f5c26b", mood: "Cozy farm" },
+    { match: ["terraria"], accent: "#65d46e", secondary: "#4e9dff", mood: "Adventure" },
+    { match: ["factorio"], accent: "#f28f38", secondary: "#8ed1ff", mood: "Factory flow" },
+    { match: ["rimworld"], accent: "#d8c48f", secondary: "#ff6b86", mood: "Colony watch" },
+    { match: ["palworld"], accent: "#39d8ff", secondary: "#8aff80", mood: "Open world" },
+    { match: ["grand theft auto", "gta"], accent: "#44f0c2", secondary: "#ff4d8d", mood: "City neon" },
+    { match: ["pubg"], accent: "#f6a33a", secondary: "#d8dbe2", mood: "Battle royale" },
+    { match: ["rainbow six"], accent: "#42a5ff", secondary: "#ffb547", mood: "Breach ready" },
+    { match: ["path of exile"], accent: "#b68050", secondary: "#ff4d6d", mood: "Dark loot" }
   ];
 
   function productThemes(env) {
@@ -3489,6 +3585,159 @@
   function settingValue(env, key, fallback) {
     var value = getSetting(env, key);
     return value == null || value === "" ? fallback : value;
+  }
+
+  function activeGameModeProfile(env) {
+    return customGameModeProfile;
+  }
+
+  function gameModeProfileName(profile, game) {
+    return text(game, "No game launched yet");
+  }
+
+  function gameModeProfileTheme(profile, env) {
+    var theme = findById(productThemes(env), settingValue(env, "themeId", customGameModeProfile.themeId));
+    var customAccent = settingValue(env, "accentColor", "");
+    return {
+      id: theme.id,
+      accent: customAccent || theme.accent || customGameModeProfile.accent,
+      secondary: theme.secondary || customGameModeProfile.secondary,
+      mood: text(theme.name, customGameModeProfile.mood)
+    };
+  }
+
+  function themeForSteamGame(game, env) {
+    var theme = gameModeProfileTheme(customGameModeProfile, env);
+    var gameName = text(game && game.name, "Steam Game");
+    var normalizedName = gameName.toLowerCase();
+    var matchedTheme = gameThemeKeywords.filter(function (entry) {
+      return entry.match.some(function (keyword) {
+        return normalizedName.indexOf(keyword) !== -1;
+      });
+    })[0];
+
+    if (matchedTheme) {
+      return {
+        profileId: customGameModeProfile.id,
+        gameName: gameName,
+        themeId: "game:" + gameName,
+        accent: matchedTheme.accent,
+        secondary: matchedTheme.secondary,
+        mood: matchedTheme.mood
+      };
+    }
+
+    return {
+      profileId: customGameModeProfile.id,
+      gameName: gameName,
+      themeId: theme.id,
+      accent: theme.accent,
+      secondary: theme.secondary,
+      mood: "Dashboard theme"
+    };
+  }
+
+  function normalizeSteamGamesPayload(payload) {
+    payload = payload || {};
+    return {
+      supported: payload.supported !== false,
+      configured: Boolean(payload.configured),
+      status: text(payload.status, payload.configured ? "live" : "setup"),
+      stale: Boolean(payload.stale),
+      sampledAt: text(payload.sampledAt, ""),
+      message: text(payload.message, payload.configured ? "Steam games are ready." : "Install games in Steam and Xenon will find them."),
+      source: text(payload.source, "Steam library manifests"),
+      libraryCount: optionalNumber(payload.libraryCount) || 0,
+      activeGame: payload.activeGame ? {
+        appId: text(payload.activeGame.appId, ""),
+        name: text(payload.activeGame.name, "Steam Game"),
+        installed: payload.activeGame.installed !== false,
+        lastPlayed: text(payload.activeGame.lastPlayed, ""),
+        sizeOnDisk: optionalNumber(payload.activeGame.sizeOnDisk),
+        artworkUrl: text(payload.activeGame.artworkUrl, ""),
+        tileLabel: text(payload.activeGame.tileLabel, "S")
+      } : null,
+      games: Array.isArray(payload.games) ? payload.games.map(function (game) {
+        return {
+          appId: text(game.appId, ""),
+          name: text(game.name, "Steam Game"),
+          installed: game.installed !== false,
+          lastPlayed: text(game.lastPlayed, ""),
+          sizeOnDisk: optionalNumber(game.sizeOnDisk),
+          artworkUrl: text(game.artworkUrl, ""),
+          tileLabel: text(game.tileLabel, "S")
+        };
+      }).filter(function (game) {
+        return Boolean(game.appId);
+      }) : []
+    };
+  }
+
+  function gameModeThemeStyle(theme) {
+    return "--game-accent:" + escapeHtml(theme.accent) + ";--game-secondary:" + escapeHtml(theme.secondary) + ";";
+  }
+
+  function renderGameModeSteamPad(steam, statusText, statusTone, launchingId, expandedAppId, env) {
+    var games = Array.isArray(steam.games) ? steam.games : [];
+    var total = Array.isArray(steam.games) ? steam.games.length : 0;
+    var activeAppId = steam && steam.activeGame ? String(steam.activeGame.appId || "") : "";
+    var savedGame = settingValue(env, "gameModeGame", "");
+    return '' +
+      '<article class="product-control-panel game-mode-steam-panel">' +
+        '<div class="game-mode-steam-head">' +
+          '<div>' +
+            '<div class="metric-label">Steam games</div>' +
+            '<strong>' + escapeHtml(total ? total + " installed" : "No games found") + '</strong>' +
+            '<span>' + escapeHtml(total ? "Tap to launch. Hold a game to apply its look first." : text(steam.message, "Xenon scans your local Steam library.")) + '</span>' +
+          '</div>' +
+          '<div class="game-mode-steam-actions">' +
+            '<button class="inline-button" type="button" data-action="steam-refresh"' + (launchingId ? " disabled" : "") + '>Rescan</button>' +
+            statusPill(statusText, statusTone) +
+          '</div>' +
+        '</div>' +
+        '<div class="game-mode-steam-dock" role="list" aria-label="Steam launch dock">' + (games.length ? games.map(function (game) {
+          var theme = themeForSteamGame(game, env);
+          var launching = launchingId === game.appId;
+          var active = activeAppId === game.appId || savedGame === game.name;
+          var expanded = expandedAppId === game.appId;
+          var tileClass = "game-mode-steam-tile" + (active ? " is-active" : "") + (expanded ? " is-expanded" : "");
+          return '' +
+            '<div class="' + tileClass + '" style="' + gameModeThemeStyle(theme) + '" data-app-id="' + escapeHtml(game.appId) + '" role="listitem">' +
+              '<button class="game-mode-steam-launch" type="button" data-action="steam-launch" data-app-id="' + escapeHtml(game.appId) + '"' + (launchingId ? " disabled" : "") + '>' +
+                '<span class="game-mode-steam-art">' + (game.artworkUrl
+                  ? '<img src="' + escapeHtml(game.artworkUrl) + '" alt="' + escapeHtml(game.name) + '" loading="lazy">'
+                  : '<span>' + escapeHtml(game.tileLabel) + '</span>') + '</span>' +
+                '<span class="game-mode-steam-copy">' +
+                  '<strong>' + escapeHtml(game.name) + '</strong>' +
+                  '<small>' + escapeHtml(launching ? "Launching" : active ? "Active look" : expanded ? "Look ready" : "Launch") + '</small>' +
+                '</span>' +
+              '</button>' +
+              (expanded ? '<div class="game-mode-steam-long-actions">' +
+                '<button class="inline-button" type="button" data-action="steam-theme" data-app-id="' + escapeHtml(game.appId) + '"' + (launchingId ? " disabled" : "") + '>Theme</button>' +
+                '<button class="inline-button is-primary" type="button" data-action="steam-launch" data-app-id="' + escapeHtml(game.appId) + '"' + (launchingId ? " disabled" : "") + '>Launch</button>' +
+              '</div>' : '') +
+            '</div>';
+        }).join("") : emptyState("No Steam games", "Install games in Steam, then tap Rescan.")) + '</div>' +
+      '</article>';
+  }
+
+  function renderGameModeProfilePanel(savedGame, game, profile, theme, steam, env) {
+    var steamCount = steam && Array.isArray(steam.games) ? steam.games.length : 0;
+    var activeGame = steam && steam.activeGame ? steam.activeGame : null;
+    var gameName = activeGame ? activeGame.name : text(savedGame, game);
+    var detail = activeGame
+      ? "Running now. Theme applied automatically."
+      : steamCount ? steamCount + " Steam games found" : "Steam scan ready";
+    return '' +
+      '<article class="product-control-panel game-mode-profile-panel" style="' + gameModeThemeStyle(theme) + '">' +
+        '<div class="game-mode-profile-hero">' +
+          '<div class="game-mode-profile-title">' +
+            '<div class="metric-label">Active game</div>' +
+            '<strong>' + escapeHtml(gameName) + '</strong>' +
+            '<span>' + escapeHtml(detail) + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</article>';
   }
 
   function productShell(kicker, title, copy, statusText, statusTone, bodyHtml) {
@@ -3521,56 +3770,6 @@
     }
 
     return Promise.reject(new Error("Clipboard unavailable"));
-  }
-
-  function mountProfilesWidget(widget, container, env) {
-    var cleanups = [];
-
-    function redraw() {
-      var activeProfile = settingValue(env, "profileId", "command");
-      container.innerHTML = productShell(
-        "First-run setup",
-        "Profiles",
-        "Pick a product-ready mode and the dashboard will retheme, reorder, and select the right widget pack.",
-        findById(productProfiles, activeProfile).name,
-        "good",
-        '<div class="product-profile-grid">' +
-          productProfiles.map(function (profile) {
-            return productButtonCard(profile, profile.id === activeProfile, "profile", '<span class="product-card__meta">Theme: ' + escapeHtml(findById(productThemes(env), profile.themeId).name) + '</span>');
-          }).join("") +
-        '</div>'
-      );
-    }
-
-    addListener(cleanups, container, "click", function (event) {
-      var target = event.target && event.target.closest ? event.target.closest("[data-profile]") : null;
-      var profile;
-      if (!target) {
-        return;
-      }
-
-      profile = findById(productProfiles, target.getAttribute("data-profile"));
-      saveSettings(env, {
-        profileId: profile.id,
-        themeId: profile.themeId,
-        accentColor: findById(productThemes(env), profile.themeId).accent,
-        marketplacePack: profile.pack,
-        layoutOrder: profile.layout.join(",")
-      });
-      redraw();
-    });
-
-    redraw();
-    return {
-      refresh: function () {
-        redraw();
-        return Promise.resolve();
-      },
-      destroy: function () {
-        runCleanups(cleanups);
-        container.innerHTML = "";
-      }
-    };
   }
 
   function mountThemeStudioWidget(widget, container, env) {
@@ -3704,7 +3903,7 @@
         '</div>' +
         '<div class="inline-actions">' +
           '<button class="inline-button" type="button" data-layout-action="reset">Reset order</button>' +
-          '<button class="inline-button is-primary" type="button" data-layout-action="profiles">Open profiles</button>' +
+          '<button class="inline-button is-primary" type="button" data-layout-action="theme">Open theme studio</button>' +
         '</div>'
       );
     }
@@ -3728,9 +3927,9 @@
         return;
       }
 
-      if (action === "profiles") {
+      if (action === "theme") {
         if (typeof env.selectWidget === "function") {
-          env.selectWidget("profiles", true);
+          env.selectWidget("theme-studio", true);
         }
         return;
       }
@@ -3956,7 +4155,7 @@
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="probe-obs"' + (state.busy ? " disabled" : "") + '>Probe OBS</button>' +
           '<button class="inline-button" type="button" data-action="open-media">Open media</button>' +
-          '<button class="inline-button" type="button" data-action="stream-profile">Use streaming profile</button>' +
+          '<button class="inline-button" type="button" data-action="stream-profile">Use streaming layout</button>' +
         '</div>'
       );
     }
@@ -4069,82 +4268,305 @@
 
   function mountGameModeWidget(widget, container, env) {
     var cleanups = [];
+    var state = {
+      system: {},
+      steam: normalizeSteamGamesPayload({}),
+      panelFps: null,
+      statusText: "Loading",
+      statusTone: "warn",
+      steamStatusText: "Scanning",
+      steamStatusTone: "warn",
+      steamLaunchingId: "",
+      longPressAppId: "",
+      lastAutoThemeAppId: "",
+      interacting: false
+    };
+    var suppressNextSteamLaunchId = "";
+    var longPressTimerId = 0;
+    var longPressStartX = 0;
+    var longPressStartY = 0;
+    var longPressAppId = "";
+
+    function displayFps(display) {
+      return optionalNumber(display && (display.fps != null ? display.fps : display.refreshRate));
+    }
+
+    function fpsProgress(value, ceiling) {
+      var parsed = optionalNumber(value);
+      return parsed == null ? null : clamp((parsed / (ceiling || 240)) * 100, 0, 100);
+    }
 
     function redraw() {
-      var enabled = settingValue(env, "gameModeEnabled", "false") === "true";
-      var game = settingValue(env, "gameModeGame", "Default");
+      var savedGame = settingValue(env, "gameModeGame", "");
+      var profile = activeGameModeProfile(env);
+      var activeSteamGame = state.steam && state.steam.activeGame ? state.steam.activeGame : null;
+      var profileTheme = activeSteamGame ? themeForSteamGame(activeSteamGame, env) : gameModeProfileTheme(profile, env);
+      var game = gameModeProfileName(profile, savedGame);
+      var system = state.system || {};
+      var display = primaryDisplayFromSystem(system);
+      var primaryFps = displayFps(display);
+      var panelFps = optionalNumber(state.panelFps);
+      var displayName = text(display.name || display.deviceName, "Primary display");
       container.innerHTML = productShell(
-        "Game launcher",
+        "Live performance",
         "Game Mode",
-        "Save a focused mode for games, launchers, telemetry, network health, and audio routing.",
-        enabled ? "Enabled" : "Standby",
-        enabled ? "good" : "muted",
-        '<div class="inline-grid inline-grid--3">' +
-          metricCard("Mode", enabled ? "On" : "Off", "Local preset", enabled ? 100 : 0) +
-          metricCard("Profile", game, "Saved target", null) +
-          metricCard("Layout", "Gaming desk", "Applies launch order", null) +
+        "Launch installed Steam games and keep live FPS in view.",
+        primaryFps == null ? state.statusText : formatFps(primaryFps),
+        primaryFps == null ? state.statusTone : "good",
+        '<div class="inline-grid inline-grid--4 game-mode-performance">' +
+          metricCard("Primary FPS", formatFps(primaryFps), displayName, fpsProgress(primaryFps, 240), "game-mode-metric--primary") +
+          metricCard("Panel FPS", formatFps(panelFps), "Xenon render loop", fpsProgress(panelFps, 60)) +
+          metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "GPU load", system.gpu) +
+          metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
         '</div>' +
-        '<form class="inline-form product-control-panel" data-form="game-mode">' +
-          '<div class="inline-form-grid inline-form-grid--2">' +
-            '<label class="inline-field"><span>Game profile</span><input class="inline-input" type="text" name="gameModeGame" value="' + escapeHtml(game) + '" placeholder="Favorite game"></label>' +
-            '<label class="inline-field"><span>Mode</span><select class="inline-select" name="gameModeEnabled">' +
-              '<option value="true"' + (enabled ? " selected" : "") + '>Enabled</option>' +
-              '<option value="false"' + (!enabled ? " selected" : "") + '>Standby</option>' +
-            '</select></label>' +
-          '</div>' +
-        '</form>' +
-        '<div class="inline-actions">' +
-          '<button class="inline-button is-primary" type="button" data-action="gaming-profile">Apply gaming profile</button>' +
-          '<button class="inline-button" type="button" data-action="open-launchers">Open launchers</button>' +
-        '</div>'
+        renderGameModeProfilePanel(savedGame, game, profile, profileTheme, state.steam, env) +
+        renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
+        ''
       );
     }
 
-    function saveForm(form) {
-      var data = new FormData(form);
-      saveSettings(env, {
-        gameModeEnabled: String(data.get("gameModeEnabled") || "false"),
-        gameModeGame: String(data.get("gameModeGame") || "")
+    function refreshSystem() {
+      return requestJson(buildBridgeUrl(env, "/api/system"), {}, 5000).then(function (payload) {
+        state.system = payload || {};
+        state.statusText = statusTextFromPayload(payload, "Live");
+        state.statusTone = statusToneFromPayload(payload, "live");
+        if (!state.interacting) {
+          redraw();
+        }
+      }, function (error) {
+        state.system = {};
+        state.statusText = error.message || "Unavailable";
+        state.statusTone = "danger";
+        if (!state.interacting) {
+          redraw();
+        }
       });
     }
 
-    addListener(cleanups, container, "change", function (event) {
-      var form = event.target && event.target.form;
-      if (form && form.getAttribute("data-form") === "game-mode") {
-        saveForm(form);
+    function refreshSteam(force) {
+      var path = force ? "/api/steam/games?refresh=1" : "/api/steam/games";
+      return requestJson(buildBridgeUrl(env, path), {}, 6000).then(function (payload) {
+        state.steam = normalizeSteamGamesPayload(payload);
+        state.steamStatusText = statusTextFromPayload(payload, state.steam.games.length ? "Ready" : "Setup");
+        state.steamStatusTone = statusToneFromPayload(payload, state.steam.status);
+        if (state.steam.activeGame && state.steam.activeGame.appId && state.lastAutoThemeAppId !== state.steam.activeGame.appId) {
+          state.lastAutoThemeAppId = state.steam.activeGame.appId;
+          applySteamGameTheme(state.steam.activeGame);
+        }
         redraw();
+      }, function (error) {
+        state.steam = normalizeSteamGamesPayload({});
+        state.steamStatusText = error.message || "Unavailable";
+        state.steamStatusTone = "danger";
+        redraw();
+      });
+    }
+
+    function applySteamGameTheme(game) {
+      var theme = themeForSteamGame(game, env);
+      saveSettings(env, {
+        gameModeProfile: theme.profileId,
+        gameModeGame: theme.gameName,
+        gameModeThemeId: theme.themeId,
+        gameModeAccent: theme.accent,
+        gameModeSecondary: theme.secondary,
+        gameModeMood: theme.mood
+      });
+    }
+
+    function getSteamGame(appId) {
+      return (state.steam.games || []).filter(function (entry) {
+        return entry.appId === appId;
+      })[0] || null;
+    }
+
+    function applySteamGameLook(appId, announce) {
+      var game = getSteamGame(appId);
+      if (!game) {
+        return;
       }
-    });
+
+      applySteamGameTheme(game);
+      state.longPressAppId = game.appId;
+      state.steamStatusText = "Theme applied";
+      state.steamStatusTone = "good";
+      if (announce) {
+        emitTouchFeedback(env, "Game look applied");
+      }
+      redraw();
+    }
+
+    function launchSteamGame(appId) {
+      var game = getSteamGame(appId);
+
+      if (!game || state.steamLaunchingId) {
+        return;
+      }
+
+      state.steamLaunchingId = game.appId;
+      state.longPressAppId = "";
+      state.steamStatusText = "Launching";
+      state.steamStatusTone = "warn";
+      redraw();
+
+      requestJson(buildBridgeUrl(env, "/api/steam/games/launch"), {
+        method: "POST",
+        body: {
+          appId: game.appId
+        }
+      }, 8000).then(function (payload) {
+        applySteamGameTheme(game);
+        state.steamLaunchingId = "";
+        state.steamStatusText = text(payload.message, "Launched");
+        state.steamStatusTone = "good";
+        emitTouchFeedback(env, "Launching " + game.name);
+        redraw();
+      }, function (error) {
+        state.steamLaunchingId = "";
+        state.steamStatusText = error.message || "Launch failed";
+        state.steamStatusTone = "danger";
+        redraw();
+      });
+    }
+
+    function startPanelFpsMeter() {
+      var frameCount = 0;
+      var lastSample = window.performance && performance.now ? performance.now() : Date.now();
+      var frameId = 0;
+      var disposed = false;
+
+      function tick(now) {
+        var elapsed;
+        if (disposed) {
+          return;
+        }
+
+        frameCount += 1;
+        elapsed = now - lastSample;
+        if (elapsed >= 1000) {
+          state.panelFps = Math.round((frameCount * 1000) / elapsed);
+          frameCount = 0;
+          lastSample = now;
+          if (!state.interacting) {
+            redraw();
+          }
+        }
+
+        frameId = window.requestAnimationFrame(tick);
+      }
+
+      if (typeof window.requestAnimationFrame !== "function") {
+        return function () {};
+      }
+
+      frameId = window.requestAnimationFrame(tick);
+      return function () {
+        disposed = true;
+        if (frameId) {
+          window.cancelAnimationFrame(frameId);
+        }
+      };
+    }
+
+    function clearSteamLongPress() {
+      if (longPressTimerId) {
+        window.clearTimeout(longPressTimerId);
+        longPressTimerId = 0;
+      }
+      longPressAppId = "";
+    }
+
+    addListener(cleanups, container, "pointerdown", function (event) {
+      var tile = event.target && event.target.closest ? event.target.closest(".game-mode-steam-tile") : null;
+      if (!tile || state.steamLaunchingId) {
+        return;
+      }
+
+      clearSteamLongPress();
+      longPressAppId = String(tile.getAttribute("data-app-id") || "");
+      longPressStartX = event.clientX;
+      longPressStartY = event.clientY;
+      state.interacting = true;
+      longPressTimerId = window.setTimeout(function () {
+        var appId = longPressAppId;
+        clearSteamLongPress();
+        if (!appId || state.steamLaunchingId) {
+          return;
+        }
+        suppressNextSteamLaunchId = appId;
+        state.interacting = false;
+        applySteamGameLook(appId, true);
+        window.setTimeout(function () {
+          if (suppressNextSteamLaunchId === appId) {
+            suppressNextSteamLaunchId = "";
+          }
+        }, 700);
+      }, 560);
+    }, { passive: true });
+
+    addListener(cleanups, container, "pointermove", function (event) {
+      if (!longPressTimerId) {
+        return;
+      }
+
+      if (Math.abs(event.clientX - longPressStartX) > 14 || Math.abs(event.clientY - longPressStartY) > 14) {
+        clearSteamLongPress();
+      }
+    }, { passive: true });
+
+    addListener(cleanups, container, "pointerup", function () {
+      state.interacting = false;
+      clearSteamLongPress();
+    }, { passive: true });
+
+    addListener(cleanups, container, "pointercancel", function () {
+      state.interacting = false;
+      clearSteamLongPress();
+    }, { passive: true });
 
     addListener(cleanups, container, "click", function (event) {
       var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
-      var profile = findById(productProfiles, "gaming");
+      var action = target ? target.getAttribute("data-action") : "";
       if (!target) {
         return;
       }
 
-      if (target.getAttribute("data-action") === "open-launchers" && typeof env.selectWidget === "function") {
-        env.selectWidget("launchers", true);
-      } else if (target.getAttribute("data-action") === "gaming-profile") {
-        saveSettings(env, {
-          profileId: profile.id,
-          themeId: profile.themeId,
-          accentColor: findById(productThemes(env), profile.themeId).accent,
-          marketplacePack: profile.pack,
-          gameModeEnabled: "true",
-          layoutOrder: profile.layout.join(",")
-        });
+      if (action === "steam-refresh" && !state.steamLaunchingId) {
+        state.steamStatusText = "Scanning";
+        state.steamStatusTone = "warn";
         redraw();
+        refreshSteam(true);
+      } else if (action === "steam-theme") {
+        applySteamGameLook(String(target.getAttribute("data-app-id") || ""), true);
+      } else if (action === "steam-launch") {
+        var appId = String(target.getAttribute("data-app-id") || "");
+        if (suppressNextSteamLaunchId === appId) {
+          suppressNextSteamLaunchId = "";
+          return;
+        }
+        launchSteamGame(appId);
       }
     });
 
+    var systemLoop = createTimerLoop(refreshSystem, 2000, function () {
+      return state.interacting;
+    });
+    var steamLoop = createTimerLoop(refreshSteam, 30000, function () {
+      return state.interacting || Boolean(state.steamLaunchingId);
+    });
+    var stopFpsMeter = startPanelFpsMeter();
     redraw();
+    systemLoop.start();
+    steamLoop.start();
     return {
       refresh: function () {
-        redraw();
-        return Promise.resolve();
+        return Promise.all([systemLoop.refresh(), steamLoop.refresh()]);
       },
       destroy: function () {
+        clearSteamLongPress();
+        systemLoop.destroy();
+        steamLoop.destroy();
+        stopFpsMeter();
         runCleanups(cleanups);
         container.innerHTML = "";
       }
@@ -4301,7 +4723,7 @@
           metricCard("Cloud calls", "Optional", "Weather and release checks", null) +
         '</div>' +
         '<div class="product-privacy-list">' +
-          '<div><strong>Stays on this PC</strong><span>Dashboard preferences, widget endpoints, profiles, layout, OBS target, and installer readiness.</span></div>' +
+        '<div><strong>Stays on this PC</strong><span>Dashboard preferences, widget endpoints, layout, OBS target, and installer readiness.</span></div>' +
           '<div><strong>Requires permission</strong><span>Weather keys, calendar feeds, Hue bridge pairing, and optional connectors you enable.</span></div>' +
           '<div><strong>Independent software</strong><span>This app is not an official CORSAIR product and is not endorsed by integration providers unless a written agreement says otherwise.</span></div>' +
         '</div>' +
@@ -4377,15 +4799,7 @@
 
   var renderers = {
     setup: mountSetupWidget,
-    profiles: mountProfilesWidget,
-    "theme-studio": mountThemeStudioWidget,
-    "layout-editor": mountLayoutEditorWidget,
-    updates: mountUpdatesWidget,
-    streaming: mountStreamingWidget,
     "game-mode": mountGameModeWidget,
-    marketplace: mountMarketplaceWidget,
-    installer: mountInstallerWidget,
-    privacy: mountPrivacyWidget,
     system: mountSystemWidget,
     network: mountNetworkWidget,
     launchers: mountLaunchersWidget,
@@ -4396,12 +4810,7 @@
     media: mountMediaWidget,
     clipboard: mountClipboardWidget,
     weather: mountWeatherWidget,
-    hue: mountHueWidget,
-    "unifi-camera": mountCameraWidget,
-    "unifi-network": mountUniFiNetworkWidget,
-    plex: mountPlexWidget,
-    nas: mountNasWidget,
-    automation: mountAutomationWidget
+    hue: mountHueWidget
   };
 
   function mountWidget(widget, container, env) {

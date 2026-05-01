@@ -97,14 +97,50 @@ function saveConfig(nextConfig) {
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }
 
-function json(response, statusCode, payload) {
-  response.writeHead(statusCode, {
+function json(response, statusCode, payload, corsOrigin = "") {
+  const headers = {
     "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type"
-  });
+  };
+
+  if (corsOrigin) {
+    headers["Access-Control-Allow-Origin"] = corsOrigin;
+    headers.Vary = "Origin";
+  }
+
+  response.writeHead(statusCode, headers);
   response.end(JSON.stringify(payload));
+}
+
+function corsOriginForRequest(request) {
+  const origin = typeof request.headers.origin === "string" ? request.headers.origin.trim() : "";
+  if (!origin) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(origin);
+    const hostname = parsed.hostname.toLowerCase();
+    const port = parsed.port ? Number(parsed.port) : 80;
+    if (parsed.protocol === "http:" && port === config.port && (hostname === "127.0.0.1" || hostname === "localhost")) {
+      return parsed.origin;
+    }
+  } catch {
+  }
+
+  return null;
+}
+
+function applyCorsHeaders(response, corsOrigin) {
+  if (!corsOrigin) {
+    return;
+  }
+
+  response.setHeader("Access-Control-Allow-Origin", corsOrigin);
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Vary", "Origin");
 }
 
 function sendText(response, statusCode, text) {
@@ -951,7 +987,7 @@ async function getLiveAudioSnapshot() {
 async function getWeatherSnapshot(url) {
   const apiKey = config.weather?.apiKey;
   const requestUrl = createLocalUrl(url);
-  const city = requestUrl.searchParams.get("city") || config.weather?.city || "Indianapolis";
+  const city = requestUrl.searchParams.get("city") || config.weather?.city || "";
   const units = requestUrl.searchParams.get("units") || config.weather?.units || "metric";
 
   if (!apiKey) {
@@ -1520,7 +1556,7 @@ function getConfigSnapshot() {
     port: config.port,
     weather: {
       configured: Boolean(weather.apiKey),
-      city: weather.city || "Indianapolis",
+      city: weather.city || "",
       units: weather.units || "metric"
     },
     hue: {
@@ -1543,7 +1579,7 @@ function saveWeatherConfig(input) {
       : (config.weather?.apiKey || ""),
     city: typeof input.city === "string" && input.city.trim()
       ? input.city.trim()
-      : (config.weather?.city || "Indianapolis"),
+      : (config.weather?.city || ""),
     units: input.units === "imperial" ? "imperial" : "metric"
   };
 
@@ -1656,8 +1692,16 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  const corsOrigin = corsOriginForRequest(request);
+  if (corsOrigin === null) {
+    json(response, 403, { error: "Origin not allowed" });
+    return;
+  }
+
+  applyCorsHeaders(response, corsOrigin);
+
   if (request.method === "OPTIONS") {
-    json(response, 204, {});
+    json(response, 204, {}, corsOrigin);
     return;
   }
 

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
 
@@ -8,16 +7,12 @@ public sealed class SystemMetricsService : IDisposable
 {
     private readonly HostLogger _logger;
     private readonly object _sync = new();
-    private readonly Dictionary<int, ProcessSample> _processSamples = new();
-    private readonly int _logicalCores = Math.Max(1, Environment.ProcessorCount);
     private System.Threading.Timer? _usageTimer;
-    private System.Threading.Timer? _processTimer;
     private System.Threading.Timer? _temperatureTimer;
     private SystemSnapshot _snapshot = new();
     private ulong _lastIdleTime;
     private ulong _lastKernelTime;
     private ulong _lastUserTime;
-    private DateTimeOffset _lastProcessSampleTime = DateTimeOffset.MinValue;
     private bool _started;
 
     public SystemMetricsService(HostLogger logger)
@@ -35,9 +30,7 @@ public sealed class SystemMetricsService : IDisposable
         _started = true;
         SampleUsage();
         SampleHardwareTemperatures();
-        SampleProcesses();
         _usageTimer = new System.Threading.Timer(_ => SampleUsage(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
-        _processTimer = new System.Threading.Timer(_ => SampleProcesses(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         _temperatureTimer = new System.Threading.Timer(_ => SampleHardwareTemperatures(), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
         _logger.Info("Native system metrics service started.");
     }
@@ -68,7 +61,6 @@ public sealed class SystemMetricsService : IDisposable
     public void Dispose()
     {
         _usageTimer?.Dispose();
-        _processTimer?.Dispose();
         _temperatureTimer?.Dispose();
     }
 
@@ -78,16 +70,16 @@ public sealed class SystemMetricsService : IDisposable
         {
             var cpu = ReadCpuUsage();
             var memory = ReadMemoryUsage();
-            var disk = TryReadDiskUsage();
             var gpu = TryReadGpuUsage();
+            var primaryDisplay = DisplayManager.ReadPrimaryDisplaySnapshot();
 
             lock (_sync)
             {
                 var sampledAt = DateTimeOffset.UtcNow;
                 _snapshot.Cpu = Round(cpu);
                 _snapshot.Ram = Round(memory);
-                _snapshot.Disk = disk;
                 _snapshot.Gpu = gpu;
+                _snapshot.PrimaryDisplay = primaryDisplay;
                 _snapshot.Supported = true;
                 _snapshot.Status = "live";
                 _snapshot.SampledAt = sampledAt;
@@ -99,89 +91,6 @@ public sealed class SystemMetricsService : IDisposable
         catch (Exception error)
         {
             _logger.Error("Failed to sample native system usage.", error);
-        }
-    }
-
-    private void SampleProcesses()
-    {
-        try
-        {
-            var now = DateTimeOffset.UtcNow;
-            var elapsedMs = _lastProcessSampleTime == DateTimeOffset.MinValue
-                ? 0
-                : Math.Max(1, (now - _lastProcessSampleTime).TotalMilliseconds);
-
-            var nextSamples = new Dictionary<int, ProcessSample>();
-            var totalPhysicalMemory = GetTotalPhysicalMemory();
-            var processes = Process.GetProcesses();
-            var topProcesses = new List<ProcessEntry>();
-
-            foreach (var process in processes)
-            {
-                try
-                {
-                    if (process.HasExited)
-                    {
-                        continue;
-                    }
-
-                    var totalProcessorTime = process.TotalProcessorTime;
-                    var workingSet = process.WorkingSet64;
-                    var previous = _processSamples.TryGetValue(process.Id, out var sample)
-                        ? sample
-                        : null;
-                    var cpuDeltaMs = previous is null
-                        ? 0
-                        : Math.Max(0, (totalProcessorTime - previous.TotalProcessorTime).TotalMilliseconds);
-                    var cpu = elapsedMs > 0
-                        ? Math.Min(100, (cpuDeltaMs / elapsedMs / _logicalCores) * 100)
-                        : 0;
-
-                    nextSamples[process.Id] = new ProcessSample(totalProcessorTime);
-                    topProcesses.Add(new ProcessEntry
-                    {
-                        Name = process.ProcessName,
-                        Pid = process.Id,
-                        Cpu = Round(cpu),
-                        MemoryMB = (int)Math.Round(workingSet / 1024d / 1024d),
-                        MemoryPercent = totalPhysicalMemory <= 0
-                            ? 0
-                            : Round((workingSet / (double)totalPhysicalMemory) * 100)
-                    });
-                }
-                catch
-                {
-                }
-                finally
-                {
-                    process.Dispose();
-                }
-            }
-
-            var ordered = topProcesses
-                .OrderByDescending(entry => entry.Cpu)
-                .ThenByDescending(entry => entry.MemoryMB)
-                .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
-                .Take(5)
-                .ToList();
-
-            lock (_sync)
-            {
-                _snapshot.TopProcesses = ordered;
-                _snapshot.Source = "native host";
-            }
-
-            _processSamples.Clear();
-            foreach (var pair in nextSamples)
-            {
-                _processSamples[pair.Key] = pair.Value;
-            }
-
-            _lastProcessSampleTime = now;
-        }
-        catch (Exception error)
-        {
-            _logger.Error("Failed to sample native process usage.", error);
         }
     }
 
@@ -232,12 +141,6 @@ public sealed class SystemMetricsService : IDisposable
         return ((memoryStatus.TotalPhys - memoryStatus.AvailPhys) * 100d) / memoryStatus.TotalPhys;
     }
 
-    private static ulong GetTotalPhysicalMemory()
-    {
-        var memoryStatus = new MemoryStatusEx();
-        return GlobalMemoryStatusEx(ref memoryStatus) ? memoryStatus.TotalPhys : 0;
-    }
-
     private void SampleHardwareTemperatures()
     {
         try
@@ -256,32 +159,6 @@ public sealed class SystemMetricsService : IDisposable
         {
             _logger.Warn($"Failed to sample hardware temperatures: {error.Message}");
         }
-    }
-
-    private static double? TryReadDiskUsage()
-    {
-        try
-        {
-            using var searcher = new ManagementObjectSearcher(
-                @"root\cimv2",
-                "SELECT PercentIdleTime FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk WHERE Name = '_Total'");
-
-            foreach (ManagementObject item in searcher.Get())
-            {
-                if (item["PercentIdleTime"] is null)
-                {
-                    continue;
-                }
-
-                var idle = Convert.ToDouble(item["PercentIdleTime"]);
-                return Round(100 - idle);
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
     }
 
     private static double? TryReadGpuUsage()
@@ -348,6 +225,11 @@ public sealed class SystemMetricsService : IDisposable
                 }
 
                 var value = Convert.ToDouble(sensor["Value"]);
+                if (value <= 0 || value > 130)
+                {
+                    continue;
+                }
+
                 bestValue = bestValue.HasValue ? Math.Max(bestValue.Value, value) : value;
             }
 
@@ -367,7 +249,9 @@ public sealed class SystemMetricsService : IDisposable
         };
 
         parts.Add(snapshot.Gpu.HasValue ? "GPU telemetry is live." : "GPU telemetry is unavailable on this PC.");
-        parts.Add(snapshot.Disk.HasValue ? "Disk activity is live." : "Disk activity is unavailable on this PC.");
+        parts.Add(snapshot.PrimaryDisplay?.Fps is not null
+            ? "Primary display FPS is live."
+            : "Primary display FPS is unavailable on this PC.");
 
         if (snapshot.CpuTemp.HasValue || snapshot.GpuTemp.HasValue)
         {
@@ -422,8 +306,6 @@ public sealed class SystemMetricsService : IDisposable
             Length = (uint)Marshal.SizeOf<MemoryStatusEx>();
         }
     }
-
-    private sealed record ProcessSample(TimeSpan TotalProcessorTime);
 }
 
 public sealed class SystemSnapshot
@@ -444,15 +326,13 @@ public sealed class SystemSnapshot
 
     public double? Ram { get; set; }
 
-    public double? Disk { get; set; }
-
     public double? CpuTemp { get; set; }
 
     public double? GpuTemp { get; set; }
 
     public string Source { get; set; } = "native host";
 
-    public List<ProcessEntry> TopProcesses { get; set; } = [];
+    public DisplaySnapshot? PrimaryDisplay { get; set; }
 
     public SystemSnapshot Clone()
     {
@@ -466,36 +346,59 @@ public sealed class SystemSnapshot
             Cpu = Cpu,
             Gpu = Gpu,
             Ram = Ram,
-            Disk = Disk,
             CpuTemp = CpuTemp,
             GpuTemp = GpuTemp,
             Source = Source,
-            TopProcesses = TopProcesses.Select(entry => entry.Clone()).ToList()
+            PrimaryDisplay = PrimaryDisplay?.Clone()
         };
     }
 }
 
-public sealed class ProcessEntry
+public sealed class DisplaySnapshot
 {
-    public string Name { get; set; } = "Unknown";
+    public bool Supported { get; set; } = true;
 
-    public int Pid { get; set; }
+    public string Status { get; set; } = "starting";
 
-    public double Cpu { get; set; }
+    public string Name { get; set; } = "Primary display";
 
-    public int MemoryMB { get; set; }
+    public string DeviceName { get; set; } = "";
 
-    public double MemoryPercent { get; set; }
+    public bool Primary { get; set; } = true;
 
-    public ProcessEntry Clone()
+    public int? Width { get; set; }
+
+    public int? Height { get; set; }
+
+    public double? RefreshRate { get; set; }
+
+    public double? Fps { get; set; }
+
+    public int? BitsPerPixel { get; set; }
+
+    public string Source { get; set; } = "Windows display mode";
+
+    public DateTimeOffset? SampledAt { get; set; }
+
+    public string Message { get; set; } = "";
+
+    public DisplaySnapshot Clone()
     {
-        return new ProcessEntry
+        return new DisplaySnapshot
         {
+            Supported = Supported,
+            Status = Status,
             Name = Name,
-            Pid = Pid,
-            Cpu = Cpu,
-            MemoryMB = MemoryMB,
-            MemoryPercent = MemoryPercent
+            DeviceName = DeviceName,
+            Primary = Primary,
+            Width = Width,
+            Height = Height,
+            RefreshRate = RefreshRate,
+            Fps = Fps,
+            BitsPerPixel = BitsPerPixel,
+            Source = Source,
+            SampledAt = SampledAt,
+            Message = Message
         };
     }
 }

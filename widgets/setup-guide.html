@@ -448,18 +448,9 @@
           <div id="guide-optional" class="optional-list"></div>
         </section>
 
-        <section class="panel">
-          <div class="section-header">
-            <div>
-              <p class="eyebrow">Advanced</p>
-              <h2>Extra widgets</h2>
-            </div>
-          </div>
+        <section id="guide-integrations-panel" class="panel is-hidden" aria-hidden="true">
           <div id="guide-integrations" class="optional-list"></div>
-          <p class="empty-copy">These stay hidden until configured.</p>
-          <div class="actions">
-            <a id="guide-open-advanced" class="button" href="#">Open advanced</a>
-          </div>
+          <a id="guide-open-advanced" class="button is-hidden" href="#"></a>
         </section>
       </div>
     </section>
@@ -476,71 +467,16 @@
       var hueEndpoint = params.get("hueEndpoint") || "/api/hue";
       var hueLinkEndpoint = params.get("hueLinkEndpoint") || "/api/hue/link";
       var dashboardUrl = params.get("dashboardUrl") || window.location.href;
-      var advancedUrl = params.get("advancedUrl") || dashboardUrl;
+      var advancedUrl = dashboardUrl + (dashboardUrl.indexOf("?") === -1 ? "?" : "&") + "advanced=1";
       var showAdvanced = params.get("advanced") === "1";
       var onboardingVersion = Number(params.get("onboardingVersion") || 1);
       var settingsStorageKey = "xeneon-dashboard-settings";
-      var defaultDashboardSettings = {
-        unifiCameraEndpoint: "",
-        unifiCameraFeed: "",
-        unifiCameraRelayUrl: "",
-        unifiCameraSnapshot: "",
-        unifiCameraName: "",
-        unifiCameraLocation: "",
-        unifiCameraFeedType: "",
-        unifiNetworkEndpoint: "",
-        plexEndpoint: "",
-        plexUplink: "",
-        nasEndpoint: "",
-        automationEndpoint: "",
-        automationActionEndpoint: ""
-      };
+      var defaultDashboardSettings = {};
       var expandedSections = {
         weather: false,
-        hue: false,
-        "unifi-network": false,
-        "unifi-camera": false,
-        plex: false,
-        nas: false,
-        automation: false
+        hue: false
       };
-      var integrationSchemas = [
-        {
-          id: "unifi-network",
-          title: "UniFi Network",
-          copy: "Built into Xenon. It checks your local network automatically.",
-          state: "Built in",
-          fields: []
-        },
-        {
-          id: "unifi-camera",
-          title: "UniFi Camera",
-          copy: "Native camera connector is planned. No relay URL is needed for setup.",
-          state: "Later",
-          fields: []
-        },
-        {
-          id: "plex",
-          title: "Plex Server",
-          copy: "Native Plex connector is planned. No extra helper app is needed for setup.",
-          state: "Later",
-          fields: []
-        },
-        {
-          id: "nas",
-          title: "NAS Storage",
-          copy: "Native NAS connector is planned. No extra helper app is needed for setup.",
-          state: "Later",
-          fields: []
-        },
-        {
-          id: "automation",
-          title: "Home Automation",
-          copy: "Native smart-home connector is planned. Endpoint setup is no longer part of first run.",
-          state: "Later",
-          fields: []
-        }
-      ];
+      var integrationSchemas = [];
 
       function fetchJson(url, options) {
         return fetch(url, options || { cache: "no-store" }).then(function (response) {
@@ -588,7 +524,10 @@
       function renderSnippets() {
         var iframeSnippet = '<iframe src="' + dashboardUrl + '" width="2560" height="720" loading="eager" scrolling="no" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border:0;overflow:hidden;background:#0b0f14;"></iframe>';
         document.getElementById("guide-iframe-snippet").textContent = iframeSnippet;
-        document.getElementById("guide-open-advanced").href = advancedUrl;
+        var advancedLink = document.getElementById("guide-open-advanced");
+        if (advancedLink) {
+          advancedLink.href = advancedUrl;
+        }
       }
 
       function countState(items, state) {
@@ -667,7 +606,7 @@
                 '<div class="form-row">' +
                   '<div class="field">' +
                     '<label for="weather-city">City</label>' +
-                    '<input id="weather-city" type="text" placeholder="Indianapolis" value="' + escapeHtml(config.weather.city || "Indianapolis") + '">' +
+                    '<input id="weather-city" type="text" placeholder="City or ZIP" value="' + escapeHtml(config.weather.city || "") + '">' +
                   '</div>' +
                   '<div class="field">' +
                     '<label for="weather-units">Units</label>' +
@@ -689,7 +628,7 @@
               '<form id="hue-form" class="form">' +
                 '<div class="field">' +
                   '<label for="hue-bridge-ip">Bridge IP</label>' +
-                  '<input id="hue-bridge-ip" type="text" placeholder="192.168.1.50" value="' + escapeHtml(hueSnapshot.bridgeIp || "") + '">' +
+                  '<input id="hue-bridge-ip" type="text" placeholder="Local bridge IP" value="' + escapeHtml(hueSnapshot.bridgeIp || "") + '">' +
                 '</div>' +
                 '<div class="actions">' +
                   '<button class="button is-primary" type="submit">Link bridge</button>' +
@@ -761,46 +700,12 @@
         return next;
       }
 
-      function summarizeIntegration(schema, settings) {
-        if (!schema.fields.length) {
-          return schema.copy;
-        }
-
-        if (schema.id === "unifi-camera") {
-          if (settings.unifiCameraEndpoint) { return "Endpoint saved"; }
-          if (settings.unifiCameraRelayUrl) { return "Relay saved"; }
-          if (settings.unifiCameraFeed) { return "Feed saved"; }
-          if (settings.unifiCameraSnapshot) { return "Snapshot saved"; }
-          return schema.copy;
-        }
-
-        if (schema.id === "automation") {
-          if (settings.automationActionEndpoint) { return "State + action saved"; }
-          if (settings.automationEndpoint) { return "State saved"; }
-          return schema.copy;
-        }
-
-        return settings[schema.fields[0].key] ? "Endpoint saved" : schema.copy;
+      function summarizeIntegration(schema) {
+        return schema.copy || "";
       }
 
-      function getIntegrationState(schema, settings) {
-        if (!schema.fields.length) {
-          return schema.state || "Later";
-        }
-
-        if (schema.id === "unifi-camera") {
-          return settings.unifiCameraEndpoint || settings.unifiCameraFeed || settings.unifiCameraRelayUrl || settings.unifiCameraSnapshot
-            ? "Ready"
-            : "Optional";
-        }
-
-        if (schema.id === "automation") {
-          return settings.automationEndpoint || settings.automationActionEndpoint
-            ? "Ready"
-            : "Optional";
-        }
-
-        return settings[schema.fields[0].key] ? "Ready" : "Optional";
+      function getIntegrationState(schema) {
+        return schema.state || "Optional";
       }
 
       function renderIntegrations() {

@@ -123,7 +123,7 @@ public sealed class ConfigStore
         normalized.Hue ??= new HueConfig();
         normalized.Dashboard ??= new DashboardConfig();
         normalized.Launchers ??= [];
-        normalized.Weather.City = string.IsNullOrWhiteSpace(normalized.Weather.City) ? "Indianapolis" : normalized.Weather.City.Trim();
+        normalized.Weather.City = normalized.Weather.City?.Trim() ?? "";
         normalized.Weather.Units = string.Equals(normalized.Weather.Units, "imperial", StringComparison.OrdinalIgnoreCase)
             ? "imperial"
             : "metric";

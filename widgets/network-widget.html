@@ -4,110 +4,62 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Network Widget</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css?v=20260425-5">
-  <link rel="stylesheet" href="../css/widgets.css?v=20260425-5">
+  <link rel="stylesheet" href="../css/theme.css?v=20260425-25">
+  <link rel="stylesheet" href="../css/widgets.css?v=20260425-25">
   <style>
     .widget-header--compact {
       justify-content: flex-end;
     }
 
-    .network-grid {
+    .network-grid,
+    .network-unifi-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 16px;
       align-content: start;
+    }
+
+    .network-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       height: 100%;
     }
 
-    .network-overview {
+    .network-unifi-grid {
+      grid-column: 1 / -1;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .network-unifi-card {
       grid-column: 1 / -1;
       display: grid;
       gap: 14px;
     }
 
-    .network-overview__top,
-    .network-overview__aps,
-    .network-overview__ap,
-    .network-overview__metrics {
-      display: grid;
+    .network-unifi-card__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
       gap: 12px;
     }
 
-    .network-overview__top {
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: start;
-    }
-
-    .network-overview__name {
-      margin-top: 8px;
-      font-size: clamp(1.5rem, 3vw, 2.4rem);
-      line-height: 1;
-    }
-
-    .network-overview__metrics {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .network-overview__metric,
-    .network-overview__ap {
-      padding: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.03);
-    }
-
-    .network-overview__metric span,
-    .network-overview__ap span {
-      color: var(--color-text-dim);
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .network-overview__metric strong,
-    .network-overview__ap strong {
-      display: block;
-      margin-top: 8px;
-      font-size: 1.2rem;
-      line-height: 1.1;
-    }
-
-    .network-overview__ap {
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .network-overview__ap small {
-      color: var(--color-text-dim);
-      font-size: 0.78rem;
-      line-height: 1.3;
-    }
-
-    .network-overview__pill {
+    .network-pill {
       min-height: 30px;
       padding: 6px 10px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.08);
-      font-size: 0.72rem;
-    }
-
-    .network-overview__pill[data-tone="good"] {
       color: #bfffe1;
       background: rgba(68, 209, 122, 0.16);
-    }
-
-    .network-overview__pill[data-tone="warn"] {
-      color: #ffe4bd;
-      background: rgba(255, 179, 71, 0.16);
+      font-size: 0.72rem;
     }
 
     @media (max-width: 1100px) {
       .network-grid,
-      .network-overview__metrics {
+      .network-unifi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .network-grid,
+      .network-unifi-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -119,58 +71,52 @@
       <div id="network-status" class="widget-status">Measuring</div>
     </header>
     <section class="widget-content network-grid">
-      <article class="list-card">
-        <div class="network-list">
-          <div class="network-item"><span>Download</span><strong id="download-speed">--</strong></div>
-          <div class="network-item"><span>Upload</span><strong id="upload-speed">--</strong></div>
-          <div class="network-item"><span>Ping</span><strong id="ping-speed">--</strong></div>
-        </div>
+      <article class="metric-card">
+        <div class="metric-label">Download</div>
+        <div id="download-speed" class="metric-value">--</div>
+        <div class="metric-detail">Live throughput</div>
       </article>
-      <article class="list-card">
+      <article class="metric-card">
+        <div class="metric-label">Upload</div>
+        <div id="upload-speed" class="metric-value">--</div>
+        <div class="metric-detail">Live throughput</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-label">Ping</div>
+        <div id="ping-speed" class="metric-value">--</div>
+        <div class="metric-detail">Round-trip latency</div>
+      </article>
+      <article class="metric-card">
         <div class="metric-label">Connection</div>
         <div id="network-connection" class="metric-value">--</div>
-        <div id="network-detail" class="metric-detail">Browser network information</div>
+        <div id="network-detail" class="metric-detail">Native host</div>
       </article>
 
-      <article id="network-overview-card" class="list-card network-overview is-hidden">
-        <div class="network-overview__top">
+      <article id="network-unifi-card" class="list-card network-unifi-card is-hidden">
+        <div class="network-unifi-card__header">
           <div>
-            <div class="metric-label">UniFi Network</div>
-            <div id="network-overview-name" class="network-overview__name">--</div>
-            <div id="network-overview-detail" class="metric-detail">Configure a UniFi endpoint to fold your full network into this widget.</div>
+            <div class="metric-label">UniFi</div>
+            <div id="network-unifi-name" class="metric-value">--</div>
+            <div id="network-unifi-detail" class="metric-detail">Local UniFi detected</div>
           </div>
-          <div id="network-overview-health" class="network-overview__pill" data-tone="warn">Optional</div>
+          <div class="network-pill">Detected</div>
         </div>
-
-        <div class="network-overview__metrics">
-          <div class="network-overview__metric">
-            <span>Clients</span>
-            <strong id="network-overview-clients">--</strong>
-          </div>
-          <div class="network-overview__metric">
-            <span>Wi-Fi</span>
-            <strong id="network-overview-wifi">--</strong>
-          </div>
-          <div class="network-overview__metric">
-            <span>Wired</span>
-            <strong id="network-overview-wired">--</strong>
-          </div>
-          <div class="network-overview__metric">
-            <span>Access Points</span>
-            <strong id="network-overview-aps-count">--</strong>
-          </div>
+        <div class="network-unifi-grid">
+          <div class="inline-kpi"><strong id="network-unifi-clients">--</strong><span>Clients</span></div>
+          <div class="inline-kpi"><strong id="network-unifi-wifi">--</strong><span>Wi-Fi</span></div>
+          <div class="inline-kpi"><strong id="network-unifi-wired">--</strong><span>Wired</span></div>
+          <div class="inline-kpi"><strong id="network-unifi-aps">--</strong><span>APs</span></div>
         </div>
-
-        <div id="network-overview-aps" class="network-overview__aps"></div>
       </article>
     </section>
   </main>
-  <script src="../js/widget-core.js?v=20260425-5"></script>
+  <script src="../js/widget-core.js?v=20260425-25"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
       var endpoint = params.get("endpoint") || "";
       var unifiEndpoint = params.get("unifiEndpoint") || "/api/unifi/network";
+
       function fetchJson(url) {
         return fetch(url, { cache: "no-store" }).then(function (response) {
           if (!response.ok) {
@@ -191,75 +137,40 @@
           upload: null,
           ping: ping,
           type: type,
-          detail: connection ? "Browser link estimate" : "Bridge required"
+          source: connection ? "Browser estimate" : "Native host"
         };
       }
 
       function normalizeUniFiSnapshot(raw) {
         var data = raw || {};
         var clients = data.clients || {};
-        var aps = Array.isArray(data.aps) ? data.aps : [];
         return {
+          detected: Boolean(data.detected),
           gateway: data.gateway || "UniFi Gateway",
-          source: data.source || "UniFi network",
-          latencyMs: typeof data.latencyMs === "number" ? data.latencyMs : null,
-          packetLoss: typeof data.packetLoss === "number" ? data.packetLoss : null,
+          provider: data.provider || "",
           clients: {
             total: Number(clients.total || 0),
             wifi: Number(clients.wifi || 0),
-            wired: Number(clients.wired || 0),
-            guests: Number(clients.guests || 0)
+            wired: Number(clients.wired || 0)
           },
-          aps: aps
+          aps: Array.isArray(data.aps) ? data.aps : []
         };
       }
 
-      function getUniFiTone(snapshot) {
-        var online = snapshot.aps.filter(function (ap) { return ap.status === "online"; }).length;
-        var degraded = snapshot.aps.filter(function (ap) { return ap.status === "degraded"; }).length;
-        if (!snapshot.aps.length) {
-          return "warn";
-        }
-        if (online === 0) {
-          return "warn";
-        }
-        if (degraded > 0) {
-          return "warn";
-        }
-        return "good";
-      }
-
       function renderUniFi(snapshot) {
-        var card = document.getElementById("network-overview-card");
-        var tone = getUniFiTone(snapshot);
-        var apCount = snapshot.aps.length;
-        card.classList.remove("is-hidden");
-        document.getElementById("network-overview-name").textContent = snapshot.gateway;
-        document.getElementById("network-overview-detail").textContent = snapshot.latencyMs == null
-          ? "UniFi gateway summary"
-          : Math.round(snapshot.latencyMs) + " ms latency" + (snapshot.packetLoss != null ? " / " + snapshot.packetLoss.toFixed(1) + "% loss" : "");
-        document.getElementById("network-overview-health").textContent = tone === "good" ? "Integrated" : "Needs review";
-        document.getElementById("network-overview-health").setAttribute("data-tone", tone);
-        document.getElementById("network-overview-clients").textContent = String(snapshot.clients.total);
-        document.getElementById("network-overview-wifi").textContent = String(snapshot.clients.wifi);
-        document.getElementById("network-overview-wired").textContent = String(snapshot.clients.wired);
-        document.getElementById("network-overview-aps-count").textContent = String(apCount);
-        document.getElementById("network-overview-aps").innerHTML = snapshot.aps.slice(0, 4).map(function (ap) {
-          var stateTone = ap.status === "online" ? "good" : "warn";
-          return '' +
-            '<div class="network-overview__ap">' +
-              '<div>' +
-                '<span>' + ap.name + '</span>' +
-                '<strong>' + String(ap.clients || 0) + ' clients</strong>' +
-                '<small>' + (ap.channel || ap.uplink || 'UniFi access point') + '</small>' +
-              '</div>' +
-              '<div class="network-overview__pill" data-tone="' + stateTone + '">' + (ap.status || 'online') + '</div>' +
-            '</div>';
-        }).join("");
-      }
+        var card = document.getElementById("network-unifi-card");
+        if (!snapshot || !snapshot.detected) {
+          card.classList.add("is-hidden");
+          return;
+        }
 
-      function hideUniFi() {
-        document.getElementById("network-overview-card").classList.add("is-hidden");
+        card.classList.remove("is-hidden");
+        document.getElementById("network-unifi-name").textContent = snapshot.gateway;
+        document.getElementById("network-unifi-detail").textContent = snapshot.provider || "Local UniFi detected";
+        document.getElementById("network-unifi-clients").textContent = String(snapshot.clients.total);
+        document.getElementById("network-unifi-wifi").textContent = String(snapshot.clients.wifi);
+        document.getElementById("network-unifi-wired").textContent = String(snapshot.clients.wired);
+        document.getElementById("network-unifi-aps").textContent = String(snapshot.aps.length);
       }
 
       var widget = {
@@ -272,31 +183,30 @@
           if (endpoint) {
             try {
               snapshot = await fetchJson(endpoint);
-              snapshot.detail = snapshot.source || "Bridge telemetry";
               sourceText = snapshot.source || "Local bridge";
             } catch (error) {
               snapshot = getLocalNetworkSnapshot();
-              sourceText = snapshot.detail === "Bridge required" ? "Unavailable" : "Browser estimate";
+              sourceText = "Unavailable";
             }
           } else {
             snapshot = getLocalNetworkSnapshot();
-            sourceText = snapshot.detail === "Bridge required" ? "Unavailable" : "Browser estimate";
+            sourceText = snapshot.source || "Live";
           }
 
           document.getElementById("download-speed").textContent = WidgetCore.formatBytesPerSecond(snapshot.download);
           document.getElementById("upload-speed").textContent = WidgetCore.formatBytesPerSecond(snapshot.upload);
           document.getElementById("ping-speed").textContent = typeof snapshot.ping === "number" && isFinite(snapshot.ping) ? Math.round(snapshot.ping) + " ms" : "--";
-          document.getElementById("network-connection").textContent = snapshot.type;
-          document.getElementById("network-detail").textContent = snapshot.detail;
-          hideUniFi();
+          document.getElementById("network-connection").textContent = snapshot.type || "--";
+          document.getElementById("network-detail").textContent = snapshot.source || "Native host";
 
-          if (unifiEndpoint) {
-            try {
-              renderUniFi(normalizeUniFiSnapshot(await fetchJson(unifiEndpoint)));
-              sourceText = sourceText === "Unavailable" ? "UniFi only" : sourceText + " + UniFi";
-            } catch (error) {
-              hideUniFi();
+          try {
+            var unifi = normalizeUniFiSnapshot(await fetchJson(unifiEndpoint));
+            renderUniFi(unifi);
+            if (unifi.detected) {
+              sourceText = "UniFi detected";
             }
+          } catch (error) {
+            renderUniFi(null);
           }
 
           document.getElementById("network-status").textContent = sourceText;

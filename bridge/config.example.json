@@ -2,7 +2,7 @@
   "port": 8976,
   "weather": {
     "apiKey": "",
-    "city": "Indianapolis",
+    "city": "",
     "units": "metric"
   },
   "calendar": {

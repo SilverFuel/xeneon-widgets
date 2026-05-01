@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css?v=20260425-5">
-  <link rel="stylesheet" href="../css/widgets.css?v=20260425-5">
+  <link rel="stylesheet" href="../css/theme.css?v=20260501-1">
+  <link rel="stylesheet" href="../css/widgets.css?v=20260501-1">
   <style>
     .widget-header--compact {
       justify-content: flex-end;
@@ -25,6 +25,13 @@
       gap: 12px;
     }
 
+    .system-gpu-power-list-card {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 12px;
+      min-height: 0;
+    }
+
     .system-process-head {
       display: flex;
       align-items: center;
@@ -38,7 +45,8 @@
       line-height: 1.3;
     }
 
-    .system-process-list {
+    .system-process-list,
+    .system-gpu-power-list {
       min-height: 0;
       display: grid;
       gap: 8px;
@@ -47,9 +55,9 @@
       padding-right: 4px;
     }
 
-    .system-process-item {
+    .system-process-item,
+    .system-gpu-power-item {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
       gap: 12px;
       align-items: center;
       padding: 10px 12px;
@@ -57,7 +65,26 @@
       background: rgba(255, 255, 255, 0.04);
     }
 
-    .system-process-name {
+    .system-process-item {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+
+    .system-gpu-power-item {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .system-gpu-power-item[data-tone="warn"] {
+      border: 1px solid rgba(255, 181, 71, 0.42);
+      background: rgba(255, 181, 71, 0.08);
+    }
+
+    .system-gpu-power-item[data-tone="danger"] {
+      border: 1px solid rgba(255, 77, 109, 0.5);
+      background: rgba(255, 77, 109, 0.1);
+    }
+
+    .system-process-name,
+    .system-gpu-power-name {
       min-width: 0;
       font-weight: 600;
       white-space: nowrap;
@@ -65,13 +92,21 @@
       text-overflow: ellipsis;
     }
 
-    .system-process-stat {
+    .system-process-stat,
+    .system-gpu-power-stat {
       color: var(--color-text-dim);
       font-size: 0.8rem;
       white-space: nowrap;
     }
 
-    .system-process-empty {
+    .system-gpu-power-stat {
+      color: var(--color-text);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .system-process-empty,
+    .system-gpu-power-empty {
       padding: 10px 12px;
       border-radius: 14px;
       background: rgba(255, 255, 255, 0.04);
@@ -81,7 +116,9 @@
     }
 
     [data-size="medium"] .system-process-card,
-    [data-size="small"] .system-process-card {
+    [data-size="medium"] .system-gpu-power-list-card,
+    [data-size="small"] .system-process-card,
+    [data-size="small"] .system-gpu-power-list-card {
       grid-column: span 2;
     }
 
@@ -127,6 +164,27 @@
         <div class="bar"><span id="disk-bar" style="width:0%"></span></div>
         <div class="metric-detail">Active utilization</div>
       </article>
+      <article class="metric-card">
+        <div class="metric-label">GPU Power</div>
+        <div id="gpu-power-total" class="metric-value">--</div>
+        <div id="gpu-power-total-detail" class="metric-detail">Board draw</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-label">Connector Pins</div>
+        <div id="gpu-power-pins" class="metric-value">--</div>
+        <div id="gpu-power-pins-detail" class="metric-detail">Per-pin readings</div>
+      </article>
+      <article class="list-card system-gpu-power-list-card">
+        <div class="system-process-head">
+          <div>
+            <div class="metric-label">GPU Connector & Rails</div>
+            <div id="gpu-power-message" class="system-process-copy">Readings from available local sensor tools.</div>
+          </div>
+        </div>
+        <div id="gpu-power-list" class="system-gpu-power-list">
+          <div class="system-gpu-power-empty">Loading GPU connector telemetry.</div>
+        </div>
+      </article>
       <article class="list-card system-process-card">
         <div class="system-process-head">
           <div>
@@ -140,12 +198,13 @@
       </article>
     </section>
   </main>
-  <script src="../js/widget-core.js?v=20260425-5"></script>
-  <script src="../js/system-stats.js?v=20260425-5"></script>
+  <script src="../js/widget-core.js?v=20260501-1"></script>
+  <script src="../js/system-stats.js?v=20260501-1"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
       var endpoint = params.get("endpoint") || "";
+      var gpuPowerEndpoint = params.get("gpuPowerEndpoint") || "";
 
       function fetchJson(url) {
         return fetch(url, { cache: "no-store" }).then(function (response) {
@@ -195,21 +254,83 @@
         document.getElementById(barId).style.width = typeof value === "number" && isFinite(value) ? value + "%" : "0%";
       }
 
+      function text(value, fallback) {
+        return typeof value === "string" && value.trim() ? value.trim() : fallback;
+      }
+
+      function sensorValue(sensor, fallback) {
+        if (!sensor) {
+          return fallback || "--";
+        }
+
+        return text(sensor.displayValue, text(sensor.rawValue, sensor.value == null ? (fallback || "--") : String(sensor.value)));
+      }
+
+      function renderGpuPower(power) {
+        power = power || {};
+        var pins = Array.isArray(power.pins) ? power.pins : [];
+        var rails = Array.isArray(power.rails) ? power.rails : [];
+        var draw = Array.isArray(power.power) ? power.power : [];
+        var alerts = Array.isArray(power.alerts) ? power.alerts : [];
+        var list = alerts.length ? alerts : pins.concat(rails, draw);
+
+        document.getElementById("gpu-power-total").textContent = sensorValue(power.totalPower);
+        document.getElementById("gpu-power-total-detail").textContent = power.totalPower ? text(power.totalPower.label, "Board draw") : "No power draw yet";
+        document.getElementById("gpu-power-pins").textContent = String(pins.length);
+        document.getElementById("gpu-power-pins-detail").textContent = pins.length ? "Connector readings" : "Waiting for per-pin data";
+        document.getElementById("gpu-power-message").textContent = text(power.message, "GPU connector telemetry appears when a sensor source exposes it.");
+
+        if (!list.length) {
+          document.getElementById("gpu-power-list").innerHTML = '<div class="system-gpu-power-empty">No connector, rail, or power readings exposed yet.</div>';
+          return;
+        }
+
+        document.getElementById("gpu-power-list").innerHTML = list.slice(0, 12).map(function (sensor) {
+          return '' +
+            '<div class="system-gpu-power-item" data-tone="' + escapeHtml(text(sensor.status, "good")) + '">' +
+              '<div>' +
+                '<div class="system-gpu-power-name" title="' + escapeHtml(text(sensor.name, sensor.label)) + '">' + escapeHtml(text(sensor.label, "GPU sensor")) + '</div>' +
+                '<div class="system-process-stat">' + escapeHtml(text(sensor.detail, text(sensor.source, "Local sensor"))) + '</div>' +
+              '</div>' +
+              '<div class="system-gpu-power-stat">' + escapeHtml(sensorValue(sensor)) + '</div>' +
+            '</div>';
+        }).join("");
+      }
+
+      async function loadSystemStats() {
+        if (!endpoint) {
+          return SystemStats.getSystemStats();
+        }
+
+        try {
+          return await fetchJson(endpoint);
+        } catch (error) {
+          return SystemStats.getSystemStats();
+        }
+      }
+
+      async function loadGpuPower() {
+        if (!gpuPowerEndpoint) {
+          return {};
+        }
+
+        try {
+          return await fetchJson(gpuPowerEndpoint);
+        } catch (error) {
+          return { message: "GPU power telemetry unavailable." };
+        }
+      }
+
       var widget = {
         refreshInterval: 4000,
         initWidget: function () {},
         updateWidget: async function () {
-          var stats;
-
-          if (endpoint) {
-            try {
-              stats = await fetchJson(endpoint);
-            } catch (error) {
-              stats = await SystemStats.getSystemStats();
-            }
-          } else {
-            stats = await SystemStats.getSystemStats();
-          }
+          var results = await Promise.all([
+            loadSystemStats(),
+            loadGpuPower()
+          ]);
+          var stats = results[0];
+          var gpuPower = results[1];
 
           renderMetric("cpu-usage", "cpu-bar", stats.cpu);
           renderMetric("gpu-usage", "gpu-bar", stats.gpu);
@@ -219,6 +340,7 @@
           document.getElementById("gpu-temp").textContent = stats.gpuTemp == null ? "GPU temp unavailable" : Math.round(stats.gpuTemp) + " C";
           document.getElementById("system-status").textContent = stats.source;
           renderTopProcesses(stats.topProcesses);
+          renderGpuPower(gpuPower);
         },
         destroyWidget: function () {
           if (this.__interval) {
