@@ -1,23 +1,30 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace XenonEdgeHost;
 
 public sealed class BridgeManager : IDisposable
 {
-    private const string DashboardAssetRevision = "20260425-8";
+    private const string DashboardAssetRevision = "20260501-1";
     private const int MaxJsonBodyBytes = 256 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
+    private static readonly Regex WindowsUserPathPattern = new(@"[A-Za-z]:\\Users\\[^\\\s""]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex MacUserPathPattern = new(@"/Users/[^/\s""]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex EmailPattern = new(@"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex PrivateIpPattern = new(@"\b(?:(?:10)\.(?:\d{1,3}\.){2}\d{1,3}|(?:172)\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|(?:192\.168)\.\d{1,3}\.\d{1,3})\b", RegexOptions.Compiled);
+    private static readonly Regex SensitiveQueryPattern = new(@"(?<name>(?:api[_-]?key|appid|token|secret|password|pass|sig|signature|auth|key))=[^&\s""]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
     private readonly HostLogger _logger = App.Logger;
     private readonly ConfigStore _configStore;
     private readonly EmbeddedAssetProvider _assetProvider;
     private readonly SystemMetricsService _systemMetrics;
+    private readonly GpuPowerMonitorService _gpuPowerMonitor;
     private readonly NetworkMetricsService _networkMetrics;
     private readonly AudioService _audioService;
     private readonly WeatherService _weatherService;
@@ -27,6 +34,7 @@ public sealed class BridgeManager : IDisposable
     private readonly ReleaseService _releaseService;
     private readonly MediaService _mediaService;
     private readonly LauncherService _launcherService;
+    private readonly SteamService _steamService;
     private readonly SystemActionsService _systemActionsService;
     private readonly ClipboardHistoryService _clipboardHistoryService;
     private readonly HttpClient _weatherHttpClient;
@@ -41,6 +49,7 @@ public sealed class BridgeManager : IDisposable
         _configStore = new ConfigStore(_logger);
         _assetProvider = new EmbeddedAssetProvider();
         _systemMetrics = new SystemMetricsService(_logger);
+        _gpuPowerMonitor = new GpuPowerMonitorService(_logger);
         _networkMetrics = new NetworkMetricsService(_logger);
         _audioService = new AudioService(_logger);
         _weatherHttpClient = new HttpClient
@@ -54,6 +63,7 @@ public sealed class BridgeManager : IDisposable
         _releaseService = new ReleaseService(_weatherHttpClient);
         _mediaService = new MediaService(_logger);
         _launcherService = new LauncherService();
+        _steamService = new SteamService(_logger);
         _systemActionsService = new SystemActionsService(_logger);
         _clipboardHistoryService = new ClipboardHistoryService(_logger);
 
@@ -125,6 +135,7 @@ public sealed class BridgeManager : IDisposable
             _lifecycleLock.Release();
             _lifecycleLock.Dispose();
             _systemMetrics.Dispose();
+            _gpuPowerMonitor.Dispose();
             _networkMetrics.Dispose();
             _hueService.Dispose();
             _uniFiService.Dispose();
@@ -177,6 +188,7 @@ public sealed class BridgeManager : IDisposable
         }
 
         _systemMetrics.Start();
+        _gpuPowerMonitor.Start();
         _networkMetrics.Start();
         _uniFiService.RefreshDiscoveryInBackground();
 
@@ -271,6 +283,9 @@ public sealed class BridgeManager : IDisposable
                 case "/api/config/reset" when request.HttpMethod == "POST":
                     await HandleConfigResetAsync(response, cancellationToken);
                     return;
+                case "/api/support/bundle" when request.HttpMethod == "GET":
+                    await HandleSupportBundleAsync(response, cancellationToken);
+                    return;
                 case "/api/releases/latest":
                     await WriteJsonAsync(response, 200, await _releaseService.GetLatestReleaseAsync(cancellationToken), cancellationToken);
                     return;
@@ -292,8 +307,20 @@ public sealed class BridgeManager : IDisposable
                 case "/api/launchers/icon" when request.HttpMethod == "GET":
                     await HandleLauncherIconAsync(request, response, cancellationToken);
                     return;
+                case "/api/steam/games" when request.HttpMethod == "GET":
+                    await WriteJsonAsync(response, 200, _steamService.GetSnapshot(IsTruthyQueryValue(request, "refresh")), cancellationToken);
+                    return;
+                case "/api/steam/games/launch" when request.HttpMethod == "POST":
+                    await HandleSteamGameLaunchAsync(request, response, cancellationToken);
+                    return;
+                case "/api/steam/games/art" when request.HttpMethod == "GET":
+                    await HandleSteamGameArtworkAsync(request, response, cancellationToken);
+                    return;
                 case "/api/system":
                     await WriteJsonAsync(response, 200, _systemMetrics.GetSnapshot(), cancellationToken);
+                    return;
+                case "/api/gpu-power":
+                    await WriteJsonAsync(response, 200, _gpuPowerMonitor.GetSnapshot(), cancellationToken);
                     return;
                 case "/api/network":
                     await WriteJsonAsync(response, 200, _networkMetrics.GetSnapshot(), cancellationToken);
@@ -474,6 +501,28 @@ public sealed class BridgeManager : IDisposable
         }, cancellationToken);
     }
 
+    private async Task HandleSupportBundleAsync(HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        var config = _configStore.Snapshot();
+        var health = await BuildHealthPayloadAsync(cancellationToken);
+
+        response.AddHeader("Content-Disposition", "attachment; filename=\"xenon-support-bundle.json\"");
+        await WriteJsonAsync(response, 200, new
+        {
+            generatedAt = DateTimeOffset.UtcNow,
+            app = new
+            {
+                name = "XENEON Edge Host",
+                version = typeof(BridgeManager).Assembly.GetName().Version?.ToString() ?? "unknown",
+                dashboardAssetRevision = DashboardAssetRevision,
+                dashboardUrl = DashboardUri.ToString()
+            },
+            config = BuildSupportConfigSnapshot(config),
+            health = SanitizeSupportObject(health, config),
+            log = ReadRecentLogLines(120, config)
+        }, cancellationToken);
+    }
+
     private async Task HandleWeatherConfigUpdateAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
     {
         var payload = await ReadJsonAsync<WeatherConfigRequest>(request, cancellationToken);
@@ -535,6 +584,24 @@ public sealed class BridgeManager : IDisposable
         if (!_launcherService.TryGetIcon(_configStore.Snapshot(), id, out var asset))
         {
             await WriteTextAsync(response, 404, "Launcher icon not found", cancellationToken);
+            return;
+        }
+
+        await WriteBinaryAsync(response, 200, asset.ContentType, asset.Content, cancellationToken);
+    }
+
+    private async Task HandleSteamGameLaunchAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        var payload = await ReadJsonAsync<SteamGameLaunchRequest>(request, cancellationToken);
+        await WriteJsonAsync(response, 200, _steamService.Launch(payload.AppId), cancellationToken);
+    }
+
+    private async Task HandleSteamGameArtworkAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        var appId = GetQueryValue(request, "id");
+        if (!_steamService.TryGetArtwork(appId, out var asset))
+        {
+            await WriteTextAsync(response, 404, "Steam game artwork not found", cancellationToken);
             return;
         }
 
@@ -712,9 +779,16 @@ public sealed class BridgeManager : IDisposable
         var media = await _mediaService.GetSnapshotAsync(cancellationToken);
         var hue = await _hueService.GetSnapshotAsync(config, cancellationToken);
         var clipboard = await _clipboardHistoryService.GetSnapshotAsync(cancellationToken);
+        var gpuPower = _gpuPowerMonitor.GetSnapshot();
 
         var bridge = CreateSetupItem("bridge", "Local bridge", "Ready", true, $"Running at {BuildBaseUri(config.Port)}.");
         var system = CreateSetupItem("system", "System Monitor", "Ready", true, "Native system telemetry is live.");
+        var gpuPowerItem = CreateSetupItem(
+            "gpu-power",
+            "GPU Power Monitor",
+            gpuPower.Status == "error" ? "Needs Setup" : "Ready",
+            false,
+            TextOr(gpuPower.Message, "GPU connector and rail telemetry is ready when exposed by local sensor tools."));
         var network = CreateSetupItem("network", "Network Monitor", "Ready", true, "Native network telemetry is live.");
         var launcherItem = CreateSetupItem(
             "launchers",
@@ -783,6 +857,7 @@ public sealed class BridgeManager : IDisposable
             capabilities = new
             {
                 system = true,
+                gpuPower = true,
                 network = true,
                 launchers = true,
                 quickActions = true,
@@ -806,6 +881,7 @@ public sealed class BridgeManager : IDisposable
                 {
                     ["bridge"] = bridge,
                     ["system"] = system,
+                    ["gpu-power"] = gpuPowerItem,
                     ["network"] = network,
                     ["launchers"] = launcherItem,
                     ["quick-actions"] = quickActionsItem,
@@ -845,9 +921,64 @@ public sealed class BridgeManager : IDisposable
                 configured = config.Launchers.Count > 0,
                 count = config.Launchers.Count
             },
+            gpuPower = new
+            {
+                configured = true,
+                endpoint = "/api/gpu-power",
+                localOnly = true,
+                source = "Windows/LHM/OHM/HWiNFO CSV"
+            },
             hue = new
             {
                 bridgeIp = config.Hue.BridgeIp,
+                configured = !string.IsNullOrWhiteSpace(config.Hue.BridgeIp),
+                linked = !string.IsNullOrWhiteSpace(config.Hue.AppKey),
+                secureStorage = "Windows DPAPI"
+            },
+            unifi = new
+            {
+                configured = false,
+                endpoint = "/api/unifi/network",
+                localOnly = true
+            },
+            dashboard = new
+            {
+                onboardingCompleted = config.Dashboard.OnboardingCompleted,
+                onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
+                onboardingVersion = config.Dashboard.OnboardingVersion
+            }
+        };
+    }
+
+    private static object BuildSupportConfigSnapshot(AppConfig config)
+    {
+        return new
+        {
+            port = config.Port,
+            weather = new
+            {
+                configured = !string.IsNullOrWhiteSpace(config.Weather.ApiKey),
+                cityConfigured = !string.IsNullOrWhiteSpace(config.Weather.City),
+                units = config.Weather.Units,
+                secureStorage = "Windows DPAPI"
+            },
+            calendar = new
+            {
+                configured = !string.IsNullOrWhiteSpace(config.Calendar.IcsUrl)
+            },
+            launchers = new
+            {
+                configured = config.Launchers.Count > 0,
+                count = config.Launchers.Count
+            },
+            gpuPower = new
+            {
+                configured = true,
+                endpoint = "/api/gpu-power",
+                localOnly = true
+            },
+            hue = new
+            {
                 configured = !string.IsNullOrWhiteSpace(config.Hue.BridgeIp),
                 linked = !string.IsNullOrWhiteSpace(config.Hue.AppKey),
                 secureStorage = "Windows DPAPI"
@@ -907,6 +1038,72 @@ public sealed class BridgeManager : IDisposable
     private static string TextOr(string? value, string fallback)
     {
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    private string[] ReadRecentLogLines(int maxLines, AppConfig? config = null)
+    {
+        try
+        {
+            if (!File.Exists(_logger.LogPath))
+            {
+                return [];
+            }
+
+            return File.ReadLines(_logger.LogPath)
+                .TakeLast(Math.Max(1, maxLines))
+                .Select(line => SanitizeSupportText(line, config))
+                .ToArray();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static object SanitizeSupportObject(object payload, AppConfig config)
+    {
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        var sanitized = SanitizeSupportText(json, config);
+        return JsonSerializer.Deserialize<JsonElement>(sanitized, JsonOptions);
+    }
+
+    private static string SanitizeSupportText(string value, AppConfig? config = null)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return value;
+        }
+
+        var sanitized = value;
+
+        if (config is not null)
+        {
+            sanitized = ReplaceIfPresent(sanitized, config.Weather.City, "<weather-location>");
+            sanitized = ReplaceIfPresent(sanitized, config.Calendar.IcsUrl, "<calendar-feed-url>");
+            sanitized = ReplaceIfPresent(sanitized, config.Hue.BridgeIp, "<local-ip>");
+
+            foreach (var launcher in config.Launchers)
+            {
+                sanitized = ReplaceIfPresent(sanitized, launcher.ExecutablePath, "<launcher-path>");
+                sanitized = ReplaceIfPresent(sanitized, launcher.IconPath, "<launcher-icon-path>");
+                sanitized = ReplaceIfPresent(sanitized, launcher.Arguments, "<launcher-arguments>");
+            }
+        }
+
+        sanitized = WindowsUserPathPattern.Replace(sanitized, @"C:\Users\<user>");
+        sanitized = MacUserPathPattern.Replace(sanitized, "/Users/<user>");
+        sanitized = EmailPattern.Replace(sanitized, "<email>");
+        sanitized = PrivateIpPattern.Replace(sanitized, "<local-ip>");
+        sanitized = SensitiveQueryPattern.Replace(sanitized, "${name}=<redacted>");
+
+        return sanitized;
+    }
+
+    private static string ReplaceIfPresent(string source, string? value, string replacement)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? source
+            : source.Replace(value, replacement, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<T> ReadJsonAsync<T>(HttpListenerRequest request, CancellationToken cancellationToken)
@@ -1092,6 +1289,14 @@ public sealed class BridgeManager : IDisposable
         }
 
         return "";
+    }
+
+    private static bool IsTruthyQueryValue(HttpListenerRequest request, string key)
+    {
+        var value = GetQueryValue(request, key);
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
     private void RaiseStatus(string message)

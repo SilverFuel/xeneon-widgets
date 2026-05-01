@@ -14,6 +14,7 @@ public sealed partial class MainWindow : Window
     private const int GwlExStyle = -20;
     private const long WsExToolWindow = 0x00000080L;
     private const long WsExAppWindow = 0x00040000L;
+    private const long WsExNoActivate = 0x08000000L;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;
@@ -33,6 +34,7 @@ public sealed partial class MainWindow : Window
     private bool _webViewInitializationFailed;
     private bool _webViewDiagnosticsAttached;
     private bool _taskbarStyleApplied;
+    private int _quitRequested;
     private int _navigationFailures;
     private EventWaitHandle? _showDisplayEvent;
     private RegisteredWaitHandle? _showDisplayWaitHandle;
@@ -74,7 +76,7 @@ public sealed partial class MainWindow : Window
             onShowDisplay: () => DispatcherQueue.TryEnqueue(ShowDisplayWindow),
             onOpenLogs: () => DispatcherQueue.TryEnqueue(OpenLogs),
             onResetDashboard: () => DispatcherQueue.TryEnqueue(() => _ = ResetDashboardStateAsync()),
-            onQuit: () => DispatcherQueue.TryEnqueue(QuitApplication),
+            onQuit: RequestQuitFromTray,
             logger: _logger);
         ConfigureWindow();
         await InitializeHostAsync();
@@ -447,7 +449,15 @@ public sealed partial class MainWindow : Window
     private void ShowDisplayWindow()
     {
         ConfigureWindow();
-        Activate();
+        ShowWindowNoActivate();
+    }
+
+    private void RequestQuitFromTray()
+    {
+        if (!DispatcherQueue.TryEnqueue(QuitApplication))
+        {
+            QuitApplication();
+        }
     }
 
     private void StartShowDisplaySignalListener()
@@ -474,9 +484,42 @@ public sealed partial class MainWindow : Window
 
     private void QuitApplication()
     {
+        if (Interlocked.Exchange(ref _quitRequested, 1) == 1)
+        {
+            return;
+        }
+
         _logger.Info("Quit requested from tray menu.");
-        Close();
-        Application.Current.Exit();
+        ScheduleForceExitIfShutdownStalls();
+
+        try
+        {
+            _trayIcon?.Dispose();
+            _trayIcon = null;
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Tray icon cleanup failed during quit: {error.Message}");
+        }
+
+        try
+        {
+            Close();
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Window close failed during quit.", error);
+        }
+
+        try
+        {
+            Application.Current.Exit();
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Application exit failed during quit.", error);
+            Environment.Exit(0);
+        }
     }
 
     private void HandleClosed(object sender, WindowEventArgs args)
@@ -499,7 +542,7 @@ public sealed partial class MainWindow : Window
         }
 
         var currentStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
-        var nextStyle = (currentStyle | WsExToolWindow) & ~WsExAppWindow;
+        var nextStyle = (currentStyle | WsExToolWindow | WsExNoActivate) & ~WsExAppWindow;
 
         if (nextStyle == currentStyle)
         {
@@ -519,7 +562,36 @@ public sealed partial class MainWindow : Window
         ShowWindow(windowHandle, SwHide);
         ShowWindow(windowHandle, SwShowNoActivate);
         _taskbarStyleApplied = true;
-        _logger.Info("Applied tool-window style so the EDGE display stays off the taskbar.");
+        _logger.Info("Applied no-activate tool-window style so the EDGE display stays off the taskbar and does not steal audio focus.");
+    }
+
+    private void ShowWindowNoActivate()
+    {
+        var windowHandle = WindowNative.GetWindowHandle(this);
+        if (windowHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        SetWindowPos(
+            windowHandle,
+            IntPtr.Zero,
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate);
+        ShowWindow(windowHandle, SwShowNoActivate);
+    }
+
+    private void ScheduleForceExitIfShutdownStalls()
+    {
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(4));
+            _logger.Warn("Quit did not complete within 4 seconds. Forcing process exit.");
+            Environment.Exit(0);
+        });
     }
 
     private void DisposeResources()

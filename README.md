@@ -58,7 +58,31 @@ Xenon includes a built-in UniFi detector now. The dashboard uses:
 http://127.0.0.1:8976/api/unifi/network
 ```
 
-That endpoint auto-detects a local UniFi OS console, such as `https://192.168.0.1`, and gives the dashboard a setup-free UniFi state. Full client, AP, app, and camera stats can be added later with a local credential flow, but the basic UniFi panel no longer requires a separate helper service.
+That endpoint auto-detects common local UniFi OS console addresses and gives the dashboard a setup-free UniFi state. Full client, AP, app, and camera stats can be added later with a local credential flow, but the basic UniFi panel no longer requires a separate helper service.
+
+## GPU Power In System Monitor
+
+The System Monitor includes a GPU Power section for RTX 50-series and other modern GPUs. It does not hardcode an Astral-only path; it discovers connector, rail, current, voltage, power, and protection sensors from local public sources when they are exposed.
+
+The native endpoint is:
+
+```text
+http://127.0.0.1:8976/api/gpu-power
+```
+
+Built-in sources:
+
+- LibreHardwareMonitor or OpenHardwareMonitor WMI sensors
+- HWiNFO sensor CSV logs when available
+
+For HWiNFO CSV logs, either place a recent HWiNFO/sensor CSV in Documents, Desktop, Downloads, `Documents\HWiNFO`, or `Documents\HWiNFO64`, or set one of these environment variables before launching Xenon:
+
+```powershell
+$env:XENON_HWINFO_LOG="C:\path\to\HWiNFO-log.csv"
+$env:XENON_HWINFO_LOG_DIR="C:\path\to\folder"
+```
+
+Per-pin readings appear only when the GPU and the sensor tool expose them. Otherwise the widget still shows available GPU rail, power draw, and temperature readings.
 
 ## Build The Installer
 

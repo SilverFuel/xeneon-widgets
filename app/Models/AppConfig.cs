@@ -19,7 +19,7 @@ public sealed class WeatherConfig
 {
     public string ApiKey { get; set; } = "";
 
-    public string City { get; set; } = "Indianapolis";
+    public string City { get; set; } = "";
 
     public string Units { get; set; } = "metric";
 }
