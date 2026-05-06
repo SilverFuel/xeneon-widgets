@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+
+tone_instructions: "Be concise, practical, and specific. Prioritize user-impacting bugs, security/privacy issues, release risks, and maintainability problems over style nits."
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  review_details: true
+  changed_files_summary: true
+  sequence_diagrams: false
+  estimate_code_review_effort: true
+  poem: false
+  in_progress_fortune: false
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 5
+    base_branches:
+      - "release/.*"
+      - "hotfix/.*"
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "[skip review]"
+    ignore_usernames:
+      - "dependabot[bot]"
+      - "github-actions[bot]"
+  path_filters:
+    - "!publish/**"
+    - "!release/**"
+    - "!release-assets/**"
+    - "!app/bin/**"
+    - "!app/obj/**"
+    - "!app/dist/**"
+    - "!app/installer-build/**"
+    - "!desktop/electron/dist/**"
+    - "!desktop/electron/node_modules/**"
+    - "!node_modules/**"
+  path_instructions:
+    - path: "app/**"
+      instructions: |
+        Review the native Windows host carefully. Focus on:
+        - Shutdown, tray, WebView2, display placement, and no-activate window behavior.
+        - Local HTTP endpoints staying bound to localhost and rejecting unsafe origins.
+        - DPAPI/config handling, avoiding credential leakage in logs or support bundles.
+        - Win32 interop correctness, disposal, race conditions, and UI-thread access.
+    - path: "app/Services/**"
+      instructions: |
+        Sensor and integration services must fail softly. Flag changes that can block the UI, crash the host when optional hardware/software is missing, leak local paths/secrets, or assume a single GPU/display/audio setup.
+    - path: "bridge/**"
+      instructions: |
+        The bridge is legacy/local support code. Focus on localhost-only behavior, CORS/origin restrictions, command execution safety, and compatibility with the native host.
+    - path: "js/**"
+      instructions: |
+        Review dashboard JavaScript for touch ergonomics, resilient polling, safe localStorage use, escaped HTML, and avoiding focus/audio-stealing regressions on the XENEON display.
+    - path: "widgets/**"
+      instructions: |
+        Widgets run on a small touch display. Prioritize clear labels, compact layouts, readable states, no overlapping text, graceful empty/error states, and no unnecessary explanatory clutter.
+    - path: "css/**"
+      instructions: |
+        Check responsive sizing, touch hit areas, contrast, overflow, and whether dynamic text can overlap or resize layout unexpectedly.
+    - path: ".github/workflows/**"
+      instructions: |
+        Review CI/release workflows for reproducibility, least privilege, artifact correctness, and whether release jobs can accidentally publish unsigned or stale builds.
+    - path: "scripts/**"
+      instructions: |
+        Review scripts for safe paths, clear failures, non-destructive defaults, and Windows PowerShell compatibility.
+    - path: "README.md"
+      instructions: |
+        Check product claims for accuracy. This is independent software, not an official CORSAIR app; flag wording that implies endorsement or overstates hardware/software support.
+    - path: "CHANGELOG.md"
+      instructions: |
+        Ensure release notes are user-facing, accurate, and do not promise support beyond what the implementation actually provides.
+  tools:
+    github-checks:
+      enabled: true
+      timeout_ms: 900000
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+
+chat:
+  auto_reply: true
