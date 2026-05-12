@@ -16,11 +16,28 @@ The primary product is the native Windows host in `app`. Legacy browser bridge f
 
 XENEON Edge Host is an independent product. It is not an official CORSAIR app unless a separate written agreement says otherwise.
 
+## Install And Let Xenon Auto-Setup
+
+For beta users, use the Windows setup EXE from GitHub Releases instead of the source code ZIP:
+
+1. Download `XenonEdgeHost-Setup-<version>-<date>.exe`.
+2. Run it. The free beta may show a Windows SmartScreen warning until the installer is signed.
+3. Launch XENEON Edge Host from the Start Menu or Desktop shortcut.
+
+On first launch, Xenon scans the PC and prepares the normal dashboard automatically:
+
+- starts the local dashboard service
+- detects system, GPU, network, audio, media, Steam, UniFi, and clipboard capabilities where Windows exposes them
+- pins safe launcher defaults from Start Menu shortcuts and recent Steam games when no launchers are configured yet
+- marks the core dashboard ready without asking the user to finish setup manually
+
+Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, and Philips Hue needs the bridge link button before Xenon can store local Hue credentials.
+
 ## Product Layer
 
 The dashboard now includes the pieces that make it feel like an installable product:
 
-- first-run diagnostics and setup
+- automatic first-run provisioning with diagnostics and repair
 - normal setup that hides advanced connector plumbing
 - dashboard profiles for command, gaming, streaming, home-lab, and minimal modes
 - Theme Studio with accent, opacity, and animation controls

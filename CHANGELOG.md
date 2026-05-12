@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Added primary display FPS telemetry from the native host.
-- Upgraded Game Mode with live display FPS, dashboard FPS, CPU, and GPU readouts.
+- Added primary display refresh-rate telemetry from the native host.
+- Upgraded Game Mode with live display refresh, dashboard FPS, CPU, and GPU readouts.
+- Renamed Game Mode FPS cards to Display Hz and Dashboard FPS so Windows refresh rate is not confused with game frame rate.
 - Added a local Steam launch pad that scans installed games and launches them through Steam.
 - Simplified Game Mode by removing game profile presets, color chips, manual theme fields, and extra summary clutter.
 - Hid product/admin panels from the normal dashboard picker so the app opens to the daily-use controls.

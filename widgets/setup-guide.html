@@ -397,8 +397,8 @@
     <header class="header">
       <div>
         <p class="eyebrow">Diagnostics</p>
-        <h1>Setup & diagnostics</h1>
-        <p class="subtitle">Finish the three essentials once. Everything else stays optional.</p>
+        <h1>Auto setup & diagnostics</h1>
+        <p class="subtitle">Xenon scans this PC, prepares safe defaults, and only asks for permissions it cannot infer.</p>
       </div>
       <div id="guide-status" class="status tone-warn">Loading</div>
     </header>
@@ -411,9 +411,9 @@
           <div class="section-header">
             <div>
               <p class="eyebrow">Essentials</p>
-              <h2>Required before finish setup</h2>
+              <h2>Detected automatically</h2>
             </div>
-            <button id="finish-setup" class="button is-primary" type="button" disabled>Finish setup</button>
+            <button id="finish-setup" class="button is-primary" type="button" disabled>Auto ready</button>
           </div>
 
           <div id="guide-essentials" class="row-list"></div>
@@ -440,7 +440,7 @@
           <div class="section-header">
             <div>
               <p class="eyebrow">Optional</p>
-              <h2>Weather + Hue</h2>
+              <h2>Needs permission</h2>
             </div>
             <div class="pill tone-muted">Optional</div>
           </div>
@@ -537,7 +537,7 @@
       }
 
       function renderOverview(setup) {
-        var essentials = [setup.items.bridge, setup.items.system, setup.items.network];
+        var essentials = [setup.items.bridge, setup.items.provisioning, setup.items.system, setup.items.network].filter(Boolean);
         var optional = [setup.items.weather, setup.items.hue, setup.items.calendar, setup.items.unifi].filter(Boolean);
         var autoDetected = [setup.items.unifi].filter(function (item) {
           return item && (item.state === "Detected" || item.state === "Ready" || item.state === "Built in");
@@ -548,7 +548,7 @@
         }).length;
 
         document.getElementById("guide-overview").innerHTML = [
-          '<div class="overview-chip"><strong>' + countState(essentials, "Ready") + '/3</strong><span>Essentials ready</span></div>',
+          '<div class="overview-chip"><strong>' + countState(essentials, "Ready") + '/' + essentials.length + '</strong><span>Auto checks ready</span></div>',
           '<div class="overview-chip"><strong>' + (needsAttention || 0) + '</strong><span>Need attention</span></div>',
           '<div class="overview-chip"><strong>' + optionalReady + '/' + optional.length + '</strong><span>Optional live</span></div>',
           '<div class="overview-chip"><strong>' + autoDetected + '/1</strong><span>Auto detected</span></div>'
@@ -574,7 +574,7 @@
       }
 
       function renderEssentials(setup) {
-        var items = [setup.items.bridge, setup.items.system, setup.items.network];
+        var items = [setup.items.bridge, setup.items.provisioning, setup.items.system, setup.items.network].filter(Boolean);
         document.getElementById("guide-essentials").innerHTML = items.map(function (item) {
           return '' +
             '<div class="setup-row">' +
@@ -779,18 +779,18 @@
 
         if (setup.onboardingCompleted) {
           finishButton.disabled = true;
-          finishButton.textContent = "Completed";
+          finishButton.textContent = "Auto ready";
           finishCopy.textContent = setup.onboardingCompletedAt
-            ? "Onboarding completed on " + new Date(setup.onboardingCompletedAt).toLocaleString() + ". Diagnostics stays available if anything breaks."
-            : "Onboarding completed. Diagnostics stays available if anything breaks.";
+            ? "Auto setup completed on " + new Date(setup.onboardingCompletedAt).toLocaleString() + ". Diagnostics stays available if anything breaks."
+            : "Auto setup completed. Diagnostics stays available if anything breaks.";
           return;
         }
 
-        finishButton.textContent = "Finish setup";
+        finishButton.textContent = "Finish manually";
         finishButton.disabled = !setup.essentialsReady;
         finishCopy.textContent = setup.essentialsReady
-          ? "Everything required is ready. Finish setup once to hide this panel from the main picker."
-          : "Finish setup unlocks the normal dashboard flow after Local bridge, System Monitor, and Network Monitor are ready.";
+          ? "Xenon normally completes this automatically. Use this only if diagnostics says auto setup is still pending."
+          : "Xenon is still checking the local app service, System Monitor, and Network Monitor.";
       }
 
       async function refreshGuide() {

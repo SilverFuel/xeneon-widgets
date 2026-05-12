@@ -35,6 +35,7 @@ public sealed class BridgeManager : IDisposable
     private readonly MediaService _mediaService;
     private readonly LauncherService _launcherService;
     private readonly SteamService _steamService;
+    private readonly ProvisioningService _provisioningService;
     private readonly SystemActionsService _systemActionsService;
     private readonly ClipboardHistoryService _clipboardHistoryService;
     private readonly HttpClient _weatherHttpClient;
@@ -64,6 +65,7 @@ public sealed class BridgeManager : IDisposable
         _mediaService = new MediaService(_logger);
         _launcherService = new LauncherService();
         _steamService = new SteamService(_logger);
+        _provisioningService = new ProvisioningService(_configStore, _steamService, _logger);
         _systemActionsService = new SystemActionsService(_logger);
         _clipboardHistoryService = new ClipboardHistoryService(_logger);
 
@@ -215,6 +217,22 @@ public sealed class BridgeManager : IDisposable
         _logger.Info($"Native dashboard server listening on {BuildBaseUri(_configStore.Current.Port)}");
         RaiseStatus("Native dashboard server ready.");
         BridgeReady?.Invoke();
+        StartProvisioningInBackground();
+    }
+
+    private void StartProvisioningInBackground()
+    {
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                _provisioningService.RunStartupProvisioning();
+            }
+            catch (Exception error)
+            {
+                _logger.Error("Automatic provisioning failed.", error);
+            }
+        });
     }
 
     private async Task RunServerAsync(HttpListener listener, CancellationToken cancellationToken)
@@ -273,6 +291,12 @@ public sealed class BridgeManager : IDisposable
             {
                 case "/api/health":
                     await WriteJsonAsync(response, 200, await BuildHealthPayloadAsync(cancellationToken), cancellationToken);
+                    return;
+                case "/api/provisioning" when request.HttpMethod == "GET":
+                    await WriteJsonAsync(response, 200, _provisioningService.GetSnapshot(), cancellationToken);
+                    return;
+                case "/api/provisioning/run" when request.HttpMethod == "POST":
+                    await WriteJsonAsync(response, 200, _provisioningService.RunStartupProvisioning(forceLauncherScan: true), cancellationToken);
                     return;
                 case "/api/config" when request.HttpMethod == "GET":
                     await WriteJsonAsync(response, 200, BuildConfigSnapshot(), cancellationToken);
@@ -780,22 +804,29 @@ public sealed class BridgeManager : IDisposable
         var hue = await _hueService.GetSnapshotAsync(config, cancellationToken);
         var clipboard = await _clipboardHistoryService.GetSnapshotAsync(cancellationToken);
         var gpuPower = _gpuPowerMonitor.GetSnapshot();
+        var provisioning = _provisioningService.GetSnapshot();
 
-        var bridge = CreateSetupItem("bridge", "Local bridge", "Ready", true, $"Running at {BuildBaseUri(config.Port)}.");
+        var bridge = CreateSetupItem("bridge", "Local app service", "Ready", true, $"Running at {BuildBaseUri(config.Port)}.");
         var system = CreateSetupItem("system", "System Monitor", "Ready", true, "Native system telemetry is live.");
+        var provisioningItem = CreateSetupItem(
+            "provisioning",
+            "Auto provisioning",
+            string.Equals(provisioning.Status, "live", StringComparison.OrdinalIgnoreCase) ? "Ready" : "Checking",
+            true,
+            TextOr(provisioning.Message, "Xenon scans this PC and prepares safe defaults automatically."));
         var gpuPowerItem = CreateSetupItem(
             "gpu-power",
             "GPU Power Monitor",
-            gpuPower.Status == "error" ? "Needs Setup" : "Ready",
+            gpuPower.Status == "error" ? "Optional" : "Ready",
             false,
             TextOr(gpuPower.Message, "GPU connector and rail telemetry is ready when exposed by local sensor tools."));
         var network = CreateSetupItem("network", "Network Monitor", "Ready", true, "Native network telemetry is live.");
         var launcherItem = CreateSetupItem(
             "launchers",
             "App Launcher",
-            launchers.Configured ? "Ready" : "Needs Setup",
+            launchers.Configured ? "Ready" : "Optional",
             false,
-            TextOr(launchers.Message, "Add apps or shortcuts to build your launcher grid."));
+            TextOr(launchers.Message, "Xenon scans Start Menu shortcuts and Steam games automatically."));
         var quickActionsItem = CreateSetupItem(
             "quick-actions",
             "Quick Actions",
@@ -811,7 +842,7 @@ public sealed class BridgeManager : IDisposable
         var audioItem = CreateSetupItem(
             "audio",
             "Audio Control",
-            audio.Configured ? "Ready" : "Needs Setup",
+            audio.Configured ? "Ready" : "Optional",
             false,
             audio.Configured
                 ? $"Core Audio is live with {audio.Devices.Count} playback outputs."
@@ -838,7 +869,7 @@ public sealed class BridgeManager : IDisposable
         var clipboardItem = CreateSetupItem(
             "clipboard",
             "Clipboard History",
-            clipboard.Status == "setup" || clipboard.Status == "error" ? "Needs Setup" : "Ready",
+            clipboard.Status == "error" ? "Needs Setup" : clipboard.Status == "setup" ? "Optional" : "Ready",
             false,
             TextOr(clipboard.Message, "Clipboard history is live."));
         var hueItem = !string.IsNullOrWhiteSpace(config.Hue.BridgeIp)
@@ -876,10 +907,13 @@ public sealed class BridgeManager : IDisposable
                 onboardingCompleted = config.Dashboard.OnboardingCompleted,
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
                 onboardingVersion = config.Dashboard.OnboardingVersion,
-                needsAttention = !audio.Configured || (!string.IsNullOrWhiteSpace(config.Hue.BridgeIp) && !hue.Linked),
+                needsAttention = (!string.IsNullOrWhiteSpace(config.Calendar.IcsUrl) && calendar.Status == "error")
+                    || (!string.IsNullOrWhiteSpace(config.Hue.BridgeIp) && !hue.Linked),
+                provisioning,
                 items = new Dictionary<string, object>
                 {
                     ["bridge"] = bridge,
+                    ["provisioning"] = provisioningItem,
                     ["system"] = system,
                     ["gpu-power"] = gpuPowerItem,
                     ["network"] = network,
@@ -904,6 +938,7 @@ public sealed class BridgeManager : IDisposable
         return new
         {
             port = config.Port,
+            provisioning = _provisioningService.GetSnapshot(),
             weather = new
             {
                 configured = !string.IsNullOrWhiteSpace(config.Weather.ApiKey),
@@ -943,6 +978,9 @@ public sealed class BridgeManager : IDisposable
             },
             dashboard = new
             {
+                autoProvisioningEnabled = config.Dashboard.AutoProvisioningEnabled,
+                autoProvisionedAt = config.Dashboard.AutoProvisionedAt,
+                autoProvisioningVersion = config.Dashboard.AutoProvisioningVersion,
                 onboardingCompleted = config.Dashboard.OnboardingCompleted,
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
                 onboardingVersion = config.Dashboard.OnboardingVersion
@@ -991,6 +1029,9 @@ public sealed class BridgeManager : IDisposable
             },
             dashboard = new
             {
+                autoProvisioningEnabled = config.Dashboard.AutoProvisioningEnabled,
+                autoProvisioned = !string.IsNullOrWhiteSpace(config.Dashboard.AutoProvisionedAt),
+                autoProvisioningVersion = config.Dashboard.AutoProvisioningVersion,
                 onboardingCompleted = config.Dashboard.OnboardingCompleted,
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
                 onboardingVersion = config.Dashboard.OnboardingVersion

@@ -1115,15 +1115,15 @@
       {
         id: "setup",
         getTitle: function () {
-          return bridgeSetup.onboardingCompleted ? "Diagnostics" : "Setup Guide";
+          return bridgeSetup.onboardingCompleted ? "Diagnostics" : "Auto Setup";
         },
         getKicker: function () {
-          return bridgeSetup.onboardingCompleted ? "Diagnostics" : "First run";
+          return bridgeSetup.onboardingCompleted ? "Diagnostics" : "Auto provisioning";
         },
         getCopy: function () {
           return bridgeSetup.onboardingCompleted
-            ? "Bridge health, optional integrations, and repair steps."
-            : "Finish the essentials once. Weather and Hue can wait until later.";
+            ? "Auto-detected services, optional permissions, and repair steps."
+            : "Xenon scans this PC and prepares safe defaults automatically.";
         },
         getViewerLabel: function () {
           return (!bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention) ? "Needs Setup" : "Ready";
@@ -1149,7 +1149,7 @@
         title: "Game Mode",
         tier: "product",
         kicker: "Launch mode",
-        copy: "Launch installed Steam games and watch live display FPS without extra setup.",
+        copy: "Launch installed Steam games and watch display refresh, dashboard smoothness, CPU, and GPU.",
         viewerLabel: "Steam games"
       },
       {

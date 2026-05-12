@@ -127,6 +127,7 @@ public sealed class ConfigStore
         normalized.Weather.Units = string.Equals(normalized.Weather.Units, "imperial", StringComparison.OrdinalIgnoreCase)
             ? "imperial"
             : "metric";
+        normalized.Dashboard.AutoProvisioningVersion = normalized.Dashboard.AutoProvisioningVersion <= 0 ? 1 : normalized.Dashboard.AutoProvisioningVersion;
         normalized.Dashboard.OnboardingVersion = normalized.Dashboard.OnboardingVersion <= 0 ? 1 : normalized.Dashboard.OnboardingVersion;
         normalized.Launchers = normalized.Launchers
             .Where(entry => !string.IsNullOrWhiteSpace(entry.ExecutablePath))

@@ -52,6 +52,11 @@
     return parsed == null ? "--" : Math.round(parsed) + " FPS";
   }
 
+  function formatHz(value) {
+    var parsed = optionalNumber(value);
+    return parsed == null ? "--" : Math.round(parsed) + " Hz";
+  }
+
   function primaryDisplayFromSystem(data) {
     return (data && (data.primaryDisplay || data.display)) || {};
   }
@@ -807,12 +812,12 @@
         '<div class="inline-toolbar">' +
           '<div>' +
             '<div class="eyebrow">Diagnostics</div>' +
-            '<h3 class="inline-title">Setup and diagnostics</h3>' +
-            '<p class="inline-copy">Install, open, finish setup. Optional extras can wait until the dashboard is working.</p>' +
+            '<h3 class="inline-title">Auto setup and diagnostics</h3>' +
+            '<p class="inline-copy">Xenon scans this PC and prepares the dashboard automatically. Optional extras only need permission when you want them.</p>' +
           '</div>' +
           '<div class="inline-actions">' +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
-            '<button class="inline-button is-primary" type="button" data-action="finish-setup"' + (essentialsReady && !onboardingCompleted ? "" : " disabled") + '>' + (onboardingCompleted ? "Completed" : "Finish setup") + '</button>' +
+            '<button class="inline-button is-primary" type="button" data-action="finish-setup"' + (essentialsReady && !onboardingCompleted ? "" : " disabled") + '>' + (onboardingCompleted ? "Auto ready" : "Finish manually") + '</button>' +
             '<button class="inline-button" type="button" data-action="reset-local-data"' + (state.busy ? " disabled" : "") + '>' + (state.confirmReset ? "Confirm reset" : "Reset local data") + '</button>' +
             '<a class="inline-button" href="' + escapeHtml(supportBundleUrl) + '" target="_blank" rel="noreferrer">Support bundle</a>' +
             '<a class="inline-button" href="' + escapeHtml(supportUrl) + '" target="_blank" rel="noreferrer">Support</a>' +
@@ -4287,8 +4292,8 @@
     var longPressStartY = 0;
     var longPressAppId = "";
 
-    function displayFps(display) {
-      return optionalNumber(display && (display.fps != null ? display.fps : display.refreshRate));
+    function displayRefreshRate(display) {
+      return optionalNumber(display && (display.refreshRate != null ? display.refreshRate : display.fps));
     }
 
     function fpsProgress(value, ceiling) {
@@ -4304,18 +4309,18 @@
       var game = gameModeProfileName(profile, savedGame);
       var system = state.system || {};
       var display = primaryDisplayFromSystem(system);
-      var primaryFps = displayFps(display);
-      var panelFps = optionalNumber(state.panelFps);
+      var primaryRefreshRate = displayRefreshRate(display);
+      var dashboardFps = optionalNumber(state.panelFps);
       var displayName = text(display.name || display.deviceName, "Primary display");
       container.innerHTML = productShell(
         "Live performance",
         "Game Mode",
-        "Launch installed Steam games and keep live FPS in view.",
-        primaryFps == null ? state.statusText : formatFps(primaryFps),
-        primaryFps == null ? state.statusTone : "good",
+        "Launch installed Steam games with display refresh, dashboard smoothness, CPU, and GPU in view.",
+        primaryRefreshRate == null ? state.statusText : formatHz(primaryRefreshRate),
+        primaryRefreshRate == null ? state.statusTone : "good",
         '<div class="inline-grid inline-grid--4 game-mode-performance">' +
-          metricCard("Primary FPS", formatFps(primaryFps), displayName, fpsProgress(primaryFps, 240), "game-mode-metric--primary") +
-          metricCard("Panel FPS", formatFps(panelFps), "Xenon render loop", fpsProgress(panelFps, 60)) +
+          metricCard("Display Hz", formatHz(primaryRefreshRate), displayName, fpsProgress(primaryRefreshRate, 240), "game-mode-metric--primary") +
+          metricCard("Dashboard FPS", formatFps(dashboardFps), "XENEON UI render rate", fpsProgress(dashboardFps, 60)) +
           metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "GPU load", system.gpu) +
           metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
         '</div>' +
