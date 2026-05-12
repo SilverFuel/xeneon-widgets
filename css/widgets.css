@@ -600,26 +600,40 @@ a.is-touch-pressing,
   }
 }
 
+@keyframes dashboard-visor-breathe {
+  0%,
+  100% {
+    opacity: calc(0.42 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
+  }
+
+  50% {
+    opacity: calc(0.62 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
+  }
+}
+
 .dashboard-native-page {
   --dashboard-surface-opacity: 1;
   --dashboard-widget-opacity: 1;
   --dashboard-aura-opacity: 1;
-  --dashboard-accent: #00e0ff;
-  --dashboard-secondary: #44f0c2;
-  --dashboard-warm: #f5a623;
-  --dashboard-accent-glow: rgba(0, 224, 255, 0.12);
-  --dashboard-secondary-glow: rgba(68, 240, 194, 0.1);
-  --dashboard-warm-glow: rgba(245, 166, 35, 0.1);
-  --dashboard-theme-bg: #070d13;
+  --dashboard-accent: #43ff9d;
+  --dashboard-secondary: #95ff5f;
+  --dashboard-warm: #ff9d2e;
+  --dashboard-accent-glow: rgba(67, 255, 157, 0.13);
+  --dashboard-secondary-glow: rgba(149, 255, 95, 0.1);
+  --dashboard-warm-glow: rgba(255, 157, 46, 0.14);
+  --dashboard-visor-glass: rgba(16, 49, 32, 0.28);
+  --dashboard-visor-rim: rgba(255, 139, 34, 0.44);
+  --dashboard-theme-bg: #07100a;
   display: grid;
   place-items: center;
   min-height: 100vh;
   padding: 0;
   overflow: hidden;
   background:
+    radial-gradient(ellipse at 50% 50%, rgba(67, 255, 157, 0.1), transparent 52%),
     linear-gradient(110deg, var(--dashboard-accent-glow), transparent 30%),
     linear-gradient(290deg, var(--dashboard-warm-glow), transparent 34%),
-    linear-gradient(180deg, rgba(7, 12, 18, 0), rgba(6, 9, 14, 0.68)),
+    linear-gradient(180deg, rgba(4, 16, 9, 0), rgba(5, 9, 7, 0.76)),
     rgba(11, 15, 20, calc(0.94 * var(--dashboard-surface-opacity)));
 }
 
@@ -639,7 +653,8 @@ a.is-touch-pressing,
   overflow: hidden;
   isolation: isolate;
   background:
-    linear-gradient(90deg, var(--dashboard-accent-glow), transparent 22%, var(--dashboard-secondary-glow) 58%, transparent),
+    radial-gradient(ellipse 86% 72% at 50% 52%, rgba(67, 255, 157, 0.11), transparent 64%),
+    linear-gradient(90deg, rgba(255, 139, 34, 0.13), transparent 18%, var(--dashboard-secondary-glow) 58%, transparent 82%, rgba(255, 139, 34, 0.14)),
     var(--dashboard-theme-bg);
 }
 
@@ -660,13 +675,15 @@ a.is-touch-pressing,
 
 .dashboard-ambient-layer {
   z-index: 1;
-  opacity: calc(0.7 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
+  opacity: calc(0.46 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 4px);
-  background-size: 80px 80px, 80px 80px, 100% 4px;
-  mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 94%, transparent 100%);
+    radial-gradient(ellipse 96% 76% at 50% 52%, transparent 0 54%, rgba(255, 139, 34, 0.12) 66%, rgba(255, 157, 46, 0.34) 82%, rgba(0, 0, 0, 0.68) 100%),
+    radial-gradient(ellipse 48% 34% at 50% 48%, rgba(67, 255, 157, 0.13), transparent 72%),
+    linear-gradient(90deg, rgba(255, 139, 34, 0.3), transparent 12%, transparent 88%, rgba(255, 139, 34, 0.3)),
+    linear-gradient(180deg, rgba(255, 183, 71, 0.16), transparent 14%, transparent 86%, rgba(255, 117, 28, 0.2));
+  -webkit-mask-image: radial-gradient(ellipse 98% 84% at 50% 52%, transparent 0 58%, rgba(0, 0, 0, 0.55) 72%, #000 100%);
+  mask-image: radial-gradient(ellipse 98% 84% at 50% 52%, transparent 0 58%, rgba(0, 0, 0, 0.55) 72%, #000 100%);
+  animation: dashboard-visor-breathe 7s ease-in-out infinite;
 }
 
 .dashboard-native-page--motion-off .dashboard-ambient-canvas,
@@ -684,19 +701,35 @@ a.is-touch-pressing,
 }
 
 .dashboard-stage-shell::before {
-  display: none;
+  z-index: 1;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 94% 72% at 50% 50%, transparent 0 55%, rgba(255, 139, 34, 0.16) 66%, rgba(255, 170, 56, 0.42) 82%, rgba(0, 0, 0, 0.7) 100%),
+    linear-gradient(90deg, rgba(255, 128, 28, 0.5), transparent 7%, transparent 93%, rgba(255, 128, 28, 0.5)),
+    linear-gradient(180deg, rgba(255, 183, 71, 0.28), transparent 11%, transparent 89%, rgba(255, 113, 24, 0.28));
+  box-shadow:
+    inset 0 0 54px rgba(255, 139, 34, 0.16),
+    inset 0 0 120px rgba(0, 0, 0, 0.62);
+  opacity: calc(0.82 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
+  animation: dashboard-visor-breathe 7s ease-in-out infinite;
 }
 
 .dashboard-stage-shell::after {
   z-index: 4;
   inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 8%, transparent 90%, rgba(0, 0, 0, 0.24));
-  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.48);
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 52%, transparent 0 62%, rgba(255, 139, 34, 0.18) 80%, rgba(0, 0, 0, 0.64) 100%),
+    linear-gradient(90deg, rgba(255, 139, 34, 0.3), transparent 5%, transparent 95%, rgba(255, 139, 34, 0.3)),
+    linear-gradient(180deg, rgba(255, 183, 71, 0.16), transparent 8%, transparent 92%, rgba(255, 117, 28, 0.18));
+  -webkit-mask-image: radial-gradient(ellipse 82% 62% at 50% 52%, transparent 0 62%, rgba(0, 0, 0, 0.7) 78%, #000 100%);
+  mask-image: radial-gradient(ellipse 82% 62% at 50% 52%, transparent 0 62%, rgba(0, 0, 0, 0.7) 78%, #000 100%);
+  box-shadow: inset 0 0 72px rgba(0, 0, 0, 0.36), inset 0 0 90px rgba(255, 139, 34, 0.1);
+  opacity: 0.68;
 }
 
 .dashboard-stage,
 .dashboard-router-stage {
-  z-index: 2;
+  z-index: 3;
 }
 
 .dashboard-stage.native-dashboard {
@@ -799,9 +832,9 @@ a.is-touch-pressing,
   border: 1px solid var(--color-border);
   border-radius: 22px;
   background:
-    linear-gradient(135deg, rgba(0, 224, 255, calc(0.11 * var(--dashboard-surface-opacity))), transparent 34%),
-    linear-gradient(315deg, rgba(255, 77, 141, calc(0.08 * var(--dashboard-surface-opacity))), transparent 38%),
-    linear-gradient(180deg, rgba(21, 29, 39, calc(0.9 * var(--dashboard-surface-opacity))), rgba(10, 15, 22, calc(0.96 * var(--dashboard-surface-opacity))));
+    linear-gradient(135deg, rgba(67, 255, 157, calc(0.055 * var(--dashboard-surface-opacity))), transparent 34%),
+    linear-gradient(315deg, rgba(255, 139, 34, calc(0.045 * var(--dashboard-surface-opacity))), transparent 38%),
+    linear-gradient(180deg, rgba(17, 27, 26, calc(0.94 * var(--dashboard-surface-opacity))), rgba(8, 13, 16, calc(0.98 * var(--dashboard-surface-opacity))));
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
   backdrop-filter: blur(16px) saturate(1.15);
@@ -815,9 +848,16 @@ a.is-touch-pressing,
   pointer-events: none;
   border-radius: inherit;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.11), transparent 22%, transparent 78%, rgba(0, 224, 255, 0.12)),
-    repeating-linear-gradient(90deg, transparent 0 54px, rgba(255, 255, 255, 0.025) 55px, transparent 58px);
-  opacity: calc(0.5 * var(--dashboard-surface-opacity));
+    radial-gradient(ellipse 72% 46% at 50% 0%, rgba(255, 157, 46, 0.15), transparent 62%),
+    linear-gradient(90deg, rgba(67, 255, 157, 0.14), transparent 18%, transparent 82%, rgba(255, 139, 34, 0.16));
+  opacity: calc(0.22 * var(--dashboard-surface-opacity));
+  z-index: 0;
+}
+
+.router-rail > *,
+.router-viewer > * {
+  position: relative;
+  z-index: 1;
 }
 
 .router-rail::after,
@@ -1586,8 +1626,11 @@ a.is-touch-pressing,
 .router-viewer__frame-shell::after {
   z-index: 2;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 10%, transparent 88%, rgba(0, 0, 0, 0.22)),
-    repeating-linear-gradient(0deg, transparent 0 3px, rgba(255, 255, 255, 0.035) 3px 4px);
+    radial-gradient(ellipse 82% 64% at 50% 50%, transparent 0 66%, rgba(255, 139, 34, 0.16) 84%, rgba(0, 0, 0, 0.32) 100%),
+    linear-gradient(90deg, rgba(255, 139, 34, 0.16), transparent 8%, transparent 92%, rgba(255, 139, 34, 0.16)),
+    linear-gradient(180deg, rgba(255, 183, 71, 0.08), transparent 10%, transparent 90%, rgba(0, 0, 0, 0.14));
+  -webkit-mask-image: radial-gradient(ellipse 78% 60% at 50% 50%, transparent 0 66%, rgba(0, 0, 0, 0.72) 84%, #000 100%);
+  mask-image: radial-gradient(ellipse 78% 60% at 50% 50%, transparent 0 66%, rgba(0, 0, 0, 0.72) 84%, #000 100%);
   opacity: 0.34;
 }
 
