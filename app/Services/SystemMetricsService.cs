@@ -249,9 +249,9 @@ public sealed class SystemMetricsService : IDisposable
         };
 
         parts.Add(snapshot.Gpu.HasValue ? "GPU telemetry is live." : "GPU telemetry is unavailable on this PC.");
-        parts.Add(snapshot.PrimaryDisplay?.Fps is not null
-            ? "Primary display FPS is live."
-            : "Primary display FPS is unavailable on this PC.");
+        parts.Add(snapshot.PrimaryDisplay?.RefreshRate is not null
+            ? "Primary display refresh rate is live."
+            : "Primary display refresh rate is unavailable on this PC.");
 
         if (snapshot.CpuTemp.HasValue || snapshot.GpuTemp.HasValue)
         {

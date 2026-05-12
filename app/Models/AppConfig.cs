@@ -40,6 +40,12 @@ public sealed class HueConfig
 
 public sealed class DashboardConfig
 {
+    public bool AutoProvisioningEnabled { get; set; } = true;
+
+    public string AutoProvisionedAt { get; set; } = "";
+
+    public int AutoProvisioningVersion { get; set; } = 1;
+
     public bool OnboardingCompleted { get; set; }
 
     public string OnboardingCompletedAt { get; set; } = "";

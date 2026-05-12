@@ -85,7 +85,13 @@ public sealed partial class MainWindow : Window
     private void ConfigureWindow()
     {
         var windowHandle = WindowNative.GetWindowHandle(this);
-        var targetDisplay = DisplayManager.FindBestDisplay();
+        var displayCandidates = DisplayManager.ListDisplays();
+        if (displayCandidates.Count == 0)
+        {
+            throw new InvalidOperationException("No displays were detected.");
+        }
+
+        var targetDisplay = displayCandidates[0];
         var appWindow = AppWindow;
 
         appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
@@ -104,8 +110,14 @@ public sealed partial class MainWindow : Window
             targetDisplay.Bounds.Height));
         EnsureDisplayWindowStaysOffTaskbar(windowHandle);
 
+        _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
         _logger.Info($"Window positioned on {targetDisplay.Label} (score {targetDisplay.Score}).");
         SetOverlayText($"Launching on {targetDisplay.Label}.");
+    }
+
+    private static string DescribeDisplayCandidate(DisplayTarget display)
+    {
+        return $"{display.Label}; primary={display.IsPrimary}; score={display.Score}; bounds={display.Bounds.X},{display.Bounds.Y},{display.Bounds.Width}x{display.Bounds.Height}";
     }
 
     private async Task InitializeHostAsync()

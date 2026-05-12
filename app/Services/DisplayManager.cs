@@ -9,9 +9,7 @@ public static class DisplayManager
 
     public static DisplayTarget FindBestDisplay()
     {
-        var displays = EnumerateDisplays()
-            .OrderByDescending(display => display.Score)
-            .ToList();
+        var displays = ListDisplays();
 
         if (displays.Count == 0)
         {
@@ -19,6 +17,14 @@ public static class DisplayManager
         }
 
         return displays[0];
+    }
+
+    public static List<DisplayTarget> ListDisplays()
+    {
+        return EnumerateDisplays()
+            .OrderByDescending(display => display.Score)
+            .ThenBy(display => display.IsPrimary)
+            .ToList();
     }
 
     public static DisplaySnapshot ReadPrimaryDisplaySnapshot()
@@ -108,7 +114,7 @@ public static class DisplayManager
             Source = "Windows display mode",
             SampledAt = DateTimeOffset.UtcNow,
             Message = refreshRate.HasValue
-                ? "Primary display FPS is the current Windows refresh rate."
+                ? "Primary display refresh rate is live."
                 : "Windows did not report a display refresh rate."
         };
         return true;
@@ -135,26 +141,42 @@ public static class DisplayManager
         var friendlyName = GetFriendlyName(deviceName);
         var containsXeneon = friendlyName.Contains("XENEON", StringComparison.OrdinalIgnoreCase)
             || friendlyName.Contains("EDGE", StringComparison.OrdinalIgnoreCase);
-        var isWideEdgeResolution = bounds.Width == 2560 && bounds.Height == 720;
+        var mode = ReadDisplayMode(deviceName);
+        var modeWidth = mode.Width > 0 ? mode.Width : bounds.Width;
+        var modeHeight = mode.Height > 0 ? mode.Height : bounds.Height;
+        var matchesEdgeResolution = IsEdgeResolution(bounds.Width, bounds.Height)
+            || IsEdgeResolution(modeWidth, modeHeight);
+        var matchesEdgeAspect = IsEdgeAspect(bounds.Width, bounds.Height)
+            || IsEdgeAspect(modeWidth, modeHeight);
+        var compactEdgePanel = matchesEdgeAspect
+            && (Math.Min(bounds.Height, modeHeight) <= 900 || Math.Min(bounds.Width, modeWidth) <= 900);
         var isPrimary = (monitorInfo.dwFlags & MonitorInfoPrimaryFlag) != 0;
 
         var score = 0;
-        if (isWideEdgeResolution)
-        {
-            score += 10000;
-        }
-
         if (containsXeneon)
         {
-            score += 5000;
+            score += 90000;
         }
 
-        if (!isPrimary)
+        if (matchesEdgeResolution)
         {
-            score += 50;
+            score += 80000;
+        }
+        else if (compactEdgePanel)
+        {
+            score += 60000;
+        }
+        else if (matchesEdgeAspect)
+        {
+            score += 15000;
         }
 
-        score += bounds.Width;
+        score += Math.Max(0, 4000 - Math.Abs(modeWidth - 2560));
+        score += Math.Max(0, 2000 - (Math.Abs(modeHeight - 720) * 2));
+        score += Math.Max(0, 2000 - Math.Abs(bounds.Width - 2560));
+        score += Math.Max(0, 1000 - (Math.Abs(bounds.Height - 720) * 2));
+
+        score += isPrimary ? -5000 : 5000;
 
         displayTarget = new DisplayTarget(
             Bounds: bounds,
@@ -163,6 +185,22 @@ public static class DisplayManager
             IsPrimary: isPrimary,
             Score: score);
         return true;
+    }
+
+    private static bool IsEdgeResolution(int width, int height)
+    {
+        return Math.Abs(width - 2560) <= 80 && Math.Abs(height - 720) <= 80;
+    }
+
+    private static bool IsEdgeAspect(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        var aspect = (double)Math.Max(width, height) / Math.Min(width, height);
+        return aspect >= 3.35 && aspect <= 3.8;
     }
 
     private static string GetFriendlyName(string deviceName)
