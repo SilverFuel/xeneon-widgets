@@ -132,6 +132,9 @@ public sealed class GameActivityService
             var launcherEntries = launcherSnapshot.Entries
                 .Where(entry => IsUsableExecutablePath(entry.ExecutablePath))
                 .ToList();
+            var steamInstalledGames = steamSnapshot.Games
+                .Where(game => HasExistingInstallPath(game.InstallPath))
+                .ToList();
             var candidates = new List<GameActivityPayload>();
 
             if (steamSnapshot.ActiveGame is not null)
@@ -150,7 +153,7 @@ public sealed class GameActivityService
                     continue;
                 }
 
-                AddSteamProcessCandidate(candidates, steamSnapshot.Games, process);
+                AddSteamProcessCandidate(candidates, steamInstalledGames, process);
                 AddEpicProcessCandidate(candidates, epicGames, process);
                 AddPinnedLauncherCandidate(candidates, launcherEntries, process);
                 AddKnownGamePathCandidate(candidates, process);
@@ -158,11 +161,9 @@ public sealed class GameActivityService
 
             var orderedCandidates = candidates
                 .GroupBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(group => group
-                    .OrderByDescending(candidate => candidate.Confidence)
-                    .ThenByDescending(candidate => candidate.StartedAt ?? DateTimeOffset.MinValue)
-                    .First())
+                .Select(SelectBestCandidate)
                 .OrderByDescending(candidate => candidate.Confidence)
+                .ThenByDescending(candidate => candidate.StartedAt.HasValue)
                 .ThenByDescending(candidate => candidate.StartedAt ?? DateTimeOffset.MinValue)
                 .Take(8)
                 .ToList();
@@ -199,6 +200,54 @@ public sealed class GameActivityService
         }
     }
 
+    private static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)
+    {
+        var candidateList = candidates.ToList();
+        var best = candidateList
+            .OrderByDescending(candidate => candidate.Confidence)
+            .ThenByDescending(candidate => candidate.StartedAt.HasValue)
+            .ThenByDescending(candidate => candidate.StartedAt ?? DateTimeOffset.MinValue)
+            .First();
+        var runtime = candidateList
+            .Where(candidate => candidate.ProcessId.HasValue
+                || candidate.StartedAt.HasValue
+                || !string.IsNullOrWhiteSpace(candidate.ProcessName))
+            .OrderByDescending(candidate => candidate.StartedAt.HasValue)
+            .ThenByDescending(candidate => candidate.StartedAt ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+
+        if (runtime is null || ReferenceEquals(best, runtime))
+        {
+            return best;
+        }
+
+        best.ProcessId ??= runtime.ProcessId;
+        if (string.IsNullOrWhiteSpace(best.ProcessName))
+        {
+            best.ProcessName = runtime.ProcessName;
+        }
+
+        best.StartedAt ??= runtime.StartedAt;
+        return best;
+    }
+
+    private static bool HasExistingInstallPath(string? installPath)
+    {
+        if (string.IsNullOrWhiteSpace(installPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Directory.Exists(installPath);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void AddSteamProcessCandidate(
         List<GameActivityPayload> candidates,
         IReadOnlyList<SteamGamePayload> games,
@@ -206,7 +255,6 @@ public sealed class GameActivityService
     {
         var game = games.FirstOrDefault(entry =>
             !string.IsNullOrWhiteSpace(entry.InstallPath)
-            && Directory.Exists(entry.InstallPath)
             && IsPathInside(process.ExecutablePath, entry.InstallPath));
 
         if (game is null)

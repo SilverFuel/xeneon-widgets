@@ -4681,12 +4681,16 @@
         if (state.steam.activeGame && state.steam.activeGame.appId) {
           applyDetectedGameTheme(steamGameAsActivity(state.steam.activeGame));
         }
-        redraw();
+        if (!state.interacting) {
+          redraw();
+        }
       }, function (error) {
         state.steam = normalizeSteamGamesPayload({});
         state.steamStatusText = error.message || "Unavailable";
         state.steamStatusTone = "danger";
-        redraw();
+        if (!state.interacting) {
+          redraw();
+        }
       });
     }
 
