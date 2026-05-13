@@ -61,6 +61,10 @@
     return (data && (data.primaryDisplay || data.display)) || {};
   }
 
+  function displayRefreshRate(display) {
+    return optionalNumber(display && (display.refreshRate != null ? display.refreshRate : display.fps));
+  }
+
   function formatStorage(value, unit) {
     var parsed = optionalNumber(value);
     return parsed == null ? "--" : parsed.toFixed(parsed >= 100 ? 0 : 1) + " " + (unit || "GB");
@@ -3757,9 +3761,9 @@
     };
   }
 
-  function themeForSteamGame(game, env) {
+  function themeForGame(game, env) {
     var theme = gameModeProfileTheme(customGameModeProfile, env);
-    var gameName = text(game && game.name, "Steam Game");
+    var gameName = text(game && game.name, "Game");
     var normalizedName = gameName.toLowerCase();
     var matchedTheme = gameThemeKeywords.filter(function (entry) {
       return entry.match.some(function (keyword) {
@@ -3785,6 +3789,48 @@
       accent: theme.accent,
       secondary: theme.secondary,
       mood: "Dashboard theme"
+    };
+  }
+
+  function themeForSteamGame(game, env) {
+    return themeForGame(game, env);
+  }
+
+  function normalizeGameActivityGame(game) {
+    if (!game) {
+      return null;
+    }
+
+    return {
+      id: text(game.id || game.appId, ""),
+      appId: text(game.appId, ""),
+      name: text(game.name, "Game"),
+      platform: text(game.platform, game.appId ? "Steam" : "Game"),
+      source: text(game.source, ""),
+      processId: optionalNumber(game.processId),
+      processName: text(game.processName, ""),
+      confidence: optionalNumber(game.confidence),
+      reason: text(game.reason, ""),
+      startedAt: text(game.startedAt, ""),
+      artworkUrl: text(game.artworkUrl, ""),
+      iconUrl: text(game.iconUrl, ""),
+      tileLabel: text(game.tileLabel, "G")
+    };
+  }
+
+  function normalizeGameActivityPayload(payload) {
+    payload = payload || {};
+    return {
+      supported: payload.supported !== false,
+      configured: Boolean(payload.configured),
+      status: text(payload.status, payload.active ? "active" : "idle"),
+      active: Boolean(payload.active && payload.activeGame),
+      stale: Boolean(payload.stale),
+      sampledAt: text(payload.sampledAt, ""),
+      message: text(payload.message, payload.active ? "Game running." : "No active game detected."),
+      source: text(payload.source, "running processes"),
+      activeGame: normalizeGameActivityGame(payload.activeGame),
+      candidates: Array.isArray(payload.candidates) ? payload.candidates.map(normalizeGameActivityGame).filter(Boolean) : []
     };
   }
 
@@ -3869,6 +3915,70 @@
               '</div>' : '') +
             '</div>';
         }).join("") : emptyState("No Steam games", "Install games in Steam, then tap Rescan.")) + '</div>' +
+      '</article>';
+  }
+
+  function gameActivityId(game) {
+    return text(game && (game.id || game.appId || game.name), "");
+  }
+
+  function steamGameAsActivity(game) {
+    if (!game) {
+      return null;
+    }
+
+    return {
+      id: "steam:" + text(game.appId, ""),
+      appId: text(game.appId, ""),
+      name: text(game.name, "Steam Game"),
+      platform: "Steam",
+      source: "Steam library",
+      processName: "",
+      confidence: 96,
+      reason: "Steam game is active.",
+      startedAt: "",
+      artworkUrl: text(game.artworkUrl, ""),
+      iconUrl: "",
+      tileLabel: text(game.tileLabel, "S")
+    };
+  }
+
+  function renderGameFacePanel(savedGame, fallbackGameName, theme, activity, system, dashboardFps, env) {
+    var activeGame = activity && activity.activeGame ? activity.activeGame : null;
+    var display = primaryDisplayFromSystem(system || {});
+    var refreshRate = displayRefreshRate(display);
+    var gameName = activeGame ? activeGame.name : text(savedGame, fallbackGameName);
+    var platform = activeGame ? text(activeGame.platform, "Game") : "Waiting";
+    var detail = activeGame
+      ? text(activeGame.reason, text(activeGame.source, "Running now"))
+      : text(activity && activity.message, "No active game detected.");
+    var session = activeGame && activeGame.startedAt ? formatAge(activeGame.startedAt) : "--";
+    var artUrl = activeGame ? text(activeGame.artworkUrl || activeGame.iconUrl, "") : "";
+    var tileLabel = activeGame ? text(activeGame.tileLabel, "G") : "GX";
+    var confidence = activeGame && activeGame.confidence != null ? Math.round(activeGame.confidence) + "%" : "--";
+    return '' +
+      '<article class="product-control-panel game-face-panel" style="' + gameModeThemeStyle(theme) + '">' +
+        '<div class="game-face-main">' +
+          '<div class="game-face-art">' + (artUrl
+            ? '<img src="' + escapeHtml(artUrl) + '" alt="' + escapeHtml(gameName) + '" loading="lazy">'
+            : '<span>' + escapeHtml(tileLabel) + '</span>') + '</div>' +
+          '<div class="game-face-copy">' +
+            '<div class="metric-label">Game Face</div>' +
+            '<strong>' + escapeHtml(gameName) + '</strong>' +
+            '<span>' + escapeHtml(platform + (activeGame ? " - active now" : " - idle")) + '</span>' +
+          '</div>' +
+          '<button class="inline-button game-face-home-pill" type="button" data-action="game-face-home">Home</button>' +
+        '</div>' +
+        '<div class="game-face-detail">' + escapeHtml(detail) + '</div>' +
+        '<div class="game-face-signals">' +
+          '<div><span>Refresh</span><strong>' + escapeHtml(formatHz(refreshRate)) + '</strong></div>' +
+          '<div><span>Panel</span><strong>' + escapeHtml(formatFps(dashboardFps)) + '</strong></div>' +
+          '<div><span>GPU</span><strong>' + escapeHtml(formatPercent(system && system.gpu)) + '</strong></div>' +
+          '<div><span>CPU</span><strong>' + escapeHtml(formatPercent(system && system.cpu)) + '</strong></div>' +
+          '<div><span>RAM</span><strong>' + escapeHtml(formatPercent(system && system.ram)) + '</strong></div>' +
+          '<div><span>Session</span><strong>' + escapeHtml(session) + '</strong></div>' +
+          '<div><span>Match</span><strong>' + escapeHtml(confidence) + '</strong></div>' +
+        '</div>' +
       '</article>';
   }
 
@@ -4488,6 +4598,7 @@
     var state = {
       system: {},
       steam: normalizeSteamGamesPayload({}),
+      activity: normalizeGameActivityPayload(env.gameActivity || {}),
       panelFps: null,
       statusText: "Loading",
       statusTone: "warn",
@@ -4495,7 +4606,7 @@
       steamStatusTone: "warn",
       steamLaunchingId: "",
       longPressAppId: "",
-      lastAutoThemeAppId: "",
+      lastAutoThemeGameId: "",
       interacting: false
     };
     var suppressNextSteamLaunchId = "";
@@ -4517,7 +4628,8 @@
       var savedGame = settingValue(env, "gameModeGame", "");
       var profile = activeGameModeProfile(env);
       var activeSteamGame = state.steam && state.steam.activeGame ? state.steam.activeGame : null;
-      var profileTheme = activeSteamGame ? themeForSteamGame(activeSteamGame, env) : gameModeProfileTheme(profile, env);
+      var activeGame = state.activity && state.activity.activeGame ? state.activity.activeGame : steamGameAsActivity(activeSteamGame);
+      var profileTheme = activeGame ? themeForGame(activeGame, env) : gameModeProfileTheme(profile, env);
       var game = gameModeProfileName(profile, savedGame);
       var system = state.system || {};
       var display = primaryDisplayFromSystem(system);
@@ -4526,8 +4638,8 @@
       var displayName = text(display.name || display.deviceName, "Primary display");
       container.innerHTML = productShell(
         "Live performance",
-        "Game Mode",
-        "Launch installed Steam games with display refresh, dashboard smoothness, CPU, and GPU in view.",
+        activeGame ? "Game Face" : "Game Mode",
+        activeGame ? "Active game telemetry and launch dock." : "Launch dock with display refresh, dashboard smoothness, CPU, and GPU in view.",
         primaryRefreshRate == null ? state.statusText : formatHz(primaryRefreshRate),
         primaryRefreshRate == null ? state.statusTone : "good",
         '<div class="inline-grid inline-grid--4 game-mode-performance">' +
@@ -4536,7 +4648,7 @@
           metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "GPU load", system.gpu) +
           metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
         '</div>' +
-        renderGameModeProfilePanel(savedGame, game, profile, profileTheme, state.steam, env) +
+        renderGameFacePanel(savedGame, game, profileTheme, activeGame ? { activeGame: activeGame } : state.activity, system, dashboardFps, env) +
         renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
         ''
       );
@@ -4566,9 +4678,8 @@
         state.steam = normalizeSteamGamesPayload(payload);
         state.steamStatusText = statusTextFromPayload(payload, state.steam.games.length ? "Ready" : "Setup");
         state.steamStatusTone = statusToneFromPayload(payload, state.steam.status);
-        if (state.steam.activeGame && state.steam.activeGame.appId && state.lastAutoThemeAppId !== state.steam.activeGame.appId) {
-          state.lastAutoThemeAppId = state.steam.activeGame.appId;
-          applySteamGameTheme(state.steam.activeGame);
+        if (state.steam.activeGame && state.steam.activeGame.appId) {
+          applyDetectedGameTheme(steamGameAsActivity(state.steam.activeGame));
         }
         redraw();
       }, function (error) {
@@ -4579,8 +4690,26 @@
       });
     }
 
-    function applySteamGameTheme(game) {
-      var theme = themeForSteamGame(game, env);
+    function refreshGameActivity(force) {
+      var path = force ? "/api/game/activity?refresh=1" : "/api/game/activity";
+      return requestJson(buildBridgeUrl(env, path), {}, 5000).then(function (payload) {
+        state.activity = normalizeGameActivityPayload(payload);
+        if (state.activity.activeGame) {
+          applyDetectedGameTheme(state.activity.activeGame);
+        }
+        if (!state.interacting) {
+          redraw();
+        }
+      }, function () {
+        state.activity = normalizeGameActivityPayload({});
+        if (!state.interacting) {
+          redraw();
+        }
+      });
+    }
+
+    function applyGameTheme(game) {
+      var theme = themeForGame(game, env);
       var dashboard = env.bridgeConfig && env.bridgeConfig.dashboard ? env.bridgeConfig.dashboard : {};
       var autoTune = settingValue(env, "gameModeAutoTune", dashboard.gameModeAutoTune === false ? "0" : "1") !== "0";
       var values = {
@@ -4599,6 +4728,16 @@
       saveSettings(env, values);
     }
 
+    function applyDetectedGameTheme(game) {
+      var id = gameActivityId(game);
+      if (!id || state.lastAutoThemeGameId === id) {
+        return;
+      }
+
+      state.lastAutoThemeGameId = id;
+      applyGameTheme(game);
+    }
+
     function getSteamGame(appId) {
       return (state.steam.games || []).filter(function (entry) {
         return entry.appId === appId;
@@ -4611,7 +4750,7 @@
         return;
       }
 
-      applySteamGameTheme(game);
+      applyGameTheme(steamGameAsActivity(game));
       state.longPressAppId = game.appId;
       state.steamStatusText = "Theme applied";
       state.steamStatusTone = "good";
@@ -4640,7 +4779,7 @@
           appId: game.appId
         }
       }, 8000).then(function (payload) {
-        applySteamGameTheme(game);
+        applyGameTheme(steamGameAsActivity(game));
         state.steamLaunchingId = "";
         state.steamStatusText = text(payload.message, "Launched");
         state.steamStatusTone = "good";
@@ -4760,7 +4899,13 @@
         state.steamStatusText = "Scanning";
         state.steamStatusTone = "warn";
         redraw();
-        refreshSteam(true);
+        Promise.all([refreshSteam(true), refreshGameActivity(true)]);
+      } else if (action === "game-face-home") {
+        if (env && typeof env.returnHomeFromGameFace === "function") {
+          env.returnHomeFromGameFace();
+        } else if (env && typeof env.selectWidget === "function") {
+          env.selectWidget(env.gameFaceHomeWidget || "system", true);
+        }
       } else if (action === "steam-theme") {
         applySteamGameLook(String(target.getAttribute("data-app-id") || ""), true);
       } else if (action === "steam-launch") {
@@ -4779,17 +4924,22 @@
     var steamLoop = createTimerLoop(refreshSteam, 30000, function () {
       return state.interacting || Boolean(state.steamLaunchingId);
     });
+    var gameActivityLoop = createTimerLoop(refreshGameActivity, 5000, function () {
+      return state.interacting;
+    });
     var stopFpsMeter = startPanelFpsMeter();
     redraw();
     systemLoop.start();
+    gameActivityLoop.start();
     steamLoop.start();
     return {
       refresh: function () {
-        return Promise.all([systemLoop.refresh(), steamLoop.refresh()]);
+        return Promise.all([systemLoop.refresh(), gameActivityLoop.refresh(), steamLoop.refresh()]);
       },
       destroy: function () {
         clearSteamLongPress();
         systemLoop.destroy();
+        gameActivityLoop.destroy();
         steamLoop.destroy();
         stopFpsMeter();
         runCleanups(cleanups);

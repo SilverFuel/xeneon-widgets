@@ -7,7 +7,7 @@ namespace XenonEdgeHost;
 
 public sealed class BridgeManager : IDisposable
 {
-    private const string DashboardAssetRevision = "20260501-1";
+    private const string DashboardAssetRevision = "20260512-2";
     private const int MaxJsonBodyBytes = 256 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -35,6 +35,7 @@ public sealed class BridgeManager : IDisposable
     private readonly MediaService _mediaService;
     private readonly LauncherService _launcherService;
     private readonly SteamService _steamService;
+    private readonly GameActivityService _gameActivityService;
     private readonly ProvisioningService _provisioningService;
     private readonly SystemActionsService _systemActionsService;
     private readonly ClipboardHistoryService _clipboardHistoryService;
@@ -65,6 +66,7 @@ public sealed class BridgeManager : IDisposable
         _mediaService = new MediaService(_logger);
         _launcherService = new LauncherService();
         _steamService = new SteamService(_logger);
+        _gameActivityService = new GameActivityService(_steamService, _launcherService, _configStore, _logger);
         _provisioningService = new ProvisioningService(_configStore, _steamService, _logger);
         _systemActionsService = new SystemActionsService(_logger);
         _clipboardHistoryService = new ClipboardHistoryService(_logger);
@@ -321,6 +323,9 @@ public sealed class BridgeManager : IDisposable
 
             switch (path)
             {
+                case "/favicon.ico":
+                    await WriteJsonAsync(response, 204, new { }, cancellationToken);
+                    return;
                 case "/api/health":
                     await WriteJsonAsync(response, 200, await BuildHealthPayloadAsync(cancellationToken), cancellationToken);
                     return;
@@ -386,6 +391,9 @@ public sealed class BridgeManager : IDisposable
                     return;
                 case "/api/steam/games/art" when request.HttpMethod == "GET":
                     await HandleSteamGameArtworkAsync(request, response, cancellationToken);
+                    return;
+                case "/api/game/activity" when request.HttpMethod == "GET":
+                    await WriteJsonAsync(response, 200, _gameActivityService.GetSnapshot(IsTruthyQueryValue(request, "refresh")), cancellationToken);
                     return;
                 case "/api/system":
                     await WriteJsonAsync(response, 200, _systemMetrics.GetSnapshot(), cancellationToken);
@@ -1142,7 +1150,8 @@ public sealed class BridgeManager : IDisposable
                 media = true,
                 clipboard = true,
                 hue = true,
-                unifi = true
+                unifi = true,
+                gameActivity = true
             },
             setup = new
             {

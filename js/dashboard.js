@@ -3,7 +3,7 @@
   var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
-  var assetRevision = "20260501-1";
+  var assetRevision = "20260512-2";
   var onboardingVersion = 1;
   var showAdvanced = params.get("advanced") === "1";
   var stageWidth = 2560;
@@ -29,6 +29,11 @@
   var activeInlineWidgetId = "";
   var lastBridgeSnapshotKey = "";
   var currentWidgetId = "";
+  var gameActivity = null;
+  var gameFacePreviousWidgetId = "";
+  var gameFaceLastActiveId = "";
+  var gameFaceAutoOpenedGameId = "";
+  var gameFaceSuppressedGameId = "";
   var widgets = [];
   var dashboardSettings = {};
   var storedSettings = {};
@@ -45,7 +50,8 @@
     clipboard: false,
     weather: true,
     hue: false,
-    unifi: true
+    unifi: true,
+    gameActivity: false
   };
   var bridgeConfig = {
     weather: {
@@ -101,6 +107,7 @@
     gameModeMood: "",
     performanceBudget: "balanced",
     gameModeAutoTune: "1",
+    gameModeAutoFace: "1",
     themeReadability: "normal",
     releaseChannel: "stable",
     updateChannel: "stable",
@@ -781,6 +788,10 @@
     return fetchJson(buildUrl(bridgeOrigin, "/api/config"), 5000);
   }
 
+  function fetchGameActivity() {
+    return fetchJson(buildUrl(bridgeOrigin, "/api/game/activity"), 4200);
+  }
+
   function getBridgeRefreshInterval() {
     var budget = getPerformanceBudget();
     if (budget === "battery") {
@@ -809,6 +820,87 @@
         scheduleBridgeRefreshLoop();
       });
     }, getBridgeRefreshInterval());
+  }
+
+  function getGameActivityRefreshInterval() {
+    var budget = getPerformanceBudget();
+    if (budget === "battery") {
+      return 12000;
+    }
+    if (budget === "max" || budget === "game") {
+      return 4000;
+    }
+    return 6000;
+  }
+
+  function activeGameIdFromPayload(payload) {
+    var activeGame = payload && payload.active && payload.activeGame ? payload.activeGame : null;
+    if (!activeGame) {
+      return "";
+    }
+
+    return String(activeGame.id || activeGame.appId || activeGame.processName || activeGame.name || "");
+  }
+
+  function isGameFaceAutoOpenEnabled() {
+    return String(getSetting("gameModeAutoFace") || "1") !== "0";
+  }
+
+  function handleGameActivity(payload) {
+    var activeGame;
+    var activeId;
+
+    gameActivity = payload || null;
+    activeGame = gameActivity && gameActivity.active && gameActivity.activeGame ? gameActivity.activeGame : null;
+    activeId = activeGameIdFromPayload(gameActivity);
+
+    if (!activeGame || !activeId) {
+      gameFaceLastActiveId = "";
+      gameFaceAutoOpenedGameId = "";
+      gameFaceSuppressedGameId = "";
+      return;
+    }
+
+    if (activeId !== gameFaceLastActiveId) {
+      gameFaceLastActiveId = activeId;
+      gameFaceAutoOpenedGameId = "";
+      gameFaceSuppressedGameId = "";
+    }
+
+    if (!isGameFaceAutoOpenEnabled()
+      || gameFaceSuppressedGameId === activeId
+      || gameFaceAutoOpenedGameId === activeId
+      || currentWidgetId === "game-mode"
+      || currentWidgetId === "setup") {
+      return;
+    }
+
+    gameFacePreviousWidgetId = currentWidgetId || getFallbackPrimaryWidget();
+    gameFaceAutoOpenedGameId = activeId;
+    selectWidget("game-mode", false);
+    showTouchFeedback("Game Face opened");
+  }
+
+  function refreshGameActivity() {
+    if (bridgeReachable !== true || isLocalBridgeBlockedByPageOrigin()) {
+      return Promise.resolve();
+    }
+
+    return fetchGameActivity().then(function (payload) {
+      handleGameActivity(payload);
+    }, function () {
+      gameActivity = null;
+    });
+  }
+
+  function scheduleGameActivityLoop() {
+    window.setTimeout(function () {
+      refreshGameActivity().then(function () {
+        scheduleGameActivityLoop();
+      }, function () {
+        scheduleGameActivityLoop();
+      });
+    }, getGameActivityRefreshInterval());
   }
 
   function setNowStrip(targetWidget, label, title, detail) {
@@ -841,8 +933,19 @@
   }
 
   function updateNowPlayingStrip() {
+    var activeGame = gameActivity && gameActivity.active && gameActivity.activeGame ? gameActivity.activeGame : null;
     if (!nowStripNode || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin()) {
       hideNowStrip();
+      return;
+    }
+
+    if (activeGame && currentWidgetId !== "game-mode") {
+      setNowStrip(
+        "game-mode",
+        "Game",
+        text(activeGame.name, "Game running"),
+        text(activeGame.platform, text(activeGame.source, "Active now"))
+      );
       return;
     }
 
@@ -883,7 +986,7 @@
       var targetWidget = nowStripNode.dataset.targetWidget || "";
       if (targetWidget) {
         selectWidget(targetWidget, true);
-        showTouchFeedback(targetWidget === "media" ? "Media opened" : "Audio opened");
+        showTouchFeedback(targetWidget === "media" ? "Media opened" : targetWidget === "game-mode" ? "Game Face opened" : "Audio opened");
       }
     });
 
@@ -1592,6 +1695,8 @@
       showAdvanced: showAdvanced,
       bridgeSetup: bridgeSetup,
       bridgeConfig: bridgeConfig,
+      gameActivity: gameActivity,
+      gameFaceHomeWidget: gameFacePreviousWidgetId || getFallbackPrimaryWidget(),
       getSetting: getSetting,
       getSettings: function () {
         return Object.assign({}, dashboardSettings);
@@ -1604,6 +1709,18 @@
       resetSettings: resetLocalDashboardSettings,
       resetAllLocalData: resetAllLocalData,
       selectWidget: selectWidget,
+      returnHomeFromGameFace: function () {
+        var activeId = activeGameIdFromPayload(gameActivity);
+        var targetWidget = gameFacePreviousWidgetId || getFallbackPrimaryWidget();
+        if (targetWidget === "game-mode") {
+          targetWidget = getFallbackPrimaryWidget();
+        }
+        if (activeId) {
+          gameFaceSuppressedGameId = activeId;
+        }
+        selectWidget(targetWidget, true);
+        showTouchFeedback("Home");
+      },
       showTouchFeedback: showTouchFeedback,
       handleSetupUpdate: handleInlineSetupUpdate
     };
@@ -1755,6 +1872,7 @@
     var readability = getThemeReadability();
     var budget = getPerformanceBudget();
     var autoTune = String(getSetting("gameModeAutoTune") || "1") !== "0";
+    var autoFace = String(getSetting("gameModeAutoFace") || "1") !== "0";
     return '' +
       '<section class="router-settings__global">' +
         '<div class="router-settings__global-head">' +
@@ -1781,6 +1899,7 @@
         '</div>' +
         '<div class="router-settings__global-actions">' +
           '<label class="router-settings__checkbox"><input id="dashboard-autotune-toggle" type="checkbox"' + (autoTune ? " checked" : "") + '> Game Mode auto-tune</label>' +
+          '<label class="router-settings__checkbox"><input id="dashboard-autoface-toggle" type="checkbox"' + (autoFace ? " checked" : "") + '> Game Face auto-open</label>' +
           '<button id="dashboard-opacity-reset" class="router-settings__button" type="button">Reset opacity</button>' +
         '</div>' +
       '</section>';
@@ -1793,6 +1912,7 @@
     var readabilitySelect = document.getElementById("dashboard-readability-select");
     var budgetSelect = document.getElementById("dashboard-budget-select");
     var autoTuneToggle = document.getElementById("dashboard-autotune-toggle");
+    var autoFaceToggle = document.getElementById("dashboard-autoface-toggle");
 
     function updateOpacity(nextValue, persistValue) {
       var normalized = normalizeOpacityPercent(nextValue);
@@ -1841,6 +1961,14 @@
       autoTuneToggle.addEventListener("change", function () {
         saveDashboardSettings({
           gameModeAutoTune: autoTuneToggle.checked ? "1" : "0"
+        });
+      });
+    }
+
+    if (autoFaceToggle) {
+      autoFaceToggle.addEventListener("change", function () {
+        saveDashboardSettings({
+          gameModeAutoFace: autoFaceToggle.checked ? "1" : "0"
         });
       });
     }
@@ -2281,6 +2409,7 @@
       initNowPlayingStrip();
 
       scheduleBridgeRefreshLoop();
+      scheduleGameActivityLoop();
 
       window.addEventListener("resize", setScale);
     } catch (error) {
