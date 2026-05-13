@@ -3982,6 +3982,73 @@
       '</article>';
   }
 
+  function renderGameFocusHudItem(label, value, detail, progress) {
+    var progressValue = optionalNumber(progress);
+    return '' +
+      '<div class="game-focus-hud__item">' +
+        '<span>' + escapeHtml(label) + '</span>' +
+        '<strong>' + escapeHtml(value) + '</strong>' +
+        '<small>' + escapeHtml(detail || "") + '</small>' +
+        (progressValue == null ? "" : '<i style="--hud-fill:' + escapeHtml(String(clamp(progressValue, 0, 100))) + '%"></i>') +
+      '</div>';
+  }
+
+  function gameFocusProgress(value, ceiling) {
+    var parsed = optionalNumber(value);
+    return parsed == null ? null : clamp((parsed / (ceiling || 100)) * 100, 0, 100);
+  }
+
+  function renderGameFocusScene(game, theme, system, dashboardFps, env, introActive) {
+    var display = primaryDisplayFromSystem(system || {});
+    var refreshRate = displayRefreshRate(display);
+    var gameName = text(game && game.name, "Game");
+    var platform = text(game && game.platform, "Game");
+    var detail = text(game && game.reason, text(game && game.source, "Running now"));
+    var session = game && game.startedAt ? formatAge(game.startedAt) : "Just now";
+    var confidence = game && game.confidence != null ? Math.round(game.confidence) + "%" : "--";
+    var tileLabel = text(game && game.tileLabel, "GX");
+    var artUrl = text(game && (game.artworkUrl || game.iconUrl), "");
+    var displayName = text(display.name || display.deviceName, "XENEON EDGE");
+    var dashboardFpsValue = optionalNumber(dashboardFps);
+    var shellClass = "game-focus-shell" + (introActive ? " is-intro" : "");
+    return '' +
+      '<section class="' + shellClass + '" style="' + gameModeThemeStyle(theme) + '">' +
+        '<div class="game-focus-wake" aria-hidden="true">' +
+          '<span>Launch detected</span>' +
+          '<strong>' + escapeHtml(gameName) + '</strong>' +
+        '</div>' +
+        '<div class="game-focus-visor" aria-hidden="true">' +
+          '<span></span><span></span><span></span>' +
+        '</div>' +
+        '<header class="game-focus-topbar">' +
+          '<div class="game-focus-identity">' +
+            '<span>' + escapeHtml(platform) + ' active</span>' +
+            '<strong>' + escapeHtml(gameName) + '</strong>' +
+            '<small>' + escapeHtml(detail) + '</small>' +
+          '</div>' +
+          '<button class="inline-button game-focus-home" type="button" data-action="game-face-home">Home</button>' +
+        '</header>' +
+        '<main class="game-focus-core">' +
+          '<div class="game-focus-emblem">' + (artUrl
+            ? '<img src="' + escapeHtml(artUrl) + '" alt="' + escapeHtml(gameName) + '" loading="lazy">'
+            : '<span>' + escapeHtml(tileLabel) + '</span>') + '</div>' +
+          '<div class="game-focus-lock">' +
+            '<span>In session</span>' +
+            '<strong>' + escapeHtml(gameName) + '</strong>' +
+            '<small>' + escapeHtml(displayName) + '</small>' +
+          '</div>' +
+        '</main>' +
+        '<footer class="game-focus-hud">' +
+          renderGameFocusHudItem("Refresh", formatHz(refreshRate), displayName, gameFocusProgress(refreshRate, 240)) +
+          renderGameFocusHudItem("Panel", formatFps(dashboardFpsValue), "EDGE render", gameFocusProgress(dashboardFpsValue, 120)) +
+          renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "Load", system && system.gpu) +
+          renderGameFocusHudItem("CPU", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu) +
+          renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram) +
+          renderGameFocusHudItem("Session", session, "Match " + confidence, null) +
+        '</footer>' +
+      '</section>';
+  }
+
   function renderGameModeProfilePanel(savedGame, game, profile, theme, steam, env) {
     var steamCount = steam && Array.isArray(steam.games) ? steam.games.length : 0;
     var activeGame = steam && steam.activeGame ? steam.activeGame : null;
@@ -4607,10 +4674,13 @@
       steamLaunchingId: "",
       longPressAppId: "",
       lastAutoThemeGameId: "",
+      focusActiveGameId: "",
+      focusIntroGameId: "",
       interacting: false
     };
     var suppressNextSteamLaunchId = "";
     var longPressTimerId = 0;
+    var focusIntroTimerId = 0;
     var longPressStartX = 0;
     var longPressStartY = 0;
     var longPressAppId = "";
@@ -4622,6 +4692,37 @@
     function fpsProgress(value, ceiling) {
       var parsed = optionalNumber(value);
       return parsed == null ? null : clamp((parsed / (ceiling || 240)) * 100, 0, 100);
+    }
+
+    function clearFocusIntroTimer() {
+      if (focusIntroTimerId) {
+        window.clearTimeout(focusIntroTimerId);
+        focusIntroTimerId = 0;
+      }
+    }
+
+    function syncGameFocusIntro(activeGame) {
+      var activeId = gameActivityId(activeGame);
+      if (!activeId) {
+        state.focusActiveGameId = "";
+        state.focusIntroGameId = "";
+        clearFocusIntroTimer();
+        return;
+      }
+
+      if (state.focusActiveGameId === activeId) {
+        return;
+      }
+
+      state.focusActiveGameId = activeId;
+      state.focusIntroGameId = activeId;
+      clearFocusIntroTimer();
+      focusIntroTimerId = window.setTimeout(function () {
+        if (state.focusIntroGameId === activeId) {
+          state.focusIntroGameId = "";
+          redraw();
+        }
+      }, 2300);
     }
 
     function redraw() {
@@ -4636,10 +4737,25 @@
       var primaryRefreshRate = displayRefreshRate(display);
       var dashboardFps = optionalNumber(state.panelFps);
       var displayName = text(display.name || display.deviceName, "Primary display");
+      var activeGameId = gameActivityId(activeGame);
+      syncGameFocusIntro(activeGame);
+
+      if (activeGame) {
+        container.innerHTML = renderGameFocusScene(
+          activeGame,
+          profileTheme,
+          system,
+          dashboardFps,
+          env,
+          state.focusIntroGameId === activeGameId
+        );
+        return;
+      }
+
       container.innerHTML = productShell(
         "Live performance",
-        activeGame ? "Game Face" : "Game Mode",
-        activeGame ? "Active game telemetry and launch dock." : "Launch dock with display refresh, dashboard smoothness, CPU, and GPU in view.",
+        "Game Mode",
+        "Launch dock with display refresh, dashboard smoothness, CPU, and GPU in view.",
         primaryRefreshRate == null ? state.statusText : formatHz(primaryRefreshRate),
         primaryRefreshRate == null ? state.statusTone : "good",
         '<div class="inline-grid inline-grid--4 game-mode-performance">' +
@@ -4946,6 +5062,7 @@
         gameActivityLoop.destroy();
         steamLoop.destroy();
         stopFpsMeter();
+        clearFocusIntroTimer();
         runCleanups(cleanups);
         container.innerHTML = "";
       }
