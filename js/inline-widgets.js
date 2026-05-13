@@ -3985,11 +3985,11 @@
   function renderGameFocusHudItem(label, value, detail, progress) {
     var progressValue = optionalNumber(progress);
     return '' +
-      '<div class="game-focus-hud__item">' +
+      '<div class="game-focus-metric">' +
         '<span>' + escapeHtml(label) + '</span>' +
         '<strong>' + escapeHtml(value) + '</strong>' +
         '<small>' + escapeHtml(detail || "") + '</small>' +
-        (progressValue == null ? "" : '<i style="--hud-fill:' + escapeHtml(String(clamp(progressValue, 0, 100))) + '%"></i>') +
+        (progressValue == null ? "" : '<i style="--metric-fill:' + escapeHtml(String(clamp(progressValue, 0, 100))) + '%"></i>') +
       '</div>';
   }
 
@@ -3998,7 +3998,67 @@
     return parsed == null ? null : clamp((parsed / (ceiling || 100)) * 100, 0, 100);
   }
 
-  function renderGameFocusScene(game, theme, system, dashboardFps, env, introActive) {
+  function formatGameFocusRate(value) {
+    var parsed = optionalNumber(value);
+    if (parsed == null) {
+      return "--";
+    }
+    return (parsed >= 10 ? Math.round(parsed) : parsed.toFixed(1)) + " Mbps";
+  }
+
+  function gameFocusAudioOutput(audio) {
+    var data = normalizeAudioPayload(audio || {});
+    return data.devices.filter(function (device) {
+      return device && device.isDefault;
+    })[0] || data.devices[0] || null;
+  }
+
+  function compactAudioName(name) {
+    var value = text(name, "No output");
+    value = value.replace(/\s*\([^)]*\)/g, "").trim();
+    return value || text(name, "No output");
+  }
+
+  function gameFocusTileLabel(game) {
+    var name = text(game && game.name, "");
+    var fallback = text(game && game.tileLabel, "GX");
+    var tokens = name.toUpperCase().match(/[A-Z0-9]+/g) || [];
+    var last = tokens.length ? tokens[tokens.length - 1] : "";
+    var romanMap = {
+      I: "1",
+      II: "2",
+      III: "3",
+      IV: "4",
+      V: "5",
+      VI: "6",
+      VII: "7",
+      VIII: "8",
+      IX: "9",
+      X: "10"
+    };
+
+    if (tokens.length > 1 && (romanMap[last] || /^\d{1,2}$/.test(last))) {
+      return tokens[0].charAt(0) + (romanMap[last] || last);
+    }
+
+    if (tokens.length > 1) {
+      return tokens.slice(0, 2).map(function (part) {
+        return part.charAt(0);
+      }).join("");
+    }
+
+    return fallback;
+  }
+
+  function renderGameFocusFact(label, value) {
+    return '' +
+      '<div class="game-focus-fact">' +
+        '<span>' + escapeHtml(label) + '</span>' +
+        '<strong>' + escapeHtml(value) + '</strong>' +
+      '</div>';
+  }
+
+  function renderGameFocusScene(game, theme, system, dashboardFps, audio, network, env, introActive) {
     var display = primaryDisplayFromSystem(system || {});
     var refreshRate = displayRefreshRate(display);
     var gameName = text(game && game.name, "Game");
@@ -4006,10 +4066,19 @@
     var detail = text(game && game.reason, text(game && game.source, "Running now"));
     var session = game && game.startedAt ? formatAge(game.startedAt) : "Just now";
     var confidence = game && game.confidence != null ? Math.round(game.confidence) + "%" : "--";
-    var tileLabel = text(game && game.tileLabel, "GX");
+    var tileLabel = gameFocusTileLabel(game);
     var artUrl = text(game && (game.artworkUrl || game.iconUrl), "");
     var displayName = text(display.name || display.deviceName, "XENEON EDGE");
     var dashboardFpsValue = optionalNumber(dashboardFps);
+    var processName = text(game && game.processName, "Detected process");
+    var source = text(game && game.source, platform);
+    var audioData = normalizeAudioPayload(audio || {});
+    var audioOutput = gameFocusAudioOutput(audioData);
+    var audioName = compactAudioName(audioOutput && audioOutput.name);
+    var audioState = audioData.muted ? "Muted" : Math.round(audioData.masterVolume) + "%";
+    var activeAudioSessions = audioData.sessions.filter(isUsefulAudioSession).length;
+    var networkData = network || {};
+    var ping = optionalNumber(networkData.ping);
     var shellClass = "game-focus-shell" + (introActive ? " is-intro" : "");
     return '' +
       '<section class="' + shellClass + '" style="' + gameModeThemeStyle(theme) + '">' +
@@ -4017,34 +4086,56 @@
           '<span>Launch detected</span>' +
           '<strong>' + escapeHtml(gameName) + '</strong>' +
         '</div>' +
-        '<div class="game-focus-visor" aria-hidden="true">' +
-          '<span></span><span></span><span></span>' +
-        '</div>' +
         '<header class="game-focus-topbar">' +
           '<div class="game-focus-identity">' +
-            '<span>' + escapeHtml(platform) + ' active</span>' +
+            '<span>' + escapeHtml(platform) + '</span>' +
             '<strong>' + escapeHtml(gameName) + '</strong>' +
-            '<small>' + escapeHtml(detail) + '</small>' +
           '</div>' +
           '<button class="inline-button game-focus-home" type="button" data-action="game-face-home">Home</button>' +
         '</header>' +
-        '<main class="game-focus-core">' +
-          '<div class="game-focus-emblem">' + (artUrl
-            ? '<img src="' + escapeHtml(artUrl) + '" alt="' + escapeHtml(gameName) + '" loading="lazy">'
-            : '<span>' + escapeHtml(tileLabel) + '</span>') + '</div>' +
-          '<div class="game-focus-lock">' +
-            '<span>In session</span>' +
-            '<strong>' + escapeHtml(gameName) + '</strong>' +
-            '<small>' + escapeHtml(displayName) + '</small>' +
-          '</div>' +
+        '<main class="game-focus-board">' +
+          '<section class="game-focus-card game-focus-card--context">' +
+            '<div class="game-focus-emblem">' + (artUrl
+              ? '<img src="' + escapeHtml(artUrl) + '" alt="' + escapeHtml(gameName) + '" loading="lazy">'
+              : '<span>' + escapeHtml(tileLabel) + '</span>') + '</div>' +
+            '<div class="game-focus-session">' +
+              '<span>Game</span>' +
+              '<strong>' + escapeHtml(gameName) + '</strong>' +
+              '<small>' + escapeHtml(source) + '</small>' +
+            '</div>' +
+            '<div class="game-focus-facts">' +
+              renderGameFocusFact("Session", session) +
+              renderGameFocusFact("Match", confidence) +
+              renderGameFocusFact("Process", processName) +
+            '</div>' +
+          '</section>' +
+          '<section class="game-focus-metrics">' +
+            renderGameFocusHudItem("FPS", formatFps(dashboardFpsValue), "EDGE render", gameFocusProgress(dashboardFpsValue, 120)) +
+            renderGameFocusHudItem("Refresh", formatHz(refreshRate), displayName, gameFocusProgress(refreshRate, 240)) +
+            renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "Load", system && system.gpu) +
+            renderGameFocusHudItem("CPU", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu) +
+            renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram) +
+            renderGameFocusHudItem("Ping", ping == null ? "--" : Math.round(ping) + " ms", text(networkData.type, "Network"), gameFocusProgress(80 - Math.min(ping || 80, 80), 80)) +
+          '</section>' +
+          '<aside class="game-focus-card game-focus-card--utility">' +
+            '<div class="game-focus-audio">' +
+              '<span>Audio</span>' +
+              '<strong>' + escapeHtml(audioState) + '</strong>' +
+              '<small>' + escapeHtml(audioName) + '</small>' +
+            '</div>' +
+            '<div class="game-focus-network">' +
+              '<span>Network</span>' +
+              '<strong>' + escapeHtml(ping == null ? "--" : Math.round(ping) + " ms") + '</strong>' +
+              '<small>' + escapeHtml(formatGameFocusRate(networkData.download) + " down / " + formatGameFocusRate(networkData.upload) + " up") + '</small>' +
+            '</div>' +
+            '<div class="game-focus-reason">' + escapeHtml((activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + detail) + '</div>' +
+          '</aside>' +
         '</main>' +
-        '<footer class="game-focus-hud">' +
-          renderGameFocusHudItem("Refresh", formatHz(refreshRate), displayName, gameFocusProgress(refreshRate, 240)) +
-          renderGameFocusHudItem("Panel", formatFps(dashboardFpsValue), "EDGE render", gameFocusProgress(dashboardFpsValue, 120)) +
-          renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "Load", system && system.gpu) +
-          renderGameFocusHudItem("CPU", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu) +
-          renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram) +
-          renderGameFocusHudItem("Session", session, "Match " + confidence, null) +
+        '<footer class="game-focus-footer">' +
+          '<span>Focus</span>' +
+          '<strong>' + escapeHtml(platform) + '</strong>' +
+          '<strong>' + escapeHtml(audioName + " " + audioState) + '</strong>' +
+          '<strong>' + escapeHtml(ping == null ? "Network --" : "Ping " + Math.round(ping) + " ms") + '</strong>' +
         '</footer>' +
       '</section>';
   }
@@ -4664,6 +4755,8 @@
     var cleanups = [];
     var state = {
       system: {},
+      audio: normalizeAudioPayload({}),
+      network: {},
       steam: normalizeSteamGamesPayload({}),
       activity: normalizeGameActivityPayload(env.gameActivity || {}),
       panelFps: null,
@@ -4746,6 +4839,8 @@
           profileTheme,
           system,
           dashboardFps,
+          state.audio,
+          state.network,
           env,
           state.focusIntroGameId === activeGameId
         );
@@ -4782,6 +4877,34 @@
         state.system = {};
         state.statusText = error.message || "Unavailable";
         state.statusTone = "danger";
+        if (!state.interacting) {
+          redraw();
+        }
+      });
+    }
+
+    function refreshAudio() {
+      return requestJson(buildBridgeUrl(env, "/api/audio"), {}, 5000).then(function (payload) {
+        state.audio = normalizeAudioPayload(payload);
+        if (!state.interacting) {
+          redraw();
+        }
+      }, function () {
+        state.audio = normalizeAudioPayload({});
+        if (!state.interacting) {
+          redraw();
+        }
+      });
+    }
+
+    function refreshNetwork() {
+      return requestJson(buildBridgeUrl(env, "/api/network"), {}, 5000).then(function (payload) {
+        state.network = payload || {};
+        if (!state.interacting) {
+          redraw();
+        }
+      }, function () {
+        state.network = {};
         if (!state.interacting) {
           redraw();
         }
@@ -5041,6 +5164,12 @@
     var systemLoop = createTimerLoop(refreshSystem, 2000, function () {
       return state.interacting;
     });
+    var audioLoop = createTimerLoop(refreshAudio, 3000, function () {
+      return state.interacting;
+    });
+    var networkLoop = createTimerLoop(refreshNetwork, 3000, function () {
+      return state.interacting;
+    });
     var steamLoop = createTimerLoop(refreshSteam, 30000, function () {
       return state.interacting || Boolean(state.steamLaunchingId);
     });
@@ -5050,15 +5179,19 @@
     var stopFpsMeter = startPanelFpsMeter();
     redraw();
     systemLoop.start();
+    audioLoop.start();
+    networkLoop.start();
     gameActivityLoop.start();
     steamLoop.start();
     return {
       refresh: function () {
-        return Promise.all([systemLoop.refresh(), gameActivityLoop.refresh(), steamLoop.refresh()]);
+        return Promise.all([systemLoop.refresh(), audioLoop.refresh(), networkLoop.refresh(), gameActivityLoop.refresh(), steamLoop.refresh()]);
       },
       destroy: function () {
         clearSteamLongPress();
         systemLoop.destroy();
+        audioLoop.destroy();
+        networkLoop.destroy();
         gameActivityLoop.destroy();
         steamLoop.destroy();
         stopFpsMeter();
