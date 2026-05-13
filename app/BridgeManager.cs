@@ -88,6 +88,38 @@ public sealed class BridgeManager : IDisposable
 
     public event Action<string>? BridgeStopped;
 
+    public List<DisplayTarget> ListDisplayCandidates()
+    {
+        var config = _configStore.Snapshot();
+        return DisplayManager.ListDisplays(config.Dashboard.PreferredDisplayId);
+    }
+
+    public DisplayTarget SelectDisplayTarget(IReadOnlyList<DisplayTarget>? candidates = null)
+    {
+        var config = _configStore.Snapshot();
+        var displayCandidates = candidates?.Count > 0
+            ? candidates.ToList()
+            : DisplayManager.ListDisplays(config.Dashboard.PreferredDisplayId);
+
+        if (displayCandidates.Count == 0)
+        {
+            throw new InvalidOperationException("No displays were detected.");
+        }
+
+        var selected = displayCandidates[0];
+        _configStore.Update(current =>
+        {
+            current.Dashboard.PreferredDisplayId = selected.StableId;
+            current.Dashboard.PreferredDisplayDeviceName = selected.DeviceName;
+            current.Dashboard.DisplaySelectedAt = DateTime.UtcNow.ToString("O");
+            current.Dashboard.LastKnownGoodVersion = typeof(BridgeManager).Assembly.GetName().Version?.ToString() ?? "";
+            current.Dashboard.LastKnownGoodPath = Environment.ProcessPath ?? "";
+            return current;
+        });
+
+        return selected;
+    }
+
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         await _lifecycleLock.WaitAsync(cancellationToken);
@@ -298,6 +330,18 @@ public sealed class BridgeManager : IDisposable
                 case "/api/provisioning/run" when request.HttpMethod == "POST":
                     await WriteJsonAsync(response, 200, _provisioningService.RunStartupProvisioning(forceLauncherScan: true), cancellationToken);
                     return;
+                case "/api/provisioning/launchers/apply" when request.HttpMethod == "POST":
+                    await HandleLauncherSuggestionApplyAsync(request, response, cancellationToken);
+                    return;
+                case "/api/repair/run" when request.HttpMethod == "POST":
+                    await WriteJsonAsync(response, 200, await RunAutoRepairAsync(cancellationToken), cancellationToken);
+                    return;
+                case "/api/display/diagnostics" when request.HttpMethod == "GET":
+                    await WriteJsonAsync(response, 200, BuildDisplayDiagnostics(), cancellationToken);
+                    return;
+                case "/api/display/preference" when request.HttpMethod == "POST":
+                    await HandleDisplayPreferenceAsync(request, response, cancellationToken);
+                    return;
                 case "/api/config" when request.HttpMethod == "GET":
                     await WriteJsonAsync(response, 200, BuildConfigSnapshot(), cancellationToken);
                     return;
@@ -311,7 +355,10 @@ public sealed class BridgeManager : IDisposable
                     await HandleSupportBundleAsync(response, cancellationToken);
                     return;
                 case "/api/releases/latest":
-                    await WriteJsonAsync(response, 200, await _releaseService.GetLatestReleaseAsync(cancellationToken), cancellationToken);
+                    await WriteJsonAsync(response, 200, await _releaseService.GetLatestReleaseAsync(GetReleaseChannel(request), cancellationToken), cancellationToken);
+                    return;
+                case "/api/releases/rollback" when request.HttpMethod == "POST":
+                    await WriteJsonAsync(response, 200, BuildRollbackPayload(), cancellationToken);
                     return;
                 case "/api/config/weather" when request.HttpMethod == "POST":
                     await HandleWeatherConfigUpdateAsync(request, response, cancellationToken);
@@ -507,6 +554,52 @@ public sealed class BridgeManager : IDisposable
                 current.Dashboard.OnboardingCompletedAt = "";
             }
 
+            if (payload.LauncherReviewRequired.HasValue)
+            {
+                current.Dashboard.LauncherReviewRequired = payload.LauncherReviewRequired.Value;
+            }
+
+            if (payload.AutoApplyLauncherSuggestions.HasValue)
+            {
+                current.Dashboard.AutoApplyLauncherSuggestions = payload.AutoApplyLauncherSuggestions.Value;
+            }
+
+            if (payload.PreferredDisplayId is not null)
+            {
+                current.Dashboard.PreferredDisplayId = payload.PreferredDisplayId.Trim();
+                current.Dashboard.DisplaySelectedAt = DateTime.UtcNow.ToString("O");
+            }
+
+            if (payload.PreferredDisplayDeviceName is not null)
+            {
+                current.Dashboard.PreferredDisplayDeviceName = payload.PreferredDisplayDeviceName.Trim();
+            }
+
+            if (payload.PerformanceBudget is not null)
+            {
+                current.Dashboard.PerformanceBudget = payload.PerformanceBudget.Trim();
+            }
+
+            if (payload.GameModeAutoTune.HasValue)
+            {
+                current.Dashboard.GameModeAutoTune = payload.GameModeAutoTune.Value;
+            }
+
+            if (payload.ThemeReadability is not null)
+            {
+                current.Dashboard.ThemeReadability = payload.ThemeReadability.Trim();
+            }
+
+            if (payload.ReleaseChannel is not null)
+            {
+                current.Dashboard.ReleaseChannel = payload.ReleaseChannel.Trim();
+            }
+
+            if (payload.UpdateRollbackEnabled.HasValue)
+            {
+                current.Dashboard.UpdateRollbackEnabled = payload.UpdateRollbackEnabled.Value;
+            }
+
             return current;
         });
 
@@ -543,6 +636,8 @@ public sealed class BridgeManager : IDisposable
             },
             config = BuildSupportConfigSnapshot(config),
             health = SanitizeSupportObject(health, config),
+            display = BuildDisplayDiagnostics(config),
+            releaseSafety = BuildSupportRollbackPayload(BuildRollbackPayload()),
             log = ReadRecentLogLines(120, config)
         }, cancellationToken);
     }
@@ -594,6 +689,38 @@ public sealed class BridgeManager : IDisposable
         });
 
         await WriteJsonAsync(response, 200, _launcherService.GetSnapshot(updatedConfig), cancellationToken);
+    }
+
+    private async Task HandleLauncherSuggestionApplyAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        var payload = await ReadJsonAsync<LauncherSuggestionApplyRequest>(request, cancellationToken);
+        await WriteJsonAsync(response, 200, _provisioningService.ApplyLauncherSuggestions(payload.Ids), cancellationToken);
+    }
+
+    private async Task HandleDisplayPreferenceAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        var payload = await ReadJsonAsync<DisplayPreferenceRequest>(request, cancellationToken);
+        var displayId = payload.DisplayId?.Trim() ?? "";
+        var diagnostics = BuildDisplayDiagnostics();
+        var selected = diagnostics.Displays.FirstOrDefault(display =>
+            string.Equals(display.Id, displayId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(display.DeviceName, displayId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(display.DeviceId, displayId, StringComparison.OrdinalIgnoreCase));
+
+        if (selected is null)
+        {
+            throw new InvalidOperationException("Display candidate not found.");
+        }
+
+        _configStore.Update(current =>
+        {
+            current.Dashboard.PreferredDisplayId = selected.Id;
+            current.Dashboard.PreferredDisplayDeviceName = selected.DeviceName;
+            current.Dashboard.DisplaySelectedAt = DateTime.UtcNow.ToString("O");
+            return current;
+        });
+
+        await WriteJsonAsync(response, 200, BuildDisplayDiagnostics(), cancellationToken);
     }
 
     private async Task HandleLauncherLaunchAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
@@ -792,6 +919,114 @@ public sealed class BridgeManager : IDisposable
         return false;
     }
 
+    private DisplayDiagnosticsSnapshot BuildDisplayDiagnostics(AppConfig? config = null)
+    {
+        var snapshot = config ?? _configStore.Snapshot();
+        return DisplayManager.BuildDiagnostics(snapshot.Dashboard.PreferredDisplayId);
+    }
+
+    private async Task<object> RunAutoRepairAsync(CancellationToken cancellationToken)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        var actions = new List<object>();
+        var config = _configStore.Snapshot();
+        var display = BuildDisplayDiagnostics(config);
+        var provisioning = _provisioningService.RunStartupProvisioning(forceLauncherScan: true);
+        var health = await BuildHealthPayloadAsync(cancellationToken);
+
+        actions.Add(new
+        {
+            id = "config-normalized",
+            state = "Ready",
+            message = "Local config was loaded, normalized, and re-saved."
+        });
+        actions.Add(new
+        {
+            id = "display",
+            state = display.EdgeCandidateCount > 0 ? "Ready" : "Needs Setup",
+            message = display.Message,
+            repairActions = display.RepairActions
+        });
+        actions.Add(new
+        {
+            id = "provisioning",
+            state = provisioning.Status,
+            message = provisioning.Message
+        });
+        actions.Add(new
+        {
+            id = "webview2",
+            state = App.RuntimeInfo.IsAvailable ? "Ready" : "Needs Setup",
+            message = App.RuntimeInfo.IsAvailable
+                ? $"WebView2 runtime detected ({App.RuntimeInfo.Version ?? "unknown"})."
+                : "Install or bundle WebView2 before the dashboard can render."
+        });
+        actions.Add(new
+        {
+            id = "rollback",
+            state = BuildRollbackPayload().Configured ? "Ready" : "Optional",
+            message = "Rollback metadata was checked for the current install."
+        });
+
+        return new
+        {
+            ok = true,
+            supported = true,
+            status = display.EdgeCandidateCount > 0 ? "ready" : "needs-setup",
+            sampledAt = startedAt,
+            message = "Auto repair checked display targeting, runtime health, launcher suggestions, and config state.",
+            actions,
+            health
+        };
+    }
+
+    private string GetReleaseChannel(HttpListenerRequest request)
+    {
+        var requested = GetQueryValue(request, "channel");
+        if (!string.IsNullOrWhiteSpace(requested))
+        {
+            return requested;
+        }
+
+        return _configStore.Snapshot().Dashboard.ReleaseChannel;
+    }
+
+    private RollbackPayload BuildRollbackPayload()
+    {
+        var config = _configStore.Snapshot();
+        var path = config.Dashboard.LastKnownGoodPath;
+        var configured = config.Dashboard.UpdateRollbackEnabled
+            && !string.IsNullOrWhiteSpace(path)
+            && File.Exists(path);
+
+        return new RollbackPayload
+        {
+            Supported = true,
+            Configured = configured,
+            Status = configured ? "ready" : "unavailable",
+            RollbackEnabled = config.Dashboard.UpdateRollbackEnabled,
+            LastKnownGoodVersion = config.Dashboard.LastKnownGoodVersion,
+            LastKnownGoodPath = configured ? path : "",
+            Message = configured
+                ? "A last-known-good install path is available for rollback."
+                : "Rollback will be available after Xenon records a healthy installed build."
+        };
+    }
+
+    private static object BuildSupportRollbackPayload(RollbackPayload rollback)
+    {
+        return new
+        {
+            supported = rollback.Supported,
+            configured = rollback.Configured,
+            status = rollback.Status,
+            rollbackEnabled = rollback.RollbackEnabled,
+            lastKnownGoodVersion = rollback.LastKnownGoodVersion,
+            lastKnownGoodPathConfigured = !string.IsNullOrWhiteSpace(rollback.LastKnownGoodPath),
+            message = rollback.Message
+        };
+    }
+
     private async Task<object> BuildHealthPayloadAsync(CancellationToken cancellationToken)
     {
         var config = _configStore.Snapshot();
@@ -805,6 +1040,13 @@ public sealed class BridgeManager : IDisposable
         var clipboard = await _clipboardHistoryService.GetSnapshotAsync(cancellationToken);
         var gpuPower = _gpuPowerMonitor.GetSnapshot();
         var provisioning = _provisioningService.GetSnapshot();
+        var displayDiagnostics = BuildDisplayDiagnostics(config);
+        var displayItem = CreateSetupItem(
+            "display",
+            "XENEON EDGE display",
+            displayDiagnostics.EdgeCandidateCount > 0 ? "Ready" : "Needs Setup",
+            true,
+            displayDiagnostics.Message);
 
         var bridge = CreateSetupItem("bridge", "Local app service", "Ready", true, $"Running at {BuildBaseUri(config.Port)}.");
         var system = CreateSetupItem("system", "System Monitor", "Ready", true, "Native system telemetry is live.");
@@ -888,6 +1130,7 @@ public sealed class BridgeManager : IDisposable
             capabilities = new
             {
                 system = true,
+                display = true,
                 gpuPower = true,
                 network = true,
                 launchers = true,
@@ -908,12 +1151,15 @@ public sealed class BridgeManager : IDisposable
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
                 onboardingVersion = config.Dashboard.OnboardingVersion,
                 needsAttention = (!string.IsNullOrWhiteSpace(config.Calendar.IcsUrl) && calendar.Status == "error")
-                    || (!string.IsNullOrWhiteSpace(config.Hue.BridgeIp) && !hue.Linked),
+                    || (!string.IsNullOrWhiteSpace(config.Hue.BridgeIp) && !hue.Linked)
+                    || displayDiagnostics.EdgeCandidateCount == 0,
                 provisioning,
+                display = displayDiagnostics,
                 items = new Dictionary<string, object>
                 {
                     ["bridge"] = bridge,
                     ["provisioning"] = provisioningItem,
+                    ["display"] = displayItem,
                     ["system"] = system,
                     ["gpu-power"] = gpuPowerItem,
                     ["network"] = network,
@@ -939,6 +1185,7 @@ public sealed class BridgeManager : IDisposable
         {
             port = config.Port,
             provisioning = _provisioningService.GetSnapshot(),
+            display = BuildDisplayDiagnostics(config),
             weather = new
             {
                 configured = !string.IsNullOrWhiteSpace(config.Weather.ApiKey),
@@ -981,9 +1228,21 @@ public sealed class BridgeManager : IDisposable
                 autoProvisioningEnabled = config.Dashboard.AutoProvisioningEnabled,
                 autoProvisionedAt = config.Dashboard.AutoProvisionedAt,
                 autoProvisioningVersion = config.Dashboard.AutoProvisioningVersion,
+                launcherReviewRequired = config.Dashboard.LauncherReviewRequired,
+                autoApplyLauncherSuggestions = config.Dashboard.AutoApplyLauncherSuggestions,
                 onboardingCompleted = config.Dashboard.OnboardingCompleted,
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
-                onboardingVersion = config.Dashboard.OnboardingVersion
+                onboardingVersion = config.Dashboard.OnboardingVersion,
+                preferredDisplayId = config.Dashboard.PreferredDisplayId,
+                preferredDisplayDeviceName = config.Dashboard.PreferredDisplayDeviceName,
+                displaySelectedAt = config.Dashboard.DisplaySelectedAt,
+                performanceBudget = config.Dashboard.PerformanceBudget,
+                gameModeAutoTune = config.Dashboard.GameModeAutoTune,
+                themeReadability = config.Dashboard.ThemeReadability,
+                releaseChannel = config.Dashboard.ReleaseChannel,
+                updateRollbackEnabled = config.Dashboard.UpdateRollbackEnabled,
+                lastKnownGoodVersion = config.Dashboard.LastKnownGoodVersion,
+                lastKnownGoodPath = string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath) ? "" : "<local-app-path>"
             }
         };
     }
@@ -1032,9 +1291,18 @@ public sealed class BridgeManager : IDisposable
                 autoProvisioningEnabled = config.Dashboard.AutoProvisioningEnabled,
                 autoProvisioned = !string.IsNullOrWhiteSpace(config.Dashboard.AutoProvisionedAt),
                 autoProvisioningVersion = config.Dashboard.AutoProvisioningVersion,
+                launcherReviewRequired = config.Dashboard.LauncherReviewRequired,
+                autoApplyLauncherSuggestions = config.Dashboard.AutoApplyLauncherSuggestions,
                 onboardingCompleted = config.Dashboard.OnboardingCompleted,
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
-                onboardingVersion = config.Dashboard.OnboardingVersion
+                onboardingVersion = config.Dashboard.OnboardingVersion,
+                preferredDisplayConfigured = !string.IsNullOrWhiteSpace(config.Dashboard.PreferredDisplayId),
+                performanceBudget = config.Dashboard.PerformanceBudget,
+                gameModeAutoTune = config.Dashboard.GameModeAutoTune,
+                themeReadability = config.Dashboard.ThemeReadability,
+                releaseChannel = config.Dashboard.ReleaseChannel,
+                updateRollbackEnabled = config.Dashboard.UpdateRollbackEnabled,
+                lastKnownGoodConfigured = !string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath)
             }
         };
     }
@@ -1357,4 +1625,21 @@ public sealed class BridgeManager : IDisposable
         {
         }
     }
+}
+
+public sealed class RollbackPayload
+{
+    public bool Supported { get; set; }
+
+    public bool Configured { get; set; }
+
+    public string Status { get; set; } = "";
+
+    public bool RollbackEnabled { get; set; }
+
+    public string LastKnownGoodVersion { get; set; } = "";
+
+    public string LastKnownGoodPath { get; set; } = "";
+
+    public string Message { get; set; } = "";
 }

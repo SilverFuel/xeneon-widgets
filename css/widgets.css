@@ -710,7 +710,7 @@ a.is-touch-pressing,
   box-shadow:
     inset 0 0 54px rgba(255, 139, 34, 0.16),
     inset 0 0 120px rgba(0, 0, 0, 0.62);
-  opacity: calc(0.82 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
+  opacity: calc(0.54 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
   animation: dashboard-visor-breathe 7s ease-in-out infinite;
 }
 
@@ -724,7 +724,53 @@ a.is-touch-pressing,
   -webkit-mask-image: radial-gradient(ellipse 82% 62% at 50% 52%, transparent 0 62%, rgba(0, 0, 0, 0.7) 78%, #000 100%);
   mask-image: radial-gradient(ellipse 82% 62% at 50% 52%, transparent 0 62%, rgba(0, 0, 0, 0.7) 78%, #000 100%);
   box-shadow: inset 0 0 72px rgba(0, 0, 0, 0.36), inset 0 0 90px rgba(255, 139, 34, 0.1);
+  opacity: 0.42;
+}
+
+.dashboard-native-page--readability-clean .dashboard-ambient-canvas,
+.dashboard-native-page--readability-clean .dashboard-ambient-layer,
+.dashboard-native-page--readability-clean .dashboard-stage-shell::before,
+.dashboard-native-page--readability-clean .dashboard-stage-shell::after {
+  opacity: 0.06;
+  animation: none;
+}
+
+.dashboard-native-page--readability-high-contrast {
+  --color-text: #f8fbff;
+  --color-text-dim: #c8d4df;
+  --color-border: rgba(255, 255, 255, 0.18);
+  --dashboard-theme-bg: #050a08;
+}
+
+.dashboard-native-page--readability-high-contrast .dashboard-ambient-canvas,
+.dashboard-native-page--readability-high-contrast .dashboard-ambient-layer,
+.dashboard-native-page--readability-high-contrast .dashboard-stage-shell::before {
+  opacity: 0.04;
+  animation: none;
+}
+
+.dashboard-native-page--readability-high-contrast .dashboard-stage-shell::after {
+  opacity: 0.16;
+}
+
+.dashboard-native-page--readability-visor .dashboard-stage-shell::before {
+  opacity: calc(0.78 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
+}
+
+.dashboard-native-page--readability-visor .dashboard-stage-shell::after {
   opacity: 0.68;
+}
+
+.dashboard-native-page--budget-battery .dashboard-ambient-canvas,
+.dashboard-native-page--budget-game .dashboard-ambient-canvas {
+  display: none;
+}
+
+.dashboard-native-page--budget-battery .dashboard-ambient-layer,
+.dashboard-native-page--budget-game .dashboard-ambient-layer,
+.dashboard-native-page--budget-battery .dashboard-stage-shell::before,
+.dashboard-native-page--budget-game .dashboard-stage-shell::before {
+  animation: none;
 }
 
 .dashboard-stage,
@@ -1171,6 +1217,51 @@ a.is-touch-pressing,
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.router-settings__global-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.router-settings__field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.router-settings__field span,
+.router-settings__checkbox {
+  color: var(--color-text-dim);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.router-settings__select {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: rgba(6, 13, 16, calc(0.72 * var(--dashboard-widget-opacity)));
+  color: var(--color-text);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 0.72rem;
+}
+
+.router-settings__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+}
+
+.router-settings__checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
 }
 
 .router-settings__global-title {
@@ -1901,6 +1992,76 @@ a.is-touch-pressing,
 .inline-list-meta {
   white-space: nowrap;
   text-align: right;
+}
+
+.setup-diagnostics-grid {
+  align-items: stretch;
+}
+
+.setup-diagnostics-card {
+  min-width: 0;
+}
+
+.setup-display-target {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(67, 255, 157, 0.16);
+  border-radius: 14px;
+  background: rgba(67, 255, 157, calc(0.06 * var(--dashboard-widget-opacity)));
+}
+
+.setup-display-target strong,
+.setup-display-target span,
+.setup-launcher-suggestion strong,
+.setup-launcher-suggestion small {
+  display: block;
+  min-width: 0;
+}
+
+.setup-display-target strong,
+.setup-launcher-suggestion strong {
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  line-height: 1.18;
+}
+
+.setup-display-target span,
+.setup-launcher-suggestion small {
+  color: var(--color-text-dim);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.setup-display-list,
+.setup-launcher-suggestions {
+  display: grid;
+  gap: 8px;
+  max-height: 250px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.setup-display-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.setup-launcher-suggestion {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.setup-launcher-suggestion input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
 }
 
 .gpu-power-detail-grid {
