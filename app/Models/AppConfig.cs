@@ -46,11 +46,35 @@ public sealed class DashboardConfig
 
     public int AutoProvisioningVersion { get; set; } = 1;
 
+    public bool LauncherReviewRequired { get; set; } = true;
+
+    public bool AutoApplyLauncherSuggestions { get; set; }
+
     public bool OnboardingCompleted { get; set; }
 
     public string OnboardingCompletedAt { get; set; } = "";
 
     public int OnboardingVersion { get; set; } = 1;
+
+    public string PreferredDisplayId { get; set; } = "";
+
+    public string PreferredDisplayDeviceName { get; set; } = "";
+
+    public string DisplaySelectedAt { get; set; } = "";
+
+    public string PerformanceBudget { get; set; } = "balanced";
+
+    public bool GameModeAutoTune { get; set; } = true;
+
+    public string ThemeReadability { get; set; } = "normal";
+
+    public string ReleaseChannel { get; set; } = "stable";
+
+    public bool UpdateRollbackEnabled { get; set; } = true;
+
+    public string LastKnownGoodVersion { get; set; } = "";
+
+    public string LastKnownGoodPath { get; set; } = "";
 }
 
 public sealed class LauncherEntryConfig
@@ -85,6 +109,24 @@ public sealed class DashboardConfigRequest
     public bool? OnboardingCompleted { get; set; }
 
     public int? OnboardingVersion { get; set; }
+
+    public bool? LauncherReviewRequired { get; set; }
+
+    public bool? AutoApplyLauncherSuggestions { get; set; }
+
+    public string? PreferredDisplayId { get; set; }
+
+    public string? PreferredDisplayDeviceName { get; set; }
+
+    public string? PerformanceBudget { get; set; }
+
+    public bool? GameModeAutoTune { get; set; }
+
+    public string? ThemeReadability { get; set; }
+
+    public string? ReleaseChannel { get; set; }
+
+    public bool? UpdateRollbackEnabled { get; set; }
 }
 
 public sealed class HueLinkRequest
@@ -152,6 +194,16 @@ public sealed class LauncherEntryRequest
 public sealed class LauncherLaunchRequest
 {
     public string? Id { get; set; }
+}
+
+public sealed class LauncherSuggestionApplyRequest
+{
+    public List<string> Ids { get; set; } = [];
+}
+
+public sealed class DisplayPreferenceRequest
+{
+    public string? DisplayId { get; set; }
 }
 
 public sealed class BrightnessRequest

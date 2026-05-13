@@ -129,6 +129,14 @@ public sealed class ConfigStore
             : "metric";
         normalized.Dashboard.AutoProvisioningVersion = normalized.Dashboard.AutoProvisioningVersion <= 0 ? 1 : normalized.Dashboard.AutoProvisioningVersion;
         normalized.Dashboard.OnboardingVersion = normalized.Dashboard.OnboardingVersion <= 0 ? 1 : normalized.Dashboard.OnboardingVersion;
+        normalized.Dashboard.PreferredDisplayId = normalized.Dashboard.PreferredDisplayId?.Trim() ?? "";
+        normalized.Dashboard.PreferredDisplayDeviceName = normalized.Dashboard.PreferredDisplayDeviceName?.Trim() ?? "";
+        normalized.Dashboard.DisplaySelectedAt = normalized.Dashboard.DisplaySelectedAt?.Trim() ?? "";
+        normalized.Dashboard.PerformanceBudget = NormalizeChoice(normalized.Dashboard.PerformanceBudget, "balanced", "balanced", "battery", "game", "max");
+        normalized.Dashboard.ThemeReadability = NormalizeChoice(normalized.Dashboard.ThemeReadability, "normal", "normal", "clean", "high-contrast", "visor");
+        normalized.Dashboard.ReleaseChannel = NormalizeChoice(normalized.Dashboard.ReleaseChannel, "stable", "stable", "beta", "nightly");
+        normalized.Dashboard.LastKnownGoodVersion = normalized.Dashboard.LastKnownGoodVersion?.Trim() ?? "";
+        normalized.Dashboard.LastKnownGoodPath = normalized.Dashboard.LastKnownGoodPath?.Trim() ?? "";
         normalized.Launchers = normalized.Launchers
             .Where(entry => !string.IsNullOrWhiteSpace(entry.ExecutablePath))
             .Select(entry => new LauncherEntryConfig
@@ -141,6 +149,12 @@ public sealed class ConfigStore
             })
             .ToList();
         return normalized;
+    }
+
+    private static string NormalizeChoice(string? value, string fallback, params string[] allowed)
+    {
+        var normalized = value?.Trim().ToLowerInvariant() ?? "";
+        return allowed.Contains(normalized, StringComparer.OrdinalIgnoreCase) ? normalized : fallback;
     }
 
     private static string NormalizeLauncherDisplayName(string executablePath, string? displayName)

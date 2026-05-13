@@ -537,7 +537,7 @@
       }
 
       function renderOverview(setup) {
-        var essentials = [setup.items.bridge, setup.items.provisioning, setup.items.system, setup.items.network].filter(Boolean);
+        var essentials = [setup.items.bridge, setup.items.display, setup.items.provisioning, setup.items.system, setup.items.network].filter(Boolean);
         var optional = [setup.items.weather, setup.items.hue, setup.items.calendar, setup.items.unifi].filter(Boolean);
         var autoDetected = [setup.items.unifi].filter(function (item) {
           return item && (item.state === "Detected" || item.state === "Ready" || item.state === "Built in");
@@ -574,7 +574,7 @@
       }
 
       function renderEssentials(setup) {
-        var items = [setup.items.bridge, setup.items.provisioning, setup.items.system, setup.items.network].filter(Boolean);
+        var items = [setup.items.bridge, setup.items.display, setup.items.provisioning, setup.items.system, setup.items.network].filter(Boolean);
         document.getElementById("guide-essentials").innerHTML = items.map(function (item) {
           return '' +
             '<div class="setup-row">' +

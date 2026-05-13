@@ -15,25 +15,31 @@ public sealed class ReleaseService
         _httpClient = httpClient;
     }
 
-    public async Task<object> GetLatestReleaseAsync(CancellationToken cancellationToken)
+    public async Task<object> GetLatestReleaseAsync(string? channel, CancellationToken cancellationToken)
     {
         var currentVersion = GetCurrentVersion();
+        var normalizedChannel = NormalizeChannel(channel);
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseApiUrl);
+            using var request = new HttpRequestMessage(HttpMethod.Get, GetReleaseApiUrl(normalizedChannel));
             request.Headers.UserAgent.ParseAdd($"XenonEdgeHost/{currentVersion}");
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                return BuildUnavailable(currentVersion, $"GitHub returned HTTP {(int)response.StatusCode}.");
+                return BuildUnavailable(currentVersion, normalizedChannel, $"GitHub returned HTTP {(int)response.StatusCode}.");
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            var root = document.RootElement;
+            var root = SelectReleaseElement(document.RootElement, normalizedChannel);
+            if (root.ValueKind == JsonValueKind.Undefined)
+            {
+                return BuildUnavailable(currentVersion, normalizedChannel, "No release matched the selected update channel.");
+            }
+
             var assets = ReadAssets(root);
             var windowsAsset = FindAsset(assets, asset => asset.Name.Contains("setup", StringComparison.OrdinalIgnoreCase) && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
             var macAsset = FindAsset(assets, asset => asset.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase)
@@ -46,6 +52,7 @@ public sealed class ReleaseService
                 supported = true,
                 configured = true,
                 status = "live",
+                channel = normalizedChannel,
                 currentVersion,
                 latestVersion,
                 htmlUrl = TextOr(GetString(root, "html_url"), ReleasesUrl),
@@ -56,7 +63,7 @@ public sealed class ReleaseService
                 sampledAt = DateTime.UtcNow.ToString("O"),
                 message = string.IsNullOrWhiteSpace(latestVersion)
                     ? "Release feed is reachable, but no public release tag was found."
-                    : $"Latest public release is {latestVersion}."
+                    : $"Latest {normalizedChannel} release is {latestVersion}."
             };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -65,17 +72,18 @@ public sealed class ReleaseService
         }
         catch (Exception error)
         {
-            return BuildUnavailable(currentVersion, error.Message);
+            return BuildUnavailable(currentVersion, normalizedChannel, error.Message);
         }
     }
 
-    private static object BuildUnavailable(string currentVersion, string message)
+    private static object BuildUnavailable(string currentVersion, string channel, string message)
     {
         return new
         {
             supported = true,
             configured = true,
             status = "error",
+            channel,
             currentVersion,
             latestVersion = "",
             htmlUrl = ReleasesUrl,
@@ -86,6 +94,50 @@ public sealed class ReleaseService
             sampledAt = DateTime.UtcNow.ToString("O"),
             message
         };
+    }
+
+    private static string NormalizeChannel(string? channel)
+    {
+        var value = channel?.Trim().ToLowerInvariant() ?? "";
+        return value is "beta" or "nightly" ? value : "stable";
+    }
+
+    private static string GetReleaseApiUrl(string channel)
+    {
+        return channel == "stable"
+            ? LatestReleaseApiUrl
+            : "https://api.github.com/repos/SilverFuel/xeneon-widgets/releases";
+    }
+
+    private static JsonElement SelectReleaseElement(JsonElement root, string channel)
+    {
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            return root;
+        }
+
+        foreach (var release in root.EnumerateArray())
+        {
+            var tag = GetString(release, "tag_name");
+            var name = GetString(release, "name");
+            var prerelease = release.TryGetProperty("prerelease", out var prereleaseElement)
+                && prereleaseElement.ValueKind == JsonValueKind.True;
+            var combined = $"{tag} {name}";
+            var isNightly = combined.Contains("nightly", StringComparison.OrdinalIgnoreCase);
+            var isBeta = prerelease || combined.Contains("beta", StringComparison.OrdinalIgnoreCase);
+
+            if (channel == "nightly" && isNightly)
+            {
+                return release;
+            }
+
+            if (channel == "beta" && isBeta && !isNightly)
+            {
+                return release;
+            }
+        }
+
+        return root.EnumerateArray().FirstOrDefault();
     }
 
     private static string GetCurrentVersion()

@@ -69,7 +69,16 @@
     dashboard: {
       onboardingCompleted: false,
       onboardingCompletedAt: "",
-      onboardingVersion: onboardingVersion
+      onboardingVersion: onboardingVersion,
+      launcherReviewRequired: true,
+      autoApplyLauncherSuggestions: false,
+      preferredDisplayId: "",
+      preferredDisplayDeviceName: "",
+      performanceBudget: "balanced",
+      gameModeAutoTune: true,
+      themeReadability: "normal",
+      releaseChannel: "stable",
+      updateRollbackEnabled: true
     }
   };
   var bridgeSetup = createBootSetupSummary();
@@ -90,6 +99,11 @@
     gameModeAccent: "",
     gameModeSecondary: "",
     gameModeMood: "",
+    performanceBudget: "balanced",
+    gameModeAutoTune: "1",
+    themeReadability: "normal",
+    releaseChannel: "stable",
+    updateChannel: "stable",
     city: "",
     units: "metric",
     unifiNetworkEndpoint: ""
@@ -199,6 +213,7 @@
       needsAttention: true,
       items: {
         bridge: createSetupItem("Local bridge", "Needs Setup", true, "Start the localhost bridge to load the dashboard."),
+        display: createSetupItem("XENEON EDGE display", "Needs Setup", true, "Start the local bridge to check EDGE display targeting."),
         system: createSetupItem("System Monitor", "Needs Setup", true, "System telemetry depends on the local bridge."),
         network: createSetupItem("Network Monitor", "Needs Setup", true, "Network telemetry depends on the local bridge."),
         launchers: createSetupItem("App Launcher", "Needs Setup", false, "App launching depends on the local bridge."),
@@ -406,6 +421,19 @@
     return Math.max(35, Math.min(100, Math.round(parsed)));
   }
 
+  function normalizeChoice(value, fallback, allowed) {
+    var normalized = String(value || "").trim().toLowerCase();
+    return allowed.indexOf(normalized) >= 0 ? normalized : fallback;
+  }
+
+  function getPerformanceBudget() {
+    return normalizeChoice(getSetting("performanceBudget"), "balanced", ["balanced", "battery", "game", "max"]);
+  }
+
+  function getThemeReadability() {
+    return normalizeChoice(getSetting("themeReadability"), "normal", ["normal", "clean", "high-contrast", "visor"]);
+  }
+
   function normalizeAnimationPercent(value) {
     var parsed = Number(value);
     if (!Number.isFinite(parsed)) {
@@ -473,6 +501,15 @@
     var accent = gameAccent || parseHexColor(getSetting("accentColor")) || theme.accent;
     var secondary = gameSecondary || theme.secondary;
     var intensity = getAnimationIntensityPercent();
+    var budget = getPerformanceBudget();
+    var readability = getThemeReadability();
+    var effectiveIntensity = intensity;
+
+    if (budget === "battery") {
+      effectiveIntensity = Math.min(effectiveIntensity, 18);
+    } else if (budget === "game") {
+      effectiveIntensity = Math.min(effectiveIntensity, 32);
+    }
 
     applyDashboardOpacity();
     document.documentElement.style.setProperty("--color-accent", accent);
@@ -484,12 +521,20 @@
     document.documentElement.style.setProperty("--dashboard-secondary-glow", rgbaFromHex(secondary, 0.1));
     document.documentElement.style.setProperty("--dashboard-warm-glow", rgbaFromHex(theme.warm, 0.1));
     document.documentElement.style.setProperty("--dashboard-theme-bg", theme.background);
-    document.documentElement.style.setProperty("--dashboard-aura-opacity", String(intensity / 100));
+    document.documentElement.style.setProperty("--dashboard-aura-opacity", String(effectiveIntensity / 100));
 
     if (document.body) {
       document.body.setAttribute("data-theme", theme.id);
-      document.body.classList.toggle("dashboard-native-page--motion-low", intensity > 0 && intensity <= 35);
-      document.body.classList.toggle("dashboard-native-page--motion-off", intensity === 0);
+      document.body.setAttribute("data-performance-budget", budget);
+      document.body.setAttribute("data-readability", readability);
+      document.body.classList.toggle("dashboard-native-page--motion-low", effectiveIntensity > 0 && effectiveIntensity <= 35);
+      document.body.classList.toggle("dashboard-native-page--motion-off", effectiveIntensity === 0);
+      document.body.classList.toggle("dashboard-native-page--budget-battery", budget === "battery");
+      document.body.classList.toggle("dashboard-native-page--budget-game", budget === "game");
+      document.body.classList.toggle("dashboard-native-page--budget-max", budget === "max");
+      document.body.classList.toggle("dashboard-native-page--readability-clean", readability === "clean");
+      document.body.classList.toggle("dashboard-native-page--readability-high-contrast", readability === "high-contrast");
+      document.body.classList.toggle("dashboard-native-page--readability-visor", readability === "visor");
     }
 
     renderDashboardChromeState();
@@ -736,6 +781,36 @@
     return fetchJson(buildUrl(bridgeOrigin, "/api/config"), 5000);
   }
 
+  function getBridgeRefreshInterval() {
+    var budget = getPerformanceBudget();
+    if (budget === "battery") {
+      return 60000;
+    }
+    if (budget === "game") {
+      return 45000;
+    }
+    if (budget === "max") {
+      return 15000;
+    }
+    return 30000;
+  }
+
+  function scheduleBridgeRefreshLoop() {
+    window.setTimeout(function () {
+      refreshBridgeState({
+        skipFrameReload: true
+      }).catch(function (error) {
+        reportFatalDashboardError(
+          "Dashboard refresh failed",
+          error,
+          "A background dashboard refresh crashed."
+        );
+      }).then(function () {
+        scheduleBridgeRefreshLoop();
+      });
+    }, getBridgeRefreshInterval());
+  }
+
   function setNowStrip(targetWidget, label, title, detail) {
     if (!nowStripNode) {
       return;
@@ -868,16 +943,38 @@
   }
 
   function syncSettingsFromBridgeConfig() {
-    if (!bridgeConfig || !bridgeConfig.weather) {
+    if (!bridgeConfig) {
       return;
     }
 
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, "city")) {
+    if (bridgeConfig.weather && !Object.prototype.hasOwnProperty.call(storedSettings, "city")) {
       dashboardSettings.city = bridgeConfig.weather.city || defaultSettings.city;
     }
 
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, "units")) {
+    if (bridgeConfig.weather && !Object.prototype.hasOwnProperty.call(storedSettings, "units")) {
       dashboardSettings.units = bridgeConfig.weather.units || defaultSettings.units;
+    }
+
+    if (!bridgeConfig.dashboard) {
+      return;
+    }
+
+    [
+      "performanceBudget",
+      "themeReadability",
+      "releaseChannel"
+    ].forEach(function (key) {
+      if (!Object.prototype.hasOwnProperty.call(storedSettings, key) && bridgeConfig.dashboard[key] != null) {
+        dashboardSettings[key] = String(bridgeConfig.dashboard[key] || defaultSettings[key]);
+      }
+    });
+
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, "updateChannel") && bridgeConfig.dashboard.releaseChannel) {
+      dashboardSettings.updateChannel = String(bridgeConfig.dashboard.releaseChannel || defaultSettings.updateChannel);
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, "gameModeAutoTune")) {
+      dashboardSettings.gameModeAutoTune = bridgeConfig.dashboard.gameModeAutoTune === false ? "0" : "1";
     }
   }
 
@@ -1153,6 +1250,22 @@
         viewerLabel: "Steam games"
       },
       {
+        id: "theme-studio",
+        title: "Theme Studio",
+        tier: "product",
+        kicker: "Visual style",
+        copy: "Theme, readability, performance budget, and Game Mode tuning for the EDGE surface.",
+        viewerLabel: "Display tuning"
+      },
+      {
+        id: "updates",
+        title: "Updates",
+        tier: "product",
+        kicker: "Release safety",
+        copy: "Stable, beta, and nightly release checks with rollback state from the local host.",
+        viewerLabel: "Release channel"
+      },
+      {
         id: "system",
         title: "System Monitor",
         copy: "CPU, GPU, and RAM telemetry from the local bridge.",
@@ -1323,10 +1436,12 @@
 
   function widgetRequiresBridge(widget) {
     return widget.id === "setup"
+      || widget.id === "game-mode"
       || widget.id === "system"
       || widget.id === "network"
       || widget.id === "audio"
       || widget.id === "media"
+      || widget.id === "updates"
       || widget.id === "weather"
       || widget.id === "calendar"
       || widget.id === "hue";
@@ -1346,12 +1461,60 @@
     }
   }
 
+  function persistNativeDashboardSettings(values) {
+    var payload = {};
+    var hasPayload = false;
+    var channel;
+
+    if (!bridgeReachable) {
+      return;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values || {}, "performanceBudget")) {
+      payload.performanceBudget = normalizeChoice(values.performanceBudget, "balanced", ["balanced", "battery", "game", "max"]);
+      hasPayload = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values || {}, "themeReadability")) {
+      payload.themeReadability = normalizeChoice(values.themeReadability, "normal", ["normal", "clean", "high-contrast", "visor"]);
+      hasPayload = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values || {}, "releaseChannel") || Object.prototype.hasOwnProperty.call(values || {}, "updateChannel")) {
+      channel = normalizeChoice(values.releaseChannel || values.updateChannel, "stable", ["stable", "beta", "nightly"]);
+      payload.releaseChannel = channel;
+      hasPayload = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values || {}, "gameModeAutoTune")) {
+      payload.gameModeAutoTune = String(values.gameModeAutoTune || "0") !== "0";
+      hasPayload = true;
+    }
+
+    if (!hasPayload) {
+      return;
+    }
+
+    postJson(buildUrl(bridgeOrigin, "/api/config/dashboard"), payload, 6000).catch(function (error) {
+      console.warn("Unable to persist native dashboard settings", error);
+    });
+  }
+
   function saveDashboardSettings(values) {
     Object.keys(values || {}).forEach(function (key) {
       dashboardSettings[key] = String(values[key] || "");
       storedSettings[key] = dashboardSettings[key];
     });
 
+    if (Object.prototype.hasOwnProperty.call(values || {}, "releaseChannel")) {
+      dashboardSettings.updateChannel = dashboardSettings.releaseChannel;
+      storedSettings.updateChannel = dashboardSettings.releaseChannel;
+    } else if (Object.prototype.hasOwnProperty.call(values || {}, "updateChannel")) {
+      dashboardSettings.releaseChannel = dashboardSettings.updateChannel;
+      storedSettings.releaseChannel = dashboardSettings.updateChannel;
+    }
+
+    persistNativeDashboardSettings(values || {});
     persistSettings();
     applyDashboardPresentation();
     widgets = createWidgets();
@@ -1589,6 +1752,9 @@
 
   function renderGlobalSettings() {
     var opacity = getDashboardOpacityPercent();
+    var readability = getThemeReadability();
+    var budget = getPerformanceBudget();
+    var autoTune = String(getSetting("gameModeAutoTune") || "1") !== "0";
     return '' +
       '<section class="router-settings__global">' +
         '<div class="router-settings__global-head">' +
@@ -1599,7 +1765,22 @@
           '<div id="dashboard-opacity-value" class="router-settings__global-value">' + opacity + '%</div>' +
         '</div>' +
         '<input id="dashboard-opacity-slider" class="router-settings__slider" type="range" min="35" max="100" step="1" value="' + opacity + '">' +
+        '<div class="router-settings__global-controls">' +
+          '<label class="router-settings__field"><span>Readability</span><select id="dashboard-readability-select" class="router-settings__select">' +
+            '<option value="normal"' + (readability === "normal" ? " selected" : "") + '>Normal</option>' +
+            '<option value="clean"' + (readability === "clean" ? " selected" : "") + '>Clean</option>' +
+            '<option value="high-contrast"' + (readability === "high-contrast" ? " selected" : "") + '>High contrast</option>' +
+            '<option value="visor"' + (readability === "visor" ? " selected" : "") + '>Visor</option>' +
+          '</select></label>' +
+          '<label class="router-settings__field"><span>Performance</span><select id="dashboard-budget-select" class="router-settings__select">' +
+            '<option value="balanced"' + (budget === "balanced" ? " selected" : "") + '>Balanced</option>' +
+            '<option value="battery"' + (budget === "battery" ? " selected" : "") + '>Quiet</option>' +
+            '<option value="game"' + (budget === "game" ? " selected" : "") + '>Game</option>' +
+            '<option value="max"' + (budget === "max" ? " selected" : "") + '>Max</option>' +
+          '</select></label>' +
+        '</div>' +
         '<div class="router-settings__global-actions">' +
+          '<label class="router-settings__checkbox"><input id="dashboard-autotune-toggle" type="checkbox"' + (autoTune ? " checked" : "") + '> Game Mode auto-tune</label>' +
           '<button id="dashboard-opacity-reset" class="router-settings__button" type="button">Reset opacity</button>' +
         '</div>' +
       '</section>';
@@ -1609,6 +1790,9 @@
     var slider = document.getElementById("dashboard-opacity-slider");
     var valueNode = document.getElementById("dashboard-opacity-value");
     var resetButton = document.getElementById("dashboard-opacity-reset");
+    var readabilitySelect = document.getElementById("dashboard-readability-select");
+    var budgetSelect = document.getElementById("dashboard-budget-select");
+    var autoTuneToggle = document.getElementById("dashboard-autotune-toggle");
 
     function updateOpacity(nextValue, persistValue) {
       var normalized = normalizeOpacityPercent(nextValue);
@@ -1634,6 +1818,30 @@
     if (resetButton) {
       resetButton.addEventListener("click", function () {
         updateOpacity(defaultSettings.dashboardOpacity, true);
+      });
+    }
+
+    if (readabilitySelect) {
+      readabilitySelect.addEventListener("change", function () {
+        saveDashboardSettings({
+          themeReadability: normalizeChoice(readabilitySelect.value, "normal", ["normal", "clean", "high-contrast", "visor"])
+        });
+      });
+    }
+
+    if (budgetSelect) {
+      budgetSelect.addEventListener("change", function () {
+        saveDashboardSettings({
+          performanceBudget: normalizeChoice(budgetSelect.value, "balanced", ["balanced", "battery", "game", "max"])
+        });
+      });
+    }
+
+    if (autoTuneToggle) {
+      autoTuneToggle.addEventListener("change", function () {
+        saveDashboardSettings({
+          gameModeAutoTune: autoTuneToggle.checked ? "1" : "0"
+        });
       });
     }
   }
@@ -1873,6 +2081,21 @@
       };
     }
 
+    bridgeConfig.dashboard = Object.assign({
+      onboardingCompleted: false,
+      onboardingCompletedAt: "",
+      onboardingVersion: onboardingVersion,
+      launcherReviewRequired: true,
+      autoApplyLauncherSuggestions: false,
+      preferredDisplayId: "",
+      preferredDisplayDeviceName: "",
+      performanceBudget: "balanced",
+      gameModeAutoTune: true,
+      themeReadability: "normal",
+      releaseChannel: "stable",
+      updateRollbackEnabled: true
+    }, bridgeConfig.dashboard);
+
     bridgeSetup = health && health.setup ? health.setup : createBootSetupSummary();
     syncSettingsFromBridgeConfig();
   }
@@ -2057,17 +2280,7 @@
       });
       initNowPlayingStrip();
 
-      window.setInterval(function () {
-        refreshBridgeState({
-          skipFrameReload: true
-        }).catch(function (error) {
-          reportFatalDashboardError(
-            "Dashboard refresh failed",
-            error,
-            "A background dashboard refresh crashed."
-          );
-        });
-      }, 30000);
+      scheduleBridgeRefreshLoop();
 
       window.addEventListener("resize", setScale);
     } catch (error) {

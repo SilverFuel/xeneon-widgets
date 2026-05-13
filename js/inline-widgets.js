@@ -387,6 +387,8 @@
     var items = setup && setup.items ? setup.items : {};
     return [
       items.bridge || { label: "Local bridge", state: "Needs Setup", nextStep: "Waiting for bridge." },
+      items.display || { label: "XENEON EDGE display", state: "Needs Setup", nextStep: "Waiting for display diagnostics." },
+      items.provisioning || { label: "Auto provisioning", state: "Checking", nextStep: "Waiting for startup scan." },
       items.system || { label: "System Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." },
       items.network || { label: "Network Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." }
     ];
@@ -693,11 +695,91 @@
     }).join("");
   }
 
+  function renderDisplayDiagnosticsCard(display) {
+    var selected = display && display.selected ? display.selected : null;
+    var displays = display && Array.isArray(display.displays) ? display.displays : [];
+    var repairActions = display && Array.isArray(display.repairActions) ? display.repairActions : [];
+    var visibleDisplays = displays.slice(0, 4);
+    var edgeCount = optionalNumber(display && display.edgeCandidateCount) || 0;
+
+    function describeDisplay(entry) {
+      var width = optionalNumber(entry && (entry.boundsWidth || entry.modeWidth));
+      var height = optionalNumber(entry && (entry.boundsHeight || entry.modeHeight));
+      var origin = entry && (entry.boundsX != null || entry.boundsY != null)
+        ? " at " + String(entry.boundsX || 0) + "," + String(entry.boundsY || 0)
+        : "";
+      return width && height ? Math.round(width) + "x" + Math.round(height) + origin : text(entry && entry.deviceName, "Windows display");
+    }
+
+    return '' +
+      '<article class="list-card inline-card setup-diagnostics-card">' +
+        '<div class="inline-card-header">' +
+          '<div>' +
+            '<div class="metric-label">Display targeting</div>' +
+            '<div class="router-inline-copy">' + escapeHtml(text(display && display.message, selected ? "EDGE target selected." : "No display target selected yet.")) + '</div>' +
+          '</div>' +
+          statusPill(edgeCount ? edgeCount + " EDGE" : "Check display", edgeCount ? "good" : "warn") +
+        '</div>' +
+        '<div class="setup-display-target">' +
+          '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected display") : "No selected EDGE display") + '</strong>' +
+          '<span>' + escapeHtml(selected ? describeDisplay(selected) : "Open repair after connecting the XENEON EDGE.") + '</span>' +
+        '</div>' +
+        '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
+          var reasons = Array.isArray(entry.reasons) ? entry.reasons.slice(0, 2).join(" / ") : "";
+          return '' +
+            '<div class="inline-list-item setup-display-row">' +
+              '<div>' +
+                '<div class="inline-list-title">' + escapeHtml(text(entry.label || entry.friendlyName, "Display")) + '</div>' +
+                '<div class="inline-list-copy">' + escapeHtml(describeDisplay(entry) + (reasons ? " / " + reasons : "")) + '</div>' +
+              '</div>' +
+              statusPill(entry.preferred ? "Pinned" : String(entry.score || 0), entry.containsXeneonName || entry.matchesEdgeResolution ? "good" : "muted") +
+            '</div>';
+        }).join("") : emptyState("No displays returned", "The local bridge did not return monitor details yet.")) + '</div>' +
+        '<div class="inline-actions">' +
+          '<button class="inline-button is-primary" type="button" data-action="run-repair">Repair scan</button>' +
+          (repairActions.length ? '<span class="router-inline-copy">' + escapeHtml(text(repairActions[0].message, "Repair actions are available.")) + '</span>' : '') +
+        '</div>' +
+      '</article>';
+  }
+
+  function renderLauncherReviewCard(provisioning) {
+    var suggestions = provisioning && Array.isArray(provisioning.suggestedLaunchers) ? provisioning.suggestedLaunchers : [];
+    var visible = suggestions.slice(0, 6);
+
+    if (!suggestions.length) {
+      return '';
+    }
+
+    return '' +
+      '<article class="list-card inline-card setup-diagnostics-card">' +
+        '<div class="inline-card-header">' +
+          '<div>' +
+            '<div class="metric-label">Launcher review</div>' +
+            '<div class="router-inline-copy">Review auto-discovered apps before they become launcher tiles.</div>' +
+          '</div>' +
+          statusPill(suggestions.length + " found", "warn") +
+        '</div>' +
+        '<div class="setup-launcher-suggestions">' + visible.map(function (entry) {
+          return '' +
+            '<label class="setup-launcher-suggestion">' +
+              '<input type="checkbox" data-launcher-suggestion="' + escapeHtml(text(entry.id, "")) + '" checked>' +
+              '<span><strong>' + escapeHtml(text(entry.displayName, "App")) + '</strong><small>' + escapeHtml(text(entry.source, "Detected app")) + '</small></span>' +
+            '</label>';
+        }).join("") + '</div>' +
+        '<div class="inline-actions">' +
+          '<button class="inline-button is-primary" type="button" data-action="apply-launcher-suggestions">Pin selected</button>' +
+          '<button class="inline-button" type="button" data-action="run-repair">Rescan</button>' +
+        '</div>' +
+      '</article>';
+  }
+
   function renderSetupWidget(state, env) {
     var health = state.health || {};
     var setup = health.setup || env.bridgeSetup || {};
     var config = state.config || env.bridgeConfig || {};
     var hue = state.hue || { bridgeIp: "", message: "" };
+    var display = setup.display || config.display || {};
+    var provisioning = setup.provisioning || config.provisioning || {};
     var items = readSetupItems(setup);
     var optionalItems = setup.items || {};
     var mediaItem = optionalItems.media || { label: "Media Transport", state: "Ready", nextStep: "Windows media transport is ready." };
@@ -715,6 +797,11 @@
     var optionalSetupVisible = Boolean(state.showOptional || optionalNeedsAttention);
     var supportUrl = buildBridgeUrl(env, "/support.html");
     var supportBundleUrl = buildBridgeUrl(env, "/api/support/bundle");
+    var diagnosticsHtml = '' +
+      '<div class="inline-grid inline-grid--2 setup-diagnostics-grid">' +
+        renderDisplayDiagnosticsCard(display) +
+        renderLauncherReviewCard(provisioning) +
+      '</div>';
     var advancedSetupHtml = env.showAdvanced
       ? '' +
         '<div class="inline-card-header setup-optional-head">' +
@@ -839,6 +926,7 @@
             '<div class="router-inline-copy">' + escapeHtml(mediaItem.nextStep) + '</div>' +
           '</article>' +
         '</div>' +
+        diagnosticsHtml +
         optionalSetupHtml +
         advancedSetupHtml +
       '</div>';
@@ -881,7 +969,8 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
-      var action = event.target && event.target.getAttribute("data-action");
+      var target = event.target && event.target.closest ? event.target.closest("[data-action]") : event.target;
+      var action = target && target.getAttribute("data-action");
       if (!action || state.busy) {
         return;
       }
@@ -896,6 +985,63 @@
         state.showOptional = !state.showOptional;
         state.confirmReset = false;
         redraw();
+        return;
+      }
+
+      if (action === "run-repair") {
+        state.busy = true;
+        state.statusText = "Repairing";
+        state.statusTone = "warn";
+        redraw();
+        requestJson(buildBridgeUrl(env, "/api/repair/run"), {
+          method: "POST",
+          body: {}
+        }, 12000).then(function () {
+          state.busy = false;
+          emitTouchFeedback(env, "Repair scan complete");
+          return refresh();
+        }, function (error) {
+          state.busy = false;
+          state.statusText = error.message || "Repair failed";
+          state.statusTone = "danger";
+          redraw();
+        });
+        return;
+      }
+
+      if (action === "apply-launcher-suggestions") {
+        var ids = Array.prototype.slice.call(container.querySelectorAll("[data-launcher-suggestion]:checked")).map(function (input) {
+          return String(input.getAttribute("data-launcher-suggestion") || "");
+        }).filter(Boolean);
+
+        if (!ids.length) {
+          state.statusText = "Select apps";
+          state.statusTone = "warn";
+          redraw();
+          return;
+        }
+
+        state.busy = true;
+        state.statusText = "Pinning";
+        state.statusTone = "warn";
+        redraw();
+        requestJson(buildBridgeUrl(env, "/api/provisioning/launchers/apply"), {
+          method: "POST",
+          body: {
+            ids: ids
+          }
+        }, 10000).then(function () {
+          return setupUpdate(env, "launchers");
+        }).then(function () {
+          state.busy = false;
+          emitTouchFeedback(env, "Launchers pinned");
+          return refresh();
+        }, function (error) {
+          state.busy = false;
+          state.statusText = error.message || "Pinning failed";
+          state.statusTone = "danger";
+          redraw();
+        });
         return;
       }
 
@@ -3787,6 +3933,10 @@
       var accent = settingValue(env, "accentColor", activePreset.accent);
       var intensity = settingValue(env, "animationIntensity", "100");
       var opacity = settingValue(env, "dashboardOpacity", "100");
+      var dashboard = env.bridgeConfig && env.bridgeConfig.dashboard ? env.bridgeConfig.dashboard : {};
+      var readability = settingValue(env, "themeReadability", text(dashboard.themeReadability, "normal"));
+      var performanceBudget = settingValue(env, "performanceBudget", text(dashboard.performanceBudget, "balanced"));
+      var gameModeAutoTune = settingValue(env, "gameModeAutoTune", dashboard.gameModeAutoTune === false ? "0" : "1");
 
       container.innerHTML = productShell(
         "Visual style",
@@ -3813,6 +3963,24 @@
               }).join("") +
             '</select></label>' +
           '</div>' +
+          '<div class="inline-form-grid inline-form-grid--3">' +
+            '<label class="inline-field"><span>Readability</span><select class="inline-select" name="themeReadability">' +
+              '<option value="normal"' + (readability === "normal" ? " selected" : "") + '>Normal</option>' +
+              '<option value="clean"' + (readability === "clean" ? " selected" : "") + '>Clean</option>' +
+              '<option value="high-contrast"' + (readability === "high-contrast" ? " selected" : "") + '>High contrast</option>' +
+              '<option value="visor"' + (readability === "visor" ? " selected" : "") + '>Visor</option>' +
+            '</select></label>' +
+            '<label class="inline-field"><span>Performance</span><select class="inline-select" name="performanceBudget">' +
+              '<option value="balanced"' + (performanceBudget === "balanced" ? " selected" : "") + '>Balanced</option>' +
+              '<option value="battery"' + (performanceBudget === "battery" ? " selected" : "") + '>Quiet</option>' +
+              '<option value="game"' + (performanceBudget === "game" ? " selected" : "") + '>Game</option>' +
+              '<option value="max"' + (performanceBudget === "max" ? " selected" : "") + '>Max</option>' +
+            '</select></label>' +
+            '<label class="inline-field"><span>Game tune</span><select class="inline-select" name="gameModeAutoTune">' +
+              '<option value="1"' + (gameModeAutoTune !== "0" ? " selected" : "") + '>On</option>' +
+              '<option value="0"' + (gameModeAutoTune === "0" ? " selected" : "") + '>Off</option>' +
+            '</select></label>' +
+          '</div>' +
           '<label class="inline-field product-range-field"><span>Motion ' + escapeHtml(intensity) + '%</span><input class="inline-range" type="range" name="animationIntensity" min="0" max="140" value="' + escapeHtml(intensity) + '"></label>' +
           '<label class="inline-field product-range-field"><span>Opacity ' + escapeHtml(opacity) + '%</span><input class="inline-range" type="range" name="dashboardOpacity" min="35" max="100" value="' + escapeHtml(opacity) + '"></label>' +
         '</form>'
@@ -3825,7 +3993,10 @@
         themeId: String(data.get("themeId") || "edge"),
         accentColor: String(data.get("accentColor") || ""),
         animationIntensity: String(data.get("animationIntensity") || "100"),
-        dashboardOpacity: String(data.get("dashboardOpacity") || "100")
+        dashboardOpacity: String(data.get("dashboardOpacity") || "100"),
+        themeReadability: String(data.get("themeReadability") || "normal"),
+        performanceBudget: String(data.get("performanceBudget") || "balanced"),
+        gameModeAutoTune: String(data.get("gameModeAutoTune") || "1")
       });
     }
 
@@ -4026,6 +4197,11 @@
       latestUrl: "https://github.com/SilverFuel/xeneon-widgets/releases",
       downloadUrl: "",
       macUrl: "",
+      channel: "stable",
+      rollback: {
+        configured: false,
+        message: "Rollback will be available after a healthy installed build is recorded."
+      },
       message: "Check the release feed when you are ready to update.",
       statusText: "Ready",
       statusTone: "good",
@@ -4033,27 +4209,34 @@
     };
 
     function redraw() {
-      var channel = settingValue(env, "updateChannel", "stable");
+      var dashboard = env.bridgeConfig && env.bridgeConfig.dashboard ? env.bridgeConfig.dashboard : {};
+      var channel = settingValue(env, "releaseChannel", settingValue(env, "updateChannel", text(dashboard.releaseChannel, "stable")));
+      if (["stable", "beta", "nightly"].indexOf(channel) === -1) {
+        channel = "stable";
+      }
+      state.channel = channel;
       container.innerHTML = productShell(
         "Auto-update foundation",
         "Updates",
         "Check the public release feed from the local host so customers have one clear update path.",
         state.statusText,
         state.statusTone,
-        '<div class="inline-grid inline-grid--3">' +
+        '<div class="inline-grid inline-grid--4">' +
           metricCard("Current build", env.assetRevision || "local", "Dashboard asset revision", null) +
           metricCard("Latest release", state.latest || "Not checked", state.message, null) +
           metricCard("Installer", state.downloadUrl ? "Found" : "Not checked", state.macUrl ? "Windows and Mac assets" : "Windows asset expected", null) +
+          metricCard("Rollback", state.rollback.configured ? "Ready" : "Pending", state.rollback.message, null) +
         '</div>' +
         '<form class="inline-form product-control-panel" data-form="updates">' +
-          '<label class="inline-field"><span>Release channel</span><select class="inline-select" name="updateChannel">' +
+          '<label class="inline-field"><span>Release channel</span><select class="inline-select" name="releaseChannel">' +
             '<option value="stable"' + (channel === "stable" ? " selected" : "") + '>Stable</option>' +
-            '<option value="preview"' + (channel === "preview" ? " selected" : "") + '>Preview</option>' +
-            '<option value="internal"' + (channel === "internal" ? " selected" : "") + '>Internal</option>' +
+            '<option value="beta"' + (channel === "beta" ? " selected" : "") + '>Beta</option>' +
+            '<option value="nightly"' + (channel === "nightly" ? " selected" : "") + '>Nightly</option>' +
           '</select></label>' +
         '</form>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="check-release"' + (state.busy ? " disabled" : "") + '>Check releases</button>' +
+          '<button class="inline-button" type="button" data-action="check-rollback"' + (state.busy ? " disabled" : "") + '>Check rollback</button>' +
           (state.downloadUrl ? '<a class="inline-button" href="' + escapeHtml(state.downloadUrl) + '" target="_blank" rel="noreferrer">Windows installer</a>' : '') +
           (state.macUrl ? '<a class="inline-button" href="' + escapeHtml(state.macUrl) + '" target="_blank" rel="noreferrer">Mac package</a>' : '') +
           '<a class="inline-button" href="' + escapeHtml(state.latestUrl) + '" target="_blank" rel="noreferrer">Open releases</a>' +
@@ -4070,7 +4253,7 @@
       state.statusTone = "warn";
       redraw();
 
-      requestJson(buildBridgeUrl(env, "/api/releases/latest"), {}, 10000).then(function (payload) {
+      requestJson(buildBridgeUrl(env, "/api/releases/latest", { channel: state.channel }), {}, 10000).then(function (payload) {
         state.busy = false;
         state.latest = text(payload && (payload.latestVersion || payload.tag_name || payload.name), "No release tag");
         state.latestUrl = text(payload && (payload.htmlUrl || payload.html_url), state.latestUrl);
@@ -4089,17 +4272,46 @@
       });
     }
 
+    function checkRollback() {
+      state.busy = true;
+      state.statusText = "Checking";
+      state.statusTone = "warn";
+      redraw();
+
+      requestJson(buildBridgeUrl(env, "/api/releases/rollback"), {
+        method: "POST",
+        body: {}
+      }, 6000).then(function (payload) {
+        state.busy = false;
+        state.rollback = payload || state.rollback;
+        state.statusText = payload && payload.configured ? "Rollback ready" : "Rollback pending";
+        state.statusTone = payload && payload.configured ? "good" : "warn";
+        redraw();
+      }, function (error) {
+        state.busy = false;
+        state.statusText = error.message || "Rollback check failed";
+        state.statusTone = "danger";
+        state.rollback.message = state.statusText;
+        redraw();
+      });
+    }
+
     addListener(cleanups, container, "click", function (event) {
       var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
       if (target && target.getAttribute("data-action") === "check-release") {
         checkLatestRelease();
+      } else if (target && target.getAttribute("data-action") === "check-rollback") {
+        checkRollback();
       }
     });
 
     addListener(cleanups, container, "change", function (event) {
       var select = event.target;
-      if (select && select.name === "updateChannel") {
-        saveSettings(env, { updateChannel: select.value });
+      if (select && select.name === "releaseChannel") {
+        saveSettings(env, {
+          releaseChannel: select.value,
+          updateChannel: select.value
+        });
         redraw();
       }
     });
@@ -4369,14 +4581,22 @@
 
     function applySteamGameTheme(game) {
       var theme = themeForSteamGame(game, env);
-      saveSettings(env, {
+      var dashboard = env.bridgeConfig && env.bridgeConfig.dashboard ? env.bridgeConfig.dashboard : {};
+      var autoTune = settingValue(env, "gameModeAutoTune", dashboard.gameModeAutoTune === false ? "0" : "1") !== "0";
+      var values = {
         gameModeProfile: theme.profileId,
         gameModeGame: theme.gameName,
         gameModeThemeId: theme.themeId,
         gameModeAccent: theme.accent,
         gameModeSecondary: theme.secondary,
         gameModeMood: theme.mood
-      });
+      };
+
+      if (autoTune) {
+        values.performanceBudget = "game";
+      }
+
+      saveSettings(env, values);
     }
 
     function getSteamGame(appId) {
@@ -4815,7 +5035,14 @@
     media: mountMediaWidget,
     clipboard: mountClipboardWidget,
     weather: mountWeatherWidget,
-    hue: mountHueWidget
+    hue: mountHueWidget,
+    "theme-studio": mountThemeStudioWidget,
+    "layout-editor": mountLayoutEditorWidget,
+    updates: mountUpdatesWidget,
+    streaming: mountStreamingWidget,
+    marketplace: mountMarketplaceWidget,
+    installer: mountInstallerWidget,
+    privacy: mountPrivacyWidget
   };
 
   function mountWidget(widget, container, env) {

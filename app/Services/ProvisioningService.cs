@@ -132,7 +132,20 @@ public sealed class ProvisioningService
                 current.Dashboard.AutoProvisionedAt = startedAt.ToString("O");
                 current.Dashboard.AutoProvisioningVersion = ProvisioningVersion;
 
-                if (current.Launchers.Count == 0 && suggestedLaunchers.Count > 0)
+                if (current.Launchers.Count == 0
+                    && suggestedLaunchers.Count > 0
+                    && current.Dashboard.LauncherReviewRequired
+                    && !current.Dashboard.AutoApplyLauncherSuggestions)
+                {
+                    actions.Add(new ProvisioningActionPayload
+                    {
+                        Id = "launchers",
+                        Label = "App launcher",
+                        State = "Review",
+                        Message = $"Found {suggestedLaunchers.Count} launcher suggestion{(suggestedLaunchers.Count == 1 ? "" : "s")} for review."
+                    });
+                }
+                else if (current.Launchers.Count == 0 && suggestedLaunchers.Count > 0)
                 {
                     current.Launchers = suggestedLaunchers;
                     actions.Add(new ProvisioningActionPayload
@@ -202,6 +215,7 @@ public sealed class ProvisioningService
             LauncherCount = updatedConfig.Launchers.Count,
             DetectedLauncherCount = detectedLaunchers.Count,
             SteamGameCount = steamSnapshot.Games.Count,
+            SuggestedLaunchers = suggestedLaunchers.Select(CreateSuggestionPayload).ToList(),
             Actions = actions,
             PermissionNeeded = BuildPermissionNeeded(updatedConfig)
         };
@@ -212,6 +226,60 @@ public sealed class ProvisioningService
         }
 
         _logger.Info($"{snapshot.Message} Launchers={snapshot.LauncherCount}, SteamGames={snapshot.SteamGameCount}.");
+        return snapshot;
+    }
+
+    public ProvisioningSnapshot ApplyLauncherSuggestions(IReadOnlyCollection<string>? ids)
+    {
+        var selectedIds = new HashSet<string>(ids ?? [], StringComparer.OrdinalIgnoreCase);
+        ProvisioningSnapshot snapshot;
+        lock (_sync)
+        {
+            snapshot = _lastSnapshot.Clone();
+        }
+
+        var suggestions = snapshot.SuggestedLaunchers
+            .Where(suggestion => selectedIds.Count == 0 || selectedIds.Contains(suggestion.Id))
+            .Select(suggestion => new LauncherEntryConfig
+            {
+                Id = suggestion.Id,
+                DisplayName = suggestion.DisplayName,
+                IconPath = suggestion.IconPath,
+                ExecutablePath = suggestion.ExecutablePath,
+                Arguments = suggestion.Arguments
+            })
+            .ToList();
+
+        var updatedConfig = _configStore.Update(current =>
+        {
+            current.Launchers = MergeLaunchers(current.Launchers, suggestions);
+            current.Dashboard.LauncherReviewRequired = true;
+            return current;
+        });
+
+        snapshot.LauncherCount = updatedConfig.Launchers.Count;
+        snapshot.Status = "live";
+        snapshot.Message = suggestions.Count > 0
+            ? $"Pinned {suggestions.Count} reviewed launcher suggestion{(suggestions.Count == 1 ? "" : "s")}."
+            : "No launcher suggestions were selected.";
+        snapshot.SuggestedLaunchers = selectedIds.Count == 0
+            ? []
+            : snapshot.SuggestedLaunchers
+                .Where(suggestion => !selectedIds.Contains(suggestion.Id))
+                .ToList();
+        snapshot.Actions.Add(new ProvisioningActionPayload
+        {
+            Id = "launchers-reviewed",
+            Label = "Launcher review",
+            State = suggestions.Count > 0 ? "Ready" : "Optional",
+            Message = snapshot.Message
+        });
+
+        lock (_sync)
+        {
+            _lastSnapshot = snapshot.Clone();
+        }
+
         return snapshot;
     }
 
@@ -575,6 +643,23 @@ public sealed class ProvisioningService
         return $"{prefix}-{Convert.ToHexString(hash)[..12].ToLowerInvariant()}";
     }
 
+    private static ProvisioningLauncherSuggestionPayload CreateSuggestionPayload(LauncherEntryConfig entry)
+    {
+        return new ProvisioningLauncherSuggestionPayload
+        {
+            Id = entry.Id,
+            DisplayName = entry.DisplayName,
+            IconPath = entry.IconPath,
+            ExecutablePath = entry.ExecutablePath,
+            Arguments = entry.Arguments,
+            Source = entry.ExecutablePath.StartsWith("steam://", StringComparison.OrdinalIgnoreCase) ? "Steam" : "Start Menu",
+            Reason = entry.ExecutablePath.StartsWith("steam://", StringComparison.OrdinalIgnoreCase)
+                ? "Installed Steam game"
+                : "Trusted Start Menu shortcut",
+            Selected = true
+        };
+    }
+
     private sealed record DiscoveredLauncherEntry(
         string DisplayName,
         string ExecutablePath,
@@ -607,6 +692,8 @@ public sealed class ProvisioningSnapshot
 
     public int SteamGameCount { get; set; }
 
+    public List<ProvisioningLauncherSuggestionPayload> SuggestedLaunchers { get; set; } = [];
+
     public List<ProvisioningActionPayload> Actions { get; set; } = [];
 
     public List<ProvisioningPermissionPayload> PermissionNeeded { get; set; } = [];
@@ -626,6 +713,7 @@ public sealed class ProvisioningSnapshot
             LauncherCount = LauncherCount,
             DetectedLauncherCount = DetectedLauncherCount,
             SteamGameCount = SteamGameCount,
+            SuggestedLaunchers = SuggestedLaunchers.Select(suggestion => suggestion.Clone()).ToList(),
             Actions = Actions.Select(action => action.Clone()).ToList(),
             PermissionNeeded = PermissionNeeded.Select(permission => permission.Clone()).ToList()
         };
@@ -640,6 +728,40 @@ public sealed class ProvisioningSnapshot
             Status = "pending",
             Source = "native startup scan",
             Message = "Xenon is preparing this PC automatically."
+        };
+    }
+}
+
+public sealed class ProvisioningLauncherSuggestionPayload
+{
+    public string Id { get; set; } = "";
+
+    public string DisplayName { get; set; } = "";
+
+    public string IconPath { get; set; } = "";
+
+    public string ExecutablePath { get; set; } = "";
+
+    public string Arguments { get; set; } = "";
+
+    public string Source { get; set; } = "";
+
+    public string Reason { get; set; } = "";
+
+    public bool Selected { get; set; }
+
+    public ProvisioningLauncherSuggestionPayload Clone()
+    {
+        return new ProvisioningLauncherSuggestionPayload
+        {
+            Id = Id,
+            DisplayName = DisplayName,
+            IconPath = IconPath,
+            ExecutablePath = ExecutablePath,
+            Arguments = Arguments,
+            Source = Source,
+            Reason = Reason,
+            Selected = Selected
         };
     }
 }
