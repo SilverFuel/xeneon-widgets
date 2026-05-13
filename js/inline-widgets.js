@@ -3947,7 +3947,7 @@
     var activeGame = activity && activity.activeGame ? activity.activeGame : null;
     var display = primaryDisplayFromSystem(system || {});
     var refreshRate = displayRefreshRate(display);
-    var gameName = activeGame ? activeGame.name : text(savedGame, fallbackGameName);
+    var gameName = activeGame ? activeGame.name : "No game launched yet";
     var platform = activeGame ? text(activeGame.platform, "Game") : "Waiting";
     var detail = activeGame
       ? text(activeGame.reason, text(activeGame.source, "Running now"))

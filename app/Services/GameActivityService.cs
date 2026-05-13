@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Management;
 using System.Text.Json;
 
 namespace XenonEdgeHost;
@@ -81,6 +82,20 @@ public sealed class GameActivityService
         "valorant",
         "warcraft",
         "xboxgames"
+    ];
+
+    private static readonly BattleNetKnownGame[] BattleNetKnownGames =
+    [
+        new("Diablo IV", [@"\diablo iv\", @"\diablo 4\"]),
+        new("Diablo Immortal", [@"\diablo immortal\"]),
+        new("Diablo III", [@"\diablo iii\", @"\diablo 3\"]),
+        new("World of Warcraft", [@"\world of warcraft\"]),
+        new("Overwatch 2", [@"\overwatch\", @"\overwatch 2\"]),
+        new("Hearthstone", [@"\hearthstone\"]),
+        new("StarCraft II", [@"\starcraft ii\", @"\starcraft 2\"]),
+        new("StarCraft", [@"\starcraft\"]),
+        new("Heroes of the Storm", [@"\heroes of the storm\"]),
+        new("Call of Duty", [@"\call of duty\"])
     ];
 
     private readonly SteamService _steamService;
@@ -413,7 +428,7 @@ public sealed class GameActivityService
 
     private static List<RunningProcessInfo> ReadRunningProcesses()
     {
-        var results = new List<RunningProcessInfo>();
+        var results = new Dictionary<int, RunningProcessInfo>();
         foreach (var process in Process.GetProcesses())
         {
             try
@@ -433,11 +448,11 @@ public sealed class GameActivityService
                 {
                 }
 
-                results.Add(new RunningProcessInfo(
+                results[process.Id] = new RunningProcessInfo(
                     process.Id,
                     process.ProcessName,
                     NormalizePath(executablePath),
-                    startedAt));
+                    startedAt);
             }
             catch
             {
@@ -448,15 +463,73 @@ public sealed class GameActivityService
             }
         }
 
-        return results;
+        AddWmiProcesses(results);
+        return results.Values.ToList();
+    }
+
+    private static void AddWmiProcesses(Dictionary<int, RunningProcessInfo> results)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT ProcessId, Name, ExecutablePath, CreationDate FROM Win32_Process WHERE ExecutablePath IS NOT NULL");
+            using var collection = searcher.Get();
+            foreach (ManagementObject item in collection)
+            {
+                using (item)
+                {
+                    var processIdValue = item["ProcessId"];
+                    if (processIdValue is null)
+                    {
+                        continue;
+                    }
+
+                    var processId = Convert.ToInt32(processIdValue);
+                    if (results.ContainsKey(processId))
+                    {
+                        continue;
+                    }
+
+                    var executablePath = NormalizePath(item["ExecutablePath"] as string);
+                    if (string.IsNullOrWhiteSpace(executablePath))
+                    {
+                        continue;
+                    }
+
+                    DateTimeOffset? startedAt = null;
+                    var creationDate = item["CreationDate"] as string;
+                    if (!string.IsNullOrWhiteSpace(creationDate))
+                    {
+                        try
+                        {
+                            startedAt = new DateTimeOffset(ManagementDateTimeConverter.ToDateTime(creationDate));
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    results[processId] = new RunningProcessInfo(
+                        processId,
+                        TextOr(item["Name"] as string, Path.GetFileNameWithoutExtension(executablePath)),
+                        executablePath,
+                        startedAt);
+                }
+            }
+        }
+        catch
+        {
+        }
     }
 
     private static bool IsIgnoredProcess(RunningProcessInfo process)
     {
         var processName = process.ProcessName ?? "";
+        var processBaseName = Path.GetFileNameWithoutExtension(processName);
         var lowerName = processName.ToLowerInvariant();
         var executablePath = process.ExecutablePath.ToLowerInvariant();
         if (IgnoredProcessNames.Contains(processName)
+            || IgnoredProcessNames.Contains(processBaseName)
             || executablePath.Contains(@"\windows\", StringComparison.OrdinalIgnoreCase))
         {
             return true;
@@ -520,6 +593,11 @@ public sealed class GameActivityService
             return true;
         }
 
+        if (TryInferBattleNetGamePath(lower, out inferred))
+        {
+            return true;
+        }
+
         if (TryInferFromMarker(normalized, lower, @"\.minecraft\", "Minecraft", "Minecraft profile", 76, out inferred)
             || TryInferFromMarker(normalized, lower, @"\prismlauncher\instances\", "Minecraft", "Minecraft launcher", 76, out inferred)
             || TryInferFromMarker(normalized, lower, @"\curseforge\minecraft\instances\", "Minecraft", "Minecraft launcher", 76, out inferred))
@@ -543,6 +621,28 @@ public sealed class GameActivityService
             }
         }
 
+        return false;
+    }
+
+    private static bool TryInferBattleNetGamePath(string lowerPath, out InferredGamePath inferred)
+    {
+        foreach (var game in BattleNetKnownGames)
+        {
+            if (!game.PathMarkers.Any(marker => lowerPath.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            inferred = new InferredGamePath(
+                game.Name,
+                "Battle.net",
+                "Battle.net library",
+                84,
+                $"Matched a running process inside the {game.Name} install folder.");
+            return true;
+        }
+
+        inferred = default;
         return false;
     }
 
@@ -820,6 +920,10 @@ public sealed class GameActivityService
         string DisplayName,
         string InstallLocation,
         string LaunchExecutablePath);
+
+    private sealed record BattleNetKnownGame(
+        string Name,
+        string[] PathMarkers);
 
     private readonly record struct InferredGamePath(
         string Name,
