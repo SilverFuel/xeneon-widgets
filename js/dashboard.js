@@ -34,6 +34,10 @@
   var gameFaceLastActiveId = "";
   var gameFaceAutoOpenedGameId = "";
   var gameFaceSuppressedGameId = "";
+  var pendingGameFaceAutoOpenId = "";
+  var pendingGameFaceTimerId = 0;
+  var dashboardInteractionActive = false;
+  var dashboardInteractionTimerId = 0;
   var widgets = [];
   var dashboardSettings = {};
   var storedSettings = {};
@@ -629,6 +633,9 @@
     persistSettings();
     renderDashboardChromeState();
     showTouchFeedback(enabled ? "Touch locked" : "Touch unlocked");
+    if (!enabled) {
+      maybeOpenPendingGameFace();
+    }
   }
 
   function toggleSettingsDrawer() {
@@ -638,6 +645,9 @@
     settingsDrawerOpen = !settingsDrawerOpen;
     renderDashboardChromeState();
     showTouchFeedback(settingsDrawerOpen ? "Settings open" : "Settings tucked away");
+    if (!settingsDrawerOpen) {
+      maybeOpenPendingGameFace();
+    }
   }
 
   function showTouchFeedback(message) {
@@ -846,6 +856,94 @@
     return String(getSetting("gameModeAutoFace") || "1") !== "0";
   }
 
+  function clearPendingGameFaceAutoOpen() {
+    window.clearTimeout(pendingGameFaceTimerId);
+    pendingGameFaceTimerId = 0;
+    pendingGameFaceAutoOpenId = "";
+  }
+
+  function markDashboardInteractionActive() {
+    dashboardInteractionActive = true;
+    window.clearTimeout(dashboardInteractionTimerId);
+  }
+
+  function markDashboardInteractionIdleSoon() {
+    window.clearTimeout(dashboardInteractionTimerId);
+    dashboardInteractionTimerId = window.setTimeout(function () {
+      dashboardInteractionActive = false;
+      maybeOpenPendingGameFace();
+    }, 180);
+  }
+
+  function isDashboardBusyForGameFaceAutoOpen() {
+    return dashboardInteractionActive || settingsDrawerOpen || isTouchLockEnabled();
+  }
+
+  function openGameFaceForActiveId(activeId) {
+    if (!activeId
+      || !isGameFaceAutoOpenEnabled()
+      || gameFaceSuppressedGameId === activeId
+      || gameFaceAutoOpenedGameId === activeId
+      || currentWidgetId === "setup") {
+      return false;
+    }
+
+    if (currentWidgetId === "game-mode") {
+      gameFaceAutoOpenedGameId = activeId;
+      clearPendingGameFaceAutoOpen();
+      return true;
+    }
+
+    gameFacePreviousWidgetId = currentWidgetId || getFallbackPrimaryWidget();
+    gameFaceAutoOpenedGameId = activeId;
+    clearPendingGameFaceAutoOpen();
+    selectWidget("game-mode", false);
+    showTouchFeedback("Game Face opened");
+    return true;
+  }
+
+  function schedulePendingGameFaceAutoOpen(activeId) {
+    if (!activeId) {
+      clearPendingGameFaceAutoOpen();
+      return;
+    }
+
+    pendingGameFaceAutoOpenId = activeId;
+    window.clearTimeout(pendingGameFaceTimerId);
+    pendingGameFaceTimerId = window.setTimeout(maybeOpenPendingGameFace, 260);
+  }
+
+  function maybeOpenPendingGameFace() {
+    var activeId;
+
+    if (!pendingGameFaceAutoOpenId) {
+      return;
+    }
+
+    activeId = activeGameIdFromPayload(gameActivity);
+    if (!gameActivity || !gameActivity.active || !activeId || activeId !== pendingGameFaceAutoOpenId) {
+      clearPendingGameFaceAutoOpen();
+      return;
+    }
+
+    if (gameFaceSuppressedGameId === activeId
+      || gameFaceAutoOpenedGameId === activeId
+      || !isGameFaceAutoOpenEnabled()
+      || currentWidgetId === "setup") {
+      clearPendingGameFaceAutoOpen();
+      return;
+    }
+
+    if (isDashboardBusyForGameFaceAutoOpen()) {
+      if (dashboardInteractionActive) {
+        schedulePendingGameFaceAutoOpen(activeId);
+      }
+      return;
+    }
+
+    openGameFaceForActiveId(activeId);
+  }
+
   function handleGameActivity(payload) {
     var activeGame;
     var activeId;
@@ -858,6 +956,7 @@
       gameFaceLastActiveId = "";
       gameFaceAutoOpenedGameId = "";
       gameFaceSuppressedGameId = "";
+      clearPendingGameFaceAutoOpen();
       return;
     }
 
@@ -865,20 +964,29 @@
       gameFaceLastActiveId = activeId;
       gameFaceAutoOpenedGameId = "";
       gameFaceSuppressedGameId = "";
+      clearPendingGameFaceAutoOpen();
     }
 
     if (!isGameFaceAutoOpenEnabled()
       || gameFaceSuppressedGameId === activeId
       || gameFaceAutoOpenedGameId === activeId
-      || currentWidgetId === "game-mode"
       || currentWidgetId === "setup") {
+      clearPendingGameFaceAutoOpen();
       return;
     }
 
-    gameFacePreviousWidgetId = currentWidgetId || getFallbackPrimaryWidget();
-    gameFaceAutoOpenedGameId = activeId;
-    selectWidget("game-mode", false);
-    showTouchFeedback("Game Face opened");
+    if (currentWidgetId === "game-mode") {
+      gameFaceAutoOpenedGameId = activeId;
+      clearPendingGameFaceAutoOpen();
+      return;
+    }
+
+    if (isDashboardBusyForGameFaceAutoOpen()) {
+      schedulePendingGameFaceAutoOpen(activeId);
+      return;
+    }
+
+    openGameFaceForActiveId(activeId);
   }
 
   function refreshGameActivity() {
@@ -2355,6 +2463,18 @@
       dashboardSettings = buildInitialSettings();
       widgets = createWidgets();
       applyDashboardPresentation();
+
+      document.addEventListener("pointerdown", markDashboardInteractionActive, { passive: true });
+      document.addEventListener("pointerup", markDashboardInteractionIdleSoon, { passive: true });
+      document.addEventListener("pointercancel", markDashboardInteractionIdleSoon, { passive: true });
+      document.addEventListener("input", function () {
+        markDashboardInteractionActive();
+        markDashboardInteractionIdleSoon();
+      }, true);
+      document.addEventListener("change", function () {
+        markDashboardInteractionActive();
+        markDashboardInteractionIdleSoon();
+      }, true);
 
       setScale();
       initAmbientGraphics();
