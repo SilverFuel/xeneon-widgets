@@ -3,7 +3,7 @@
   var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
-  var assetRevision = "20260512-2";
+  var assetRevision = "20260513-1";
   var onboardingVersion = 1;
   var showAdvanced = params.get("advanced") === "1";
   var stageWidth = 2560;
@@ -593,6 +593,13 @@
     return String(getSetting("touchLockMode") || "") === "1";
   }
 
+  function isGameFocusActive() {
+    return currentWidgetId === "game-mode"
+      && gameActivity
+      && gameActivity.active
+      && gameActivity.activeGame;
+  }
+
   function renderDashboardChromeState() {
     var locked = isTouchLockEnabled();
     if (locked) {
@@ -603,6 +610,7 @@
       document.body.classList.toggle("dashboard-native-page--settings-open", settingsDrawerOpen && !locked);
       document.body.classList.toggle("dashboard-native-page--settings-closed", !settingsDrawerOpen || locked);
       document.body.classList.toggle("dashboard-native-page--touch-locked", locked);
+      document.body.classList.toggle("dashboard-native-page--game-focus-active", isGameFocusActive());
     }
 
     if (settingsPanelNode) {
@@ -898,7 +906,7 @@
     gameFaceAutoOpenedGameId = activeId;
     clearPendingGameFaceAutoOpen();
     selectWidget("game-mode", false);
-    showTouchFeedback("Game Face opened");
+    showTouchFeedback("Game focus");
     return true;
   }
 
@@ -957,6 +965,7 @@
       gameFaceAutoOpenedGameId = "";
       gameFaceSuppressedGameId = "";
       clearPendingGameFaceAutoOpen();
+      renderDashboardChromeState();
       return;
     }
 
@@ -972,21 +981,25 @@
       || gameFaceAutoOpenedGameId === activeId
       || currentWidgetId === "setup") {
       clearPendingGameFaceAutoOpen();
+      renderDashboardChromeState();
       return;
     }
 
     if (currentWidgetId === "game-mode") {
       gameFaceAutoOpenedGameId = activeId;
       clearPendingGameFaceAutoOpen();
+      renderDashboardChromeState();
       return;
     }
 
     if (isDashboardBusyForGameFaceAutoOpen()) {
       schedulePendingGameFaceAutoOpen(activeId);
+      renderDashboardChromeState();
       return;
     }
 
     openGameFaceForActiveId(activeId);
+    renderDashboardChromeState();
   }
 
   function refreshGameActivity() {
@@ -998,6 +1011,7 @@
       handleGameActivity(payload);
     }, function () {
       gameActivity = null;
+      renderDashboardChromeState();
     });
   }
 
@@ -1457,8 +1471,8 @@
         title: "Game Mode",
         tier: "product",
         kicker: "Launch mode",
-        copy: "Launch installed Steam games and watch display refresh, dashboard smoothness, CPU, and GPU.",
-        viewerLabel: "Steam games"
+        copy: "Launch games, then let the EDGE surface switch into a focused in-game HUD.",
+        viewerLabel: "Game focus"
       },
       {
         id: "theme-studio",
@@ -2519,7 +2533,9 @@
         return;
       }
 
-      checkBridgeAndRender(preferredWidgetId, explicitWidgetParam).catch(function (error) {
+      checkBridgeAndRender(preferredWidgetId, explicitWidgetParam).then(function () {
+        return refreshGameActivity();
+      }).catch(function (error) {
         reportFatalDashboardError(
           "Dashboard boot failed",
           error,
