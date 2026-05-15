@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Management;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace XenonEdgeHost;
@@ -14,10 +15,14 @@ public sealed class GameActivityService
         "battle.net",
         "blizzardbrowser",
         "chrome",
+        "cmd",
         "codex",
+        "code",
+        "conhost",
         "corsair.service",
         "corsaircue",
         "discord",
+        "dotnet",
         "eadesktop",
         "epicgameslauncher",
         "epicwebhelper",
@@ -26,15 +31,23 @@ public sealed class GameActivityService
         "galaxyclient",
         "gamingservices",
         "gamingservicesnet",
+        "git",
         "gog galaxy",
         "msedge",
+        "msbuild",
+        "node",
         "nvidia app",
         "nvcontainer",
         "origin",
+        "openconsole",
+        "powershell",
+        "pwsh",
+        "python",
         "riotclientservices",
         "steam",
         "steamwebhelper",
         "systemsettings",
+        "windowsterminal",
         "ubisoftconnect",
         "xboxappservices",
         "xenonedgehost"
@@ -105,6 +118,10 @@ public sealed class GameActivityService
     private readonly object _sync = new();
     private GameActivitySnapshot? _cachedSnapshot;
     private DateTimeOffset _cachedAt = DateTimeOffset.MinValue;
+    private GameActivityPayload? _lastActiveGame;
+    private string _lastActiveGameId = "";
+    private DateTimeOffset? _sessionStartedAt;
+    private DateTimeOffset? _lastEndedAt;
 
     public GameActivityService(
         SteamService steamService,
@@ -135,6 +152,68 @@ public sealed class GameActivityService
         }
     }
 
+    public GameActivityPinResult PinCandidate(GameActivityPinRequest request)
+    {
+        var snapshot = GetSnapshot(forceRefresh: true);
+        var processId = request.ProcessId.GetValueOrDefault();
+        var candidate = snapshot.Candidates.FirstOrDefault(entry =>
+                !string.IsNullOrWhiteSpace(request.Id)
+                && string.Equals(entry.Id, request.Id.Trim(), StringComparison.OrdinalIgnoreCase))
+            ?? snapshot.Candidates.FirstOrDefault(entry =>
+                processId > 0 && entry.ProcessId == processId)
+            ?? snapshot.ActiveGame;
+
+        if (candidate is null)
+        {
+            throw new InvalidOperationException("Running app candidate not found.");
+        }
+
+        if (string.IsNullOrWhiteSpace(candidate.ExecutablePath) || !File.Exists(candidate.ExecutablePath))
+        {
+            throw new InvalidOperationException("This app does not expose a launchable executable.");
+        }
+
+        var added = false;
+        _configStore.Update(current =>
+        {
+            current.Launchers ??= [];
+            var path = NormalizePath(candidate.ExecutablePath);
+            var existing = current.Launchers.FirstOrDefault(entry =>
+                string.Equals(NormalizePath(entry.ExecutablePath), path, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                return current;
+            }
+
+            current.Launchers.Add(new LauncherEntryConfig
+            {
+                Id = "game-" + Guid.NewGuid().ToString("N"),
+                DisplayName = TextOr(candidate.Name, TextOr(candidate.ProcessName, "Game")),
+                ExecutablePath = path,
+                IconPath = "",
+                Arguments = ""
+            });
+            added = true;
+            return current;
+        });
+
+        lock (_sync)
+        {
+            _cachedSnapshot = null;
+            _cachedAt = DateTimeOffset.MinValue;
+        }
+
+        return new GameActivityPinResult
+        {
+            Ok = true,
+            Added = added,
+            Game = candidate,
+            Message = added
+                ? $"{candidate.Name} will be treated as a game from now on."
+                : $"{candidate.Name} is already pinned."
+        };
+    }
+
     private GameActivitySnapshot BuildSnapshot(bool forceRefresh)
     {
         try
@@ -151,6 +230,8 @@ public sealed class GameActivityService
                 .Where(game => HasExistingInstallPath(game.InstallPath))
                 .ToList();
             var candidates = new List<GameActivityPayload>();
+            var runningProcesses = ReadRunningProcesses();
+            var foregroundProcess = GetForegroundProcess(runningProcesses);
 
             if (steamSnapshot.ActiveGame is not null)
             {
@@ -161,7 +242,7 @@ public sealed class GameActivityService
                     "Steam reports this game is running."));
             }
 
-            foreach (var process in ReadRunningProcesses())
+            foreach (var process in runningProcesses)
             {
                 if (IsIgnoredProcess(process))
                 {
@@ -172,6 +253,7 @@ public sealed class GameActivityService
                 AddEpicProcessCandidate(candidates, epicGames, process);
                 AddPinnedLauncherCandidate(candidates, launcherEntries, process);
                 AddKnownGamePathCandidate(candidates, process);
+                AddFallbackProcessCandidate(candidates, process);
             }
 
             var orderedCandidates = candidates
@@ -183,18 +265,28 @@ public sealed class GameActivityService
                 .Take(8)
                 .ToList();
             var activeGame = orderedCandidates.FirstOrDefault(candidate => candidate.Confidence >= 60);
+            var mode = ResolveMode(activeGame, foregroundProcess, sampledAt);
+            var lastGame = mode == "ended" ? _lastActiveGame : null;
 
             return new GameActivitySnapshot
             {
                 Supported = true,
                 Configured = steamSnapshot.Configured || launcherSnapshot.Configured || epicGames.Count > 0,
-                Status = activeGame is null ? "idle" : "active",
+                Status = activeGame is null ? mode : "active",
+                Mode = mode,
+                StateLabel = ModeLabel(mode),
                 Active = activeGame is not null,
                 ActiveGame = activeGame,
+                LastGame = lastGame,
+                LastEndedAt = mode == "ended" ? _lastEndedAt : null,
                 Candidates = orderedCandidates,
+                ForegroundProcessId = foregroundProcess?.ProcessId,
+                ForegroundProcessName = foregroundProcess?.ProcessName ?? "",
                 Source = "running processes",
                 Message = activeGame is null
-                    ? "No active game detected."
+                    ? mode == "ended" && lastGame is not null
+                        ? $"{lastGame.Name} ended."
+                        : "No active game detected."
                     : $"{activeGame.Name} is running via {activeGame.Platform}.",
                 SampledAt = sampledAt
             };
@@ -213,6 +305,63 @@ public sealed class GameActivityService
                 SampledAt = DateTimeOffset.UtcNow
             };
         }
+    }
+
+    private string ResolveMode(GameActivityPayload? activeGame, RunningProcessInfo? foregroundProcess, DateTimeOffset sampledAt)
+    {
+        if (activeGame is null)
+        {
+            if (!string.IsNullOrWhiteSpace(_lastActiveGameId))
+            {
+                _lastEndedAt = sampledAt;
+                _lastActiveGameId = "";
+                _sessionStartedAt = null;
+                return "ended";
+            }
+
+            return _lastEndedAt.HasValue && sampledAt - _lastEndedAt.Value < TimeSpan.FromSeconds(12)
+                ? "ended"
+                : "idle";
+        }
+
+        var activeId = TextOr(activeGame.Id, BuildStableId(activeGame.Platform, activeGame.Name, activeGame.ExecutablePath));
+        if (!string.Equals(_lastActiveGameId, activeId, StringComparison.OrdinalIgnoreCase))
+        {
+            _sessionStartedAt = activeGame.StartedAt ?? sampledAt;
+            _lastActiveGameId = activeId;
+        }
+        else
+        {
+            _sessionStartedAt ??= activeGame.StartedAt ?? sampledAt;
+        }
+
+        _lastActiveGame = activeGame;
+        _lastEndedAt = null;
+        activeGame.SessionStartedAt = _sessionStartedAt;
+        activeGame.SessionDurationMs = _sessionStartedAt.HasValue
+            ? Math.Max(0, (long)(sampledAt - _sessionStartedAt.Value).TotalMilliseconds)
+            : 0;
+        activeGame.ForegroundProcessName = foregroundProcess?.ProcessName ?? "";
+        activeGame.Focused = IsForegroundGameProcess(activeGame, foregroundProcess);
+        activeGame.State = sampledAt - (_sessionStartedAt ?? sampledAt) < TimeSpan.FromSeconds(24)
+            ? "launching"
+            : activeGame.Focused
+                ? "in-game"
+                : "background";
+
+        return activeGame.State;
+    }
+
+    private static string ModeLabel(string mode)
+    {
+        return mode switch
+        {
+            "launching" => "Launching",
+            "in-game" => "In game",
+            "background" => "Background",
+            "ended" => "Ended",
+            _ => "Idle"
+        };
     }
 
     private static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)
@@ -375,6 +524,35 @@ public sealed class GameActivityService
             iconUrl: ""));
     }
 
+    private static void AddFallbackProcessCandidate(List<GameActivityPayload> candidates, RunningProcessInfo process)
+    {
+        if (!LooksLikeManualGameCandidate(process))
+        {
+            return;
+        }
+
+        var displayName = CleanGameName(process.ProcessName);
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            displayName = CleanGameName(Path.GetFileNameWithoutExtension(process.ExecutablePath));
+        }
+
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            return;
+        }
+
+        candidates.Add(CreatePayload(
+            name: displayName,
+            platform: InferPlatform(displayName, process.ExecutablePath),
+            source: "running app",
+            process,
+            confidence: 44,
+            reason: "Running app candidate. Pin it if this should trigger Game Mode.",
+            artworkUrl: "",
+            iconUrl: ""));
+    }
+
     private static GameActivityPayload CreateSteamPayload(
         SteamGamePayload game,
         RunningProcessInfo? process,
@@ -389,6 +567,7 @@ public sealed class GameActivityService
             Source = "Steam library",
             ProcessId = process?.ProcessId,
             ProcessName = process?.ProcessName ?? "",
+            ExecutablePath = process?.ExecutablePath ?? "",
             Confidence = confidence,
             Reason = reason,
             StartedAt = process?.StartedAt,
@@ -417,6 +596,7 @@ public sealed class GameActivityService
             Source = TextOr(source, "running process"),
             ProcessId = process.ProcessId,
             ProcessName = process.ProcessName,
+            ExecutablePath = process.ExecutablePath,
             Confidence = confidence,
             Reason = reason,
             StartedAt = process.StartedAt,
@@ -424,6 +604,49 @@ public sealed class GameActivityService
             IconUrl = iconUrl,
             TileLabel = ResolveTileLabel(displayName)
         };
+    }
+
+    private static RunningProcessInfo? GetForegroundProcess(IReadOnlyCollection<RunningProcessInfo> runningProcesses)
+    {
+        try
+        {
+            var handle = GetForegroundWindow();
+            if (handle == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            _ = GetWindowThreadProcessId(handle, out var processId);
+            if (processId == 0)
+            {
+                return null;
+            }
+
+            return runningProcesses.FirstOrDefault(process => process.ProcessId == processId);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsForegroundGameProcess(GameActivityPayload activeGame, RunningProcessInfo? foregroundProcess)
+    {
+        if (foregroundProcess is null)
+        {
+            return false;
+        }
+
+        if (activeGame.ProcessId.HasValue && activeGame.ProcessId.Value == foregroundProcess.ProcessId)
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(activeGame.ProcessName)
+            && string.Equals(
+                Path.GetFileNameWithoutExtension(activeGame.ProcessName),
+                Path.GetFileNameWithoutExtension(foregroundProcess.ProcessName),
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<RunningProcessInfo> ReadRunningProcesses()
@@ -548,6 +771,42 @@ public sealed class GameActivityService
 
         var combined = $"{launcher.DisplayName} {launcher.ExecutablePath} {process.ProcessName}".ToLowerInvariant();
         return GameKeywordFragments.Any(fragment => combined.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool LooksLikeManualGameCandidate(RunningProcessInfo process)
+    {
+        var executablePath = NormalizePath(process.ExecutablePath);
+        var lowerPath = executablePath.ToLowerInvariant();
+        var processName = Path.GetFileNameWithoutExtension(process.ProcessName);
+        if (string.IsNullOrWhiteSpace(executablePath)
+            || string.IsNullOrWhiteSpace(processName)
+            || !string.Equals(Path.GetExtension(executablePath), ".exe", StringComparison.OrdinalIgnoreCase)
+            || lowerPath.Contains(@"\windows\", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (TryInferKnownGamePath(executablePath, out _))
+        {
+            return true;
+        }
+
+        if (GameKeywordFragments.Any(fragment => lowerPath.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        var lowerName = processName.ToLowerInvariant();
+        if (lowerName.Length < 3
+            || lowerName.Contains("service", StringComparison.OrdinalIgnoreCase)
+            || lowerName.Contains("updater", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return lowerPath.Contains(@"\games\", StringComparison.OrdinalIgnoreCase)
+            || lowerPath.Contains(@"\game\", StringComparison.OrdinalIgnoreCase)
+            || lowerPath.Contains(@"\xboxgames\", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryInferKnownGamePath(string executablePath, out InferredGamePath inferred)
@@ -910,6 +1169,12 @@ public sealed class GameActivityService
         return $"{TextOr(platform, "game").ToLowerInvariant()}:{hash:x}";
     }
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
     private sealed record RunningProcessInfo(
         int ProcessId,
         string ProcessName,
@@ -941,6 +1206,10 @@ public sealed class GameActivitySnapshot
 
     public string Status { get; set; } = "idle";
 
+    public string Mode { get; set; } = "idle";
+
+    public string StateLabel { get; set; } = "Idle";
+
     public DateTimeOffset? SampledAt { get; set; }
 
     public bool Active { get; set; }
@@ -953,7 +1222,15 @@ public sealed class GameActivitySnapshot
 
     public GameActivityPayload? ActiveGame { get; set; }
 
+    public GameActivityPayload? LastGame { get; set; }
+
+    public DateTimeOffset? LastEndedAt { get; set; }
+
     public List<GameActivityPayload> Candidates { get; set; } = [];
+
+    public int? ForegroundProcessId { get; set; }
+
+    public string ForegroundProcessName { get; set; } = "";
 }
 
 public sealed class GameActivityPayload
@@ -970,15 +1247,45 @@ public sealed class GameActivityPayload
 
     public string ProcessName { get; set; } = "";
 
+    public string ExecutablePath { get; set; } = "";
+
     public int Confidence { get; set; }
 
     public string Reason { get; set; } = "";
 
+    public string State { get; set; } = "";
+
+    public bool Focused { get; set; }
+
+    public string ForegroundProcessName { get; set; } = "";
+
     public DateTimeOffset? StartedAt { get; set; }
+
+    public DateTimeOffset? SessionStartedAt { get; set; }
+
+    public long SessionDurationMs { get; set; }
 
     public string ArtworkUrl { get; set; } = "";
 
     public string IconUrl { get; set; } = "";
 
     public string TileLabel { get; set; } = "G";
+}
+
+public sealed class GameActivityPinRequest
+{
+    public string? Id { get; set; }
+
+    public int? ProcessId { get; set; }
+}
+
+public sealed class GameActivityPinResult
+{
+    public bool Ok { get; set; }
+
+    public bool Added { get; set; }
+
+    public string Message { get; set; } = "";
+
+    public GameActivityPayload? Game { get; set; }
 }

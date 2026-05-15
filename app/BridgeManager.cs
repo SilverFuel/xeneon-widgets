@@ -7,7 +7,7 @@ namespace XenonEdgeHost;
 
 public sealed class BridgeManager : IDisposable
 {
-    private const string DashboardAssetRevision = "20260513-2";
+    private const string DashboardAssetRevision = "20260514-14";
     private const int MaxJsonBodyBytes = 256 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -395,6 +395,9 @@ public sealed class BridgeManager : IDisposable
                 case "/api/game/activity" when request.HttpMethod == "GET":
                     await WriteJsonAsync(response, 200, _gameActivityService.GetSnapshot(IsTruthyQueryValue(request, "refresh")), cancellationToken);
                     return;
+                case "/api/game/activity/pin" when request.HttpMethod == "POST":
+                    await HandleGameActivityPinAsync(request, response, cancellationToken);
+                    return;
                 case "/api/system":
                     await WriteJsonAsync(response, 200, _systemMetrics.GetSnapshot(), cancellationToken);
                     return;
@@ -457,6 +460,12 @@ public sealed class BridgeManager : IDisposable
                     return;
                 case "/api/media/previous" when request.HttpMethod == "POST":
                     await WriteJsonAsync(response, 200, await _mediaService.ExecuteAsync("previous", cancellationToken), cancellationToken);
+                    return;
+                case "/api/media/seek-back" when request.HttpMethod == "POST":
+                    await WriteJsonAsync(response, 200, await _mediaService.ExecuteAsync("seek-back", cancellationToken), cancellationToken);
+                    return;
+                case "/api/media/seek-forward" when request.HttpMethod == "POST":
+                    await WriteJsonAsync(response, 200, await _mediaService.ExecuteAsync("seek-forward", cancellationToken), cancellationToken);
                     return;
                 case "/api/hue" when request.HttpMethod == "GET":
                     await WriteJsonAsync(response, 200, await _hueService.GetSnapshotAsync(_configStore.Snapshot(), cancellationToken), cancellationToken);
@@ -765,6 +774,12 @@ public sealed class BridgeManager : IDisposable
         }
 
         await WriteBinaryAsync(response, 200, asset.ContentType, asset.Content, cancellationToken);
+    }
+
+    private async Task HandleGameActivityPinAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        var payload = await ReadJsonAsync<GameActivityPinRequest>(request, cancellationToken);
+        await WriteJsonAsync(response, 200, _gameActivityService.PinCandidate(payload), cancellationToken);
     }
 
     private async Task HandleWeatherRequestAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
@@ -1091,11 +1106,11 @@ public sealed class BridgeManager : IDisposable
             TextOr(shortcuts.Message, "Power, brightness, and notification shortcuts are ready."));
         var audioItem = CreateSetupItem(
             "audio",
-            "Audio Control",
+            "Audio & Media",
             audio.Configured ? "Ready" : "Optional",
             false,
             audio.Configured
-                ? $"Core Audio is live with {audio.Devices.Count} playback outputs."
+                ? $"Core Audio is live with {audio.Devices.Count} playback outputs. Media controls are {TextOr(media.Status, "ready")}."
                 : TextOr(audio.Message, "No playback outputs were detected."));
         var weather = !string.IsNullOrWhiteSpace(config.Weather.ApiKey)
             ? CreateSetupItem("weather", "Weather", "Ready", false, $"Configured for {config.Weather.City} in {config.Weather.Units} units.")
@@ -1110,12 +1125,12 @@ public sealed class BridgeManager : IDisposable
             : CreateSetupItem("calendar", "Calendar", "Optional", false, "Add an ICS feed URL if you want the Calendar widget.");
         var mediaItem = CreateSetupItem(
             "media",
-            "Media Transport",
-            media.Status == "error" ? "Needs Setup" : "Ready",
+            "Audio & Media",
+            audio.Configured ? "Ready" : media.Status == "error" ? "Needs Setup" : "Ready",
             false,
             media.Status == "idle"
-                ? "Windows media transport is ready. Start playback to populate the widget."
-                : TextOr(media.Message, "Windows media transport controls are live."));
+                ? "Windows media transport is ready inside Audio & Media."
+                : TextOr(media.Message, "Windows media transport controls are live inside Audio & Media."));
         var clipboardItem = CreateSetupItem(
             "clipboard",
             "Clipboard History",

@@ -394,58 +394,275 @@
       items.display || { label: "XENEON EDGE display", state: "Needs Setup", nextStep: "Waiting for display diagnostics." },
       items.provisioning || { label: "Auto provisioning", state: "Checking", nextStep: "Waiting for startup scan." },
       items.system || { label: "System Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." },
-      items.network || { label: "Network Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." }
+      items.network || { label: "Network Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." },
+      items.audio || { label: "Audio & Media", state: "Needs Setup", nextStep: "Waiting for sound and playback controls." }
     ];
   }
 
-  function renderSystemWidget(data, statusText, statusTone) {
-    var gpuPower = data.gpuPower || normalizeGpuPowerPayload({});
-    var gpuPowerList = gpuPower.alerts.length ? gpuPower.alerts : gpuPower.pins.concat(gpuPower.rails, gpuPower.power);
+  function formatMemoryMb(value) {
+    var parsed = optionalNumber(value);
+    if (parsed == null) {
+      return "--";
+    }
+
+    return parsed >= 1024
+      ? (parsed / 1024).toFixed(parsed >= 10240 ? 0 : 1) + " GB"
+      : Math.round(parsed) + " MB";
+  }
+
+  function systemMetricTone(value, warn, danger) {
+    var parsed = optionalNumber(value);
+    if (parsed == null) {
+      return "muted";
+    }
+    if (parsed >= danger) {
+      return "danger";
+    }
+    if (parsed >= warn) {
+      return "warn";
+    }
+    return "good";
+  }
+
+  function selectedDisplayFromDiagnostics(displayDiagnostics) {
+    var displays = displayDiagnostics && Array.isArray(displayDiagnostics.displays) ? displayDiagnostics.displays : [];
+    var selectedId = text(displayDiagnostics && displayDiagnostics.selectedDisplayId, "");
+    return displays.filter(function (display) {
+      return display.preferred || (selectedId && (display.id === selectedId || display.deviceName === selectedId || display.deviceId === selectedId));
+    })[0] || displays[0] || null;
+  }
+
+  function buildSystemHealth(data, gpuPower, displayDiagnostics) {
+    var alerts = [];
+    var warnings = [];
+    var cpu = optionalNumber(data && data.cpu);
+    var gpu = optionalNumber(data && data.gpu);
+    var ram = optionalNumber(data && data.ram);
+    var cpuTemp = optionalNumber(data && data.cpuTemp);
+    var gpuTemp = optionalNumber(data && data.gpuTemp);
+
+    if (data && data.stale) {
+      warnings.push("Telemetry is stale");
+    }
+    if (cpu != null && cpu >= 92) {
+      alerts.push("CPU pressure");
+    } else if (cpu != null && cpu >= 78) {
+      warnings.push("CPU climbing");
+    }
+    if (gpu != null && gpu >= 92) {
+      alerts.push("GPU pressure");
+    } else if (gpu != null && gpu >= 82) {
+      warnings.push("GPU climbing");
+    }
+    if (ram != null && ram >= 90) {
+      alerts.push("Memory pressure");
+    } else if (ram != null && ram >= 78) {
+      warnings.push("Memory climbing");
+    }
+    if (cpuTemp != null && cpuTemp >= 90) {
+      alerts.push("CPU heat");
+    }
+    if (gpuTemp != null && gpuTemp >= 86) {
+      alerts.push("GPU heat");
+    }
+    if (gpuPower && gpuPower.alerts && gpuPower.alerts.length) {
+      alerts.push("GPU power alert");
+    }
+    if (displayDiagnostics && displayDiagnostics.edgeCandidateCount === 0) {
+      warnings.push("EDGE display fallback");
+    }
+
+    if (alerts.length) {
+      return { label: "Needs Attention", tone: "danger", detail: alerts.slice(0, 2).join(" / ") };
+    }
+    if (warnings.length) {
+      return { label: "Watch", tone: "warn", detail: warnings.slice(0, 2).join(" / ") };
+    }
+    return { label: "Healthy", tone: "good", detail: "No active pressure detected" };
+  }
+
+  function renderSystemTrend(values, tone) {
+    var samples = Array.isArray(values) ? values.slice(-30) : [];
+    if (!samples.length) {
+      return '<div class="system-trend is-empty"><span></span></div>';
+    }
+
+    return '<div class="system-trend" data-tone="' + escapeHtml(tone || "muted") + '">' + samples.map(function (value) {
+      var height = 5 + clamp(optionalNumber(value) || 0, 0, 100) * 0.16;
+      return '<span style="height:' + height.toFixed(1) + 'px"></span>';
+    }).join("") + '</div>';
+  }
+
+  function renderSystemStatCard(label, value, detail, percent, tone, trend) {
+    var progress = optionalNumber(percent);
     return '' +
-      '<div class="inline-widget-shell">' +
+      '<article class="system-stat-card" data-tone="' + escapeHtml(tone || "muted") + '">' +
+        '<div class="metric-label">' + escapeHtml(label) + '</div>' +
+        '<div class="system-stat-value">' + escapeHtml(value) + '</div>' +
+        (progress == null ? "" : '<div class="inline-progress"><span class="inline-progress__bar" style="width:' + clamp(progress, 0, 100) + '%"></span></div>') +
+        '<div class="router-inline-copy">' + escapeHtml(detail) + '</div>' +
+        renderSystemTrend(trend, tone) +
+      '</article>';
+  }
+
+  function renderSystemProcesses(processes) {
+    var visible = Array.isArray(processes) ? processes.slice(0, 5) : [];
+    if (!visible.length) {
+      return emptyState("No process pressure", "Top apps appear after the next telemetry sample.");
+    }
+
+    return '<div class="system-process-list">' + visible.map(function (process) {
+      var cpu = optionalNumber(process.cpu) || 0;
+      var memory = optionalNumber(process.memoryMb) || 0;
+      return '' +
+        '<div class="system-process-row">' +
+          '<div>' +
+            '<strong>' + escapeHtml(text(process.name, "Process")) + '</strong>' +
+            '<span>PID ' + escapeHtml(String(process.processId || "--")) + '</span>' +
+          '</div>' +
+          '<b>' + escapeHtml(formatPercent(cpu)) + '</b>' +
+          '<em>' + escapeHtml(formatMemoryMb(memory)) + '</em>' +
+        '</div>';
+    }).join("") + '</div>';
+  }
+
+  function renderSystemDisplayPanel(data, displayDiagnostics) {
+    var primaryDisplay = primaryDisplayFromSystem(data || {});
+    var selected = selectedDisplayFromDiagnostics(displayDiagnostics);
+    var edgeReady = displayDiagnostics && displayDiagnostics.edgeCandidateCount > 0;
+    var selectedLabel = text(displayDiagnostics && displayDiagnostics.selectedDisplayName, selected ? selected.label : "No EDGE target");
+    var primaryLabel = text(primaryDisplay.name || primaryDisplay.deviceName, "Primary display");
+    var selectedHz = selected && selected.refreshRate != null ? formatHz(selected.refreshRate) : formatHz(displayRefreshRate(primaryDisplay));
+    var selectedSize = selected && selected.boundsWidth && selected.boundsHeight
+      ? selected.boundsWidth + "x" + selected.boundsHeight
+      : (primaryDisplay.width && primaryDisplay.height ? primaryDisplay.width + "x" + primaryDisplay.height : "--");
+
+    return '' +
+      '<article class="system-panel system-display-panel">' +
+        '<div class="system-panel-head">' +
+          '<div><div class="metric-label">Display Health</div><strong>' + escapeHtml(edgeReady ? "EDGE target ready" : "Fallback display") + '</strong></div>' +
+          statusPill(edgeReady ? "Ready" : "Check", edgeReady ? "good" : "warn") +
+        '</div>' +
+        '<div class="system-display-grid">' +
+          '<div><span>Target</span><strong>' + escapeHtml(selectedLabel) + '</strong></div>' +
+          '<div><span>Refresh</span><strong>' + escapeHtml(selectedHz) + '</strong></div>' +
+          '<div><span>Size</span><strong>' + escapeHtml(selectedSize) + '</strong></div>' +
+          '<div><span>Primary</span><strong>' + escapeHtml(primaryLabel) + '</strong></div>' +
+        '</div>' +
+      '</article>';
+  }
+
+  function renderSystemSensorPanel(data, gpuPower) {
+    var hasTemps = data && (data.cpuTemp != null || data.gpuTemp != null);
+    var hasGpuPower = gpuPower && (gpuPower.totalPower || gpuPower.pins.length || gpuPower.rails.length || gpuPower.power.length);
+    var sensorTone = gpuPower && gpuPower.alerts.length ? "danger" : (hasTemps || hasGpuPower ? "good" : "warn");
+    var sensorLabel = gpuPower && gpuPower.alerts.length ? "Power alert" : (hasTemps || hasGpuPower ? "Live" : "Limited");
+    var powerValue = sensorValue(gpuPower && gpuPower.totalPower, "--");
+
+    return '' +
+      '<article class="system-panel system-sensor-panel">' +
+        '<div class="system-panel-head">' +
+          '<div><div class="metric-label">Thermal / Power</div><strong>' + escapeHtml(sensorLabel) + '</strong></div>' +
+          statusPill(sensorLabel, sensorTone) +
+        '</div>' +
+        '<div class="system-sensor-grid">' +
+          '<div><span>CPU temp</span><strong>' + escapeHtml(formatTemp(data && data.cpuTemp)) + '</strong></div>' +
+          '<div><span>GPU temp</span><strong>' + escapeHtml(formatTemp(data && data.gpuTemp)) + '</strong></div>' +
+          '<div><span>GPU power</span><strong>' + escapeHtml(powerValue) + '</strong></div>' +
+          '<div><span>Sensor source</span><strong>' + escapeHtml(text(gpuPower && gpuPower.source, hasTemps ? "Hardware monitor" : "Not linked")) + '</strong></div>' +
+        '</div>' +
+      '</article>';
+  }
+
+  function renderSystemWidget(data, statusText, statusTone, history, displayDiagnostics, busy) {
+    var gpuPower = data.gpuPower || normalizeGpuPowerPayload({});
+    var display = selectedDisplayFromDiagnostics(displayDiagnostics) || primaryDisplayFromSystem(data || {});
+    var displayHz = display && display.refreshRate != null ? display.refreshRate : displayRefreshRate(display);
+    var health = buildSystemHealth(data || {}, gpuPower, displayDiagnostics);
+    var topProcess = Array.isArray(data.topProcesses) && data.topProcesses.length ? data.topProcesses[0] : null;
+    var topProcessText = topProcess ? text(topProcess.name, "Process") + " top app" : text(data.source, "Native telemetry");
+    var selectedDisplayLabel = text(displayDiagnostics && displayDiagnostics.selectedDisplayName, text(display && display.label, text(display && display.name, "Display target")));
+
+    return '' +
+      '<div class="inline-widget-shell inline-widget-shell--system">' +
         '<div class="inline-toolbar">' +
           '<div>' +
-            '<div class="eyebrow">Local bridge</div>' +
+            '<div class="eyebrow">PC health cockpit</div>' +
             '<h3 class="inline-title">System monitor</h3>' +
-            '<p class="inline-copy">Native CPU, GPU, RAM, and connector telemetry without the iframe layer.</p>' +
+            '<p class="inline-copy">The important health, resource, display, and sensor signals stay visible without scrolling.</p>' +
           '</div>' +
-          statusPill(statusText, statusTone) +
+          '<div class="system-toolbar-actions">' +
+            '<button class="inline-button" type="button" data-action="system-refresh"' + (busy ? " disabled" : "") + '>Refresh</button>' +
+            '<button class="inline-button" type="button" data-action="system-task-manager"' + (busy ? " disabled" : "") + '>Task Manager</button>' +
+            statusPill(statusText, statusTone) +
+          '</div>' +
         '</div>' +
-        '<div class="inline-grid inline-grid--4">' +
-          metricCard("CPU", formatPercent(data.cpu), formatTemp(data.cpuTemp), data.cpu) +
-          metricCard("GPU", formatPercent(data.gpu), data.gpuTemp != null ? formatTemp(data.gpuTemp) : "Unavailable", data.gpu) +
-          metricCard("RAM", formatPercent(data.ram), text(data.source, "Memory pressure"), data.ram) +
-          metricCard("GPU Power", sensorValue(gpuPower.totalPower, "--"), gpuPower.totalPower ? text(gpuPower.totalPower.label, "Board draw") : "No power draw yet") +
-        '</div>' +
-        '<div class="inline-grid inline-grid--2 gpu-power-detail-grid">' +
-          '<article class="list-card inline-card">' +
-            '<div class="inline-card-header"><div><div class="metric-label">Connector Pins</div><div class="router-inline-copy">' + escapeHtml(gpuPower.pins.length ? gpuPower.pins.length + " readings live" : "Per-pin telemetry appears when exposed.") + '</div></div></div>' +
-            renderGpuPowerSensorList(gpuPower.pins, "No per-pin readings", "HWiNFO/GPU tools may expose these only on specific card and driver combinations.", 8) +
-          '</article>' +
-          '<article class="list-card inline-card">' +
-            '<div class="inline-card-header"><div><div class="metric-label">Rails & Power</div><div class="router-inline-copy">' + escapeHtml(gpuPower.source) + '</div></div></div>' +
-            renderGpuPowerSensorList(gpuPowerList, gpuPower.alerts.length ? "No alerts" : "No rail readings", gpuPower.alerts.length ? "All exposed GPU power sensors look normal." : "Start a supported local sensor source to populate this list.", 8) +
-          '</article>' +
+        '<div class="system-monitor-cockpit">' +
+          '<section class="system-health-strip">' +
+            '<article class="system-health-card" data-tone="' + escapeHtml(health.tone) + '">' +
+              '<div class="metric-label">Overall</div>' +
+              '<strong>' + escapeHtml(health.label) + '</strong>' +
+              '<span>' + escapeHtml(health.detail) + '</span>' +
+            '</article>' +
+            renderSystemStatCard("CPU", formatPercent(data.cpu), data.cpuTemp != null ? formatTemp(data.cpuTemp) : topProcessText, data.cpu, systemMetricTone(data.cpu, 78, 92), history.cpu) +
+            renderSystemStatCard("GPU", formatPercent(data.gpu), data.gpuTemp != null ? formatTemp(data.gpuTemp) : "GPU load", data.gpu, systemMetricTone(data.gpu, 82, 92), history.gpu) +
+            renderSystemStatCard("RAM", formatPercent(data.ram), "Memory pressure", data.ram, systemMetricTone(data.ram, 78, 90), history.ram) +
+            renderSystemStatCard("Display", formatHz(displayHz), selectedDisplayLabel, displayHz == null ? null : Math.min(displayHz, 240) / 240 * 100, displayDiagnostics && displayDiagnostics.edgeCandidateCount === 0 ? "warn" : "good", []) +
+          '</section>' +
+          '<section class="system-detail-grid">' +
+            '<article class="system-panel system-process-panel">' +
+              '<div class="system-panel-head"><div><div class="metric-label">What is using resources?</div><strong>Top apps right now</strong></div></div>' +
+              renderSystemProcesses(data.topProcesses) +
+            '</article>' +
+            renderSystemDisplayPanel(data, displayDiagnostics) +
+            renderSystemSensorPanel(data, gpuPower) +
+          '</section>' +
         '</div>' +
       '</div>';
   }
 
   function mountSystemWidget(widget, container, env) {
+    var cleanups = [];
     var state = {
       data: {},
       gpuPower: normalizeGpuPowerPayload({}),
+      display: null,
+      history: {
+        cpu: [],
+        gpu: [],
+        ram: []
+      },
       statusText: "Loading",
-      statusTone: "warn"
+      statusTone: "warn",
+      busy: false
     };
+
+    function pushHistoryValue(list, value) {
+      var parsed = optionalNumber(value);
+      if (parsed == null) {
+        return;
+      }
+      list.push(clamp(parsed, 0, 100));
+      while (list.length > 30) {
+        list.shift();
+      }
+    }
+
+    function updateHistory(payload) {
+      pushHistoryValue(state.history.cpu, payload && payload.cpu);
+      pushHistoryValue(state.history.gpu, payload && payload.gpu);
+      pushHistoryValue(state.history.ram, payload && payload.ram);
+    }
 
     function redraw() {
       state.data.gpuPower = state.gpuPower;
-      container.innerHTML = renderSystemWidget(state.data, state.statusText, state.statusTone);
+      container.innerHTML = renderSystemWidget(state.data, state.statusText, state.statusTone, state.history, state.display, state.busy);
     }
 
     function refresh() {
       var systemRequest = requestJson(buildBridgeUrl(env, "/api/system"), {}, 5000).then(function (payload) {
         state.data = payload || {};
+        updateHistory(state.data);
         state.statusText = statusTextFromPayload(payload, "Live");
         state.statusTone = statusToneFromPayload(payload, "live");
       }, function (error) {
@@ -469,12 +686,44 @@
         });
       });
 
-      return Promise.all([systemRequest, gpuPowerRequest]).then(function () {
+      var displayRequest = requestJson(buildBridgeUrl(env, "/api/display/diagnostics"), {}, 5000).then(function (payload) {
+        state.display = payload || null;
+      }, function () {
+        state.display = null;
+      });
+
+      return Promise.all([systemRequest, gpuPowerRequest, displayRequest]).then(function () {
         redraw();
       });
     }
 
     var loop = createTimerLoop(refresh, 4000);
+    addListener(cleanups, container, "click", function (event) {
+      var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
+      var action = target ? target.getAttribute("data-action") : "";
+      if (!action || state.busy) {
+        return;
+      }
+
+      if (action === "system-refresh") {
+        loop.refresh();
+      } else if (action === "system-task-manager") {
+        state.busy = true;
+        redraw();
+        requestJson(buildBridgeUrl(env, "/api/quick-actions/open-task-manager"), {
+          method: "POST"
+        }, 5000).then(function () {
+          state.statusText = "Task Manager";
+          state.statusTone = "good";
+        }, function (error) {
+          state.statusText = error.message || "Action failed";
+          state.statusTone = "danger";
+        }).finally(function () {
+          state.busy = false;
+          redraw();
+        });
+      }
+    });
     redraw();
     loop.start();
 
@@ -482,6 +731,7 @@
       refresh: loop.refresh,
       destroy: function () {
         loop.destroy();
+        runCleanups(cleanups);
         container.innerHTML = "";
       }
     };
@@ -786,7 +1036,6 @@
     var provisioning = setup.provisioning || config.provisioning || {};
     var items = readSetupItems(setup);
     var optionalItems = setup.items || {};
-    var mediaItem = optionalItems.media || { label: "Media Transport", state: "Ready", nextStep: "Windows media transport is ready." };
     var weatherItem = optionalItems.weather || { label: "Weather", state: "Optional", nextStep: "Add an OpenWeather key if you want weather." };
     var calendarItem = optionalItems.calendar || { label: "Calendar", state: "Optional", nextStep: "Add an ICS feed if you want the Calendar widget." };
     var hueItem = optionalItems.hue || { label: "Philips Hue", state: "Optional", nextStep: "Link Hue only if you want lighting controls." };
@@ -924,11 +1173,6 @@
                 '<div class="router-inline-copy">' + escapeHtml(item.nextStep) + '</div>' +
               '</article>';
           }).join("") +
-          '<article class="metric-card inline-card">' +
-            '<div class="metric-label">' + escapeHtml(mediaItem.label) + '</div>' +
-            '<div class="metric-value">' + escapeHtml(mediaItem.state) + '</div>' +
-            '<div class="router-inline-copy">' + escapeHtml(mediaItem.nextStep) + '</div>' +
-          '</article>' +
         '</div>' +
         diagnosticsHtml +
         optionalSetupHtml +
@@ -1245,8 +1489,38 @@
     return Boolean(session && session.active && name.indexOf("microphone") === -1 && name.indexOf("line in") === -1);
   }
 
+  function hasLiveMediaSession(data) {
+    return data && (data.status === "live" || data.status === "stale");
+  }
+
+  function getMediaPlaybackLabel(data) {
+    return text(data && data.playbackStatus, "idle").replace(/-/g, " ").replace(/\b\w/g, function (char) {
+      return char.toUpperCase();
+    });
+  }
+
+  function getMediaProgressPercent(data) {
+    return data && data.durationMs > 0 ? clamp((data.positionMs / data.durationMs) * 100, 0, 100) : null;
+  }
+
+  function formatMediaRemaining(data) {
+    var duration = optionalNumber(data && data.durationMs);
+    var position = optionalNumber(data && data.positionMs);
+    if (duration == null || duration <= 0 || position == null) {
+      return "Live";
+    }
+    return "-" + formatDurationMs(Math.max(0, duration - position));
+  }
+
+  function getMediaPrimaryAction(data) {
+    return data && data.playbackStatus === "playing"
+      ? { action: "play-pause", label: "Pause", enabled: Boolean(data.canPause || data.canPlay) }
+      : { action: "play-pause", label: "Play", enabled: Boolean(data && (data.canPlay || data.canPause || data.playbackStatus === "paused")) };
+  }
+
   function renderAudioWidget(state) {
     var data = state.data;
+    var media = state.media || normalizeMediaPayload({});
     var defaultDevice = data.devices.filter(function (device) {
       return device.isDefault;
     })[0] || data.devices[0] || null;
@@ -1254,38 +1528,90 @@
       return !device.isDefault;
     }).slice(0, 4);
     var activeSessions = data.sessions.filter(isUsefulAudioSession);
+    var hasMediaSession = hasLiveMediaSession(media);
     var visibleSessions = activeSessions.slice(0, 3);
+    var playbackLabel = getMediaPlaybackLabel(media);
+    var progressPercent = getMediaProgressPercent(media);
+    var primaryAction = getMediaPrimaryAction(media);
+    var mediaSource = formatMediaAppLabel(media.appId);
+    var mediaArtist = text(media.artist, text(media.albumArtist, mediaSource));
+    var canSeek = Boolean(media.canSeek && media.durationMs > 0);
+    var hiddenSessionCount = Math.max(0, activeSessions.length - visibleSessions.length);
+    var mediaControlsHtml = hasMediaSession ? (
+      '<div class="audio-media-now">' +
+        (media.thumbnailDataUrl
+          ? '<img class="audio-media-art" src="' + escapeHtml(media.thumbnailDataUrl) + '" alt="Album art">'
+          : '<div class="audio-media-art audio-media-art--placeholder">No Art</div>') +
+        '<div class="audio-media-details">' +
+          '<div class="audio-media-title-row">' +
+            '<div>' +
+              '<div class="inline-list-title audio-media-title">' + escapeHtml(text(media.title, "Unknown title")) + '</div>' +
+              '<div class="inline-list-copy audio-media-subtitle">' + escapeHtml(mediaArtist + " - " + mediaSource) + '</div>' +
+            '</div>' +
+            '<div class="audio-media-state">' + escapeHtml(playbackLabel) + '</div>' +
+          '</div>' +
+          '<div class="audio-media-progress-block">' +
+            '<div class="audio-media-progress-row">' +
+              '<span>' + escapeHtml(formatDurationMs(media.positionMs)) + '</span>' +
+              (progressPercent == null ? '<div class="inline-progress audio-media-progress is-empty"><span class="inline-progress__bar" style="width:100%"></span></div>' : '<div class="inline-progress audio-media-progress"><span class="inline-progress__bar" style="width:' + progressPercent + '%"></span></div>') +
+              '<strong>' + escapeHtml(formatMediaRemaining(media)) + '</strong>' +
+            '</div>' +
+          '</div>' +
+          '<div class="inline-actions audio-media-controls">' +
+            '<button class="inline-button" type="button" title="Previous track" data-action="media-control" data-media-action="previous"' + (state.busy || !media.canGoPrevious ? " disabled" : "") + '>Prev</button>' +
+            '<button class="inline-button" type="button" title="Back 15 seconds" data-action="media-control" data-media-action="seek-back"' + (state.busy || !canSeek ? " disabled" : "") + '>-15s</button>' +
+            '<button class="inline-button is-primary" type="button" data-action="media-control" data-media-action="' + escapeHtml(primaryAction.action) + '"' + (state.busy || !primaryAction.enabled ? " disabled" : "") + '>' + escapeHtml(primaryAction.label) + '</button>' +
+            '<button class="inline-button" type="button" title="Forward 15 seconds" data-action="media-control" data-media-action="seek-forward"' + (state.busy || !canSeek ? " disabled" : "") + '>+15s</button>' +
+            '<button class="inline-button" type="button" title="Next track" data-action="media-control" data-media-action="next"' + (state.busy || !media.canGoNext ? " disabled" : "") + '>Next</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    ) : "";
+    var sessionRowsHtml = visibleSessions.length ? visibleSessions.map(function (session) {
+      return '' +
+        '<div class="audio-session-row">' +
+          '<div class="inline-list-item--split audio-session-row__top">' +
+            '<div>' +
+              '<div class="inline-list-title">' + escapeHtml(getAudioSessionLabel(session)) + '</div>' +
+              '<div class="inline-list-copy">' + escapeHtml(session.muted ? "Muted" : "Live") + '</div>' +
+            '</div>' +
+            '<button class="inline-button" type="button" data-action="session-mute" data-session-id="' + escapeHtml(text(session.id, "")) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
+          '</div>' +
+          '<div class="audio-session-row__level"><strong>' + escapeHtml(formatPercent(session.volume)) + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(optionalNumber(session.volume) || 0) + '" data-action="session-volume" data-session-id="' + escapeHtml(text(session.id, "")) + '"></div>' +
+        '</div>';
+    }).join("") : emptyState("No app audio", "Apps appear here only while they are making sound.");
+    if (hiddenSessionCount > 0) {
+      sessionRowsHtml += '<div class="audio-session-more">+' + hiddenSessionCount + ' more active audio app' + (hiddenSessionCount === 1 ? "" : "s") + '</div>';
+    }
 
     return '' +
       '<div class="inline-widget-shell inline-widget-shell--audio">' +
         '<div class="inline-toolbar">' +
           '<div>' +
-            '<div class="eyebrow">Audio</div>' +
-            '<h3 class="inline-title">Audio control</h3>' +
-            '<p class="inline-copy">Current output, volume, and active apps only.</p>' +
+            '<div class="eyebrow">Audio & Media</div>' +
+            '<h3 class="inline-title">Sound and playback</h3>' +
+            '<p class="inline-copy">Master volume, output routing, media controls, and app volume without extra scrolling.</p>' +
           '</div>' +
           '<div class="inline-actions">' +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
             statusPill(state.statusText, state.statusTone) +
           '</div>' +
         '</div>' +
-        '<article class="list-card inline-card audio-master-card">' +
-          '<div class="inline-card-header">' +
-            '<div>' +
-              '<div class="metric-label">Now playing through</div>' +
-              '<div class="audio-current-output">' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '</div>' +
-              '<div class="router-inline-copy">' + escapeHtml(data.muted ? "Master output is muted" : text(defaultDevice && (defaultDevice.kind || defaultDevice.availability), text(data.source, "Windows audio"))) + '</div>' +
-            '</div>' +
-            '<button class="inline-button" type="button" data-action="master-mute">' + (data.muted ? "Unmute" : "Mute") + '</button>' +
-          '</div>' +
-          '<div class="audio-master-row">' +
-            '<strong>' + escapeHtml(Math.round(data.masterVolume) + "%") + '</strong>' +
-            '<input class="inline-range" type="range" min="0" max="100" value="' + Math.round(data.masterVolume) + '" data-action="master-volume">' +
-          '</div>' +
-        '</article>' +
-        '<div class="inline-grid inline-grid--2 audio-quick-grid">' +
-          '<article class="list-card inline-card audio-route-card">' +
+        '<div class="inline-grid inline-grid--2 audio-media-control-grid audio-compact-grid">' +
+          '<article class="list-card inline-card audio-master-card">' +
             '<div class="inline-card-header">' +
+              '<div>' +
+                '<div class="metric-label">Current output</div>' +
+                '<div class="audio-current-output">' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '</div>' +
+                '<div class="router-inline-copy">' + escapeHtml(data.muted ? "Master output is muted" : text(defaultDevice && (defaultDevice.kind || defaultDevice.availability), text(data.source, "Windows audio"))) + '</div>' +
+              '</div>' +
+              '<button class="inline-button" type="button" data-action="master-mute">' + (data.muted ? "Unmute" : "Mute") + '</button>' +
+            '</div>' +
+            '<div class="audio-master-row">' +
+              '<strong>' + escapeHtml(Math.round(data.masterVolume) + "%") + '</strong>' +
+              '<input class="inline-range" type="range" min="0" max="100" value="' + Math.round(data.masterVolume) + '" data-action="master-volume">' +
+            '</div>' +
+            '<div class="audio-card-subhead">' +
               '<div>' +
                 '<div class="metric-label">Switch output</div>' +
                 '<div class="router-inline-copy">' + escapeHtml(routeDevices.length ? "Tap a route to move Windows audio." : "Only one output is available.") + '</div>' +
@@ -1300,27 +1626,34 @@
                 '</button>';
             }).join("") : emptyState("No other outputs", defaultDevice ? "The current output is the only active route." : "No playback devices were returned by Windows.")) + '</div>' +
           '</article>' +
-          '<article class="list-card inline-card audio-session-card">' +
+          '<article class="list-card inline-card audio-playback-card">' +
             '<div class="inline-card-header">' +
               '<div>' +
-                '<div class="metric-label">Apps playing</div>' +
-                '<div class="router-inline-copy">Only active audio shows here.</div>' +
+                '<div class="metric-label">Playback mixer</div>' +
+                '<div class="router-inline-copy">Media and app volume in one compact panel.</div>' +
               '</div>' +
-              statusPill(activeSessions.length ? String(activeSessions.length) + " active" : "Quiet", activeSessions.length ? "good" : "muted") +
+              statusPill(activeSessions.length ? String(activeSessions.length) + " active" : state.mediaStatusText, activeSessions.length ? "good" : state.mediaStatusTone) +
             '</div>' +
-            '<div class="audio-session-stack">' + (visibleSessions.length ? visibleSessions.map(function (session) {
-              return '' +
-                '<div class="audio-session-row">' +
-                  '<div class="inline-list-item--split audio-session-row__top">' +
-                    '<div>' +
-                      '<div class="inline-list-title">' + escapeHtml(getAudioSessionLabel(session)) + '</div>' +
-                      '<div class="inline-list-copy">' + escapeHtml(session.muted ? "Muted" : "Live") + '</div>' +
-                    '</div>' +
-                    '<button class="inline-button" type="button" data-action="session-mute" data-session-id="' + escapeHtml(text(session.id, "")) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
+            '<div class="audio-playback-grid' + (hasMediaSession ? "" : " audio-playback-grid--mixer-only") + '">' +
+              (hasMediaSession ? '<section class="audio-playback-section audio-playback-media">' +
+                '<div class="audio-card-subhead">' +
+                  '<div>' +
+                    '<div class="metric-label">Media controls</div>' +
                   '</div>' +
-                  '<div class="audio-session-row__level"><strong>' + escapeHtml(formatPercent(session.volume)) + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(optionalNumber(session.volume) || 0) + '" data-action="session-volume" data-session-id="' + escapeHtml(text(session.id, "")) + '"></div>' +
-                '</div>';
-            }).join("") : emptyState("No apps playing", "App controls appear only when something is actively making sound.")) + '</div>' +
+                  statusPill(state.mediaStatusText, state.mediaStatusTone) +
+                '</div>' +
+                mediaControlsHtml +
+              '</section>' : '') +
+              '<section class="audio-playback-section audio-playback-sessions">' +
+                '<div class="audio-card-subhead">' +
+                  '<div>' +
+                    '<div class="metric-label">App volume mixer</div>' +
+                  '</div>' +
+                  statusPill(activeSessions.length ? String(activeSessions.length) + " active" : "Quiet", activeSessions.length ? "good" : "muted") +
+                '</div>' +
+                '<div class="audio-session-stack">' + sessionRowsHtml + '</div>' +
+              '</section>' +
+            '</div>' +
           '</article>' +
         '</div>' +
       '</div>';
@@ -1330,8 +1663,11 @@
     var cleanups = [];
     var state = {
       data: normalizeAudioPayload({}),
+      media: normalizeMediaPayload({}),
       statusText: "Loading",
       statusTone: "warn",
+      mediaStatusText: "Loading",
+      mediaStatusTone: "warn",
       busy: false,
       interacting: false
     };
@@ -1341,19 +1677,33 @@
     }
 
     function refresh() {
-      return requestJson(buildBridgeUrl(env, "/api/audio"), {}, 5000).then(function (payload) {
+      var audioRequest = requestJson(buildBridgeUrl(env, "/api/audio"), {}, 5000).then(function (payload) {
         state.data = normalizeAudioPayload(payload);
         state.statusText = statusTextFromPayload(payload, state.data.configured ? "Live" : "Setup");
         state.statusTone = statusToneFromPayload(payload, state.data.configured ? "live" : "setup");
-        redraw();
       }, function (error) {
         state.statusText = error.message || "Unavailable";
         state.statusTone = "danger";
+      });
+      var mediaRequest = requestJson(buildBridgeUrl(env, "/api/media"), {}, 5000).then(function (payload) {
+        state.media = normalizeMediaPayload(payload);
+        state.mediaStatusText = statusTextFromPayload(payload, text(state.media.playbackStatus, "Idle").replace(/-/g, " "));
+        state.mediaStatusTone = statusToneFromPayload(payload, state.media.playbackStatus);
+      }, function (error) {
+        state.media = normalizeMediaPayload({
+          status: "error",
+          message: error.message || "Media unavailable"
+        });
+        state.mediaStatusText = "Media unavailable";
+        state.mediaStatusTone = "muted";
+      });
+
+      return Promise.all([audioRequest, mediaRequest]).then(function () {
         redraw();
       });
     }
 
-    function commit(path, body) {
+    function commit(path, body, feedback) {
       state.busy = true;
       state.statusText = "Applying";
       state.statusTone = "warn";
@@ -1363,7 +1713,7 @@
         body: body
       }, 8000).then(function () {
         state.busy = false;
-        emitTouchFeedback(env, "Audio updated");
+        emitTouchFeedback(env, feedback || "Audio & Media updated");
         return refresh();
       }, function (error) {
         state.busy = false;
@@ -1374,7 +1724,7 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
-      var target = event.target;
+      var target = event.target && event.target.closest ? event.target.closest("[data-action]") : event.target;
       var action = target && target.getAttribute("data-action");
 
       if (!action || state.busy) {
@@ -1405,6 +1755,11 @@
           sessionId: String(target.getAttribute("data-session-id") || ""),
           muted: String(target.textContent || "").toLowerCase() === "mute"
         });
+        return;
+      }
+
+      if (action === "media-control") {
+        commit("/api/media/" + String(target.getAttribute("data-media-action") || ""), undefined, "Media updated");
       }
     });
 
@@ -2665,6 +3020,7 @@
       canPause: Boolean(payload.canPause),
       canGoNext: Boolean(payload.canGoNext),
       canGoPrevious: Boolean(payload.canGoPrevious),
+      canSeek: Boolean(payload.canSeek),
       thumbnailDataUrl: text(payload.thumbnailDataUrl, "")
     };
   }
@@ -2685,7 +3041,7 @@
         '<div class="inline-toolbar">' +
           '<div>' +
             '<div class="eyebrow">Media</div>' +
-            '<h3 class="inline-title">Now playing</h3>' +
+            '<h3 class="inline-title">Media controls</h3>' +
             '<p class="inline-copy">' + escapeHtml(text(data.message, "Windows media transport controls are ready.")) + '</p>' +
           '</div>' +
           '<div class="inline-actions">' +
@@ -3630,10 +3986,10 @@
     {
       id: "command",
       name: "Command",
-      copy: "Balanced daily dashboard with setup, telemetry, style, and packaging close at hand.",
+      copy: "Balanced daily dashboard with setup, telemetry, sound, style, and packaging close at hand.",
       themeId: "edge",
       pack: "core",
-      layout: ["system", "network", "audio", "media", "theme-studio", "layout-editor", "updates", "installer", "privacy"]
+      layout: ["system", "network", "audio", "theme-studio", "layout-editor", "updates", "installer", "privacy"]
     },
     {
       id: "gaming",
@@ -3641,15 +3997,15 @@
       copy: "System pressure, network state, audio, launchers, and game mode first.",
       themeId: "deepcore",
       pack: "gaming",
-      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "media", "theme-studio", "updates"]
+      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "theme-studio", "updates"]
     },
     {
       id: "streaming",
       name: "Streaming",
-      copy: "OBS, media transport, audio routing, system load, and release confidence.",
+      copy: "OBS, audio and media controls, system load, and release confidence.",
       themeId: "afterburn",
       pack: "streamer",
-      layout: ["streaming", "media", "audio", "system", "network", "quick-actions", "theme-studio", "updates", "privacy"]
+      layout: ["streaming", "audio", "system", "network", "quick-actions", "theme-studio", "updates", "privacy"]
     },
     {
       id: "homelab",
@@ -3673,20 +4029,20 @@
     {
       id: "core",
       name: "Core Owner",
-      copy: "System, network, audio, media, setup, and trust panels for a normal install.",
-      layout: ["system", "network", "audio", "media", "theme-studio", "layout-editor", "installer", "privacy"]
+      copy: "System, network, audio/media, setup, and trust panels for a normal install.",
+      layout: ["system", "network", "audio", "theme-studio", "layout-editor", "installer", "privacy"]
     },
     {
       id: "gaming",
       name: "Gaming Desk",
-      copy: "Telemetry, launchers, audio, media, and game mode for a player-focused panel.",
-      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "media", "theme-studio"]
+      copy: "Telemetry, launchers, audio/media, and game mode for a player-focused panel.",
+      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "theme-studio"]
     },
     {
       id: "streamer",
       name: "Streamer",
-      copy: "OBS, media, audio, quick actions, update checks, and privacy up front.",
-      layout: ["streaming", "media", "audio", "quick-actions", "system", "network", "updates", "privacy"]
+      copy: "OBS, audio/media, quick actions, update checks, and privacy up front.",
+      layout: ["streaming", "audio", "quick-actions", "system", "network", "updates", "privacy"]
     },
     {
       id: "homelab",
@@ -3809,9 +4165,15 @@
       source: text(game.source, ""),
       processId: optionalNumber(game.processId),
       processName: text(game.processName, ""),
+      executablePath: text(game.executablePath, ""),
       confidence: optionalNumber(game.confidence),
       reason: text(game.reason, ""),
+      state: text(game.state, ""),
+      focused: Boolean(game.focused),
+      foregroundProcessName: text(game.foregroundProcessName, ""),
       startedAt: text(game.startedAt, ""),
+      sessionStartedAt: text(game.sessionStartedAt, ""),
+      sessionDurationMs: optionalNumber(game.sessionDurationMs) || 0,
       artworkUrl: text(game.artworkUrl, ""),
       iconUrl: text(game.iconUrl, ""),
       tileLabel: text(game.tileLabel, "G")
@@ -3824,12 +4186,18 @@
       supported: payload.supported !== false,
       configured: Boolean(payload.configured),
       status: text(payload.status, payload.active ? "active" : "idle"),
+      mode: text(payload.mode, payload.active ? "in-game" : "idle"),
+      stateLabel: text(payload.stateLabel, payload.active ? "In game" : "Idle"),
       active: Boolean(payload.active && payload.activeGame),
       stale: Boolean(payload.stale),
       sampledAt: text(payload.sampledAt, ""),
+      lastEndedAt: text(payload.lastEndedAt, ""),
       message: text(payload.message, payload.active ? "Game running." : "No active game detected."),
       source: text(payload.source, "running processes"),
+      foregroundProcessId: optionalNumber(payload.foregroundProcessId),
+      foregroundProcessName: text(payload.foregroundProcessName, ""),
       activeGame: normalizeGameActivityGame(payload.activeGame),
+      lastGame: normalizeGameActivityGame(payload.lastGame),
       candidates: Array.isArray(payload.candidates) ? payload.candidates.map(normalizeGameActivityGame).filter(Boolean) : []
     };
   }
@@ -3963,7 +4331,7 @@
             ? '<img src="' + escapeHtml(artUrl) + '" alt="' + escapeHtml(gameName) + '" loading="lazy">'
             : '<span>' + escapeHtml(tileLabel) + '</span>') + '</div>' +
           '<div class="game-face-copy">' +
-            '<div class="metric-label">Game Face</div>' +
+            '<div class="metric-label">Game Mode status</div>' +
             '<strong>' + escapeHtml(gameName) + '</strong>' +
             '<span>' + escapeHtml(platform + (activeGame ? " - active now" : " - idle")) + '</span>' +
           '</div>' +
@@ -4058,13 +4426,89 @@
       '</div>';
   }
 
+  function gameFocusStateLabel(game, activity) {
+    var state = text(game && game.state, text(activity && activity.mode, "in-game"));
+    if (state === "launching") {
+      return "Launching";
+    }
+    if (state === "background") {
+      return "Background";
+    }
+    if (state === "ended") {
+      return "Ended";
+    }
+    return game && game.focused === false ? "Background" : "In game";
+  }
+
+  function gameFocusSessionText(game) {
+    var duration = optionalNumber(game && game.sessionDurationMs);
+    if (duration != null && duration > 0) {
+      return formatDurationMs(duration);
+    }
+    return game && game.sessionStartedAt ? formatAge(game.sessionStartedAt) : "Just now";
+  }
+
+  function gameFocusAudioSessions(audio, game) {
+    var data = normalizeAudioPayload(audio || {});
+    var gameProcessId = optionalNumber(game && game.processId);
+    var gameProcessName = text(game && game.processName, "").toLowerCase();
+    return data.sessions.filter(isUsefulAudioSession).sort(function (left, right) {
+      var leftName = text(left && left.name, "").toLowerCase();
+      var rightName = text(right && right.name, "").toLowerCase();
+      var leftGame = (gameProcessId != null && left.processId === gameProcessId)
+        || (gameProcessName && leftName.indexOf(gameProcessName) !== -1);
+      var rightGame = (gameProcessId != null && right.processId === gameProcessId)
+        || (gameProcessName && rightName.indexOf(gameProcessName) !== -1);
+      if (leftGame !== rightGame) {
+        return leftGame ? -1 : 1;
+      }
+      return (optionalNumber(right.volume) || 0) - (optionalNumber(left.volume) || 0);
+    });
+  }
+
+  function gameFocusVoiceLabel(sessions) {
+    var voice = sessions.filter(function (session) {
+      var name = text(session && session.name, "").toLowerCase();
+      return name.indexOf("discord") !== -1
+        || name.indexOf("voice") !== -1
+        || name.indexOf("chat") !== -1;
+    })[0];
+
+    if (!voice) {
+      return "No voice";
+    }
+
+    return (voice.muted ? "Muted" : formatPercent(voice.volume)) + " " + getAudioSessionLabel(voice);
+  }
+
+  function renderGameFocusAudioRows(sessions, game) {
+    var visible = sessions.slice(0, 3);
+    var gameProcessId = optionalNumber(game && game.processId);
+    if (!visible.length) {
+      return '<div class="game-focus-empty">No active app audio</div>';
+    }
+
+    return visible.map(function (session) {
+      var isGame = gameProcessId != null && session.processId === gameProcessId;
+      return '' +
+        '<div class="game-focus-audio-row' + (isGame ? " is-game" : "") + '">' +
+          '<div>' +
+            '<strong>' + escapeHtml(isGame ? "Game audio" : getAudioSessionLabel(session)) + '</strong>' +
+            '<span>' + escapeHtml(session.muted ? "Muted" : "Live") + '</span>' +
+          '</div>' +
+          '<b>' + escapeHtml(formatPercent(session.volume)) + '</b>' +
+          '<button class="inline-button" type="button" data-action="game-session-mute" data-session-id="' + escapeHtml(text(session.id, "")) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
+        '</div>';
+    }).join("");
+  }
+
   function renderGameFocusScene(game, theme, system, dashboardFps, audio, network, env, introActive) {
     var display = primaryDisplayFromSystem(system || {});
     var refreshRate = displayRefreshRate(display);
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
     var detail = text(game && game.reason, text(game && game.source, "Running now"));
-    var session = game && game.startedAt ? formatAge(game.startedAt) : "Just now";
+    var session = gameFocusSessionText(game);
     var confidence = game && game.confidence != null ? Math.round(game.confidence) + "%" : "--";
     var tileLabel = gameFocusTileLabel(game);
     var artUrl = text(game && (game.artworkUrl || game.iconUrl), "");
@@ -4076,20 +4520,27 @@
     var audioOutput = gameFocusAudioOutput(audioData);
     var audioName = compactAudioName(audioOutput && audioOutput.name);
     var audioState = audioData.muted ? "Muted" : Math.round(audioData.masterVolume) + "%";
-    var activeAudioSessions = audioData.sessions.filter(isUsefulAudioSession).length;
+    var audioSessions = gameFocusAudioSessions(audioData, game);
+    var activeAudioSessions = audioSessions.length;
+    var voiceLabel = gameFocusVoiceLabel(audioSessions);
     var networkData = network || {};
     var ping = optionalNumber(networkData.ping);
+    var stateLabel = gameFocusStateLabel(game);
+    var focusDetail = game && game.focused === false
+      ? "Game running in background"
+      : "Game has focus";
     var shellClass = "game-focus-shell" + (introActive ? " is-intro" : "");
     return '' +
       '<section class="' + shellClass + '" style="' + gameModeThemeStyle(theme) + '">' +
         '<div class="game-focus-wake" aria-hidden="true">' +
-          '<span>Launch detected</span>' +
+          '<span>' + escapeHtml(stateLabel) + '</span>' +
           '<strong>' + escapeHtml(gameName) + '</strong>' +
         '</div>' +
         '<header class="game-focus-topbar">' +
           '<div class="game-focus-identity">' +
-            '<span>' + escapeHtml(platform) + '</span>' +
+            '<span>' + escapeHtml(stateLabel) + '</span>' +
             '<strong>' + escapeHtml(gameName) + '</strong>' +
+            '<small>' + escapeHtml(platform + " - " + source + " - " + focusDetail) + '</small>' +
           '</div>' +
           '<button class="inline-button game-focus-home" type="button" data-action="game-face-home">Home</button>' +
         '</header>' +
@@ -4099,12 +4550,12 @@
               ? '<img src="' + escapeHtml(artUrl) + '" alt="' + escapeHtml(gameName) + '" loading="lazy">'
               : '<span>' + escapeHtml(tileLabel) + '</span>') + '</div>' +
             '<div class="game-focus-session">' +
-              '<span>Game</span>' +
-              '<strong>' + escapeHtml(gameName) + '</strong>' +
+              '<span>Session</span>' +
+              '<strong>' + escapeHtml(session) + '</strong>' +
               '<small>' + escapeHtml(source) + '</small>' +
             '</div>' +
             '<div class="game-focus-facts">' +
-              renderGameFocusFact("Session", session) +
+              renderGameFocusFact("State", stateLabel) +
               renderGameFocusFact("Match", confidence) +
               renderGameFocusFact("Process", processName) +
             '</div>' +
@@ -4118,24 +4569,34 @@
             renderGameFocusHudItem("Ping", ping == null ? "--" : Math.round(ping) + " ms", text(networkData.type, "Network"), gameFocusProgress(80 - Math.min(ping || 80, 80), 80)) +
           '</section>' +
           '<aside class="game-focus-card game-focus-card--utility">' +
-            '<div class="game-focus-audio">' +
-              '<span>Audio</span>' +
-              '<strong>' + escapeHtml(audioState) + '</strong>' +
-              '<small>' + escapeHtml(audioName) + '</small>' +
+            '<div class="game-focus-control-row">' +
+              '<div class="game-focus-audio">' +
+                '<span>Audio</span>' +
+                '<strong>' + escapeHtml(audioState) + '</strong>' +
+                '<small>' + escapeHtml(audioName) + '</small>' +
+              '</div>' +
+              '<button class="inline-button game-focus-mute" type="button" data-action="game-master-mute">' + (audioData.muted ? "Unmute" : "Mute") + '</button>' +
             '</div>' +
-            '<div class="game-focus-network">' +
-              '<span>Network</span>' +
-              '<strong>' + escapeHtml(ping == null ? "--" : Math.round(ping) + " ms") + '</strong>' +
-              '<small>' + escapeHtml(formatGameFocusRate(networkData.download) + " down / " + formatGameFocusRate(networkData.upload) + " up") + '</small>' +
+            '<div class="game-focus-audio-list">' + renderGameFocusAudioRows(audioSessions, game) + '</div>' +
+            '<div class="game-focus-status-grid">' +
+              '<div class="game-focus-network">' +
+                '<span>Voice</span>' +
+                '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
+              '</div>' +
+              '<div class="game-focus-network">' +
+                '<span>Network</span>' +
+                '<strong>' + escapeHtml(ping == null ? "--" : Math.round(ping) + " ms") + '</strong>' +
+              '</div>' +
             '</div>' +
             '<div class="game-focus-reason">' + escapeHtml((activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + detail) + '</div>' +
           '</aside>' +
         '</main>' +
         '<footer class="game-focus-footer">' +
-          '<span>Focus</span>' +
+          '<span>' + escapeHtml(stateLabel) + '</span>' +
           '<strong>' + escapeHtml(platform) + '</strong>' +
           '<strong>' + escapeHtml(audioName + " " + audioState) + '</strong>' +
           '<strong>' + escapeHtml(ping == null ? "Network --" : "Ping " + Math.round(ping) + " ms") + '</strong>' +
+          '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
         '</footer>' +
       '</section>';
   }
@@ -4156,6 +4617,59 @@
             '<span>' + escapeHtml(detail) + '</span>' +
           '</div>' +
         '</div>' +
+      '</article>';
+  }
+
+  function renderGameModeEndedPanel(activity) {
+    var lastGame = activity && activity.lastGame ? activity.lastGame : null;
+    if (!lastGame) {
+      return "";
+    }
+
+    return '' +
+      '<article class="product-control-panel game-mode-ended-panel">' +
+        '<div>' +
+          '<div class="metric-label">Session ended</div>' +
+          '<strong>' + escapeHtml(text(lastGame.name, "Game")) + '</strong>' +
+          '<span>' + escapeHtml(text(lastGame.platform, "Game") + " - " + text(activity.message, "Game closed.")) + '</span>' +
+        '</div>' +
+        '<div class="game-mode-ended-stats">' +
+          '<div><span>Duration</span><strong>' + escapeHtml(formatDurationMs(lastGame.sessionDurationMs)) + '</strong></div>' +
+          '<div><span>Ended</span><strong>' + escapeHtml(formatAge(activity.lastEndedAt)) + '</strong></div>' +
+          '<div><span>Match</span><strong>' + escapeHtml(lastGame.confidence == null ? "--" : Math.round(lastGame.confidence) + "%") + '</strong></div>' +
+        '</div>' +
+      '</article>';
+  }
+
+  function renderGameModeCandidatesPanel(activity) {
+    var candidates = activity && Array.isArray(activity.candidates) ? activity.candidates : [];
+    var visible = candidates.filter(function (candidate) {
+      return candidate && candidate.confidence < 60 && candidate.executablePath;
+    }).slice(0, 3);
+    if (!visible.length) {
+      return "";
+    }
+
+    return '' +
+      '<article class="product-control-panel game-mode-candidates-panel">' +
+        '<div class="game-mode-candidates-head">' +
+          '<div>' +
+            '<div class="metric-label">Running app candidates</div>' +
+            '<strong>Teach Game Mode</strong>' +
+            '<span>Pin one if it should trigger the in-game layout next time.</span>' +
+          '</div>' +
+          statusPill(String(visible.length) + " found", "warn") +
+        '</div>' +
+        '<div class="game-mode-candidate-list">' + visible.map(function (candidate) {
+          return '' +
+            '<div class="game-mode-candidate-row">' +
+              '<div>' +
+                '<strong>' + escapeHtml(text(candidate.name, "Running app")) + '</strong>' +
+                '<span>' + escapeHtml(text(candidate.processName, text(candidate.platform, "Process")) + " - " + text(candidate.reason, "Candidate")) + '</span>' +
+              '</div>' +
+              '<button class="inline-button" type="button" data-action="game-pin-candidate" data-candidate-id="' + escapeHtml(text(candidate.id, "")) + '" data-process-id="' + escapeHtml(String(candidate.processId || "")) + '">Treat as game</button>' +
+            '</div>';
+        }).join("") + '</div>' +
       '</article>';
   }
 
@@ -4639,7 +5153,7 @@
         '</div>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="probe-obs"' + (state.busy ? " disabled" : "") + '>Probe OBS</button>' +
-          '<button class="inline-button" type="button" data-action="open-media">Open media</button>' +
+          '<button class="inline-button" type="button" data-action="open-media">Open Audio & Media</button>' +
           '<button class="inline-button" type="button" data-action="stream-profile">Use streaming layout</button>' +
         '</div>'
       );
@@ -4716,7 +5230,7 @@
       if (target.getAttribute("data-action") === "probe-obs") {
         probeObs();
       } else if (target.getAttribute("data-action") === "open-media" && typeof env.selectWidget === "function") {
-        env.selectWidget("media", true);
+        env.selectWidget("audio", true);
       } else if (target.getAttribute("data-action") === "stream-profile") {
         saveSettings(env, {
           profileId: profile.id,
@@ -4831,6 +5345,7 @@
       var dashboardFps = optionalNumber(state.panelFps);
       var displayName = text(display.name || display.deviceName, "Primary display");
       var activeGameId = gameActivityId(activeGame);
+      var idleStatusPanels = renderGameModeEndedPanel(state.activity) + renderGameModeCandidatesPanel(state.activity);
       syncGameFocusIntro(activeGame);
 
       if (activeGame) {
@@ -4848,20 +5363,25 @@
       }
 
       container.innerHTML = productShell(
-        "Live performance",
+        "Launch mode",
         "Game Mode",
-        "Launch dock with display refresh, dashboard smoothness, CPU, and GPU in view.",
-        primaryRefreshRate == null ? state.statusText : formatHz(primaryRefreshRate),
-        primaryRefreshRate == null ? state.statusTone : "good",
-        '<div class="inline-grid inline-grid--4 game-mode-performance">' +
-          metricCard("Display Hz", formatHz(primaryRefreshRate), displayName, fpsProgress(primaryRefreshRate, 240), "game-mode-metric--primary") +
-          metricCard("Dashboard FPS", formatFps(dashboardFps), "XENEON UI render rate", fpsProgress(dashboardFps, 60)) +
-          metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "GPU load", system.gpu) +
-          metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
-        '</div>' +
-        renderGameFacePanel(savedGame, game, profileTheme, activeGame ? { activeGame: activeGame } : state.activity, system, dashboardFps, env) +
-        renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
-        ''
+        "Launch a game, then the EDGE switches into a focused play cockpit automatically.",
+        state.activity && state.activity.stateLabel ? state.activity.stateLabel : primaryRefreshRate == null ? state.statusText : formatHz(primaryRefreshRate),
+        state.activity && state.activity.mode === "ended" ? "warn" : primaryRefreshRate == null ? state.statusTone : "good",
+        '<div class="game-mode-idle-grid">' +
+          '<section class="game-mode-idle-top">' +
+            '<div class="inline-grid inline-grid--4 game-mode-performance">' +
+              metricCard("Display Hz", formatHz(primaryRefreshRate), displayName, fpsProgress(primaryRefreshRate, 240), "game-mode-metric--primary") +
+              metricCard("Dashboard FPS", formatFps(dashboardFps), "XENEON UI render rate", fpsProgress(dashboardFps, 60)) +
+              metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "GPU load", system.gpu) +
+              metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
+            '</div>' +
+          '</section>' +
+          (idleStatusPanels ? '<section class="game-mode-idle-notices">' + idleStatusPanels + '</section>' : '') +
+          '<section class="game-mode-idle-launch">' +
+            renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
+          '</section>' +
+        '</div>'
       );
     }
 
@@ -5036,6 +5556,58 @@
       });
     }
 
+    function toggleGameMasterMute() {
+      requestJson(buildBridgeUrl(env, "/api/audio/master-mute"), {
+        method: "POST",
+        body: {
+          muted: !state.audio.muted
+        }
+      }, 5000).then(function () {
+        refreshAudio();
+      }, function () {
+        refreshAudio();
+      });
+    }
+
+    function toggleGameSessionMute(sessionId) {
+      var session = state.audio.sessions.filter(function (entry) {
+        return entry.id === sessionId;
+      })[0];
+      if (!session) {
+        return;
+      }
+
+      requestJson(buildBridgeUrl(env, "/api/audio/session-mute"), {
+        method: "POST",
+        body: {
+          sessionId: sessionId,
+          muted: !session.muted
+        }
+      }, 5000).then(function () {
+        refreshAudio();
+      }, function () {
+        refreshAudio();
+      });
+    }
+
+    function pinGameCandidate(target) {
+      requestJson(buildBridgeUrl(env, "/api/game/activity/pin"), {
+        method: "POST",
+        body: {
+          id: String(target.getAttribute("data-candidate-id") || ""),
+          processId: Number(target.getAttribute("data-process-id") || 0) || null
+        }
+      }, 6000).then(function (payload) {
+        state.statusText = text(payload && payload.message, "Game pinned");
+        state.statusTone = "good";
+        return Promise.all([refreshGameActivity(true), refreshSteam(false)]);
+      }, function (error) {
+        state.statusText = error.message || "Pin failed";
+        state.statusTone = "danger";
+        redraw();
+      });
+    }
+
     function startPanelFpsMeter() {
       var frameCount = 0;
       var lastSample = window.performance && performance.now ? performance.now() : Date.now();
@@ -5149,6 +5721,12 @@
         } else if (env && typeof env.selectWidget === "function") {
           env.selectWidget(env.gameFaceHomeWidget || "system", true);
         }
+      } else if (action === "game-master-mute") {
+        toggleGameMasterMute();
+      } else if (action === "game-session-mute") {
+        toggleGameSessionMute(String(target.getAttribute("data-session-id") || ""));
+      } else if (action === "game-pin-candidate") {
+        pinGameCandidate(target);
       } else if (action === "steam-theme") {
         applySteamGameLook(String(target.getAttribute("data-app-id") || ""), true);
       } else if (action === "steam-launch") {
@@ -5436,7 +6014,7 @@
     shortcuts: mountSystemShortcutsWidget,
     audio: mountAudioWidget,
     calendar: mountCalendarWidget,
-    media: mountMediaWidget,
+    media: mountAudioWidget,
     clipboard: mountClipboardWidget,
     weather: mountWeatherWidget,
     hue: mountHueWidget,

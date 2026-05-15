@@ -3,7 +3,7 @@
   var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
-  var assetRevision = "20260513-2";
+  var assetRevision = "20260514-14";
   var onboardingVersion = 1;
   var showAdvanced = params.get("advanced") === "1";
   var stageWidth = 2560;
@@ -206,7 +206,7 @@
         launchers: createSetupItem("App Launcher", "Needs Setup", false, "Waiting for the bridge."),
         "quick-actions": createSetupItem("Quick Actions", "Needs Setup", false, "Waiting for the bridge."),
         shortcuts: createSetupItem("System Shortcuts", "Needs Setup", false, "Waiting for the bridge."),
-        audio: createSetupItem("Audio Control", "Needs Setup", false, "Waiting for the bridge."),
+        audio: createSetupItem("Audio & Media", "Needs Setup", false, "Waiting for the bridge."),
         clipboard: createSetupItem("Clipboard History", "Needs Setup", false, "Waiting for the bridge."),
         weather: createSetupItem("Weather", "Optional", false, "Add an OpenWeather key if you want the Weather widget."),
         calendar: createSetupItem("Calendar", "Optional", false, "Add an ICS feed if you want the Calendar widget."),
@@ -230,8 +230,7 @@
         launchers: createSetupItem("App Launcher", "Needs Setup", false, "App launching depends on the local bridge."),
         "quick-actions": createSetupItem("Quick Actions", "Needs Setup", false, "Quick actions depend on the local bridge."),
         shortcuts: createSetupItem("System Shortcuts", "Needs Setup", false, "System shortcuts depend on the local bridge."),
-        audio: createSetupItem("Audio Control", "Needs Setup", false, "Audio routing depends on the local bridge."),
-        media: createSetupItem("Media Transport", "Needs Setup", false, "Media transport depends on the local bridge."),
+        audio: createSetupItem("Audio & Media", "Needs Setup", false, "Audio and media controls depend on the local bridge."),
         clipboard: createSetupItem("Clipboard History", "Needs Setup", false, "Clipboard history depends on the local bridge."),
         calendar: createSetupItem("Calendar", bridgeConfig.calendar && bridgeConfig.calendar.configured ? "Needs Setup" : "Optional", false, bridgeConfig.calendar && bridgeConfig.calendar.configured ? "Calendar was configured before. Start the bridge, then re-check it." : "Add an ICS feed if you want the Calendar widget."),
         weather: createSetupItem("Weather", bridgeConfig.weather && bridgeConfig.weather.configured ? "Needs Setup" : "Optional", false, bridgeConfig.weather && bridgeConfig.weather.configured ? "Weather was configured before. Start the bridge, then re-check it." : "Add an OpenWeather key if you want the Weather widget."),
@@ -1077,8 +1076,8 @@
       var status = text(payload && payload.playbackStatus, text(payload && payload.status, ""));
       if (title || artist) {
         setNowStrip(
-          "media",
-          status && status !== "idle" ? status.replace(/-/g, " ") : "Now playing",
+          "audio",
+          status && status !== "idle" ? status.replace(/-/g, " ") : "Media controls",
           title || artist,
           artist && title ? artist : text(payload && payload.message, "Media controls ready")
         );
@@ -1108,7 +1107,7 @@
       var targetWidget = nowStripNode.dataset.targetWidget || "";
       if (targetWidget) {
         selectWidget(targetWidget, true);
-        showTouchFeedback(targetWidget === "media" ? "Media opened" : targetWidget === "game-mode" ? "Game Face opened" : "Audio opened");
+        showTouchFeedback(targetWidget === "game-mode" ? "Game Mode opened" : "Audio & Media opened");
       }
     });
 
@@ -1280,7 +1279,7 @@
     }
 
     if (widgetId === "audio") {
-      return bridgeCapabilities.audio === true;
+      return bridgeCapabilities.audio === true || bridgeCapabilities.media === true;
     }
 
     if (widgetId === "launchers") {
@@ -1407,6 +1406,10 @@
   }
 
   function getWidgetById(widgetId) {
+    if (widgetId === "media") {
+      widgetId = "audio";
+    }
+
     return widgets.filter(function (entry) {
       return entry.id === widgetId;
     })[0] || widgets[0];
@@ -1524,10 +1527,10 @@
         },
       {
         id: "audio",
-        title: "Audio",
-        copy: "Quick master volume, output switching, and active app audio only.",
+        title: "Audio & Media",
+        copy: "Volume, output switching, active app audio, and now-playing controls in one place.",
         getViewerLabel: function () {
-          return "Quick audio";
+          return "Sound and playback";
         },
         buildSrc: function () {
           return buildUrl(widgetBase, "/widgets/audio-output-panel.html", {
@@ -1535,22 +1538,6 @@
             rev: assetRevision,
             endpoint: buildUrl(bridgeOrigin, "/api/audio"),
             actionBase: buildUrl(bridgeOrigin, "/api/audio")
-          });
-        }
-      },
-      {
-        id: "media",
-        title: "Media",
-        copy: "Now playing, artwork, and transport controls for the current Windows media session.",
-        getViewerLabel: function () {
-          return "Windows session";
-        },
-        buildSrc: function () {
-          return buildUrl(widgetBase, "/widgets/media-session-panel.html", {
-            size: "full",
-            rev: assetRevision,
-            endpoint: buildUrl(bridgeOrigin, "/api/media"),
-            actionBase: buildUrl(bridgeOrigin, "/api/media")
           });
         }
       },
@@ -2021,7 +2008,7 @@
         '</div>' +
         '<div class="router-settings__global-actions">' +
           '<label class="router-settings__checkbox"><input id="dashboard-autotune-toggle" type="checkbox"' + (autoTune ? " checked" : "") + '> Game Mode auto-tune</label>' +
-          '<label class="router-settings__checkbox"><input id="dashboard-autoface-toggle" type="checkbox"' + (autoFace ? " checked" : "") + '> Game Face auto-open</label>' +
+          '<label class="router-settings__checkbox"><input id="dashboard-autoface-toggle" type="checkbox"' + (autoFace ? " checked" : "") + '> Game Mode auto-open</label>' +
           '<button id="dashboard-opacity-reset" class="router-settings__button" type="button">Reset opacity</button>' +
         '</div>' +
       '</section>';
