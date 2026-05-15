@@ -75,7 +75,7 @@ function Register-UninstallEntry($installPath, $exePath) {
     $estimatedSizeKb = 0
   }
 
-  $uninstallCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$installPath\Remove-XenonEdgeHost.ps1`""
+  $uninstallCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$installPath\Remove-XenonEdgeHost.ps1`" -Quiet"
   New-Item -Path $uninstallKey -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "DisplayName" -Value "XENEON Edge Host" -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "DisplayVersion" -Value $version -PropertyType String -Force | Out-Null
@@ -83,7 +83,7 @@ function Register-UninstallEntry($installPath, $exePath) {
   New-ItemProperty -Path $uninstallKey -Name "InstallLocation" -Value $installPath -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "DisplayIcon" -Value $exePath -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "UninstallString" -Value $uninstallCommand -PropertyType String -Force | Out-Null
-  New-ItemProperty -Path $uninstallKey -Name "QuietUninstallString" -Value ($uninstallCommand + " -Quiet") -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $uninstallKey -Name "QuietUninstallString" -Value $uninstallCommand -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "InstallDate" -Value (Get-Date -Format "yyyyMMdd") -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "URLInfoAbout" -Value "https://github.com/SilverFuel/xeneon-widgets" -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "HelpLink" -Value "https://github.com/SilverFuel/xeneon-widgets/issues" -PropertyType String -Force | Out-Null
@@ -207,14 +207,14 @@ try {
   New-Shortcut `
     -shortcutPath (Join-Path $shortcutRoot "Uninstall XENEON Edge Host.lnk") `
     -targetPath "powershell.exe" `
-    -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`"" `
+    -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`" -Quiet" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
     -shortcutPath (Join-Path $shortcutRoot "Uninstall and Remove Local Data.lnk") `
     -targetPath "powershell.exe" `
-    -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`" -RemoveLocalData" `
+    -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`" -Quiet -RemoveLocalData" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 

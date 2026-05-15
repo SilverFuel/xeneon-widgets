@@ -13,6 +13,9 @@ $installRoot = Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost"
 $exePath = Join-Path $installRoot "XenonEdgeHost.exe"
 $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"
 $desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"
+$startMenuShortcut = Join-Path $shortcutRoot "XENEON Edge Host.lnk"
+$uninstallShortcut = Join-Path $shortcutRoot "Uninstall XENEON Edge Host.lnk"
+$cleanupUninstallShortcut = Join-Path $shortcutRoot "Uninstall and Remove Local Data.lnk"
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
 $userDataRoot = Join-Path $env:APPDATA "XenonEdgeHost"
 $localDataRoot = Join-Path $env:LOCALAPPDATA "XenonEdgeHost"
@@ -38,6 +41,20 @@ function Assert-Absent($path, $label) {
   Write-Host "OK: $label removed"
 }
 
+function Assert-Contains($value, $expected, $label) {
+  if ([string]::IsNullOrWhiteSpace($value) -or $value.IndexOf($expected, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+    throw "$label does not contain '$expected'."
+  }
+
+  Write-Host "OK: $label"
+}
+
+function Get-ShortcutArguments($path) {
+  $shell = New-Object -ComObject WScript.Shell
+  $shortcut = $shell.CreateShortcut($path)
+  return $shortcut.Arguments
+}
+
 if ($RunInstall) {
   if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
     throw "Pass -InstallerPath when using -RunInstall."
@@ -49,7 +66,11 @@ if ($RunInstall) {
   if ($QuietInstall) {
     $installerArgs += "/Q"
   }
-  $installerProcess = Start-Process -FilePath $resolvedInstaller -ArgumentList $installerArgs -PassThru
+  if ($installerArgs.Count -gt 0) {
+    $installerProcess = Start-Process -FilePath $resolvedInstaller -ArgumentList $installerArgs -PassThru
+  } else {
+    $installerProcess = Start-Process -FilePath $resolvedInstaller -PassThru
+  }
   if (-not $installerProcess.WaitForExit($InstallTimeoutSeconds * 1000)) {
     $installMarkersPresent = (Test-Path -LiteralPath $exePath) -and (Test-Path -LiteralPath $uninstallKey)
     Stop-Process -Id $installerProcess.Id -Force -ErrorAction SilentlyContinue
@@ -65,6 +86,9 @@ if ($RunInstall) {
 Write-Step "Checking installed app"
 Assert-Present $exePath "Installed executable"
 Assert-Present $shortcutRoot "Start Menu shortcut folder"
+Assert-Present $startMenuShortcut "Start Menu app shortcut"
+Assert-Present $uninstallShortcut "Start Menu uninstall shortcut"
+Assert-Present $cleanupUninstallShortcut "Start Menu data cleanup shortcut"
 Assert-Present $desktopShortcut "Desktop shortcut"
 Assert-Present $uninstallKey "Apps and Features uninstall entry"
 
@@ -77,6 +101,10 @@ if ([string]::IsNullOrWhiteSpace($uninstallEntry.UninstallString)) {
   throw "UninstallString is missing from the uninstall entry."
 }
 Write-Host "OK: interactive uninstall command registered"
+Assert-Contains $uninstallEntry.UninstallString "-Quiet" "Apps and Features uninstall is hands-free"
+Assert-Contains (Get-ShortcutArguments $uninstallShortcut) "-Quiet" "Start Menu uninstall is hands-free"
+Assert-Contains (Get-ShortcutArguments $cleanupUninstallShortcut) "-RemoveLocalData" "Start Menu cleanup removes local data"
+Assert-Contains (Get-ShortcutArguments $cleanupUninstallShortcut) "-Quiet" "Start Menu cleanup is hands-free"
 if ([string]::IsNullOrWhiteSpace($uninstallEntry.InstallLocation) -or -not (Test-Path -LiteralPath $uninstallEntry.InstallLocation)) {
   throw "InstallLocation is missing or invalid in the uninstall entry."
 }

@@ -9,6 +9,7 @@ For the first free public beta, upload:
 - `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe`
 - `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe.sha256`
 - release notes from `docs\release\FREE-BETA-RELEASE-NOTES.md`
+- plain install/uninstall notes from `docs\release\WINDOWS-INSTALL-UNINSTALL.md`
 
 Mark the release as a pre-release. Do not attach a Mac package unless it was built and tested on an actual Mac and is clearly labeled beta.
 
@@ -42,6 +43,7 @@ XENEON Edge Host 0.2.0 Free Public Beta
 
 - `npm run release:ready` passes.
 - Free beta releases clearly say when the Windows installer is unsigned.
+- Release notes clearly say install and uninstall are hands-free after any Windows SmartScreen warning.
 - Paid/stable Windows installers are signed.
 - Paid/stable macOS packages are signed and notarized.
 - SHA256 files match the uploaded files.

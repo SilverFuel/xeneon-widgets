@@ -91,7 +91,7 @@ function New-IExpressSed($sourceDir, $targetPath, $sedPath) {
     "",
     "[Options]",
     "PackagePurpose=InstallApp",
-    "ShowInstallProgramWindow=1",
+    "ShowInstallProgramWindow=0",
     "HideExtractAnimation=1",
     "UseLongFileName=1",
     "InsideCompressed=0",
@@ -110,9 +110,9 @@ function New-IExpressSed($sourceDir, $targetPath, $sedPath) {
     "SourceFiles=SourceFiles",
     "",
     "[Strings]",
-    "InstallPrompt=Install XENEON Edge Host for the current Windows user?",
+    "InstallPrompt=",
     "DisplayLicense=",
-    "FinishMessage=XENEON Edge Host setup has finished.",
+    "FinishMessage=",
     "FriendlyName=XENEON Edge Host Setup",
     "AppLaunched=$launchCommand",
     "QuietCommand=$launchCommand"
@@ -168,7 +168,7 @@ Copy-Item $supportUninstallPath (Join-Path $stageRoot "uninstall.ps1") -Force
 @"
 @echo off
 setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-XenonEdgeHost.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-XenonEdgeHost.ps1" -Quiet
 set EXITCODE=%ERRORLEVEL%
 endlocal & exit /b %EXITCODE%
 "@ | Set-Content -Path $installCmdPath -Encoding ASCII
@@ -200,6 +200,9 @@ XENEON Edge Host Installer
 Run:
   $(Split-Path -Leaf $outputPath)
 
+Install behavior:
+  Run the EXE. Xenon installs for the current Windows user without setup questions.
+
 Installs to:
   %LOCALAPPDATA%\Programs\XenonEdgeHost
 
@@ -213,6 +216,7 @@ Creates:
 Uninstall:
   Windows Settings > Apps > Installed apps > XENEON Edge Host
   Or Start Menu > XENEON Edge Host > Uninstall and Remove Local Data
+  Uninstall runs without Xenon cleanup questions.
 
 SHA256:
   $hash
