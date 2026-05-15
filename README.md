@@ -209,8 +209,7 @@ See `docs/release/MACOS-RELEASE.md`.
 
 - `System Monitor` renders
 - `Network Monitor` renders
-- `Audio` renders with live devices
-- `Media` renders and shows transport state
+- `Audio & Media` renders live devices, app audio, and transport state
 - `Calendar` appears after you add an ICS feed in Diagnostics
 - `Weather` appears after you add an OpenWeather key
 - tray icon appears on the primary display

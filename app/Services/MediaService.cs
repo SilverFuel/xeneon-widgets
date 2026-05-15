@@ -61,12 +61,42 @@ public sealed class MediaService
             case "previous":
                 await session.TrySkipPreviousAsync();
                 break;
+            case "seek-back":
+                await SeekRelativeAsync(session, TimeSpan.FromSeconds(-15));
+                break;
+            case "seek-forward":
+                await SeekRelativeAsync(session, TimeSpan.FromSeconds(15));
+                break;
             default:
                 throw new InvalidOperationException("Unknown media action.");
         }
 
         _lastRefresh = DateTimeOffset.MinValue;
         return await GetSnapshotAsync(cancellationToken);
+    }
+
+    private static async Task SeekRelativeAsync(GlobalSystemMediaTransportControlsSession session, TimeSpan delta)
+    {
+        var timeline = session.GetTimelineProperties();
+        var start = timeline.StartTime;
+        var end = timeline.EndTime > start ? timeline.EndTime : TimeSpan.Zero;
+        if (end <= TimeSpan.Zero)
+        {
+            throw new InvalidOperationException("This media session does not expose a seekable timeline.");
+        }
+
+        var target = timeline.Position + delta;
+        if (target < start)
+        {
+            target = start;
+        }
+
+        if (target > end)
+        {
+            target = end;
+        }
+
+        await session.TryChangePlaybackPositionAsync(target.Ticks);
     }
 
     private async Task RefreshAsync(CancellationToken cancellationToken)
@@ -117,7 +147,8 @@ public sealed class MediaService
                     CanPlay = playback.Controls?.IsPlayEnabled ?? false,
                     CanPause = playback.Controls?.IsPauseEnabled ?? false,
                     CanGoNext = playback.Controls?.IsNextEnabled ?? false,
-                    CanGoPrevious = playback.Controls?.IsPreviousEnabled ?? false
+                    CanGoPrevious = playback.Controls?.IsPreviousEnabled ?? false,
+                    CanSeek = duration > TimeSpan.Zero
                 };
                 _lastRefresh = sampledAt;
             }
@@ -208,6 +239,8 @@ public sealed class MediaSnapshot
 
     public bool CanGoPrevious { get; set; }
 
+    public bool CanSeek { get; set; }
+
     public string ThumbnailDataUrl { get; set; } = "";
 
     public MediaSnapshot Clone()
@@ -233,6 +266,7 @@ public sealed class MediaSnapshot
             CanPause = CanPause,
             CanGoNext = CanGoNext,
             CanGoPrevious = CanGoPrevious,
+            CanSeek = CanSeek,
             ThumbnailDataUrl = ThumbnailDataUrl
         };
     }

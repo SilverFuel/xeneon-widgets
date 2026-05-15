@@ -329,7 +329,7 @@ function buildHealthPayload() {
         ),
         "quick-actions": setupItem("quick-actions", "Quick Actions", "Optional", false, "Windows quick actions are not in the Mac beta yet."),
         shortcuts: setupItem("shortcuts", "System Shortcuts", "Optional", false, "Power and brightness shortcuts are Windows-only in this beta."),
-        audio: setupItem("audio", "Audio Control", audioReady ? "Ready" : "Optional", false, "Audio routing is Windows-only in this beta."),
+        audio: setupItem("audio", "Audio & Media", audioReady ? "Ready" : "Optional", false, "Audio and media controls are Windows-only in this beta."),
         weather: setupItem(
           "weather",
           "Weather",
@@ -344,7 +344,7 @@ function buildHealthPayload() {
           false,
           snapshot.calendar.configured ? "Calendar feed is configured." : "Add an ICS feed if you want calendar."
         ),
-        media: setupItem("media", "Media Transport", "Optional", false, "Media transport is Windows-only in this beta."),
+        media: setupItem("media", "Audio & Media", "Optional", false, "Media transport is part of Audio & Media in this beta."),
         clipboard: setupItem("clipboard", "Clipboard History", "Ready", false, "Clipboard text snapshot is available."),
         hue: setupItem(
           "hue",

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
 
@@ -10,6 +11,9 @@ public sealed class SystemMetricsService : IDisposable
     private System.Threading.Timer? _usageTimer;
     private System.Threading.Timer? _temperatureTimer;
     private SystemSnapshot _snapshot = new();
+    private readonly Dictionary<int, ProcessUsageSample> _processSamples = new();
+    private readonly int _logicalProcessorCount = Math.Max(1, Environment.ProcessorCount);
+    private DateTimeOffset? _processSampledAt;
     private ulong _lastIdleTime;
     private ulong _lastKernelTime;
     private ulong _lastUserTime;
@@ -72,14 +76,16 @@ public sealed class SystemMetricsService : IDisposable
             var memory = ReadMemoryUsage();
             var gpu = TryReadGpuUsage();
             var primaryDisplay = DisplayManager.ReadPrimaryDisplaySnapshot();
+            var sampledAt = DateTimeOffset.UtcNow;
+            var topProcesses = ReadTopProcesses(sampledAt);
 
             lock (_sync)
             {
-                var sampledAt = DateTimeOffset.UtcNow;
                 _snapshot.Cpu = Round(cpu);
                 _snapshot.Ram = Round(memory);
                 _snapshot.Gpu = gpu;
                 _snapshot.PrimaryDisplay = primaryDisplay;
+                _snapshot.TopProcesses = topProcesses;
                 _snapshot.Supported = true;
                 _snapshot.Status = "live";
                 _snapshot.SampledAt = sampledAt;
@@ -139,6 +145,76 @@ public sealed class SystemMetricsService : IDisposable
         }
 
         return ((memoryStatus.TotalPhys - memoryStatus.AvailPhys) * 100d) / memoryStatus.TotalPhys;
+    }
+
+    private List<SystemProcessSnapshot> ReadTopProcesses(DateTimeOffset sampledAt)
+    {
+        var totalMemory = ReadTotalPhysicalMemory();
+        var elapsedMs = _processSampledAt.HasValue
+            ? Math.Max(1, (sampledAt - _processSampledAt.Value).TotalMilliseconds)
+            : 0;
+        var nextSamples = new Dictionary<int, ProcessUsageSample>();
+        var processes = new List<SystemProcessSnapshot>();
+
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (process.Id <= 0 || string.IsNullOrWhiteSpace(process.ProcessName))
+                {
+                    continue;
+                }
+
+                var totalProcessorMs = process.TotalProcessorTime.TotalMilliseconds;
+                var workingSet = Math.Max(0, process.WorkingSet64);
+                var previous = _processSamples.TryGetValue(process.Id, out var sample) ? sample : null;
+                var cpu = 0d;
+
+                if (elapsedMs > 0 && previous is not null)
+                {
+                    var cpuDelta = Math.Max(0, totalProcessorMs - previous.TotalProcessorMs);
+                    cpu = Math.Clamp((cpuDelta / elapsedMs / _logicalProcessorCount) * 100d, 0d, 100d);
+                }
+
+                nextSamples[process.Id] = new ProcessUsageSample(totalProcessorMs);
+                processes.Add(new SystemProcessSnapshot
+                {
+                    Name = process.ProcessName,
+                    ProcessId = process.Id,
+                    Cpu = Round(cpu),
+                    MemoryMb = Math.Round(workingSet / 1024d / 1024d, 1),
+                    MemoryPercent = totalMemory > 0 ? Round((workingSet / (double)totalMemory) * 100d) : 0
+                });
+            }
+            catch
+            {
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        _processSamples.Clear();
+        foreach (var sample in nextSamples)
+        {
+            _processSamples[sample.Key] = sample.Value;
+        }
+
+        _processSampledAt = sampledAt;
+
+        return processes
+            .OrderByDescending(process => process.Cpu)
+            .ThenByDescending(process => process.MemoryMb)
+            .ThenBy(process => process.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToList();
+    }
+
+    private static ulong ReadTotalPhysicalMemory()
+    {
+        var memoryStatus = new MemoryStatusEx();
+        return GlobalMemoryStatusEx(ref memoryStatus) ? memoryStatus.TotalPhys : 0;
     }
 
     private void SampleHardwareTemperatures()
@@ -270,6 +346,8 @@ public sealed class SystemMetricsService : IDisposable
         return Math.Round(Math.Clamp(value, 0, 100), 1);
     }
 
+    private sealed record ProcessUsageSample(double TotalProcessorMs);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetSystemTimes(out FileTime idleTime, out FileTime kernelTime, out FileTime userTime);
 
@@ -334,6 +412,8 @@ public sealed class SystemSnapshot
 
     public DisplaySnapshot? PrimaryDisplay { get; set; }
 
+    public List<SystemProcessSnapshot> TopProcesses { get; set; } = [];
+
     public SystemSnapshot Clone()
     {
         return new SystemSnapshot
@@ -349,7 +429,33 @@ public sealed class SystemSnapshot
             CpuTemp = CpuTemp,
             GpuTemp = GpuTemp,
             Source = Source,
-            PrimaryDisplay = PrimaryDisplay?.Clone()
+            PrimaryDisplay = PrimaryDisplay?.Clone(),
+            TopProcesses = TopProcesses.Select(process => process.Clone()).ToList()
+        };
+    }
+}
+
+public sealed class SystemProcessSnapshot
+{
+    public string Name { get; set; } = "";
+
+    public int ProcessId { get; set; }
+
+    public double Cpu { get; set; }
+
+    public double MemoryMb { get; set; }
+
+    public double MemoryPercent { get; set; }
+
+    public SystemProcessSnapshot Clone()
+    {
+        return new SystemProcessSnapshot
+        {
+            Name = Name,
+            ProcessId = ProcessId,
+            Cpu = Cpu,
+            MemoryMb = MemoryMb,
+            MemoryPercent = MemoryPercent
         };
     }
 }

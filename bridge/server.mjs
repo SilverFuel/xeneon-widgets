@@ -1393,7 +1393,7 @@ async function getAudioSetupItem() {
   if (!probe.ok) {
     return createSetupItem(
       "audio",
-      "Audio Control",
+      "Audio & Media",
       "Needs Setup",
       false,
       "Windows audio routing is not responding. Restart the bridge and re-open the Audio tab."
@@ -1402,7 +1402,7 @@ async function getAudioSetupItem() {
 
   return createSetupItem(
     "audio",
-    "Audio Control",
+    "Audio & Media",
     "Ready",
     false,
     probe.sessions > 0
