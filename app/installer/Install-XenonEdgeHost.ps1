@@ -3,7 +3,8 @@ param(
   [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost"),
   [switch]$SkipLaunch,
   [switch]$NoAutoStart,
-  [switch]$NoDesktopShortcut
+  [switch]$NoDesktopShortcut,
+  [switch]$Quiet
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,8 +15,16 @@ $logPath = Join-Path $logRoot "install.log"
 Start-Transcript -Path $logPath -Append | Out-Null
 
 function Write-Step($message) {
-  Write-Host ""
-  Write-Host "== $message ==" -ForegroundColor Cyan
+  if (-not $Quiet) {
+    Write-Host ""
+    Write-Host "== $message ==" -ForegroundColor Cyan
+  }
+}
+
+function Write-Info($message) {
+  if (-not $Quiet) {
+    Write-Host $message
+  }
 }
 
 function New-Shortcut($shortcutPath, $targetPath, $arguments, $workingDirectory, $iconLocation) {
@@ -46,7 +55,7 @@ function Stop-LegacyBridgeIfPresent() {
 
     if ($process.Name -eq "node.exe" -and $process.CommandLine -match [regex]::Escape("\bridge\server.mjs")) {
       Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-      Write-Host "Stopped legacy node bridge process holding port 8976."
+      Write-Info "Stopped legacy node bridge process holding port 8976."
     }
   }
 }
@@ -58,6 +67,14 @@ function Register-UninstallEntry($installPath, $exePath) {
     $version = "1.0.0"
   }
 
+  $estimatedSizeKb = 0
+  try {
+    $estimatedSizeKb = [int][math]::Ceiling(((Get-ChildItem -LiteralPath $installPath -Recurse -File -ErrorAction SilentlyContinue |
+      Measure-Object -Property Length -Sum).Sum) / 1KB)
+  } catch {
+    $estimatedSizeKb = 0
+  }
+
   $uninstallCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$installPath\Remove-XenonEdgeHost.ps1`""
   New-Item -Path $uninstallKey -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "DisplayName" -Value "XENEON Edge Host" -PropertyType String -Force | Out-Null
@@ -67,16 +84,36 @@ function Register-UninstallEntry($installPath, $exePath) {
   New-ItemProperty -Path $uninstallKey -Name "DisplayIcon" -Value $exePath -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "UninstallString" -Value $uninstallCommand -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "QuietUninstallString" -Value ($uninstallCommand + " -Quiet") -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $uninstallKey -Name "InstallDate" -Value (Get-Date -Format "yyyyMMdd") -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $uninstallKey -Name "URLInfoAbout" -Value "https://github.com/SilverFuel/xeneon-widgets" -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $uninstallKey -Name "HelpLink" -Value "https://github.com/SilverFuel/xeneon-widgets/issues" -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $uninstallKey -Name "EstimatedSize" -Value $estimatedSizeKb -PropertyType DWord -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "NoModify" -Value 1 -PropertyType DWord -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "NoRepair" -Value 1 -PropertyType DWord -Force | Out-Null
 }
 
+function Get-ProgramsRoot {
+  [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Programs")).TrimEnd('\')
+}
+
+function Assert-SafePathUnder($path, $rootPath, $label) {
+  $resolvedRoot = [System.IO.Path]::GetFullPath($rootPath).TrimEnd('\') + '\'
+  $resolvedPath = [System.IO.Path]::GetFullPath($path)
+  if (-not (($resolvedPath + '\').StartsWith($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase))) {
+    throw "$label must stay under $resolvedRoot"
+  }
+
+  return $resolvedPath
+}
+
 function Assert-SafeInstallPath($installPath) {
-  $programsRoot = Join-Path $env:LOCALAPPDATA "Programs"
-  $resolvedProgramsRoot = [System.IO.Path]::GetFullPath($programsRoot).TrimEnd('\') + '\'
-  $resolvedInstallPath = [System.IO.Path]::GetFullPath($installPath)
-  if (-not $resolvedInstallPath.StartsWith($resolvedProgramsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "InstallRoot must stay under $resolvedProgramsRoot"
+  return Assert-SafePathUnder $installPath (Get-ProgramsRoot) "InstallRoot"
+}
+
+function Remove-DirectoryIfPresent($path, $rootPath, $label) {
+  if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path)) {
+    Assert-SafePathUnder $path $rootPath $label | Out-Null
+    Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
 
@@ -93,26 +130,59 @@ foreach ($requiredPath in @($payloadZip, $supportInstall, $supportUninstall, $su
   }
 }
 
-Assert-SafeInstallPath $InstallRoot
-Write-Host "Install root: $InstallRoot"
+$InstallRoot = Assert-SafeInstallPath $InstallRoot
+$programsRoot = Get-ProgramsRoot
+$installParent = Split-Path -Parent $InstallRoot
+Assert-SafePathUnder $installParent $programsRoot "Install parent" | Out-Null
+New-Item -ItemType Directory -Path $installParent -Force | Out-Null
+
+if (Test-Path -LiteralPath $InstallRoot -PathType Leaf) {
+  throw "InstallRoot points to a file. Choose a folder under $programsRoot."
+}
+
+Write-Info "Install root: $InstallRoot"
 
 Write-Step "Stopping running processes"
 Get-Process XenonEdgeHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Stop-LegacyBridgeIfPresent
 
 $extractRoot = Join-Path $env:TEMP ("XenonEdgeHost-Payload-" + [guid]::NewGuid().ToString("N"))
+$stagedInstallRoot = Join-Path $installParent ("XenonEdgeHost.installing-" + [guid]::NewGuid().ToString("N"))
+$backupInstallRoot = Join-Path $installParent ("XenonEdgeHost.backup-" + [guid]::NewGuid().ToString("N"))
+$installMoved = $false
 try {
   Write-Step "Extracting payload"
   New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
   Expand-Archive -Path $payloadZip -DestinationPath $extractRoot -Force
 
-  Write-Step "Copying app files"
-  New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
-  Get-ChildItem -LiteralPath $InstallRoot -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-  Copy-Item (Join-Path $extractRoot "*") $InstallRoot -Recurse -Force
-  Copy-Item $supportInstall (Join-Path $InstallRoot "install.ps1") -Force
-  Copy-Item $supportUninstall (Join-Path $InstallRoot "uninstall.ps1") -Force
-  Copy-Item $supportRemove (Join-Path $InstallRoot "Remove-XenonEdgeHost.ps1") -Force
+  Write-Step "Staging app files"
+  New-Item -ItemType Directory -Path $stagedInstallRoot -Force | Out-Null
+  Copy-Item (Join-Path $extractRoot "*") $stagedInstallRoot -Recurse -Force
+  Copy-Item $supportInstall (Join-Path $stagedInstallRoot "install.ps1") -Force
+  Copy-Item $supportUninstall (Join-Path $stagedInstallRoot "uninstall.ps1") -Force
+  Copy-Item $supportRemove (Join-Path $stagedInstallRoot "Remove-XenonEdgeHost.ps1") -Force
+
+  $stagedExePath = Join-Path $stagedInstallRoot "XenonEdgeHost.exe"
+  if (-not (Test-Path $stagedExePath)) {
+    throw "Staged executable was not found at $stagedExePath"
+  }
+
+  Write-Step "Installing app files"
+  if (Test-Path -LiteralPath $InstallRoot) {
+    Move-Item -LiteralPath $InstallRoot -Destination $backupInstallRoot -Force
+  }
+
+  try {
+    Move-Item -LiteralPath $stagedInstallRoot -Destination $InstallRoot -Force
+    $installMoved = $true
+  } catch {
+    if (Test-Path -LiteralPath $backupInstallRoot -PathType Container) {
+      Move-Item -LiteralPath $backupInstallRoot -Destination $InstallRoot -Force -ErrorAction SilentlyContinue
+    }
+    throw
+  }
+
+  Remove-DirectoryIfPresent $backupInstallRoot $programsRoot "Backup install folder"
 
   $exePath = Join-Path $InstallRoot "XenonEdgeHost.exe"
   if (-not (Test-Path $exePath)) {
@@ -121,6 +191,10 @@ try {
 
   Write-Step "Creating Start Menu shortcuts"
   $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"
+  $legacyShortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host"
+  if (Test-Path $legacyShortcutRoot) {
+    Remove-Item $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
   New-Item -ItemType Directory -Path $shortcutRoot -Force | Out-Null
 
   New-Shortcut `
@@ -145,6 +219,10 @@ try {
     -iconLocation $exePath
 
   if (-not $NoDesktopShortcut) {
+    $legacyDesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk"
+    if (Test-Path $legacyDesktopShortcut) {
+      Remove-Item $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+    }
     New-Shortcut `
       -shortcutPath (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk") `
       -targetPath $exePath `
@@ -158,7 +236,12 @@ try {
 
   if (-not $NoAutoStart) {
     Write-Step "Configuring auto-start"
-    & (Join-Path $InstallRoot "install.ps1")
+    $autoStartScript = Join-Path $InstallRoot "install.ps1"
+    if ($Quiet) {
+      & $autoStartScript -Quiet
+    } else {
+      & $autoStartScript
+    }
   }
 
   if (-not $SkipLaunch) {
@@ -166,17 +249,25 @@ try {
     Start-Process $exePath
   }
 
-  Write-Host ""
-  Write-Host "Installed successfully." -ForegroundColor Green
-  Write-Host "  App:      $exePath"
-  Write-Host "  Uninstall: $InstallRoot\Remove-XenonEdgeHost.ps1"
+  if (-not $Quiet) {
+    Write-Host ""
+    Write-Host "Installed successfully." -ForegroundColor Green
+    Write-Host "  App:      $exePath"
+    Write-Host "  Uninstall: $InstallRoot\Remove-XenonEdgeHost.ps1"
+  }
 }
 catch {
-  Write-Host ""
-  Write-Host "Installation failed. See $logPath" -ForegroundColor Red
+  if (-not $Quiet) {
+    Write-Host ""
+    Write-Host "Installation failed. See $logPath" -ForegroundColor Red
+  }
   throw
 }
 finally {
   Remove-Item $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
+  if (-not $installMoved) {
+    Remove-DirectoryIfPresent $stagedInstallRoot $programsRoot "Staged install folder"
+  }
+  Remove-DirectoryIfPresent $backupInstallRoot $programsRoot "Backup install folder"
   Stop-Transcript | Out-Null
 }

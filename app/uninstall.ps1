@@ -1,3 +1,7 @@
+param(
+  [switch]$Quiet
+)
+
 $ErrorActionPreference = "Stop"
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -19,14 +23,28 @@ $runValueName = "XenonEdgeHost"
 $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 
 function Write-Step($message) {
-  Write-Host ""
-  Write-Host "== $message ==" -ForegroundColor Cyan
+  if (-not $Quiet) {
+    Write-Host ""
+    Write-Host "== $message ==" -ForegroundColor Cyan
+  }
+}
+
+function Write-Info($message) {
+  if (-not $Quiet) {
+    Write-Host $message
+  }
+}
+
+function Write-QuietWarning($message) {
+  if (-not $Quiet) {
+    Write-Warning $message
+  }
 }
 
 Write-Step "XENEON Edge Host - Uninstall Auto-Start"
 
 if ($appRoot) {
-  Write-Host "App root: $appRoot"
+  Write-Info "App root: $appRoot"
 }
 
 # --- Kill running instance ---
@@ -35,9 +53,9 @@ $running = Get-Process -Name "XenonEdgeHost" -ErrorAction SilentlyContinue
 if ($running) {
   try {
     $running | Stop-Process -Force
-    Write-Host "Stopped running XenonEdgeHost process."
+    Write-Info "Stopped running XenonEdgeHost process."
   } catch {
-    Write-Warning "Could not stop running XenonEdgeHost process."
+    Write-QuietWarning "Could not stop running XenonEdgeHost process."
   }
 }
 
@@ -46,27 +64,29 @@ if ($running) {
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
   try {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-    Write-Host "Removed scheduled task '$taskName'."
+    Write-Info "Removed scheduled task '$taskName'."
   } catch {
-    Write-Warning "Unable to remove scheduled task '$taskName'."
+    Write-QuietWarning "Unable to remove scheduled task '$taskName'."
   }
 } else {
-  Write-Host "Scheduled task '$taskName' was not installed."
+  Write-Info "Scheduled task '$taskName' was not installed."
 }
 
 # --- Remove registry Run key ---
 
 if (Get-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue) {
   Remove-ItemProperty -Path $runKeyPath -Name $runValueName
-  Write-Host "Removed startup entry '$runValueName'."
+  Write-Info "Removed startup entry '$runValueName'."
 } else {
-  Write-Host "Startup entry '$runValueName' was not installed."
+  Write-Info "Startup entry '$runValueName' was not installed."
 }
 
-Write-Host ""
-Write-Host "Auto-start removed." -ForegroundColor Green
-if ($repoRoot) {
-  Write-Host "The published files in publish/ were not deleted."
-} elseif ($appRoot) {
-  Write-Host "The installed app files in $appRoot were not deleted."
+if (-not $Quiet) {
+  Write-Host ""
+  Write-Host "Auto-start removed." -ForegroundColor Green
+  if ($repoRoot) {
+    Write-Host "The published files in publish/ were not deleted."
+  } elseif ($appRoot) {
+    Write-Host "The installed app files in $appRoot were not deleted."
+  }
 }

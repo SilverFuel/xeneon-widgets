@@ -6,12 +6,14 @@ Run this before every public Windows release. Use a fresh Windows user profile o
 
 1. Download the signed installer from GitHub Releases.
 2. Run the installer from a normal user account.
-3. Confirm the Start Menu shortcut appears.
-4. Confirm the Desktop shortcut appears if enabled.
-5. Confirm the Start Menu includes Uninstall and Remove Local Data.
-6. Open XENEON Edge Host from the Start Menu.
-7. Confirm the dashboard opens at `http://127.0.0.1:8976/`.
-8. Finish setup without configuring optional integrations.
+3. Confirm the app installs to `%LOCALAPPDATA%\Programs\XenonEdgeHost`.
+4. Confirm the Start Menu shortcut appears.
+5. Confirm the Desktop shortcut appears if enabled.
+6. Confirm Windows Settings > Apps includes `XENEON Edge Host`.
+7. Confirm the Start Menu includes Uninstall and Remove Local Data.
+8. Open XENEON Edge Host from the Start Menu.
+9. Confirm the dashboard opens at `http://127.0.0.1:8976/`.
+10. Finish setup without configuring optional integrations.
 
 ## First Launch
 
@@ -42,8 +44,10 @@ Run this before every public Windows release. Use a fresh Windows user profile o
 
 1. Uninstall from Windows Apps and Features.
 2. Confirm the Start Menu shortcut is removed.
-3. Confirm the auto-start entry is removed.
-4. Confirm the app executable is removed from `%LOCALAPPDATA%\Programs\XenonEdgeHost`.
-5. Confirm local user data can be removed with the in-app reset before uninstall.
+3. Confirm the Desktop shortcut is removed.
+4. Confirm the auto-start entry is removed.
+5. Confirm the app executable is removed from `%LOCALAPPDATA%\Programs\XenonEdgeHost`.
+6. Reinstall, then use Start Menu > XENEON Edge Host > Uninstall and Remove Local Data.
+7. Confirm `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost` are removed.
 
 Do not publish a public release if any item above fails.

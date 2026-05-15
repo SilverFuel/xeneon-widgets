@@ -43,8 +43,39 @@ Assert-SafeInstallPath $InstallRoot
 $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"
 $legacyShortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host"
 $desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"
+$legacyDesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk"
+$publicDesktopShortcut = Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "XENEON Edge Host.lnk"
+$legacyPublicDesktopShortcut = Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "Xenon Edge Host.lnk"
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
 $cleanupTargets = @([System.IO.Path]::GetFullPath($InstallRoot))
+
+function Remove-StartupFallback {
+  $taskNames = @("XenonEdgeHost", "XeneonBridge")
+  foreach ($taskName in $taskNames) {
+    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+      try {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+        if (-not $Quiet) {
+          Write-Host "Removed scheduled task '$taskName'."
+        }
+      } catch {
+        if (-not $Quiet) {
+          Write-Warning "Unable to remove scheduled task '$taskName'."
+        }
+      }
+    }
+  }
+
+  $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+  foreach ($runValueName in @("XenonEdgeHost", "XeneonBridge")) {
+    if (Get-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue) {
+      Remove-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue
+      if (-not $Quiet) {
+        Write-Host "Removed startup entry '$runValueName'."
+      }
+    }
+  }
+}
 
 if ($RemoveLocalData) {
   $cleanupTargets += Resolve-SafeLocalDataPath (Join-Path $env:APPDATA "XenonEdgeHost") $env:APPDATA
@@ -54,7 +85,13 @@ if ($RemoveLocalData) {
 Write-Step "Removing startup integration"
 $uninstallScript = Join-Path $InstallRoot "uninstall.ps1"
 if (Test-Path $uninstallScript) {
-  & $uninstallScript
+  if ($Quiet) {
+    & $uninstallScript -Quiet
+  } else {
+    & $uninstallScript
+  }
+} else {
+  Remove-StartupFallback
 }
 
 Write-Step "Removing shortcuts and uninstall registration"
@@ -66,6 +103,15 @@ if (Test-Path $legacyShortcutRoot) {
 }
 if (Test-Path $desktopShortcut) {
   Remove-Item $desktopShortcut -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path $legacyDesktopShortcut) {
+  Remove-Item $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path $publicDesktopShortcut) {
+  Remove-Item $publicDesktopShortcut -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path $legacyPublicDesktopShortcut) {
+  Remove-Item $legacyPublicDesktopShortcut -Force -ErrorAction SilentlyContinue
 }
 if (Test-Path $uninstallKey) {
   Remove-Item $uninstallKey -Recurse -Force -ErrorAction SilentlyContinue

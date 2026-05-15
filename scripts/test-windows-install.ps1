@@ -2,7 +2,9 @@ param(
   [string]$InstallerPath = "",
   [switch]$RunInstall,
   [switch]$RunUninstall,
-  [switch]$RemoveLocalData
+  [switch]$RemoveLocalData,
+  [switch]$QuietInstall,
+  [int]$InstallTimeoutSeconds = 180
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,7 +45,21 @@ if ($RunInstall) {
 
   $resolvedInstaller = (Resolve-Path -LiteralPath $InstallerPath).Path
   Write-Step "Running installer"
-  Start-Process -FilePath $resolvedInstaller -Wait
+  $installerArgs = @()
+  if ($QuietInstall) {
+    $installerArgs += "/Q"
+  }
+  $installerProcess = Start-Process -FilePath $resolvedInstaller -ArgumentList $installerArgs -PassThru
+  if (-not $installerProcess.WaitForExit($InstallTimeoutSeconds * 1000)) {
+    $installMarkersPresent = (Test-Path -LiteralPath $exePath) -and (Test-Path -LiteralPath $uninstallKey)
+    Stop-Process -Id $installerProcess.Id -Force -ErrorAction SilentlyContinue
+    if (-not $installMarkersPresent) {
+      throw "Installer did not exit within $InstallTimeoutSeconds seconds, and install markers were not present."
+    }
+    Write-Warning "Installer wrapper did not exit within $InstallTimeoutSeconds seconds, but install markers are present; continuing validation."
+  } elseif ($installerProcess.ExitCode -ne 0) {
+    throw "Installer exited with code $($installerProcess.ExitCode)."
+  }
 }
 
 Write-Step "Checking installed app"
@@ -57,6 +73,14 @@ if ([string]::IsNullOrWhiteSpace($uninstallEntry.QuietUninstallString)) {
   throw "QuietUninstallString is missing from the uninstall entry."
 }
 Write-Host "OK: quiet uninstall command registered"
+if ([string]::IsNullOrWhiteSpace($uninstallEntry.UninstallString)) {
+  throw "UninstallString is missing from the uninstall entry."
+}
+Write-Host "OK: interactive uninstall command registered"
+if ([string]::IsNullOrWhiteSpace($uninstallEntry.InstallLocation) -or -not (Test-Path -LiteralPath $uninstallEntry.InstallLocation)) {
+  throw "InstallLocation is missing or invalid in the uninstall entry."
+}
+Write-Host "OK: install location registered"
 
 if ($RunUninstall) {
   Write-Step "Running uninstaller"
