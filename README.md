@@ -59,6 +59,8 @@ The update, streaming, and marketplace panels are product-ready foundations. Bef
 3. Launch `..\publish\XenonEdgeHost.exe`.
 4. Optional: run `powershell -File install.ps1` from the `app` folder to register auto-start at login.
 
+For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, auto-start registration, Apps & Features registration, and packaged uninstall flow.
+
 The native host:
 
 - runs full-screen on the XENEON EDGE
@@ -121,7 +123,14 @@ That creates:
 - `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe.sha256`
 - `app\dist\README-install.txt`
 
-The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, creates Start Menu and Desktop shortcuts, registers auto-start, and adds an Apps & Features uninstall entry.
+The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, creates Start Menu and Desktop shortcuts, registers auto-start, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed.
+
+Uninstall paths:
+
+- Windows Settings > Apps > Installed apps > XENEON Edge Host
+- Start Menu > XENEON Edge Host > Uninstall XENEON Edge Host
+- Start Menu > XENEON Edge Host > Uninstall and Remove Local Data
+- `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Remove-XenonEdgeHost.ps1" -RemoveLocalData`
 
 Before selling a paid/stable version, treat these as release blockers:
 
@@ -151,7 +160,7 @@ See `docs/release/WINDOWS-SIGNING.md`.
 Run the clean install smoke helper on a fresh Windows profile or VM:
 
 ```powershell
-powershell -File scripts\test-windows-install.ps1 -InstallerPath app\dist\<installer>.exe -RunInstall -RunUninstall
+powershell -File scripts\test-windows-install.ps1 -InstallerPath app\dist\<installer>.exe -RunInstall -QuietInstall -RunUninstall
 ```
 
 Run the release gate separately before uploading if needed:
@@ -213,7 +222,7 @@ See `docs/release/MACOS-RELEASE.md`.
 - `Calendar` appears after you add an ICS feed in Diagnostics
 - `Weather` appears after you add an OpenWeather key
 - tray icon appears on the primary display
-- `install.ps1` creates the `XenonEdgeHost` logon task
+- setup EXE registers Apps & Features uninstall and Start Menu cleanup shortcuts
 
 ## Cleanup
 
