@@ -17,6 +17,7 @@ Use the Windows installer asset and matching SHA256 checksum:
 - The Mac host is still beta-only and should not be treated as a finished Mac product.
 - Support is handled through GitHub Issues.
 - Private security reports should use GitHub Security Advisories.
+- Install and uninstall are meant to be hands-free after the Windows SmartScreen warning, if Windows shows one.
 
 ## What Is Included
 
@@ -24,6 +25,7 @@ Use the Windows installer asset and matching SHA256 checksum:
 - Local dashboard served at `http://127.0.0.1:8976/`.
 - System telemetry, network status, audio, media, weather, calendar, Hue, launcher, and home-lab panels.
 - First-run setup and diagnostics.
+- Hands-free Windows install and uninstall flow.
 - Protected local storage for Weather and Hue secrets.
 - Setup-free basic UniFi detection through the local host.
 - Reset all app data from the setup/privacy screen.

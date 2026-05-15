@@ -15,6 +15,8 @@ Run this before every public Windows release. Use a fresh Windows user profile o
 9. Confirm the dashboard opens at `http://127.0.0.1:8976/`.
 10. Finish setup without configuring optional integrations.
 
+The installer should not ask setup questions. A Windows SmartScreen warning is acceptable for an unsigned beta, but Xenon should not ask for a folder, service choice, or install mode.
+
 ## First Launch
 
 1. Confirm System Monitor renders.
@@ -49,5 +51,7 @@ Run this before every public Windows release. Use a fresh Windows user profile o
 5. Confirm the app executable is removed from `%LOCALAPPDATA%\Programs\XenonEdgeHost`.
 6. Reinstall, then use Start Menu > XENEON Edge Host > Uninstall and Remove Local Data.
 7. Confirm `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost` are removed.
+
+The uninstaller should not ask cleanup questions. The normal uninstall removes the app. The cleanup shortcut removes the app plus local data.
 
 Do not publish a public release if any item above fails.

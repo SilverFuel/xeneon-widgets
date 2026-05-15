@@ -13,7 +13,7 @@ Use this before publishing a free beta, paid release, or public download.
 - Confirm the product name and legal disclaimer keep the app independent from CORSAIR.
 - Test install, launch, restart, auto-start, and uninstall on a clean Windows machine when possible.
 - Confirm Reset all app data removes local settings and protected secrets for the current user.
-- Confirm the Start Menu uninstall cleanup shortcut removes local app data when selected.
+- Confirm the Start Menu uninstall cleanup shortcut removes local app data when selected and does not ask extra questions.
 - Confirm the in-app Updates panel can read the GitHub Releases feed and expose the latest installer download.
 - Upload release notes, installer, and SHA256 file to GitHub Releases.
 - Keep the app described as independent from CORSAIR, Ubiquiti, Philips Hue, OpenWeather, Microsoft, and Apple unless permission exists.
@@ -30,7 +30,7 @@ Use this before publishing a free beta, paid release, or public download.
 
 ## Should Do
 
-- Offer a "remove all local data" option from the installer uninstaller UI, not only inside the app.
+- Offer a "remove all local data" Start Menu uninstall shortcut, not only inside the app.
 - Run `scripts\test-windows-install.ps1` in a clean Windows profile or VM.
 - Add a small beta group before taking payment from strangers.
 - Create a rollback download for the previous version.

@@ -16,13 +16,15 @@ The primary product is the native Windows host in `app`. Legacy browser bridge f
 
 XENEON Edge Host is an independent product. It is not an official CORSAIR app unless a separate written agreement says otherwise.
 
-## Install And Let Xenon Auto-Setup
+## Install And Uninstall Without Setup Questions
 
 For beta users, use the Windows setup EXE from GitHub Releases instead of the source code ZIP:
 
 1. Download `XenonEdgeHost-Setup-<version>-<date>.exe`.
-2. Run it. The free beta may show a Windows SmartScreen warning until the installer is signed.
-3. Launch XENEON Edge Host from the Start Menu or Desktop shortcut.
+2. Run it.
+3. Xenon installs for the current Windows user, creates the Start Menu/Desktop shortcuts, registers auto-start, and launches itself.
+
+The installer is meant to be hands-free. It does not ask the user to choose folders, services, setup steps, or uninstall behavior. The free beta may still show a Windows SmartScreen warning until the installer is signed, but Xenon itself does not add extra setup questions.
 
 On first launch, Xenon scans the PC and prepares the normal dashboard automatically:
 
@@ -32,6 +34,14 @@ On first launch, Xenon scans the PC and prepares the normal dashboard automatica
 - marks the core dashboard ready without asking the user to finish setup manually
 
 Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, and Philips Hue needs the bridge link button before Xenon can store local Hue credentials.
+
+Uninstall is also meant to be hands-free:
+
+- Windows Settings > Apps > Installed apps > XENEON Edge Host removes the app, shortcuts, auto-start, and uninstall entry.
+- Start Menu > XENEON Edge Host > Uninstall XENEON Edge Host does the same thing.
+- Start Menu > XENEON Edge Host > Uninstall and Remove Local Data also removes `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost`.
+
+Plain-language install/uninstall notes live in [docs/release/WINDOWS-INSTALL-UNINSTALL.md](docs/release/WINDOWS-INSTALL-UNINSTALL.md).
 
 ## Product Layer
 
@@ -59,7 +69,7 @@ The update, streaming, and marketplace panels are product-ready foundations. Bef
 3. Launch `..\publish\XenonEdgeHost.exe`.
 4. Optional: run `powershell -File install.ps1` from the `app` folder to register auto-start at login.
 
-For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, auto-start registration, Apps & Features registration, and packaged uninstall flow.
+For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, auto-start registration, Apps & Features registration, and packaged uninstall flow without asking setup questions.
 
 The native host:
 
@@ -123,14 +133,14 @@ That creates:
 - `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe.sha256`
 - `app\dist\README-install.txt`
 
-The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, creates Start Menu and Desktop shortcuts, registers auto-start, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed.
+The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, creates Start Menu and Desktop shortcuts, registers auto-start, launches the app, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed. The normal installer and uninstaller paths are hands-free.
 
 Uninstall paths:
 
 - Windows Settings > Apps > Installed apps > XENEON Edge Host
 - Start Menu > XENEON Edge Host > Uninstall XENEON Edge Host
 - Start Menu > XENEON Edge Host > Uninstall and Remove Local Data
-- `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Remove-XenonEdgeHost.ps1" -RemoveLocalData`
+- `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Remove-XenonEdgeHost.ps1" -Quiet -RemoveLocalData`
 
 Before selling a paid/stable version, treat these as release blockers:
 
