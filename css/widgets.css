@@ -2525,6 +2525,242 @@ a.is-touch-pressing,
   background: linear-gradient(90deg, var(--color-accent), #44f0c2);
 }
 
+.network-command-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.network-command-toolbar {
+  min-height: 64px;
+}
+
+.network-command-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr) minmax(0, 1fr) 430px;
+  grid-template-rows: 176px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.network-quality-card {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  align-content: start;
+  gap: 14px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(67, 255, 157, 0.09), transparent 42%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.network-quality-card[data-tone="warn"] {
+  border-color: rgba(255, 181, 71, 0.34);
+  background:
+    linear-gradient(135deg, rgba(255, 181, 71, 0.1), transparent 42%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.network-quality-card[data-tone="danger"] {
+  border-color: rgba(255, 77, 109, 0.42);
+  background:
+    linear-gradient(135deg, rgba(255, 77, 109, 0.12), transparent 42%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.network-quality-score {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.network-quality-score span,
+.network-pill span {
+  color: var(--color-text-dim);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.network-quality-score strong {
+  color: var(--color-accent);
+  font-size: 4.8rem;
+  font-weight: 900;
+  line-height: 0.92;
+}
+
+.network-quality-score small {
+  color: var(--color-text);
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+
+.network-quality-details,
+.network-unifi-kpis,
+.network-path-grid {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.network-pill {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 62px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.network-pill[data-tone="good"] {
+  border-color: rgba(67, 255, 157, 0.22);
+}
+
+.network-pill[data-tone="warn"] {
+  border-color: rgba(255, 181, 71, 0.3);
+}
+
+.network-pill[data-tone="danger"] {
+  border-color: rgba(255, 77, 109, 0.38);
+}
+
+.network-pill strong,
+.network-pill small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-pill strong {
+  color: var(--color-text);
+  font-size: 1.02rem;
+  line-height: 1.06;
+}
+
+.network-pill[data-tone="good"] strong {
+  color: var(--color-accent);
+}
+
+.network-pill[data-tone="warn"] strong {
+  color: #ffc46b;
+}
+
+.network-pill[data-tone="danger"] strong {
+  color: #ff7a7a;
+}
+
+.network-pill small {
+  color: var(--color-text-dim);
+  font-size: 0.76rem;
+  line-height: 1.16;
+}
+
+.network-kpi-grid {
+  grid-column: 2 / 4;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  min-height: 0;
+}
+
+.network-kpi-grid .metric-card {
+  min-height: 0;
+}
+
+.network-adapter-card {
+  grid-column: 4;
+  grid-row: 1;
+  overflow: hidden;
+}
+
+.network-path-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.network-adapter-card .network-pill {
+  min-height: 70px;
+}
+
+.network-unifi-card {
+  grid-column: 2;
+  grid-row: 2;
+  align-content: start;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.network-unifi-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.network-unifi-form {
+  display: grid;
+  gap: 9px;
+  min-height: 0;
+}
+
+.network-unifi-form .inline-input {
+  min-height: 36px;
+}
+
+.network-unifi-actions {
+  gap: 8px;
+}
+
+.network-form-message {
+  min-height: 24px;
+  overflow: hidden;
+  color: var(--color-text-dim);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-form-message[data-tone="good"] {
+  color: var(--color-accent);
+}
+
+.network-form-message[data-tone="danger"] {
+  color: #ff7a7a;
+}
+
+.network-list-card {
+  align-content: start;
+  overflow: hidden;
+}
+
+.network-list-card--clients {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.network-list-card--aps {
+  grid-column: 4;
+  grid-row: 2;
+}
+
+.network-compact-list {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  overflow: hidden;
+  padding-right: 0;
+}
+
+.network-compact-list .inline-list-item {
+  padding: 8px 9px;
+  border-radius: 8px;
+}
+
 .audio-master-card,
 .audio-playback-card {
   gap: 12px;
@@ -4190,7 +4426,7 @@ a.is-touch-pressing,
 
 .game-focus-status-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   min-width: 0;
 }

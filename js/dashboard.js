@@ -3,7 +3,7 @@
   var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
-  var assetRevision = "20260514-14";
+  var assetRevision = "20260516-02";
   var onboardingVersion = 1;
   var showAdvanced = params.get("advanced") === "1";
   var stageWidth = 2560;
@@ -76,6 +76,12 @@
       configured: false,
       linked: false
     },
+    unifi: {
+      configured: false,
+      linked: false,
+      host: "",
+      site: "default"
+    },
     dashboard: {
       onboardingCompleted: false,
       onboardingCompletedAt: "",
@@ -144,7 +150,7 @@
     },
     "unifi-network": {
       title: "UniFi Network",
-      copy: "Built in. Xenon detects the local UniFi console through the native host.",
+      copy: "Folded into Network Monitor with local UniFi linking.",
       fields: []
     }
   };
@@ -1250,7 +1256,7 @@
     }
 
     if (widgetId === "unifi-network") {
-      return getSetupItem("unifi").state || "Built in";
+      return getSetupItem("unifi").state || "Optional";
     }
 
     return isWidgetConfigured(widgetId) ? "Ready" : "Optional";
@@ -1511,17 +1517,19 @@
       },
         {
           id: "network",
-          title: "Network Monitor",
-          copy: "Download, upload, ping, and connection health from the local bridge.",
+          title: "Network",
+          copy: "Gaming latency, throughput, local adapter state, and optional UniFi gateway detail.",
           getViewerLabel: function () {
-            return "Network essentials";
+            return getWidgetState("unifi-network") === "Ready" ? "UniFi linked" : "Network health";
           },
           buildSrc: function () {
             return buildUrl(widgetBase, "/widgets/network-widget.html", {
               size: "full",
               rev: assetRevision,
               endpoint: buildUrl(bridgeOrigin, "/api/network"),
-              unifiEndpoint: getUniFiNetworkEndpoint()
+              unifiEndpoint: getUniFiNetworkEndpoint(),
+              unifiLinkEndpoint: buildUrl(bridgeOrigin, "/api/unifi/network/link"),
+              unifiDisconnectEndpoint: buildUrl(bridgeOrigin, "/api/unifi/network/disconnect")
             });
           }
         },
@@ -2307,6 +2315,15 @@
         bridgeIp: "",
         configured: false,
         linked: false
+      };
+    }
+
+    if (!bridgeConfig.unifi) {
+      bridgeConfig.unifi = {
+        configured: false,
+        linked: false,
+        host: "",
+        site: "default"
       };
     }
 

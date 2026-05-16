@@ -29,11 +29,11 @@ The installer is meant to be hands-free. It does not ask the user to choose fold
 On first launch, Xenon scans the PC and prepares the normal dashboard automatically:
 
 - starts the local dashboard service
-- detects system, GPU, network, audio, media, Steam, UniFi, and clipboard capabilities where Windows exposes them
+- detects system, GPU, network, audio, media, Steam, local UniFi consoles, and clipboard capabilities where Windows exposes them
 - pins safe launcher defaults from Start Menu shortcuts and recent Steam games when no launchers are configured yet
 - marks the core dashboard ready without asking the user to finish setup manually
 
-Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, and Philips Hue needs the bridge link button before Xenon can store local Hue credentials.
+Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, Philips Hue needs the bridge link button, and UniFi needs local console credentials if you want client and AP detail.
 
 Uninstall is also meant to be hands-free:
 
@@ -79,15 +79,31 @@ The native host:
 - stores Weather and Hue keys with Windows per-user protection instead of plain dashboard config
 - does not require Node.js for the normal app path
 
-## UniFi
+## Network And UniFi
 
-Xenon includes a built-in UniFi detector now. The dashboard uses:
+The Network page combines normal PC network health and optional UniFi detail. It works immediately with local Windows network telemetry:
+
+- download and upload throughput
+- ping
+- adapter type and link speed
+- PC IP, gateway, and DNS
+- Game Mode network readiness
+
+If Xenon sees a local UniFi console, the Network page shows a `Connect UniFi` card. This follows the same local-first shape as Home Assistant: use a local UniFi console user, not cloud scraping or hidden system setup. Xenon stores the UniFi password with Windows per-user protection and keeps it out of plain config files.
+
+Local endpoint:
 
 ```text
 http://127.0.0.1:8976/api/unifi/network
 ```
 
-That endpoint auto-detects common local UniFi OS console addresses and gives the dashboard a setup-free UniFi state. Full client, AP, app, and camera stats can be added later with a local credential flow, but the basic UniFi panel no longer requires a separate helper service.
+Link endpoint:
+
+```text
+http://127.0.0.1:8976/api/unifi/network/link
+```
+
+When linked, Xenon reads local UniFi Network client and AP stats from the controller and folds them into the Network page and the compact Game Mode network strip. If UniFi is not linked, Network Monitor still remains useful from native Windows metrics.
 
 ## GPU Power In System Monitor
 

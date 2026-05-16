@@ -10,6 +10,8 @@ public sealed class AppConfig
 
     public HueConfig Hue { get; set; } = new();
 
+    public UniFiConfig UniFi { get; set; } = new();
+
     public DashboardConfig Dashboard { get; set; } = new();
 
     public List<LauncherEntryConfig> Launchers { get; set; } = [];
@@ -36,6 +38,17 @@ public sealed class HueConfig
     public string AppKey { get; set; } = "";
 
     public string ClientKey { get; set; } = "";
+}
+
+public sealed class UniFiConfig
+{
+    public string Host { get; set; } = "";
+
+    public string Username { get; set; } = "";
+
+    public string Password { get; set; } = "";
+
+    public string Site { get; set; } = "default";
 }
 
 public sealed class DashboardConfig
@@ -132,6 +145,17 @@ public sealed class DashboardConfigRequest
 public sealed class HueLinkRequest
 {
     public string? BridgeIp { get; set; }
+}
+
+public sealed class UniFiLinkRequest
+{
+    public string? Host { get; set; }
+
+    public string? Username { get; set; }
+
+    public string? Password { get; set; }
+
+    public string? Site { get; set; }
 }
 
 public sealed class AudioDeviceRequest
