@@ -4,6 +4,7 @@ import path from "node:path";
 import https from "node:https";
 import { fileURLToPath } from "node:url";
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import http from "node:http";
 
@@ -15,6 +16,7 @@ const exampleConfigPath = path.join(__dirname, "config.example.json");
 const audioControlPath = path.join(__dirname, "audio-control.ps1");
 const dashboardOnboardingVersion = 1;
 const maxJsonBodyBytes = 256 * 1024;
+const sensitiveQueryPattern = /((?:api[_-]?key|appid|token|secret|password|pass|sig|signature|auth|key)=)[^&\s"]+/gi;
 let config = loadConfig();
 const statusCache = {
   system: createStatusCache(15000),
@@ -126,6 +128,26 @@ function json(response, statusCode, payload, corsOrigin = "") {
 
   response.writeHead(statusCode, headers);
   response.end(JSON.stringify(payload));
+}
+
+function writeStructuredLog(eventName, fields = {}) {
+  console.log(JSON.stringify({
+    eventName,
+    ...fields
+  }));
+}
+
+function createRequestId() {
+  return randomUUID().replace(/-/g, "").slice(0, 12);
+}
+
+function sanitizeLogPath(requestUrl) {
+  try {
+    const parsed = createLocalUrl(requestUrl);
+    return `${parsed.pathname}${parsed.search.replace(sensitiveQueryPattern, "$1<redacted>")}`;
+  } catch {
+    return String(requestUrl || "/").replace(sensitiveQueryPattern, "$1<redacted>");
+  }
 }
 
 function corsOriginForRequest(request) {
@@ -1733,27 +1755,33 @@ async function setAudioSessionMute(sessionId, muted) {
 }
 
 const server = http.createServer(async (request, response) => {
-  if (!request.url) {
-    json(response, 400, { error: "Invalid request" });
-    return;
-  }
-
-  const corsOrigin = corsOriginForRequest(request);
-  if (corsOrigin === null) {
-    json(response, 403, { error: "Origin not allowed" });
-    return;
-  }
-
-  applyCorsHeaders(response, corsOrigin);
-
-  if (request.method === "OPTIONS") {
-    json(response, 204, {}, corsOrigin);
-    return;
-  }
-
-  const requestUrl = createLocalUrl(request.url);
+  const requestId = createRequestId();
+  const startedAt = performance.now();
+  const method = request.method || "GET";
+  const logPath = sanitizeLogPath(request.url || "/");
+  response.setHeader("X-Request-ID", requestId);
 
   try {
+    if (!request.url) {
+      json(response, 400, { error: "Invalid request" });
+      return;
+    }
+
+    const corsOrigin = corsOriginForRequest(request);
+    if (corsOrigin === null) {
+      json(response, 403, { error: "Origin not allowed" });
+      return;
+    }
+
+    applyCorsHeaders(response, corsOrigin);
+
+    if (request.method === "OPTIONS") {
+      json(response, 204, {}, corsOrigin);
+      return;
+    }
+
+    const requestUrl = createLocalUrl(request.url);
+
     if (requestUrl.pathname === "/api/health") {
       const setup = await getSetupSummary();
       json(response, 200, {
@@ -1917,6 +1945,14 @@ const server = http.createServer(async (request, response) => {
     json(response, statusCode, {
       error: statusCode >= 500 ? "Request failed" : error.message
     });
+  } finally {
+    writeStructuredLog("http_request", {
+      requestId,
+      method,
+      path: logPath,
+      statusCode: response.statusCode,
+      durationMs: Math.round((performance.now() - startedAt) * 10) / 10
+    });
   }
 });
 
@@ -1938,5 +1974,7 @@ server.listen(config.port, "127.0.0.1", () => {
   startBackgroundCollectors().catch((error) => {
     console.warn("Background collectors failed to start", error);
   });
-  console.log(`XENEON bridge listening on http://127.0.0.1:${config.port}`);
+  writeStructuredLog("bridge_listening", {
+    origin: `http://127.0.0.1:${config.port}`
+  });
 });
