@@ -8,6 +8,7 @@ Release-readiness pass run on branch `codex/coderabbit-release-readiness`.
   - Initial release-diff chunk review completed for `app`, `js`, and `widgets`.
   - CodeRabbit raised 2 issues, both in `widgets/setup-guide.html`.
   - Branch diff review after the CodeRabbit fix completed with 0 findings.
+  - Final branch review after release-readiness checklist changes is blocked by CodeRabbit rate limiting. Multiple retries returned `errorType: rate_limit`; the latest retry on the `app` slice returned a wait time of 11 minutes and 5 seconds.
 - Findings resolved:
   - P0: 0
   - P1: 2
@@ -23,6 +24,9 @@ Release-readiness pass run on branch `codex/coderabbit-release-readiness`.
   - `npm run release:ready`
   - `scripts/assert-release-ready.ps1 -AllowGitHubSupportPath -InstallerPath <built installer>`
   - `scripts/test-windows-install.ps1` non-mutating installed-app smoke check
+- Exit criteria status:
+  - Local audits, checks, artifact build, and release gates pass.
+  - Final CodeRabbit zero-finding confirmation is not complete because CodeRabbit is rate-limiting the branch review.
 
 ## Resolved Findings
 
@@ -45,6 +49,7 @@ Release-readiness pass run on branch `codex/coderabbit-release-readiness`.
 
 ## Known Limitations
 
+- Final CodeRabbit review of the complete release-readiness branch is blocked by CodeRabbit rate limiting in this session. The last completed branch-diff CodeRabbit run, before the later checklist hardening commits, reported 0 findings.
 - The Windows installer remains unsigned for the free beta; release readiness reports this as an expected beta warning.
 - Support remains GitHub Issues and GitHub Security Advisories for the free beta; this is an expected beta warning.
 - A destructive clean install/uninstall cycle on a fresh Windows profile or VM was not run in this local pass because a current-user installation already exists. The non-mutating installed-app smoke check passed.
