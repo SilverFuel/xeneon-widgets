@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -301,11 +302,17 @@ public sealed class BridgeManager : IDisposable
 
     private async Task HandleRequestAsync(HttpListenerContext context, CancellationToken cancellationToken)
     {
+        var request = context.Request;
+        var response = context.Response;
+        var requestId = CreateRequestId();
+        var startedAt = Stopwatch.GetTimestamp();
+        var method = request.HttpMethod;
+        var path = request.Url?.PathAndQuery ?? "/";
+
         try
         {
-            var request = context.Request;
-            var response = context.Response;
-            var path = request.Url?.AbsolutePath ?? "/";
+            response.Headers["X-Request-ID"] = requestId;
+            path = request.Url?.AbsolutePath ?? "/";
 
             if (!TryAuthorizeOrigin(request, out var corsOrigin))
             {
@@ -553,6 +560,10 @@ public sealed class BridgeManager : IDisposable
             catch
             {
             }
+        }
+        finally
+        {
+            LogRequestBoundary(requestId, method, path, response.StatusCode, Stopwatch.GetElapsedTime(startedAt));
         }
     }
 
@@ -1621,6 +1632,26 @@ public sealed class BridgeManager : IDisposable
         return uri.IsDefaultPort
             ? $"{uri.Scheme}://{uri.Host}"
             : $"{uri.Scheme}://{uri.Host}:{uri.Port}";
+    }
+
+    private void LogRequestBoundary(string requestId, string method, string path, int statusCode, TimeSpan elapsed)
+    {
+        var payload = new
+        {
+            eventName = "http_request",
+            requestId,
+            method,
+            path = SanitizeSupportText(path),
+            statusCode,
+            durationMs = Math.Round(elapsed.TotalMilliseconds, 1)
+        };
+
+        _logger.Info(JsonSerializer.Serialize(payload, JsonOptions));
+    }
+
+    private static string CreateRequestId()
+    {
+        return Guid.NewGuid().ToString("N")[..12];
     }
 
     private static void ApplyCorsHeaders(HttpListenerResponse response, string? corsOrigin)
