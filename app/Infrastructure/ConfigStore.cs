@@ -121,12 +121,16 @@ public sealed class ConfigStore
         normalized.Weather ??= new WeatherConfig();
         normalized.Calendar ??= new CalendarConfig();
         normalized.Hue ??= new HueConfig();
+        normalized.UniFi ??= new UniFiConfig();
         normalized.Dashboard ??= new DashboardConfig();
         normalized.Launchers ??= [];
         normalized.Weather.City = normalized.Weather.City?.Trim() ?? "";
         normalized.Weather.Units = string.Equals(normalized.Weather.Units, "imperial", StringComparison.OrdinalIgnoreCase)
             ? "imperial"
             : "metric";
+        normalized.UniFi.Host = NormalizeHost(normalized.UniFi.Host);
+        normalized.UniFi.Username = normalized.UniFi.Username?.Trim() ?? "";
+        normalized.UniFi.Site = NormalizeSite(normalized.UniFi.Site);
         normalized.Dashboard.AutoProvisioningVersion = normalized.Dashboard.AutoProvisioningVersion <= 0 ? 1 : normalized.Dashboard.AutoProvisioningVersion;
         normalized.Dashboard.OnboardingVersion = normalized.Dashboard.OnboardingVersion <= 0 ? 1 : normalized.Dashboard.OnboardingVersion;
         normalized.Dashboard.PreferredDisplayId = normalized.Dashboard.PreferredDisplayId?.Trim() ?? "";
@@ -155,6 +159,34 @@ public sealed class ConfigStore
     {
         var normalized = value?.Trim().ToLowerInvariant() ?? "";
         return allowed.Contains(normalized, StringComparer.OrdinalIgnoreCase) ? normalized : fallback;
+    }
+
+    private static string NormalizeHost(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return "";
+        }
+
+        var trimmed = input.Trim();
+        try
+        {
+            var uri = trimmed.Contains("://", StringComparison.Ordinal)
+                ? new Uri(trimmed)
+                : new Uri($"https://{trimmed}");
+            return uri.Host;
+        }
+        catch
+        {
+            var slashIndex = trimmed.IndexOf('/');
+            return slashIndex >= 0 ? trimmed[..slashIndex] : trimmed;
+        }
+    }
+
+    private static string NormalizeSite(string? input)
+    {
+        var trimmed = input?.Trim() ?? "";
+        return string.IsNullOrWhiteSpace(trimmed) ? "default" : trimmed;
     }
 
     private static string NormalizeLauncherDisplayName(string executablePath, string? displayName)
@@ -190,6 +222,11 @@ public sealed class ConfigStore
         {
             _secretStore.Set("hue.clientKey", config.Hue.ClientKey);
         }
+
+        if (!string.IsNullOrWhiteSpace(config.UniFi.Password))
+        {
+            _secretStore.Set("unifi.password", config.UniFi.Password);
+        }
     }
 
     private void ApplyProtectedSecrets(AppConfig config)
@@ -211,24 +248,20 @@ public sealed class ConfigStore
         {
             config.Hue.ClientKey = hueClientKey;
         }
+
+        var unifiPassword = _secretStore.Get("unifi.password");
+        if (!string.IsNullOrWhiteSpace(unifiPassword))
+        {
+            config.UniFi.Password = unifiPassword;
+        }
     }
 
     private void SaveProtectedSecrets(AppConfig config)
     {
-        if (!string.IsNullOrWhiteSpace(config.Weather.ApiKey))
-        {
-            _secretStore.Set("weather.apiKey", config.Weather.ApiKey);
-        }
-
-        if (!string.IsNullOrWhiteSpace(config.Hue.AppKey))
-        {
-            _secretStore.Set("hue.appKey", config.Hue.AppKey);
-        }
-
-        if (!string.IsNullOrWhiteSpace(config.Hue.ClientKey))
-        {
-            _secretStore.Set("hue.clientKey", config.Hue.ClientKey);
-        }
+        _secretStore.Set("weather.apiKey", config.Weather.ApiKey);
+        _secretStore.Set("hue.appKey", config.Hue.AppKey);
+        _secretStore.Set("hue.clientKey", config.Hue.ClientKey);
+        _secretStore.Set("unifi.password", config.UniFi.Password);
     }
 
     private static void RemoveSecretsFromDiskConfig(AppConfig config)
@@ -236,5 +269,6 @@ public sealed class ConfigStore
         config.Weather.ApiKey = "";
         config.Hue.AppKey = "";
         config.Hue.ClientKey = "";
+        config.UniFi.Password = "";
     }
 }

@@ -785,78 +785,233 @@
   }
 
   function normalizeUnifiSnapshot(raw) {
+    return normalizeUniFiNetworkPayload(raw);
+  }
+
+  function normalizeNetworkSnapshot(raw) {
     var data = raw || {};
-    var clients = data.clients || {};
-    var aps = Array.isArray(data.aps) ? data.aps : [];
     return {
-      gateway: text(data.gateway, "UniFi Gateway"),
-      source: text(data.source, "UniFi network"),
+      supported: data.supported !== false,
       status: text(data.status, ""),
+      stale: Boolean(data.stale),
+      source: text(data.source, "native host"),
       message: text(data.message, ""),
-      detected: Boolean(data.detected),
-      provider: text(data.provider, ""),
-      clients: {
-        total: optionalNumber(clients.total) || 0,
-        wifi: optionalNumber(clients.wifi) || 0,
-        wired: optionalNumber(clients.wired) || 0,
-        guests: optionalNumber(clients.guests) || 0
-      },
-      aps: aps
+      download: optionalNumber(data.download),
+      upload: optionalNumber(data.upload),
+      ping: optionalNumber(data.ping),
+      type: text(data.type, "unknown"),
+      name: text(data.name, ""),
+      description: text(data.description, ""),
+      linkSpeedMbps: optionalNumber(data.linkSpeedMbps),
+      ipAddress: text(data.ipAddress, ""),
+      gateway: text(data.gateway, ""),
+      dnsServers: Array.isArray(data.dnsServers) ? data.dnsServers.filter(Boolean).map(String) : []
     };
   }
 
-  function renderNetworkWidget(bridgeData, unifiData, statusText, statusTone) {
-    var connectionCopy = unifiData && unifiData.provider ? unifiData.provider : text(bridgeData.source, "Native host");
-    var unifiCard = unifiData && unifiData.detected
-      ? '<div class="inline-grid inline-grid--2">' +
-          '<article class="list-card inline-card inline-card--span-2">' +
-            '<div class="inline-card-header">' +
-              '<div>' +
-                '<div class="metric-label">UniFi</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(unifiData.gateway) + '</div>' +
-              '</div>' +
-              statusPill("Detected", "good") +
-            '</div>' +
-            '<div class="inline-kpis">' +
-              '<div class="inline-kpi"><strong>' + escapeHtml(String(unifiData.clients.total)) + '</strong><span>Clients</span></div>' +
-              '<div class="inline-kpi"><strong>' + escapeHtml(String(unifiData.clients.wifi)) + '</strong><span>Wi-Fi</span></div>' +
-              '<div class="inline-kpi"><strong>' + escapeHtml(String(unifiData.clients.wired)) + '</strong><span>Wired</span></div>' +
-              '<div class="inline-kpi"><strong>' + escapeHtml(String(unifiData.aps.length)) + '</strong><span>APs</span></div>' +
-            '</div>' +
-          '</article>' +
-        '</div>'
-      : "";
+  function networkQualityScore(bridgeData, unifiData) {
+    var ping = optionalNumber(bridgeData && bridgeData.ping);
+    var score = 100;
+    if (!bridgeData || bridgeData.supported === false) {
+      score -= 45;
+    }
+    if (bridgeData && bridgeData.stale) {
+      score -= 18;
+    }
+    if (ping == null) {
+      score -= 32;
+    } else if (ping >= 120) {
+      score -= 34;
+    } else if (ping >= 80) {
+      score -= 22;
+    } else if (ping >= 55) {
+      score -= 10;
+    }
+    if (unifiData && unifiData.configured && !unifiData.linked) {
+      score -= 10;
+    }
+    return clamp(Math.round(score), 0, 100);
+  }
+
+  function networkQualityTone(score) {
+    if (score < 55) {
+      return "danger";
+    }
+    if (score < 78) {
+      return "warn";
+    }
+    return "good";
+  }
+
+  function networkQualityLabel(score) {
+    if (score < 55) {
+      return "Needs attention";
+    }
+    if (score < 78) {
+      return "Playable";
+    }
+    return "Game ready";
+  }
+
+  function networkTypeLabel(value) {
+    var normalized = text(value, "unknown").toLowerCase();
+    if (normalized === "wifi") {
+      return "Wi-Fi";
+    }
+    if (normalized === "ethernet") {
+      return "Ethernet";
+    }
+    return normalized === "unknown" ? "--" : normalized;
+  }
+
+  function networkLinkSpeed(value) {
+    var parsed = optionalNumber(value);
+    if (parsed == null || parsed <= 0) {
+      return "--";
+    }
+    return parsed >= 1000 ? (parsed / 1000).toFixed(parsed >= 10000 ? 0 : 1) + " Gbps" : Math.round(parsed) + " Mbps";
+  }
+
+  function networkPill(label, value, detail, tone) {
+    return '' +
+      '<div class="network-pill" data-tone="' + escapeHtml(tone || "muted") + '">' +
+        '<span>' + escapeHtml(label) + '</span>' +
+        '<strong>' + escapeHtml(value) + '</strong>' +
+        '<small>' + escapeHtml(detail || "") + '</small>' +
+      '</div>';
+  }
+
+  function renderNetworkQualityCard(bridgeData, unifiData) {
+    var score = networkQualityScore(bridgeData, unifiData);
+    var tone = networkQualityTone(score);
+    var label = networkQualityLabel(score);
+    var ping = optionalNumber(bridgeData.ping);
+    var detail = ping == null ? "No ping sample" : Math.round(ping) + " ms latency";
+    return '' +
+      '<article class="list-card inline-card network-quality-card" data-tone="' + escapeHtml(tone) + '">' +
+        '<div class="network-quality-score">' +
+          '<span>Readiness</span>' +
+          '<strong>' + escapeHtml(String(score)) + '</strong>' +
+          '<small>' + escapeHtml(label) + '</small>' +
+        '</div>' +
+        '<div class="network-quality-details">' +
+          networkPill("Ping", ping == null ? "--" : Math.round(ping) + " ms", detail, ping == null ? "warn" : ping >= 100 ? "danger" : ping >= 60 ? "warn" : "good") +
+          networkPill("Link", networkTypeLabel(bridgeData.type), networkLinkSpeed(bridgeData.linkSpeedMbps), bridgeData.type === "wifi" ? "warn" : "good") +
+          networkPill("Gateway", bridgeData.gateway || "--", bridgeData.ipAddress || "Local adapter", bridgeData.gateway ? "good" : "warn") +
+        '</div>' +
+      '</article>';
+  }
+
+  function renderUniFiConnectCard(unifiData, state) {
+    var host = text(unifiData.gatewayIp, text(unifiData.host, ""));
+    var linked = Boolean(unifiData.linked);
+    var detected = Boolean(unifiData.detected);
+    var configured = Boolean(unifiData.configured);
+    var title = linked ? "UniFi linked" : detected ? "UniFi detected" : configured ? "Reconnect UniFi" : "Connect UniFi";
+    var copy = linked
+      ? unifiData.gateway
+      : detected
+        ? text(unifiData.gatewayCopy, "Local console found")
+        : "Local account";
+    var status = linked ? statusPill("Linked", "good") : detected ? statusPill("Detected", "good") : statusPill(configured ? "Reconnect" : "Optional", configured ? "warn" : "muted");
+    return '' +
+      '<article class="list-card inline-card network-unifi-card">' +
+        '<div class="inline-card-header">' +
+          '<div>' +
+            '<div class="metric-label">' + escapeHtml(title) + '</div>' +
+            '<div class="router-inline-copy">' + escapeHtml(copy) + '</div>' +
+          '</div>' +
+          status +
+        '</div>' +
+        '<div class="network-unifi-kpis">' +
+          networkPill("Clients", String(unifiData.clients.total), unifiData.clients.wifi + " Wi-Fi / " + unifiData.clients.wired + " wired", linked ? "good" : "muted") +
+          networkPill("APs", String(unifiData.aps.length), unifiData.site ? "Site " + unifiData.site : "Access points", linked ? "good" : "muted") +
+          networkPill("Console", host || "--", unifiData.provider || "UniFi", detected || linked ? "good" : "muted") +
+        '</div>' +
+        '<form class="network-unifi-form" data-action="unifi-connect">' +
+          '<div class="inline-form-grid inline-form-grid--2">' +
+            '<label class="inline-field"><span>Host</span><input class="inline-input" type="text" name="host" value="' + escapeHtml(host) + '" placeholder="192.168.1.1"></label>' +
+            '<label class="inline-field"><span>Site</span><input class="inline-input" type="text" name="site" value="' + escapeHtml(text(unifiData.site, "default")) + '" placeholder="default"></label>' +
+            '<label class="inline-field"><span>Username</span><input class="inline-input" type="text" name="username" autocomplete="username" placeholder="local UniFi user"></label>' +
+            '<label class="inline-field"><span>Password</span><input class="inline-input" type="password" name="password" autocomplete="current-password" placeholder="' + (linked ? "saved" : "password") + '"></label>' +
+          '</div>' +
+          '<div class="inline-actions network-unifi-actions">' +
+            '<button class="inline-button is-primary" type="submit"' + (state.connecting ? " disabled" : "") + '>' + (state.connecting ? "Connecting" : linked ? "Update link" : "Connect") + '</button>' +
+            (linked || configured ? '<button class="inline-button" type="button" data-action="unifi-disconnect"' + (state.connecting ? " disabled" : "") + '>Forget</button>' : '') +
+            '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
+          '</div>' +
+          (state.formMessage ? '<div class="network-form-message" data-tone="' + escapeHtml(state.formTone || "muted") + '">' + escapeHtml(state.formMessage) + '</div>' : '') +
+        '</form>' +
+      '</article>';
+  }
+
+  function renderNetworkListCard(title, copy, rows, emptyTitle, emptyCopy, extraClass) {
+    return '' +
+      '<article class="list-card inline-card network-list-card ' + escapeHtml(extraClass || "") + '">' +
+        '<div class="inline-card-header"><div><div class="metric-label">' + escapeHtml(title) + '</div><div class="router-inline-copy">' + escapeHtml(copy) + '</div></div></div>' +
+        '<div class="inline-list network-compact-list">' + (rows.length ? rows.join("") : emptyState(emptyTitle, emptyCopy)) + '</div>' +
+      '</article>';
+  }
+
+  function renderNetworkWidget(bridgeData, unifiData, statusText, statusTone, state) {
+    var score = networkQualityScore(bridgeData, unifiData);
+    var topClients = (unifiData.topClients || []).slice(0, 4).map(function (client) {
+      return '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">' + escapeHtml(text(client.name, "Client")) + '</div><div class="inline-list-copy">' + escapeHtml(text(client.ip, text(client.connection, "Client"))) + '</div></div><div class="inline-list-meta">' + escapeHtml(text(client.usage, text(client.rate, "--"))) + '</div></div>';
+    });
+    var apRows = (unifiData.aps || []).slice(0, 4).map(function (ap) {
+      return '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">' + escapeHtml(text(ap.name, "Access Point")) + '</div><div class="inline-list-copy">' + escapeHtml(text(ap.status, "online") + (ap.channel ? " / " + ap.channel : "")) + '</div></div><div class="inline-list-meta">' + escapeHtml(String(optionalNumber(ap.clients) || 0) + " clients") + '</div></div>';
+    });
+    var dns = bridgeData.dnsServers.length ? bridgeData.dnsServers.join(", ") : "--";
 
     return '' +
-      '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
+      '<div class="inline-widget-shell network-command-shell">' +
+        '<div class="inline-toolbar network-command-toolbar">' +
           '<div>' +
-            '<div class="eyebrow">Connectivity</div>' +
-            '<h3 class="inline-title">Network monitor</h3>' +
-            '<p class="inline-copy">Download, upload, ping, and connection health.</p>' +
+            '<div class="eyebrow">Network</div>' +
+            '<h3 class="inline-title">Network health</h3>' +
+            '<p class="inline-copy">' + escapeHtml(networkQualityLabel(score) + " / " + (unifiData.linked ? "UniFi linked" : unifiData.detected ? "UniFi detected" : "local metrics")) + '</p>' +
           '</div>' +
-          statusPill(statusText, statusTone) +
+          '<div class="inline-actions">' +
+            statusPill(statusText, statusTone) +
+          '</div>' +
         '</div>' +
-        '<div class="inline-grid inline-grid--4">' +
-          metricCard("Download", formatRate(bridgeData.download), "Live throughput") +
-          metricCard("Upload", formatRate(bridgeData.upload), "Live throughput") +
-          metricCard("Ping", formatValue(bridgeData.ping, " ms"), "Round-trip latency") +
-          metricCard("Connection", text(bridgeData.type, "--"), connectionCopy) +
+        '<div class="network-command-grid">' +
+          renderNetworkQualityCard(bridgeData, unifiData) +
+          '<section class="network-kpi-grid">' +
+            metricCard("Download", formatRate(bridgeData.download), "Live throughput") +
+            metricCard("Upload", formatRate(bridgeData.upload), "Live throughput") +
+            metricCard("Ping", formatValue(bridgeData.ping, " ms"), "Round trip") +
+            metricCard("Adapter", networkTypeLabel(bridgeData.type), networkLinkSpeed(bridgeData.linkSpeedMbps)) +
+          '</section>' +
+          renderUniFiConnectCard(unifiData, state || {}) +
+          '<article class="list-card inline-card network-adapter-card">' +
+            '<div class="inline-card-header"><div><div class="metric-label">Local path</div><div class="router-inline-copy">' + escapeHtml(text(bridgeData.name, bridgeData.source)) + '</div></div></div>' +
+            '<div class="network-path-grid">' +
+              networkPill("PC IP", bridgeData.ipAddress || "--", bridgeData.description || "Adapter", bridgeData.ipAddress ? "good" : "warn") +
+              networkPill("Gateway", bridgeData.gateway || "--", "Router", bridgeData.gateway ? "good" : "warn") +
+              networkPill("DNS", dns, "Resolvers", bridgeData.dnsServers.length ? "good" : "muted") +
+            '</div>' +
+          '</article>' +
+          renderNetworkListCard("Top clients", "UniFi usage", topClients, unifiData.linked ? "No client data" : "Link UniFi", unifiData.linked ? "Controller returned no clients." : "Clients appear after UniFi is linked.", "network-list-card--clients") +
+          renderNetworkListCard("Access points", "UniFi radios", apRows, unifiData.linked ? "No AP data" : "Link UniFi", unifiData.linked ? "Controller returned no access points." : "APs appear after UniFi is linked.", "network-list-card--aps") +
         '</div>' +
-        unifiCard +
       '</div>';
   }
 
   function mountNetworkWidget(widget, container, env) {
+    var cleanups = [];
     var state = {
-      bridge: {},
-      unifi: null,
+      bridge: normalizeNetworkSnapshot({}),
+      unifi: normalizeUnifiSnapshot({}),
       statusText: "Loading",
-      statusTone: "warn"
+      statusTone: "warn",
+      connecting: false,
+      formMessage: "",
+      formTone: "muted"
     };
 
     function redraw() {
-      container.innerHTML = renderNetworkWidget(state.bridge, state.unifi, state.statusText, state.statusTone);
+      container.innerHTML = renderNetworkWidget(state.bridge, state.unifi, state.statusText, state.statusTone, state);
     }
 
     function refresh() {
@@ -869,19 +1024,93 @@
         : Promise.resolve(null);
 
       return Promise.all([bridgeRequest, unifiRequest]).then(function (results) {
-        state.bridge = results[0] || {};
-        state.unifi = results[1] && results[1].detected ? results[1] : null;
-        state.statusText = state.unifi ? "UniFi detected" : statusTextFromPayload(state.bridge, "Live");
-        state.statusTone = state.unifi ? toneForState(state.unifi.status || "live") : statusToneFromPayload(state.bridge, "live");
+        state.bridge = normalizeNetworkSnapshot(results[0] || {});
+        state.unifi = results[1] || normalizeUnifiSnapshot({});
+        state.statusText = state.unifi.linked ? "UniFi linked" : state.unifi.detected ? "UniFi detected" : statusTextFromPayload(state.bridge, "Live");
+        state.statusTone = state.unifi.linked || state.unifi.detected ? toneForState(state.unifi.status || "live") : statusToneFromPayload(state.bridge, "live");
         redraw();
       }, function (error) {
-        state.bridge = { source: error.message || "Unavailable" };
-        state.unifi = null;
+        state.bridge = normalizeNetworkSnapshot({ source: error.message || "Unavailable", status: "error" });
+        state.unifi = normalizeUnifiSnapshot({});
         state.statusText = error.message || "Unavailable";
         state.statusTone = "danger";
         redraw();
       });
     }
+
+    function connect(form) {
+      var data = new FormData(form);
+      state.connecting = true;
+      state.formMessage = "";
+      redraw();
+      return requestJson(buildBridgeUrl(env, "/api/unifi/network/link"), {
+        method: "POST",
+        body: {
+          host: data.get("host"),
+          username: data.get("username"),
+          password: data.get("password"),
+          site: data.get("site")
+        }
+      }, 12000).then(function (payload) {
+        state.unifi = normalizeUnifiSnapshot(payload);
+        state.statusText = "UniFi linked";
+        state.statusTone = "good";
+        state.formMessage = "Linked locally";
+        state.formTone = "good";
+      }, function (error) {
+        state.formMessage = error.message || "UniFi link failed";
+        state.formTone = "danger";
+        state.statusText = "Link failed";
+        state.statusTone = "danger";
+      }).finally(function () {
+        state.connecting = false;
+        redraw();
+      });
+    }
+
+    function disconnect() {
+      state.connecting = true;
+      state.formMessage = "";
+      redraw();
+      return requestJson(buildBridgeUrl(env, "/api/unifi/network/disconnect"), {
+        method: "POST",
+        body: {}
+      }, 5000).then(function (payload) {
+        state.unifi = normalizeUnifiSnapshot(payload);
+        state.statusText = "UniFi optional";
+        state.statusTone = "muted";
+        state.formMessage = "UniFi forgotten";
+        state.formTone = "muted";
+      }, function (error) {
+        state.formMessage = error.message || "Forget failed";
+        state.formTone = "danger";
+      }).finally(function () {
+        state.connecting = false;
+        redraw();
+      });
+    }
+
+    addListener(cleanups, container, "submit", function (event) {
+      var form = event.target && event.target.closest ? event.target.closest('form[data-action="unifi-connect"]') : null;
+      if (!form) {
+        return;
+      }
+      event.preventDefault();
+      connect(form);
+    });
+
+    addListener(cleanups, container, "click", function (event) {
+      var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
+      if (!target) {
+        return;
+      }
+      if (target.getAttribute("data-action") === "refresh") {
+        refresh();
+      }
+      if (target.getAttribute("data-action") === "unifi-disconnect") {
+        disconnect();
+      }
+    });
 
     var loop = createTimerLoop(refresh, 4000);
     redraw();
@@ -891,6 +1120,7 @@
       refresh: loop.refresh,
       destroy: function () {
         loop.destroy();
+        runCleanups(cleanups);
         container.innerHTML = "";
       }
     };
@@ -2337,9 +2567,14 @@
     var clients = payload.clients || {};
     return {
       gateway: text(payload.gateway || payload.gatewayCopy, "UniFi Gateway"),
+      gatewayIp: text(payload.gatewayIp, ""),
+      host: text(payload.host, ""),
+      site: text(payload.site, "default"),
       source: text(payload.source, "UniFi endpoint"),
       status: text(payload.status, ""),
       message: text(payload.message, ""),
+      configured: Boolean(payload.configured),
+      linked: Boolean(payload.linked),
       detected: Boolean(payload.detected),
       provider: text(payload.provider, ""),
       monthlyUsageGb: optionalNumber(payload.monthlyUsageGb),
@@ -2359,7 +2594,8 @@
       },
       aps: Array.isArray(payload.aps) ? payload.aps : [],
       topClients: Array.isArray(payload.topClients) ? payload.topClients : [],
-      topApps: Array.isArray(payload.topApps) ? payload.topApps : []
+      topApps: Array.isArray(payload.topApps) ? payload.topApps : [],
+      connectivity: Array.isArray(payload.connectivity) ? payload.connectivity : []
     };
   }
 
@@ -4010,10 +4246,10 @@
     {
       id: "homelab",
       name: "Home Lab",
-      copy: "Network, NAS, Plex, UniFi, and automation panels move forward.",
+      copy: "Network, NAS, Plex, cameras, and automation panels move forward.",
       themeId: "verdant",
       pack: "homelab",
-      layout: ["network", "nas", "plex", "unifi-network", "unifi-camera", "automation", "hue", "system", "marketplace", "privacy"]
+      layout: ["network", "nas", "plex", "unifi-camera", "automation", "hue", "system", "marketplace", "privacy"]
     },
     {
       id: "minimal",
@@ -4047,8 +4283,8 @@
     {
       id: "homelab",
       name: "Home Lab",
-      copy: "NAS, Plex, UniFi, cameras, automation, Hue, and network health.",
-      layout: ["network", "nas", "plex", "unifi-network", "unifi-camera", "automation", "hue", "system", "marketplace"]
+      copy: "NAS, Plex, cameras, automation, Hue, and network health.",
+      layout: ["network", "nas", "plex", "unifi-camera", "automation", "hue", "system", "marketplace"]
     }
   ];
 
@@ -4437,6 +4673,28 @@
     return (parsed >= 10 ? Math.round(parsed) : parsed.toFixed(1)) + " Mbps";
   }
 
+  function gameFocusNetworkSummary(network) {
+    var data = network || {};
+    var unifi = data.unifi || normalizeUnifiSnapshot({});
+    var ping = optionalNumber(data.ping != null ? data.ping : unifi.latencyMs);
+    var score = networkQualityScore(normalizeNetworkSnapshot(data), unifi);
+    var tone = networkQualityTone(score);
+    var provider = unifi.linked ? "UniFi" : unifi.detected ? "UniFi ready" : networkTypeLabel(data.type);
+    return {
+      ping: ping,
+      pingLabel: ping == null ? "--" : Math.round(ping) + " ms",
+      score: score,
+      tone: tone,
+      provider: provider,
+      detail: networkQualityLabel(score),
+      download: formatGameFocusRate(data.download),
+      upload: formatGameFocusRate(data.upload),
+      clients: unifi.linked ? String(unifi.clients.total) : "--",
+      aps: unifi.linked ? String(unifi.aps.length) : "--",
+      linkSpeed: networkLinkSpeed(data.linkSpeedMbps)
+    };
+  }
+
   function gameFocusAudioOutput(audio) {
     var data = normalizeAudioPayload(audio || {});
     return data.devices.filter(function (device) {
@@ -4587,8 +4845,9 @@
     var activeAudioSessions = audioSessions.length;
     var voiceLabel = gameFocusVoiceLabel(audioSessions);
     var networkData = network || {};
-    var ping = optionalNumber(networkData.ping);
-    var pingLabel = ping == null ? "--" : Math.round(ping) + " ms";
+    var networkSummary = gameFocusNetworkSummary(networkData);
+    var ping = networkSummary.ping;
+    var pingLabel = networkSummary.pingLabel;
     var stateLabel = gameFocusStateLabel(game);
     var focusDetail = game && game.focused === false
       ? "Game running in background"
@@ -4611,7 +4870,7 @@
           '</div>' +
           '<div class="game-focus-top-status">' +
             renderGameFocusStatusBlock("Audio", audioState, audioName, audioData.muted ? "warn" : "good") +
-            renderGameFocusStatusBlock("Network", pingLabel, text(networkData.type, "Ping"), gameFocusPingTone(ping)) +
+            renderGameFocusStatusBlock("Network", pingLabel, networkSummary.provider + " / " + networkSummary.detail, networkSummary.tone) +
             renderGameFocusStatusBlock("Pressure", pressureLabel, pressureDetail, gameFocusLoadTone(pressure, 82, 94)) +
           '</div>' +
           '<button class="inline-button game-focus-home" type="button" data-action="game-face-home">Home</button>' +
@@ -4639,7 +4898,7 @@
             renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "Load", system && system.gpu, gameFocusLoadTone(system && system.gpu, 88, 96)) +
             renderGameFocusHudItem("CPU", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu, gameFocusLoadTone(system && system.cpu, 82, 94)) +
             renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram, gameFocusLoadTone(system && system.ram, 82, 92)) +
-            renderGameFocusHudItem("Ping", pingLabel, text(networkData.type, "Network"), gameFocusProgress(80 - Math.min(ping || 80, 80), 80), gameFocusPingTone(ping)) +
+            renderGameFocusHudItem("Ping", pingLabel, networkSummary.provider, gameFocusProgress(80 - Math.min(ping || 80, 80), 80), gameFocusPingTone(ping)) +
           '</section>' +
           '<aside class="game-focus-card game-focus-card--utility">' +
             '<div class="game-focus-control-row">' +
@@ -4656,9 +4915,15 @@
                 '<span>Voice</span>' +
                 '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
               '</div>' +
-              '<div class="game-focus-network' + gameFocusToneClass(gameFocusPingTone(ping)) + '">' +
+              '<div class="game-focus-network' + gameFocusToneClass(networkSummary.tone) + '">' +
                 '<span>Network</span>' +
-                '<strong>' + escapeHtml(pingLabel) + '</strong>' +
+                '<strong>' + escapeHtml(networkSummary.detail) + '</strong>' +
+                '<small>' + escapeHtml("Down " + networkSummary.download + " / Up " + networkSummary.upload) + '</small>' +
+              '</div>' +
+              '<div class="game-focus-network' + gameFocusToneClass(networkSummary.clients === "--" ? "muted" : "good") + '">' +
+                '<span>UniFi</span>' +
+                '<strong>' + escapeHtml(networkSummary.clients) + '</strong>' +
+                '<small>' + escapeHtml(networkSummary.aps + " APs") + '</small>' +
               '</div>' +
             '</div>' +
             '<div class="game-focus-reason">' + escapeHtml((activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + detail) + '</div>' +
@@ -4669,6 +4934,7 @@
           '<strong>' + escapeHtml(platform) + '</strong>' +
           '<strong>' + escapeHtml(audioName + " " + audioState) + '</strong>' +
           '<strong>' + escapeHtml(ping == null ? "Network --" : "Ping " + pingLabel) + '</strong>' +
+          '<strong>' + escapeHtml(networkSummary.download + " down") + '</strong>' +
           '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
         '</footer>' +
       '</section>';
@@ -5491,13 +5757,21 @@
     }
 
     function refreshNetwork() {
-      return requestJson(buildBridgeUrl(env, "/api/network"), {}, 5000).then(function (payload) {
-        state.network = payload || {};
+      var nativeRequest = requestJson(buildBridgeUrl(env, "/api/network"), {}, 5000);
+      var unifiRequest = requestJson(getUniFiNetworkEndpoint(env), {}, 6000).then(normalizeUnifiSnapshot).catch(function () {
+        return normalizeUnifiSnapshot({});
+      });
+      return Promise.all([nativeRequest, unifiRequest]).then(function (results) {
+        state.network = Object.assign({}, results[0] || {}, {
+          unifi: results[1] || normalizeUnifiSnapshot({})
+        });
         if (!state.interacting) {
           redraw();
         }
       }, function () {
-        state.network = {};
+        state.network = {
+          unifi: normalizeUnifiSnapshot({})
+        };
         if (!state.interacting) {
           redraw();
         }
@@ -6082,6 +6356,7 @@
     "game-mode": mountGameModeWidget,
     system: mountSystemWidget,
     network: mountNetworkWidget,
+    "unifi-network": mountNetworkWidget,
     launchers: mountLaunchersWidget,
     "quick-actions": mountQuickActionsWidget,
     shortcuts: mountSystemShortcutsWidget,

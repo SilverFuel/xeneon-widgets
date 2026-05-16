@@ -109,6 +109,7 @@ public sealed class NetworkMetricsService : IDisposable
                 .OrderByDescending(network => network.Speed)
                 .FirstOrDefault();
             var type = MapNetworkType(primaryInterface);
+            var details = ReadInterfaceDetails(primaryInterface);
 
             lock (_sync)
             {
@@ -116,6 +117,12 @@ public sealed class NetworkMetricsService : IDisposable
                 _snapshot.Download = RoundMbps(deltaReceived, elapsedSeconds);
                 _snapshot.Upload = RoundMbps(deltaSent, elapsedSeconds);
                 _snapshot.Type = type;
+                _snapshot.Name = details.Name;
+                _snapshot.Description = details.Description;
+                _snapshot.LinkSpeedMbps = details.LinkSpeedMbps;
+                _snapshot.IpAddress = details.IpAddress;
+                _snapshot.Gateway = details.Gateway;
+                _snapshot.DnsServers = details.DnsServers;
                 _snapshot.Supported = true;
                 _snapshot.Status = "live";
                 _snapshot.SampledAt = sampledAt;
@@ -172,6 +179,46 @@ public sealed class NetworkMetricsService : IDisposable
         };
     }
 
+    private static NetworkInterfaceDetails ReadInterfaceDetails(NetworkInterface? networkInterface)
+    {
+        if (networkInterface is null)
+        {
+            return new NetworkInterfaceDetails();
+        }
+
+        var details = new NetworkInterfaceDetails
+        {
+            Name = networkInterface.Name,
+            Description = networkInterface.Description,
+            LinkSpeedMbps = networkInterface.Speed > 0
+                ? Math.Round(networkInterface.Speed / 1000d / 1000d, 0)
+                : null
+        };
+
+        try
+        {
+            var properties = networkInterface.GetIPProperties();
+            details.IpAddress = properties.UnicastAddresses
+                .Where(address => address.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                .Select(address => address.Address.ToString())
+                .FirstOrDefault() ?? "";
+            details.Gateway = properties.GatewayAddresses
+                .Where(address => address.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                .Select(address => address.Address.ToString())
+                .FirstOrDefault() ?? "";
+            details.DnsServers = properties.DnsAddresses
+                .Where(address => address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                .Select(address => address.ToString())
+                .Take(3)
+                .ToList();
+        }
+        catch
+        {
+        }
+
+        return details;
+    }
+
     private static double RoundMbps(long deltaBytes, double elapsedSeconds)
     {
         if (elapsedSeconds <= 0)
@@ -206,6 +253,18 @@ public sealed class NetworkSnapshot
 
     public string Source { get; set; } = "native host";
 
+    public string Name { get; set; } = "";
+
+    public string Description { get; set; } = "";
+
+    public double? LinkSpeedMbps { get; set; }
+
+    public string IpAddress { get; set; } = "";
+
+    public string Gateway { get; set; } = "";
+
+    public List<string> DnsServers { get; set; } = [];
+
     public NetworkSnapshot Clone()
     {
         return new NetworkSnapshot
@@ -219,7 +278,28 @@ public sealed class NetworkSnapshot
             Upload = Upload,
             Ping = Ping,
             Type = Type,
-            Source = Source
+            Source = Source,
+            Name = Name,
+            Description = Description,
+            LinkSpeedMbps = LinkSpeedMbps,
+            IpAddress = IpAddress,
+            Gateway = Gateway,
+            DnsServers = DnsServers.ToList()
         };
     }
+}
+
+internal sealed class NetworkInterfaceDetails
+{
+    public string Name { get; set; } = "";
+
+    public string Description { get; set; } = "";
+
+    public double? LinkSpeedMbps { get; set; }
+
+    public string IpAddress { get; set; } = "";
+
+    public string Gateway { get; set; } = "";
+
+    public List<string> DnsServers { get; set; } = [];
 }

@@ -7,7 +7,7 @@ namespace XenonEdgeHost;
 
 public sealed class BridgeManager : IDisposable
 {
-    private const string DashboardAssetRevision = "20260514-14";
+    private const string DashboardAssetRevision = "20260516-02";
     private const int MaxJsonBodyBytes = 256 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -61,7 +61,7 @@ public sealed class BridgeManager : IDisposable
         _weatherService = new WeatherService(_weatherHttpClient);
         _calendarService = new CalendarService(_weatherHttpClient, _logger);
         _hueService = new HueService(_configStore, _logger);
-        _uniFiService = new UniFiService(_logger);
+        _uniFiService = new UniFiService(_configStore, _logger);
         _releaseService = new ReleaseService(_weatherHttpClient);
         _mediaService = new MediaService(_logger);
         _launcherService = new LauncherService();
@@ -409,6 +409,12 @@ public sealed class BridgeManager : IDisposable
                     return;
                 case "/api/unifi/network":
                     await WriteJsonAsync(response, 200, await _uniFiService.GetNetworkPayloadAsync(_networkMetrics.GetSnapshot(), cancellationToken), cancellationToken);
+                    return;
+                case "/api/unifi/network/link" when request.HttpMethod == "POST":
+                    await HandleUniFiLinkAsync(request, response, cancellationToken);
+                    return;
+                case "/api/unifi/network/disconnect" when request.HttpMethod == "POST":
+                    await WriteJsonAsync(response, 200, _uniFiService.Disconnect(_networkMetrics.GetSnapshot()), cancellationToken);
                     return;
                 case "/api/quick-actions" when request.HttpMethod == "GET":
                     await WriteJsonAsync(response, 200, _systemActionsService.GetQuickActionsSnapshot(), cancellationToken);
@@ -833,6 +839,12 @@ public sealed class BridgeManager : IDisposable
         await WriteJsonAsync(response, 200, await _hueService.LinkBridgeAsync(payload.BridgeIp, cancellationToken), cancellationToken);
     }
 
+    private async Task HandleUniFiLinkAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        var payload = await ReadJsonAsync<UniFiLinkRequest>(request, cancellationToken);
+        await WriteJsonAsync(response, 200, await _uniFiService.LinkAsync(payload, _networkMetrics.GetSnapshot(), cancellationToken), cancellationToken);
+    }
+
     private async Task HandleClipboardCopyAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
     {
         var payload = await ReadJsonAsync<ClipboardCopyRequest>(request, cancellationToken);
@@ -1141,11 +1153,15 @@ public sealed class BridgeManager : IDisposable
             ? CreateSetupItem("hue", "Philips Hue", hue.Linked ? "Ready" : "Needs Setup", false, TextOr(hue.Message, hue.Linked ? "Linked to your Hue Bridge." : "Press the bridge button, then link it from Diagnostics."))
             : CreateSetupItem("hue", "Philips Hue", "Optional", false, "Add your Hue Bridge only if you want local light control.");
         var uniFi = _uniFiService.GetCachedNetworkPayload(_networkMetrics.GetSnapshot());
-        var uniFiItem = uniFi.Detected
-            ? CreateSetupItem("unifi", "UniFi Network", "Detected", false, $"Found UniFi locally at {uniFi.GatewayIp}. Full client and AP stats can be added later.")
-            : string.Equals(uniFi.Status, "checking", StringComparison.OrdinalIgnoreCase)
-                ? CreateSetupItem("unifi", "UniFi Network", "Checking", false, "Xenon is checking for a local UniFi console in the background.")
-            : CreateSetupItem("unifi", "UniFi Network", "Optional", false, "Xenon can auto-detect a local UniFi console when one is reachable.");
+        var uniFiItem = uniFi.Linked
+            ? CreateSetupItem("unifi", "UniFi Network", "Ready", false, $"Linked locally to {uniFi.Gateway}.")
+            : uniFi.Configured && string.Equals(uniFi.Status, "error", StringComparison.OrdinalIgnoreCase)
+                ? CreateSetupItem("unifi", "UniFi Network", "Needs Setup", false, TextOr(uniFi.Message, "Reconnect UniFi from the Network page."))
+                : uniFi.Detected
+                    ? CreateSetupItem("unifi", "UniFi Network", "Detected", false, $"Found UniFi locally at {uniFi.GatewayIp}. Connect from the Network page for clients and APs.")
+                    : string.Equals(uniFi.Status, "checking", StringComparison.OrdinalIgnoreCase)
+                        ? CreateSetupItem("unifi", "UniFi Network", "Checking", false, "Xenon is checking for a local UniFi console in the background.")
+                        : CreateSetupItem("unifi", "UniFi Network", "Optional", false, "Network Monitor works now. Link UniFi locally when you want gateway detail.");
 
         return new
         {
@@ -1243,9 +1259,18 @@ public sealed class BridgeManager : IDisposable
             },
             unifi = new
             {
-                configured = false,
+                configured = !string.IsNullOrWhiteSpace(config.UniFi.Host),
+                linked = !string.IsNullOrWhiteSpace(config.UniFi.Host)
+                    && !string.IsNullOrWhiteSpace(config.UniFi.Username)
+                    && !string.IsNullOrWhiteSpace(config.UniFi.Password),
+                host = config.UniFi.Host,
+                usernameConfigured = !string.IsNullOrWhiteSpace(config.UniFi.Username),
+                site = config.UniFi.Site,
                 endpoint = "/api/unifi/network",
-                localOnly = true
+                linkEndpoint = "/api/unifi/network/link",
+                disconnectEndpoint = "/api/unifi/network/disconnect",
+                localOnly = true,
+                secureStorage = "Windows DPAPI"
             },
             dashboard = new
             {
@@ -1306,9 +1331,16 @@ public sealed class BridgeManager : IDisposable
             },
             unifi = new
             {
-                configured = false,
+                configured = !string.IsNullOrWhiteSpace(config.UniFi.Host),
+                linked = !string.IsNullOrWhiteSpace(config.UniFi.Host)
+                    && !string.IsNullOrWhiteSpace(config.UniFi.Username)
+                    && !string.IsNullOrWhiteSpace(config.UniFi.Password),
+                hostConfigured = !string.IsNullOrWhiteSpace(config.UniFi.Host),
+                usernameConfigured = !string.IsNullOrWhiteSpace(config.UniFi.Username),
+                site = config.UniFi.Site,
                 endpoint = "/api/unifi/network",
-                localOnly = true
+                localOnly = true,
+                secureStorage = "Windows DPAPI"
             },
             dashboard = new
             {
@@ -1414,6 +1446,8 @@ public sealed class BridgeManager : IDisposable
             sanitized = ReplaceIfPresent(sanitized, config.Weather.City, "<weather-location>");
             sanitized = ReplaceIfPresent(sanitized, config.Calendar.IcsUrl, "<calendar-feed-url>");
             sanitized = ReplaceIfPresent(sanitized, config.Hue.BridgeIp, "<local-ip>");
+            sanitized = ReplaceIfPresent(sanitized, config.UniFi.Host, "<local-ip>");
+            sanitized = ReplaceIfPresent(sanitized, config.UniFi.Username, "<unifi-user>");
 
             foreach (var launcher in config.Launchers)
             {

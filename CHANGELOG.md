@@ -17,6 +17,9 @@
 - Fixed Top Processes touch scrolling by letting the main System Monitor panel handle the scroll gesture.
 - Removed Top Processes from System Monitor and stopped enumerating running processes in the native host.
 - Simplified Network Monitor to the useful essentials: download, upload, ping, connection health, and a compact UniFi summary only when detected.
+- Combined Network and UniFi into one stronger Network page with readiness score, adapter path, gateway/DNS detail, local UniFi linking, clients, and APs.
+- Added protected local UniFi credential storage and local UniFi Network API polling for linked client/AP stats.
+- Added a compact Game Mode network strip so in-game focus shows ping, throughput, readiness, and UniFi client/AP context.
 - Simplified Audio into a quick control panel with one master output, compact output switching, active app controls only, and smoother page scrolling.
 - Improved touch handling so scroll gestures do not accidentally trigger taps.
 - Added touch-specific pressed feedback and scroll-area behavior for the dashboard.
