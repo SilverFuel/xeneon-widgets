@@ -53,7 +53,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | CR-3 | P1 | `bridge/server.mjs` | Guarded the legacy bridge catch handler so it does not write a JSON error after streamed response headers are already sent; extended the bridge boundary check. | `fb6178a` |
 | CR-4 | P1 | `scripts/check-bridge-boundaries.mjs` | Resolved workspace paths explicitly, checked file existence, and emitted clear read failures; applied the same robustness pattern to sibling validation scripts. | `dcb11e0` |
 | CR-5 | P2 | `RELEASE_READINESS.md` | Removed environment-specific branch wording from the readiness report. | `ca75cff` |
-| CR-6 | P1 | `CHANGELOG.md` | Replaced internal CI/tooling details in the public changelog with concise user-facing release notes while keeping technical specifics in this readiness report. | `c8b5512` |
+| CR-6 | P1 | `CHANGELOG.md` | Replaced internal CI/tooling details in the public changelog with concise user-facing release notes while keeping technical specifics in this readiness report. | `c0d3474` |
 | Improvement | P1 | `bridge/server.mjs` | Reported browser-bridge provisioning and display setup states explicitly so first-run diagnostics avoid stale fallback states; covered by bridge API integration test. | `629c9a8` |
 
 ## Checklist Status
