@@ -4,8 +4,11 @@
 
 - Resolved CodeRabbit setup-guide findings for hidden optional panels and stale integration helper arguments.
 - Added release-readiness checks for setup guide state, legacy bridge request boundaries, local HTTP observability, and dependency version pinning.
+- Added a local bridge API integration test and support-bundle redaction guard to the release check suite.
+- Added a non-destructive release gauntlet that runs dependency audits, repository checks, artifact validation, and the release readiness gate against the built installer.
 - Added dependency audits to CI and release builds, plus a root package lock for reproducible root-level npm audit runs.
 - Capped legacy bridge JSON request bodies, mapped invalid JSON and oversized bodies to explicit client errors, and hid raw internal messages on server errors.
+- Reported browser-bridge display/provisioning setup state explicitly so first-run diagnostics do not linger in a generic checking state.
 - Guarded legacy bridge error handling so streamed responses do not attempt to send a second JSON error after headers are sent.
 - Added local request correlation IDs and structured HTTP request boundary logs to the native host and legacy bridge.
 - Improved release validation scripts so they resolve workspace files explicitly and fail with clearer read errors.
