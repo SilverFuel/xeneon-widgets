@@ -2,6 +2,15 @@
 
 Use this before publishing a free beta, paid release, or public download.
 
+## Automated Gate
+
+- Run `npm run release:gauntlet` against the latest local installer.
+- For a disposable Windows VM or fresh Windows profile, run:
+
+```powershell
+powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<installer>.exe -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall
+```
+
 ## Free Public Beta Must Do
 
 - Publish `support.html` and `refund-policy.html` with the release.
