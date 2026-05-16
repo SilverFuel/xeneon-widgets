@@ -8,6 +8,7 @@
 - Capped legacy bridge JSON request bodies, mapped invalid JSON and oversized bodies to explicit client errors, and hid raw internal messages on server errors.
 - Guarded legacy bridge error handling so streamed responses do not attempt to send a second JSON error after headers are sent.
 - Added local request correlation IDs and structured HTTP request boundary logs to the native host and legacy bridge.
+- Improved release validation scripts so they resolve workspace files explicitly and fail with clearer read errors.
 - Pinned Electron beta host dependencies to the versions already recorded in the package lock.
 - Added primary display refresh-rate telemetry from the native host.
 - Upgraded Game Mode with live display refresh, dashboard FPS, CPU, and GPU readouts.
