@@ -34,4 +34,10 @@ assert(
   "legacy bridge must not expose raw internal error messages on HTTP 500 responses"
 );
 
+assert(
+  /response\.headersSent\s*\|\|\s*response\.writableEnded/.test(bridgeServer)
+    && /if\s*\(!response\.writableEnded\)\s*\{\s*response\.end\(\);/s.test(bridgeServer),
+  "legacy bridge error handler must not write JSON after response headers are sent"
+);
+
 console.log("checked bridge/server.mjs external boundaries");

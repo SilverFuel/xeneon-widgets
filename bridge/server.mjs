@@ -1941,6 +1941,13 @@ const server = http.createServer(async (request, response) => {
 
     serveStaticFile(request.url, response);
   } catch (error) {
+    if (response.headersSent || response.writableEnded) {
+      if (!response.writableEnded) {
+        response.end();
+      }
+      return;
+    }
+
     const statusCode = Number.isInteger(error.statusCode) ? error.statusCode : 500;
     json(response, statusCode, {
       error: statusCode >= 500 ? "Request failed" : error.message
