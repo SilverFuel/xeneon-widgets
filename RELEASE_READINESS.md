@@ -2,7 +2,7 @@
 
 ## Summary
 
-Release-readiness pass run on branch `codex/coderabbit-release-readiness`.
+Release-readiness pass run for the current 0.2.0 beta release branch.
 
 - CodeRabbit runs:
   - Initial release-diff chunk review completed for `app`, `js`, and `widgets`.
