@@ -7,11 +7,12 @@
   },
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File .\\start-xeneon.ps1",
-    "check": "npm run check:js && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:app",
+    "check": "npm run check:js && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:dependency-pins && npm run check:app",
     "check:js": "node scripts/check-js.mjs",
     "check:setup-guide": "node scripts/check-setup-guide.mjs",
     "check:bridge-boundaries": "node scripts/check-bridge-boundaries.mjs",
     "check:observability": "node scripts/check-observability.mjs",
+    "check:dependency-pins": "node scripts/check-dependency-pins.mjs",
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
     "audit:deps": "npm audit --audit-level=moderate && npm --prefix desktop/electron audit --audit-level=moderate && dotnet list app\\XenonEdgeHost.sln package --vulnerable --include-transitive",
     "clean": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clean-workspace.ps1",
