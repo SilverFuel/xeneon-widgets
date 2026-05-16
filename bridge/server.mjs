@@ -1589,6 +1589,20 @@ async function getSetupSummary() {
       "Ready",
       true,
       `Running at http://127.0.0.1:${config.port}.`
+    ),
+    display: createSetupItem(
+      "display",
+      "XENEON EDGE display",
+      "Optional",
+      false,
+      "Use the Windows app for EDGE display targeting diagnostics."
+    ),
+    provisioning: createSetupItem(
+      "provisioning",
+      "Auto provisioning",
+      "Ready",
+      true,
+      "Dashboard defaults are ready for the browser bridge."
     )
   };
 
@@ -1612,6 +1626,10 @@ async function getSetupSummary() {
     onboardingCompleted: onboarding.onboardingCompleted,
     onboardingCompletedAt: onboarding.onboardingCompletedAt,
     onboardingVersion: onboarding.onboardingVersion,
+    provisioning: {
+      status: "live",
+      message: "Dashboard defaults are ready for the browser bridge."
+    },
     needsAttention: Object.values(items).some((item) => item.state === "Needs Setup"),
     items
   };
