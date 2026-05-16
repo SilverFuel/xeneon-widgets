@@ -20,6 +20,7 @@
 - Combined Network and UniFi into one stronger Network page with readiness score, adapter path, gateway/DNS detail, local UniFi linking, clients, and APs.
 - Added protected local UniFi credential storage and local UniFi Network API polling for linked client/AP stats.
 - Added a compact Game Mode network strip so in-game focus shows ping, throughput, readiness, and UniFi client/AP context.
+- Guarded Windows media session refreshes with a timeout so health checks do not hang when the Windows media COM layer stalls.
 - Simplified Audio into a quick control panel with one master output, compact output switching, active app controls only, and smoother page scrolling.
 - Improved touch handling so scroll gestures do not accidentally trigger taps.
 - Added touch-specific pressed feedback and scroll-area behavior for the dashboard.

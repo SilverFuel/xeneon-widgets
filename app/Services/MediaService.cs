@@ -9,6 +9,7 @@ public sealed class MediaService
     private readonly object _sync = new();
     private MediaSnapshot _snapshot = MediaSnapshot.CreateStarting();
     private DateTimeOffset _lastRefresh = DateTimeOffset.MinValue;
+    private Task? _refreshTask;
 
     public MediaService(HostLogger logger)
     {
@@ -19,7 +20,7 @@ public sealed class MediaService
     {
         if (DateTimeOffset.UtcNow - _lastRefresh > TimeSpan.FromSeconds(5))
         {
-            await RefreshAsync(cancellationToken);
+            await RefreshWithTimeoutAsync(cancellationToken);
         }
 
         lock (_sync)
@@ -73,6 +74,35 @@ public sealed class MediaService
 
         _lastRefresh = DateTimeOffset.MinValue;
         return await GetSnapshotAsync(cancellationToken);
+    }
+
+    private async Task RefreshWithTimeoutAsync(CancellationToken cancellationToken)
+    {
+        Task refreshTask;
+        lock (_sync)
+        {
+            if (_refreshTask is null || _refreshTask.IsCompleted)
+            {
+                _refreshTask = RefreshAsync(CancellationToken.None);
+            }
+
+            refreshTask = _refreshTask;
+        }
+
+        var timeoutTask = Task.Delay(TimeSpan.FromMilliseconds(1800), cancellationToken);
+        var completedTask = await Task.WhenAny(refreshTask, timeoutTask);
+        if (completedTask == refreshTask)
+        {
+            await refreshTask;
+            return;
+        }
+
+        _logger.Warn("Windows media session refresh timed out.");
+        lock (_sync)
+        {
+            _snapshot = MediaSnapshot.CreateError("Windows media session check timed out.");
+            _lastRefresh = DateTimeOffset.UtcNow;
+        }
     }
 
     private static async Task SeekRelativeAsync(GlobalSystemMediaTransportControlsSession session, TimeSpan delta)
