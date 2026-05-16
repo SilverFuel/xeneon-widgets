@@ -92,6 +92,12 @@ try {
   if (healthPayload.ok !== true) {
     fail("health payload was not ok");
   }
+  if (healthPayload.setup?.items?.provisioning?.state !== "Ready") {
+    fail("health payload did not report browser bridge provisioning as ready");
+  }
+  if (healthPayload.setup?.items?.display?.state !== "Optional") {
+    fail("health payload did not report browser bridge display diagnostics as optional");
+  }
 
   const rejectedOrigin = await request("/api/health", {
     headers: {
