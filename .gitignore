@@ -9,6 +9,7 @@ bridge/config.json
 
 # Logs and generated scratch files
 *.log
+/output.csv
 tmp-*.png
 tmp-*.jpg
 tmp-*.jpeg

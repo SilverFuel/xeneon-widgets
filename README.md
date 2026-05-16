@@ -195,6 +195,18 @@ Run the release gate separately before uploading if needed:
 npm run release:ready
 ```
 
+Run the full non-destructive release gauntlet against the latest installer:
+
+```powershell
+npm run release:gauntlet
+```
+
+For a disposable Windows VM or fresh Windows profile, run the destructive install/uninstall smoke:
+
+```powershell
+powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<installer>.exe -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall
+```
+
 For the beta release asset list and wording, see `docs/release/FREE-BETA-RELEASE-NOTES.md` and `docs/release/GITHUB-RELEASE.md`.
 
 Use the in-app Privacy or Setup panel to reset local dashboard settings and protected integration secrets before uninstalling or handing a machine to someone else.

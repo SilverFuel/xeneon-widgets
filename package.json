@@ -19,6 +19,7 @@
     "audit:deps": "npm audit --audit-level=moderate && npm --prefix desktop/electron audit --audit-level=moderate && dotnet list app\\XenonEdgeHost.sln package --vulnerable --include-transitive",
     "clean": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clean-workspace.ps1",
     "installer": "powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1",
+    "release:gauntlet": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-release-gauntlet.ps1 -AllowGitHubSupportPath -AllowUnsignedBeta",
     "release:free-beta": "powershell -ExecutionPolicy Bypass -File .\\scripts\\prepare-free-beta-release.ps1",
     "release:ready": "powershell -ExecutionPolicy Bypass -File .\\scripts\\assert-release-ready.ps1 -AllowGitHubSupportPath",
     "release:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-release.ps1",
