@@ -316,6 +316,10 @@
       display: none;
     }
 
+    .is-hidden {
+      display: none;
+    }
+
     .form,
     .field {
       display: grid;
@@ -711,7 +715,7 @@
       function renderIntegrations() {
         var settings = readDashboardSettings();
         document.getElementById("guide-integrations").innerHTML = integrationSchemas.map(function (schema) {
-          var state = getIntegrationState(schema, settings);
+          var state = getIntegrationState(schema);
           var expanded = shouldExpandSection(schema.id, state);
           return '' +
             '<div class="optional-card">' +
@@ -719,7 +723,7 @@
                 '<div class="row-copy">' +
                   '<span class="row-label">Optional</span>' +
                   '<strong>' + escapeHtml(schema.title) + '</strong>' +
-                  '<span class="detail">' + escapeHtml(summarizeIntegration(schema, settings)) + '</span>' +
+                  '<span class="detail">' + escapeHtml(summarizeIntegration(schema)) + '</span>' +
                 '</div>' +
                 '<div class="pill ' + getToneClass(state) + '">' + escapeHtml(state) + '</div>' +
               '</button>' +
