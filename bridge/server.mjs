@@ -11,7 +11,9 @@ import http from "node:http";
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
-const configPath = path.join(__dirname, "config.json");
+const configPath = process.env.XENON_BRIDGE_CONFIG
+  ? path.resolve(process.env.XENON_BRIDGE_CONFIG)
+  : path.join(__dirname, "config.json");
 const exampleConfigPath = path.join(__dirname, "config.example.json");
 const audioControlPath = path.join(__dirname, "audio-control.ps1");
 const dashboardOnboardingVersion = 1;
