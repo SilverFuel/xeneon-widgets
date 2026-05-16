@@ -14,6 +14,7 @@ const configPath = path.join(__dirname, "config.json");
 const exampleConfigPath = path.join(__dirname, "config.example.json");
 const audioControlPath = path.join(__dirname, "audio-control.ps1");
 const dashboardOnboardingVersion = 1;
+const maxJsonBodyBytes = 256 * 1024;
 let config = loadConfig();
 const statusCache = {
   system: createStatusCache(15000),
@@ -47,6 +48,20 @@ function createStatusCache(ttlMs) {
     value: null,
     promise: null
   };
+}
+
+class InvalidJsonBodyError extends Error {
+  constructor() {
+    super("Invalid JSON body");
+    this.statusCode = 400;
+  }
+}
+
+class RequestBodyTooLargeError extends Error {
+  constructor() {
+    super(`Request body exceeds ${maxJsonBodyBytes} bytes`);
+    this.statusCode = 413;
+  }
 }
 
 function getDefaultDashboardConfig() {
@@ -192,13 +207,44 @@ function createLocalUrl(requestUrl = "/") {
 function readRequestBody(request) {
   return new Promise((resolve, reject) => {
     const chunks = [];
+    let totalBytes = 0;
+    let settled = false;
+
+    function fail(error) {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      reject(error);
+      request.resume();
+    }
+
     request.on("data", (chunk) => {
+      totalBytes += chunk.length;
+      if (totalBytes > maxJsonBodyBytes) {
+        fail(new RequestBodyTooLargeError());
+        return;
+      }
+
       chunks.push(chunk);
     });
     request.on("end", () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
       resolve(Buffer.concat(chunks).toString("utf8"));
     });
-    request.on("error", reject);
+    request.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      reject(error);
+    });
   });
 }
 
@@ -211,7 +257,7 @@ async function readJsonBody(request) {
   try {
     return JSON.parse(raw);
   } catch (error) {
-    throw new Error("Invalid JSON body");
+    throw new InvalidJsonBodyError();
   }
 }
 
@@ -1867,7 +1913,10 @@ const server = http.createServer(async (request, response) => {
 
     serveStaticFile(request.url, response);
   } catch (error) {
-    json(response, 500, { error: error.message });
+    const statusCode = Number.isInteger(error.statusCode) ? error.statusCode : 500;
+    json(response, statusCode, {
+      error: statusCode >= 500 ? "Request failed" : error.message
+    });
   }
 });
 
