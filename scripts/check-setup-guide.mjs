@@ -1,6 +1,21 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-const setupGuide = readFileSync("widgets/setup-guide.html", "utf8");
+const setupGuide = readWorkspaceFile("widgets/setup-guide.html");
+
+function readWorkspaceFile(relativePath) {
+  const filePath = resolve(process.cwd(), relativePath);
+  try {
+    if (!existsSync(filePath)) {
+      throw new Error("file does not exist");
+    }
+
+    return readFileSync(filePath, "utf8");
+  } catch (error) {
+    console.error(`Unable to read ${relativePath} at ${filePath}: ${error.message}`);
+    process.exit(1);
+  }
+}
 
 function assert(condition, message) {
   if (!condition) {
