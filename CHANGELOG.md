@@ -6,6 +6,7 @@
 - Added release-readiness checks for setup guide state, legacy bridge request boundaries, local HTTP observability, and dependency version pinning.
 - Added dependency audits to CI and release builds, plus a root package lock for reproducible root-level npm audit runs.
 - Capped legacy bridge JSON request bodies, mapped invalid JSON and oversized bodies to explicit client errors, and hid raw internal messages on server errors.
+- Guarded legacy bridge error handling so streamed responses do not attempt to send a second JSON error after headers are sent.
 - Added local request correlation IDs and structured HTTP request boundary logs to the native host and legacy bridge.
 - Pinned Electron beta host dependencies to the versions already recorded in the package lock.
 - Added primary display refresh-rate telemetry from the native host.
