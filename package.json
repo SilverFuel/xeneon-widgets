@@ -12,6 +12,7 @@
     "check:setup-guide": "node scripts/check-setup-guide.mjs",
     "check:bridge-boundaries": "node scripts/check-bridge-boundaries.mjs",
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
+    "audit:deps": "npm audit --audit-level=moderate && npm --prefix desktop/electron audit --audit-level=moderate && dotnet list app\\XenonEdgeHost.sln package --vulnerable --include-transitive",
     "clean": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clean-workspace.ps1",
     "installer": "powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1",
     "release:free-beta": "powershell -ExecutionPolicy Bypass -File .\\scripts\\prepare-free-beta-release.ps1",

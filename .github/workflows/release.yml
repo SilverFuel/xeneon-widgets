@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Audit dependencies
+        run: npm run audit:deps
+
       - name: Validate
         run: npm run check
 

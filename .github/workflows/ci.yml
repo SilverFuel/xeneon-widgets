@@ -24,5 +24,8 @@ jobs:
         with:
           node-version: 22
 
+      - name: Audit dependencies
+        run: npm run audit:deps
+
       - name: Validate JavaScript and native app
         run: npm run check
