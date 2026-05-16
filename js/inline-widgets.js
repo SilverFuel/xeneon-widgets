@@ -4350,10 +4350,73 @@
       '</article>';
   }
 
-  function renderGameFocusHudItem(label, value, detail, progress) {
+  function gameFocusToneClass(tone) {
+    var value = text(tone, "").toLowerCase();
+    return value ? " is-" + value : "";
+  }
+
+  function gameFocusLoadTone(value, warnAt, dangerAt) {
+    var parsed = optionalNumber(value);
+    if (parsed == null) {
+      return "muted";
+    }
+    if (parsed >= (dangerAt || 92)) {
+      return "danger";
+    }
+    if (parsed >= (warnAt || 80)) {
+      return "warn";
+    }
+    return "good";
+  }
+
+  function gameFocusLowTone(value, warnBelow, dangerBelow) {
+    var parsed = optionalNumber(value);
+    if (parsed == null) {
+      return "muted";
+    }
+    if (parsed <= (dangerBelow || 30)) {
+      return "danger";
+    }
+    if (parsed <= (warnBelow || 55)) {
+      return "warn";
+    }
+    return "good";
+  }
+
+  function gameFocusPingTone(value) {
+    var parsed = optionalNumber(value);
+    if (parsed == null) {
+      return "muted";
+    }
+    if (parsed >= 100) {
+      return "danger";
+    }
+    if (parsed >= 60) {
+      return "warn";
+    }
+    return "good";
+  }
+
+  function gameFocusPressureValue(system) {
+    var values = [optionalNumber(system && system.gpu), optionalNumber(system && system.cpu), optionalNumber(system && system.ram)].filter(function (value) {
+      return value != null;
+    });
+    return values.length ? Math.max.apply(Math, values) : null;
+  }
+
+  function renderGameFocusStatusBlock(label, value, detail, tone) {
+    return '' +
+      '<div class="game-focus-status-block' + gameFocusToneClass(tone) + '">' +
+        '<span>' + escapeHtml(label) + '</span>' +
+        '<strong>' + escapeHtml(value) + '</strong>' +
+        '<small>' + escapeHtml(detail || "") + '</small>' +
+      '</div>';
+  }
+
+  function renderGameFocusHudItem(label, value, detail, progress, tone) {
     var progressValue = optionalNumber(progress);
     return '' +
-      '<div class="game-focus-metric">' +
+      '<div class="game-focus-metric' + gameFocusToneClass(tone) + '">' +
         '<span>' + escapeHtml(label) + '</span>' +
         '<strong>' + escapeHtml(value) + '</strong>' +
         '<small>' + escapeHtml(detail || "") + '</small>' +
@@ -4491,7 +4554,7 @@
     return visible.map(function (session) {
       var isGame = gameProcessId != null && session.processId === gameProcessId;
       return '' +
-        '<div class="game-focus-audio-row' + (isGame ? " is-game" : "") + '">' +
+        '<div class="game-focus-audio-row' + (isGame ? " is-game" : "") + (session.muted ? " is-muted" : "") + '">' +
           '<div>' +
             '<strong>' + escapeHtml(isGame ? "Game audio" : getAudioSessionLabel(session)) + '</strong>' +
             '<span>' + escapeHtml(session.muted ? "Muted" : "Live") + '</span>' +
@@ -4525,10 +4588,14 @@
     var voiceLabel = gameFocusVoiceLabel(audioSessions);
     var networkData = network || {};
     var ping = optionalNumber(networkData.ping);
+    var pingLabel = ping == null ? "--" : Math.round(ping) + " ms";
     var stateLabel = gameFocusStateLabel(game);
     var focusDetail = game && game.focused === false
       ? "Game running in background"
       : "Game has focus";
+    var pressure = gameFocusPressureValue(system || {});
+    var pressureLabel = pressure == null ? "--" : Math.round(pressure) + "%";
+    var pressureDetail = "GPU " + formatPercent(system && system.gpu) + " / CPU " + formatPercent(system && system.cpu);
     var shellClass = "game-focus-shell" + (introActive ? " is-intro" : "");
     return '' +
       '<section class="' + shellClass + '" style="' + gameModeThemeStyle(theme) + '">' +
@@ -4541,6 +4608,11 @@
             '<span>' + escapeHtml(stateLabel) + '</span>' +
             '<strong>' + escapeHtml(gameName) + '</strong>' +
             '<small>' + escapeHtml(platform + " - " + source + " - " + focusDetail) + '</small>' +
+          '</div>' +
+          '<div class="game-focus-top-status">' +
+            renderGameFocusStatusBlock("Audio", audioState, audioName, audioData.muted ? "warn" : "good") +
+            renderGameFocusStatusBlock("Network", pingLabel, text(networkData.type, "Ping"), gameFocusPingTone(ping)) +
+            renderGameFocusStatusBlock("Pressure", pressureLabel, pressureDetail, gameFocusLoadTone(pressure, 82, 94)) +
           '</div>' +
           '<button class="inline-button game-focus-home" type="button" data-action="game-face-home">Home</button>' +
         '</header>' +
@@ -4558,19 +4630,20 @@
               renderGameFocusFact("State", stateLabel) +
               renderGameFocusFact("Match", confidence) +
               renderGameFocusFact("Process", processName) +
+              renderGameFocusFact("Source", source) +
             '</div>' +
           '</section>' +
           '<section class="game-focus-metrics">' +
-            renderGameFocusHudItem("FPS", formatFps(dashboardFpsValue), "EDGE render", gameFocusProgress(dashboardFpsValue, 120)) +
-            renderGameFocusHudItem("Refresh", formatHz(refreshRate), displayName, gameFocusProgress(refreshRate, 240)) +
-            renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "Load", system && system.gpu) +
-            renderGameFocusHudItem("CPU", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu) +
-            renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram) +
-            renderGameFocusHudItem("Ping", ping == null ? "--" : Math.round(ping) + " ms", text(networkData.type, "Network"), gameFocusProgress(80 - Math.min(ping || 80, 80), 80)) +
+            renderGameFocusHudItem("EDGE FPS", formatFps(dashboardFpsValue), "Panel render", gameFocusProgress(dashboardFpsValue, 120), gameFocusLowTone(dashboardFpsValue, 55, 30)) +
+            renderGameFocusHudItem("Refresh", formatHz(refreshRate), displayName, gameFocusProgress(refreshRate, 240), gameFocusLowTone(refreshRate, 60, 45)) +
+            renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "Load", system && system.gpu, gameFocusLoadTone(system && system.gpu, 88, 96)) +
+            renderGameFocusHudItem("CPU", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu, gameFocusLoadTone(system && system.cpu, 82, 94)) +
+            renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram, gameFocusLoadTone(system && system.ram, 82, 92)) +
+            renderGameFocusHudItem("Ping", pingLabel, text(networkData.type, "Network"), gameFocusProgress(80 - Math.min(ping || 80, 80), 80), gameFocusPingTone(ping)) +
           '</section>' +
           '<aside class="game-focus-card game-focus-card--utility">' +
             '<div class="game-focus-control-row">' +
-              '<div class="game-focus-audio">' +
+              '<div class="game-focus-audio' + gameFocusToneClass(audioData.muted ? "warn" : "good") + '">' +
                 '<span>Audio</span>' +
                 '<strong>' + escapeHtml(audioState) + '</strong>' +
                 '<small>' + escapeHtml(audioName) + '</small>' +
@@ -4579,13 +4652,13 @@
             '</div>' +
             '<div class="game-focus-audio-list">' + renderGameFocusAudioRows(audioSessions, game) + '</div>' +
             '<div class="game-focus-status-grid">' +
-              '<div class="game-focus-network">' +
+              '<div class="game-focus-network' + gameFocusToneClass(voiceLabel === "No voice" ? "muted" : "good") + '">' +
                 '<span>Voice</span>' +
                 '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
               '</div>' +
-              '<div class="game-focus-network">' +
+              '<div class="game-focus-network' + gameFocusToneClass(gameFocusPingTone(ping)) + '">' +
                 '<span>Network</span>' +
-                '<strong>' + escapeHtml(ping == null ? "--" : Math.round(ping) + " ms") + '</strong>' +
+                '<strong>' + escapeHtml(pingLabel) + '</strong>' +
               '</div>' +
             '</div>' +
             '<div class="game-focus-reason">' + escapeHtml((activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + detail) + '</div>' +
@@ -4595,7 +4668,7 @@
           '<span>' + escapeHtml(stateLabel) + '</span>' +
           '<strong>' + escapeHtml(platform) + '</strong>' +
           '<strong>' + escapeHtml(audioName + " " + audioState) + '</strong>' +
-          '<strong>' + escapeHtml(ping == null ? "Network --" : "Ping " + Math.round(ping) + " ms") + '</strong>' +
+          '<strong>' + escapeHtml(ping == null ? "Network --" : "Ping " + pingLabel) + '</strong>' +
           '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
         '</footer>' +
       '</section>';
