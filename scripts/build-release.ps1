@@ -19,11 +19,11 @@ function Write-Step($message) {
 Push-Location $repoRoot
 try {
   if (-not $SkipChecks) {
-    Write-Step "Checking JavaScript"
-    npm run check:js
+    Write-Step "Auditing dependencies"
+    npm run audit:deps
 
-    Write-Step "Building Windows app"
-    dotnet build app\XenonEdgeHost.sln --configuration Release
+    Write-Step "Running repository checks"
+    npm run check
   }
 
   if (-not $SkipInstaller) {
