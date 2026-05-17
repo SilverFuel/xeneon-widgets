@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File .\\start-xeneon.ps1",
-    "check": "npm run check:js && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:dependency-pins && npm run check:support-redaction && npm run check:display-recovery && npm run test:bridge-api && npm run check:app",
+    "check": "npm run check:js && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:dependency-pins && npm run check:support-redaction && npm run check:display-recovery && npm run check:unifi-form && npm run test:bridge-api && npm run check:app",
     "check:js": "node scripts/check-js.mjs",
     "check:setup-guide": "node scripts/check-setup-guide.mjs",
     "check:bridge-boundaries": "node scripts/check-bridge-boundaries.mjs",
@@ -15,6 +15,7 @@
     "check:dependency-pins": "node scripts/check-dependency-pins.mjs",
     "check:support-redaction": "node scripts/check-support-redaction.mjs",
     "check:display-recovery": "node scripts/check-display-recovery.mjs",
+    "check:unifi-form": "node scripts/check-unifi-form-draft.mjs",
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
     "test:bridge-api": "node scripts/test-bridge-api.mjs",
     "audit:deps": "npm audit --audit-level=moderate && npm --prefix desktop/electron audit --audit-level=moderate && dotnet list app\\XenonEdgeHost.sln package --vulnerable --include-transitive",

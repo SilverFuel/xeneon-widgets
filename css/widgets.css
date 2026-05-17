@@ -2697,8 +2697,16 @@ a.is-touch-pressing,
   overflow: hidden;
 }
 
+.network-unifi-card[data-link-state="connect"] {
+  gap: 8px;
+}
+
 .network-unifi-kpis {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.network-unifi-card[data-link-state="connect"] .network-unifi-kpis {
+  display: none;
 }
 
 .network-unifi-form {

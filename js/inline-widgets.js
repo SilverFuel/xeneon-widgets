@@ -903,10 +903,20 @@
   }
 
   function renderUniFiConnectCard(unifiData, state) {
+    var draft = state.unifiDraft || {};
+    function draftField(name, fallback) {
+      return Object.prototype.hasOwnProperty.call(draft, name) ? String(draft[name] == null ? "" : draft[name]) : fallback;
+    }
+
     var host = text(unifiData.gatewayIp, text(unifiData.host, ""));
+    var formHost = draftField("host", host);
+    var formSite = draftField("site", text(unifiData.site, "default"));
+    var formUsername = draftField("username", "");
+    var formPassword = draftField("password", "");
     var linked = Boolean(unifiData.linked);
     var detected = Boolean(unifiData.detected);
     var configured = Boolean(unifiData.configured);
+    var linkState = linked ? "linked" : "connect";
     var title = linked ? "UniFi linked" : detected ? "UniFi detected" : configured ? "Reconnect UniFi" : "Connect UniFi";
     var copy = linked
       ? unifiData.gateway
@@ -914,8 +924,30 @@
         ? text(unifiData.gatewayCopy, "Local console found")
         : "Local account";
     var status = linked ? statusPill("Linked", "good") : detected ? statusPill("Detected", "good") : statusPill(configured ? "Reconnect" : "Optional", configured ? "warn" : "muted");
+    var kpis = '' +
+      '<div class="network-unifi-kpis">' +
+        networkPill("Clients", String(unifiData.clients.total), unifiData.clients.wifi + " Wi-Fi / " + unifiData.clients.wired + " wired", linked ? "good" : "muted") +
+        networkPill("APs", String(unifiData.aps.length), unifiData.site ? "Site " + unifiData.site : "Access points", linked ? "good" : "muted") +
+        networkPill("Console", host || "--", unifiData.provider || "UniFi", detected || linked ? "good" : "muted") +
+      '</div>';
+    var form = '' +
+      '<form class="network-unifi-form" data-action="unifi-connect">' +
+        '<div class="inline-form-grid inline-form-grid--2">' +
+          '<label class="inline-field"><span>Host</span><input class="inline-input" type="text" name="host" value="' + escapeHtml(formHost) + '" placeholder="192.168.1.1"></label>' +
+          '<label class="inline-field"><span>Site</span><input class="inline-input" type="text" name="site" value="' + escapeHtml(formSite) + '" placeholder="default"></label>' +
+          '<label class="inline-field"><span>Username</span><input class="inline-input" type="text" name="username" autocomplete="username" value="' + escapeHtml(formUsername) + '" placeholder="local UniFi user"></label>' +
+          '<label class="inline-field"><span>Password</span><input class="inline-input" type="password" name="password" autocomplete="current-password" value="' + escapeHtml(formPassword) + '" placeholder="' + (linked ? "saved" : "password") + '"></label>' +
+        '</div>' +
+        '<div class="inline-actions network-unifi-actions">' +
+          '<button class="inline-button is-primary" type="submit"' + (state.connecting ? " disabled" : "") + '>' + (state.connecting ? "Connecting" : linked ? "Update link" : "Connect") + '</button>' +
+          (linked || configured ? '<button class="inline-button" type="button" data-action="unifi-disconnect"' + (state.connecting ? " disabled" : "") + '>Forget</button>' : '') +
+          '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
+        '</div>' +
+        (state.formMessage ? '<div class="network-form-message" data-tone="' + escapeHtml(state.formTone || "muted") + '">' + escapeHtml(state.formMessage) + '</div>' : '') +
+      '</form>';
+
     return '' +
-      '<article class="list-card inline-card network-unifi-card">' +
+      '<article class="list-card inline-card network-unifi-card" data-link-state="' + escapeHtml(linkState) + '">' +
         '<div class="inline-card-header">' +
           '<div>' +
             '<div class="metric-label">' + escapeHtml(title) + '</div>' +
@@ -923,25 +955,7 @@
           '</div>' +
           status +
         '</div>' +
-        '<div class="network-unifi-kpis">' +
-          networkPill("Clients", String(unifiData.clients.total), unifiData.clients.wifi + " Wi-Fi / " + unifiData.clients.wired + " wired", linked ? "good" : "muted") +
-          networkPill("APs", String(unifiData.aps.length), unifiData.site ? "Site " + unifiData.site : "Access points", linked ? "good" : "muted") +
-          networkPill("Console", host || "--", unifiData.provider || "UniFi", detected || linked ? "good" : "muted") +
-        '</div>' +
-        '<form class="network-unifi-form" data-action="unifi-connect">' +
-          '<div class="inline-form-grid inline-form-grid--2">' +
-            '<label class="inline-field"><span>Host</span><input class="inline-input" type="text" name="host" value="' + escapeHtml(host) + '" placeholder="192.168.1.1"></label>' +
-            '<label class="inline-field"><span>Site</span><input class="inline-input" type="text" name="site" value="' + escapeHtml(text(unifiData.site, "default")) + '" placeholder="default"></label>' +
-            '<label class="inline-field"><span>Username</span><input class="inline-input" type="text" name="username" autocomplete="username" placeholder="local UniFi user"></label>' +
-            '<label class="inline-field"><span>Password</span><input class="inline-input" type="password" name="password" autocomplete="current-password" placeholder="' + (linked ? "saved" : "password") + '"></label>' +
-          '</div>' +
-          '<div class="inline-actions network-unifi-actions">' +
-            '<button class="inline-button is-primary" type="submit"' + (state.connecting ? " disabled" : "") + '>' + (state.connecting ? "Connecting" : linked ? "Update link" : "Connect") + '</button>' +
-            (linked || configured ? '<button class="inline-button" type="button" data-action="unifi-disconnect"' + (state.connecting ? " disabled" : "") + '>Forget</button>' : '') +
-            '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
-          '</div>' +
-          (state.formMessage ? '<div class="network-form-message" data-tone="' + escapeHtml(state.formTone || "muted") + '">' + escapeHtml(state.formMessage) + '</div>' : '') +
-        '</form>' +
+        (linked ? kpis + form : form + kpis) +
       '</article>';
   }
 
@@ -1007,11 +1021,34 @@
       statusTone: "warn",
       connecting: false,
       formMessage: "",
-      formTone: "muted"
+      formTone: "muted",
+      unifiDraft: {}
     };
 
     function redraw() {
       container.innerHTML = renderNetworkWidget(state.bridge, state.unifi, state.statusText, state.statusTone, state);
+    }
+
+    function readUniFiDraft(form) {
+      var data = new FormData(form);
+      state.unifiDraft = {
+        host: String(data.get("host") || ""),
+        site: String(data.get("site") || ""),
+        username: String(data.get("username") || ""),
+        password: String(data.get("password") || "")
+      };
+      return state.unifiDraft;
+    }
+
+    function isUniFiFormActive() {
+      var active = document.activeElement;
+      return Boolean(active && container.contains(active) && active.closest && active.closest('form[data-action="unifi-connect"]'));
+    }
+
+    function redrawWhenFormIdle() {
+      if (!isUniFiFormActive()) {
+        redraw();
+      }
     }
 
     function refresh() {
@@ -1028,31 +1065,37 @@
         state.unifi = results[1] || normalizeUnifiSnapshot({});
         state.statusText = state.unifi.linked ? "UniFi linked" : state.unifi.detected ? "UniFi detected" : statusTextFromPayload(state.bridge, "Live");
         state.statusTone = state.unifi.linked || state.unifi.detected ? toneForState(state.unifi.status || "live") : statusToneFromPayload(state.bridge, "live");
-        redraw();
+        redrawWhenFormIdle();
       }, function (error) {
         state.bridge = normalizeNetworkSnapshot({ source: error.message || "Unavailable", status: "error" });
         state.unifi = normalizeUnifiSnapshot({});
         state.statusText = error.message || "Unavailable";
         state.statusTone = "danger";
-        redraw();
+        redrawWhenFormIdle();
       });
     }
 
     function connect(form) {
-      var data = new FormData(form);
+      var draft = readUniFiDraft(form);
       state.connecting = true;
       state.formMessage = "";
       redraw();
       return requestJson(buildBridgeUrl(env, "/api/unifi/network/link"), {
         method: "POST",
         body: {
-          host: data.get("host"),
-          username: data.get("username"),
-          password: data.get("password"),
-          site: data.get("site")
+          host: draft.host,
+          username: draft.username,
+          password: draft.password,
+          site: draft.site
         }
       }, 12000).then(function (payload) {
         state.unifi = normalizeUnifiSnapshot(payload);
+        state.unifiDraft = {
+          host: text(state.unifi.gatewayIp, text(state.unifi.host, draft.host)),
+          site: text(state.unifi.site, draft.site || "default"),
+          username: draft.username,
+          password: ""
+        };
         state.statusText = "UniFi linked";
         state.statusTone = "good";
         state.formMessage = "Linked locally";
@@ -1077,6 +1120,7 @@
         body: {}
       }, 5000).then(function (payload) {
         state.unifi = normalizeUnifiSnapshot(payload);
+        state.unifiDraft = {};
         state.statusText = "UniFi optional";
         state.statusTone = "muted";
         state.formMessage = "UniFi forgotten";
@@ -1099,6 +1143,13 @@
       connect(form);
     });
 
+    addListener(cleanups, container, "input", function (event) {
+      var form = event.target && event.target.closest ? event.target.closest('form[data-action="unifi-connect"]') : null;
+      if (form) {
+        readUniFiDraft(form);
+      }
+    });
+
     addListener(cleanups, container, "click", function (event) {
       var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
       if (!target) {
@@ -1112,7 +1163,7 @@
       }
     });
 
-    var loop = createTimerLoop(refresh, 4000);
+    var loop = createTimerLoop(refresh, 4000, isUniFiFormActive);
     redraw();
     loop.start();
 
