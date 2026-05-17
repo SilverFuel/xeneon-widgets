@@ -18,6 +18,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Post-UniFi CodeRabbit committed-diff review raised 2 minor issues; both were fixed and covered.
   - Final post-fix CodeRabbit committed-diff review completed with 0 findings.
   - User-reported Windows display-settings interference was mitigated by making monitor retargeting passive.
+  - Post-display-safety CodeRabbit review raised 2 issues; both were fixed and covered.
 - Findings resolved:
   - P0: 0
   - P1: 6
@@ -73,6 +74,8 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | CR-9 | P2 | `js/inline-widgets.js` | Disabled UniFi host, site, username, password, refresh, submit, and forget controls while link/disconnect requests are in flight; duplicate action handlers now return early while connecting. | `8006d6c` |
 | CR-10 | P2 | `scripts/run-release-gauntlet.ps1` | Added early validation rejecting simultaneous `-RequireSignedInstaller` and `-AllowUnsignedBeta`; covered by a release-gauntlet validation check. | `8006d6c` |
 | User issue | P1 | `app/MainWindow.xaml.cs` | Removed automatic Windows display-change retargeting and made startup/tray positioning non-persistent so Xenon does not fight Windows display defaults. | `c1bf008` |
+| CR-11 | P0 | `app/MainWindow.xaml.cs` | Cleared the WebView recovery gate if dispatcher enqueue fails so future recovery attempts are not blocked. | `e7b8a6b` |
+| CR-12 | P1 | `js/inline-widgets.js` | Tightened UniFi form focus detection so only editable credential fields pause polling; buttons and disabled/read-only controls no longer suppress redraws. | `e7b8a6b` |
 
 ## Checklist Status
 
