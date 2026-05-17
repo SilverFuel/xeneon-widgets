@@ -79,8 +79,8 @@
     }
   },
   "devDependencies": {
-    "electron": "^41.3.0",
-    "electron-builder": "^26.8.1"
+    "electron": "41.3.0",
+    "electron-builder": "26.8.1"
   },
   "engines": {
     "node": ">=22"

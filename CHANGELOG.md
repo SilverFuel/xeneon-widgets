@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Improved first-run setup and diagnostics so readiness states are clearer and optional panels stay out of the way until needed.
+- Improved dashboard recovery when Windows display changes or the embedded browser needs to reload.
+- Stopped automatic monitor-change recovery from repositioning the dashboard while Windows display settings are being changed.
+- Improved local bridge reliability with safer request handling, clearer client errors, and better support diagnostics.
+- Improved installer and release validation before publishing beta builds.
+- Hardened Windows installer upgrades, startup repair, uninstall cleanup, and release packaging checks.
+- Added Start Menu Safe Mode and Repair shortcuts for display recovery and install self-healing.
+- Made the beta host build more reproducible and easier to verify.
 - Added primary display refresh-rate telemetry from the native host.
 - Upgraded Game Mode with live display refresh, dashboard FPS, CPU, and GPU readouts.
 - Renamed Game Mode FPS cards to Display Hz and Dashboard FPS so Windows refresh rate is not confused with game frame rate.
@@ -19,6 +27,7 @@
 - Simplified Network Monitor to the useful essentials: download, upload, ping, connection health, and a compact UniFi summary only when detected.
 - Combined Network and UniFi into one stronger Network page with readiness score, adapter path, gateway/DNS detail, local UniFi linking, clients, and APs.
 - Added protected local UniFi credential storage and local UniFi Network API polling for linked client/AP stats.
+- Fixed UniFi credential entry so detected-console refreshes do not interrupt username or password typing.
 - Added a compact Game Mode network strip so in-game focus shows ping, throughput, readiness, and UniFi client/AP context.
 - Guarded Windows media session refreshes with a timeout so health checks do not hang when the Windows media COM layer stalls.
 - Simplified Audio into a quick control panel with one master output, compact output switching, active app controls only, and smoother page scrolling.

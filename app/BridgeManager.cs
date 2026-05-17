@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -90,13 +91,16 @@ public sealed class BridgeManager : IDisposable
 
     public event Action<string>? BridgeStopped;
 
-    public List<DisplayTarget> ListDisplayCandidates()
+    public List<DisplayTarget> ListDisplayCandidates(bool ignoreSavedPreference = false)
     {
         var config = _configStore.Snapshot();
-        return DisplayManager.ListDisplays(config.Dashboard.PreferredDisplayId);
+        return DisplayManager.ListDisplays(ignoreSavedPreference ? null : config.Dashboard.PreferredDisplayId);
     }
 
-    public DisplayTarget SelectDisplayTarget(IReadOnlyList<DisplayTarget>? candidates = null)
+    public DisplayTarget SelectDisplayTarget(
+        IReadOnlyList<DisplayTarget>? candidates = null,
+        bool saveSelection = true,
+        bool preferPrimary = false)
     {
         var config = _configStore.Snapshot();
         var displayCandidates = candidates?.Count > 0
@@ -108,7 +112,14 @@ public sealed class BridgeManager : IDisposable
             throw new InvalidOperationException("No displays were detected.");
         }
 
-        var selected = displayCandidates[0];
+        var selected = preferPrimary
+            ? displayCandidates.FirstOrDefault(display => display.IsPrimary) ?? displayCandidates[0]
+            : displayCandidates[0];
+        if (!saveSelection)
+        {
+            return selected;
+        }
+
         _configStore.Update(current =>
         {
             current.Dashboard.PreferredDisplayId = selected.StableId;
@@ -301,11 +312,17 @@ public sealed class BridgeManager : IDisposable
 
     private async Task HandleRequestAsync(HttpListenerContext context, CancellationToken cancellationToken)
     {
+        var request = context.Request;
+        var response = context.Response;
+        var requestId = CreateRequestId();
+        var startedAt = Stopwatch.GetTimestamp();
+        var method = request.HttpMethod;
+        var path = request.Url?.PathAndQuery ?? "/";
+
         try
         {
-            var request = context.Request;
-            var response = context.Response;
-            var path = request.Url?.AbsolutePath ?? "/";
+            response.Headers["X-Request-ID"] = requestId;
+            path = request.Url?.AbsolutePath ?? "/";
 
             if (!TryAuthorizeOrigin(request, out var corsOrigin))
             {
@@ -553,6 +570,10 @@ public sealed class BridgeManager : IDisposable
             catch
             {
             }
+        }
+        finally
+        {
+            LogRequestBoundary(requestId, method, path, response.StatusCode, Stopwatch.GetElapsedTime(startedAt));
         }
     }
 
@@ -1621,6 +1642,26 @@ public sealed class BridgeManager : IDisposable
         return uri.IsDefaultPort
             ? $"{uri.Scheme}://{uri.Host}"
             : $"{uri.Scheme}://{uri.Host}:{uri.Port}";
+    }
+
+    private void LogRequestBoundary(string requestId, string method, string path, int statusCode, TimeSpan elapsed)
+    {
+        var payload = new
+        {
+            eventName = "http_request",
+            requestId,
+            method,
+            path = SanitizeSupportText(path),
+            statusCode,
+            durationMs = Math.Round(elapsed.TotalMilliseconds, 1)
+        };
+
+        _logger.Info(JsonSerializer.Serialize(payload, JsonOptions));
+    }
+
+    private static string CreateRequestId()
+    {
+        return Guid.NewGuid().ToString("N")[..12];
     }
 
     private static void ApplyCorsHeaders(HttpListenerResponse response, string? corsOrigin)

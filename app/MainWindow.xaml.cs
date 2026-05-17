@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
     private bool _taskbarStyleApplied;
     private int _quitRequested;
     private int _navigationFailures;
+    private int _webViewRecoveryScheduled;
     private EventWaitHandle? _showDisplayEvent;
     private RegisteredWaitHandle? _showDisplayWaitHandle;
 
@@ -78,20 +79,24 @@ public sealed partial class MainWindow : Window
             onResetDashboard: () => DispatcherQueue.TryEnqueue(() => _ = ResetDashboardStateAsync()),
             onQuit: RequestQuitFromTray,
             logger: _logger);
-        ConfigureWindow();
+        ConfigureWindow(saveSelection: false);
         await InitializeHostAsync();
     }
 
-    private void ConfigureWindow()
+    private void ConfigureWindow(bool saveSelection)
     {
         var windowHandle = WindowNative.GetWindowHandle(this);
-        var displayCandidates = _bridgeManager.ListDisplayCandidates();
+        var safeMode = Program.LaunchOptions.SafeMode;
+        var displayCandidates = _bridgeManager.ListDisplayCandidates(ignoreSavedPreference: safeMode);
         if (displayCandidates.Count == 0)
         {
             throw new InvalidOperationException("No displays were detected.");
         }
 
-        var targetDisplay = _bridgeManager.SelectDisplayTarget(displayCandidates);
+        var targetDisplay = _bridgeManager.SelectDisplayTarget(
+            displayCandidates,
+            saveSelection: saveSelection && !safeMode,
+            preferPrimary: safeMode);
         var appWindow = AppWindow;
 
         appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
@@ -111,8 +116,10 @@ public sealed partial class MainWindow : Window
         EnsureDisplayWindowStaysOffTaskbar(windowHandle);
 
         _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
-        _logger.Info($"Window positioned on {targetDisplay.Label} (score {targetDisplay.Score}).");
-        SetOverlayText($"Launching on {targetDisplay.Label}.");
+        _logger.Info($"{(safeMode ? "Safe Mode: " : "")}Window positioned on {targetDisplay.Label} (score {targetDisplay.Score}).");
+        SetOverlayText(safeMode
+            ? $"Safe Mode: launching on primary display ({targetDisplay.Label})."
+            : $"Launching on {targetDisplay.Label}.");
     }
 
     private static string DescribeDisplayCandidate(DisplayTarget display)
@@ -323,6 +330,7 @@ public sealed partial class MainWindow : Window
     private void HandleProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs args)
     {
         _logger.Error($"WebView process failed: {args.ProcessFailedKind}");
+        ScheduleWebViewRecovery($"WebView process failed: {args.ProcessFailedKind}");
     }
 
     private async Task RetryNavigationAsync()
@@ -335,6 +343,46 @@ public sealed partial class MainWindow : Window
         }
 
         NavigateDashboard(forceReload: true);
+    }
+
+    private void ScheduleWebViewRecovery(string reason)
+    {
+        if (_disposed || Interlocked.Exchange(ref _webViewRecoveryScheduled, 1) == 1)
+        {
+            return;
+        }
+
+        if (!DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                SetOverlayText("Recovering dashboard display...");
+                _logger.Warn($"Recovering dashboard after {reason}.");
+                await Task.Delay(1000);
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _webViewDiagnosticsAttached = false;
+                await EnsureWebViewReadyAsync();
+                _navigationFailures = 0;
+                NavigateDashboard(forceReload: true);
+            }
+            catch (Exception error)
+            {
+                _logger.Error("WebView recovery failed.", error);
+                SetOverlayText($"Dashboard display recovery failed.\n{error.Message}\n\nUse the tray icon to restart the server.");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _webViewRecoveryScheduled, 0);
+            }
+        }))
+        {
+            _logger.Warn("Failed to enqueue WebView recovery. Clearing recovery gate.");
+            Interlocked.Exchange(ref _webViewRecoveryScheduled, 0);
+        }
     }
 
     private void HandleBridgeStatusChanged(string message)
@@ -460,7 +508,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowDisplayWindow()
     {
-        ConfigureWindow();
+        ConfigureWindow(saveSelection: false);
         ShowWindowNoActivate();
     }
 

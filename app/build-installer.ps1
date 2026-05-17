@@ -32,6 +32,9 @@ $outputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) {
   [System.IO.Path]::GetFullPath($OutputPath)
 }
 $outputDirectory = Split-Path -Parent $outputPath
+if ([System.IO.Path]::GetExtension($outputPath) -ne ".exe") {
+  throw "OutputPath must end with .exe so the build script cannot overwrite an unrelated file type."
+}
 $sedPath = Join-Path $stageRoot "XenonEdgeHost-Setup.sed"
 $installCmdPath = Join-Path $stageRoot "install.cmd"
 $distReadmePath = Join-Path $distDir "README-install.txt"
@@ -40,6 +43,8 @@ $installScriptPath = Join-Path $installerScriptRoot "Install-XenonEdgeHost.ps1"
 $removeScriptPath = Join-Path $installerScriptRoot "Remove-XenonEdgeHost.ps1"
 $supportInstallPath = Join-Path $scriptRoot "install.ps1"
 $supportUninstallPath = Join-Path $scriptRoot "uninstall.ps1"
+$supportSafeModePath = Join-Path $scriptRoot "Launch-XenonSafeMode.ps1"
+$supportRepairPath = Join-Path $scriptRoot "repair.ps1"
 $payloadZipPath = Join-Path $stageRoot "payload.zip"
 
 function Write-Step($message) {
@@ -74,6 +79,8 @@ function New-IExpressSed($sourceDir, $targetPath, $sedPath) {
     "Remove-XenonEdgeHost.ps1",
     "install.ps1",
     "uninstall.ps1",
+    "Launch-XenonSafeMode.ps1",
+    "repair.ps1",
     "payload.zip"
   )
 
@@ -143,7 +150,7 @@ if (-not (Test-Path (Join-Path $publishDir "XenonEdgeHost.exe"))) {
 }
 
 Write-Step "Preparing installer staging"
-Remove-Item $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $payloadRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
@@ -156,7 +163,7 @@ Get-ChildItem $publishDir -Force | Where-Object { $_.Name -ne "XenonEdgeHost.exe
 }
 
 if (Test-Path $payloadZipPath) {
-  Remove-Item $payloadZipPath -Force
+  Remove-Item -LiteralPath $payloadZipPath -Force
 }
 
 Compress-Archive -Path (Join-Path $payloadRoot "*") -DestinationPath $payloadZipPath -CompressionLevel Optimal
@@ -164,6 +171,8 @@ Copy-Item $installScriptPath (Join-Path $stageRoot "Install-XenonEdgeHost.ps1") 
 Copy-Item $removeScriptPath (Join-Path $stageRoot "Remove-XenonEdgeHost.ps1") -Force
 Copy-Item $supportInstallPath (Join-Path $stageRoot "install.ps1") -Force
 Copy-Item $supportUninstallPath (Join-Path $stageRoot "uninstall.ps1") -Force
+Copy-Item $supportSafeModePath (Join-Path $stageRoot "Launch-XenonSafeMode.ps1") -Force
+Copy-Item $supportRepairPath (Join-Path $stageRoot "repair.ps1") -Force
 
 @"
 @echo off
@@ -175,7 +184,7 @@ endlocal & exit /b %EXITCODE%
 
 Write-Step "Generating IExpress package"
 if (Test-Path $outputPath) {
-  Remove-Item $outputPath -Force
+  Remove-Item -LiteralPath $outputPath -Force
 }
 
 $iexpress = Get-Command iexpress.exe -ErrorAction SilentlyContinue
@@ -184,7 +193,10 @@ if (-not $iexpress) {
 }
 
 New-IExpressSed -sourceDir $stageRoot -targetPath $outputPath -sedPath $sedPath
-Start-Process $iexpress.Source -ArgumentList @("/N", "/Q", "/M", $sedPath) -Wait
+$iexpressProcess = Start-Process $iexpress.Source -ArgumentList @("/N", "/Q", "/M", $sedPath) -Wait -PassThru
+if ($iexpressProcess.ExitCode -ne 0) {
+  throw "IExpress failed with exit code $($iexpressProcess.ExitCode)."
+}
 
 if (-not (Test-Path $outputPath)) {
   throw "IExpress did not produce the installer at $outputPath"
@@ -208,6 +220,7 @@ Installs to:
 
 Creates:
   - Start Menu shortcuts
+  - Safe Mode and Repair Start Menu shortcuts
   - Desktop shortcut
   - current-user auto-start entry
   - Apps & Features uninstall entry
