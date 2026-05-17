@@ -917,6 +917,7 @@
     var detected = Boolean(unifiData.detected);
     var configured = Boolean(unifiData.configured);
     var linkState = linked ? "linked" : "connect";
+    var disabled = state.connecting ? " disabled" : "";
     var title = linked ? "UniFi linked" : detected ? "UniFi detected" : configured ? "Reconnect UniFi" : "Connect UniFi";
     var copy = linked
       ? unifiData.gateway
@@ -933,15 +934,15 @@
     var form = '' +
       '<form class="network-unifi-form" data-action="unifi-connect">' +
         '<div class="inline-form-grid inline-form-grid--2">' +
-          '<label class="inline-field"><span>Host</span><input class="inline-input" type="text" name="host" value="' + escapeHtml(formHost) + '" placeholder="192.168.1.1"></label>' +
-          '<label class="inline-field"><span>Site</span><input class="inline-input" type="text" name="site" value="' + escapeHtml(formSite) + '" placeholder="default"></label>' +
-          '<label class="inline-field"><span>Username</span><input class="inline-input" type="text" name="username" autocomplete="username" value="' + escapeHtml(formUsername) + '" placeholder="local UniFi user"></label>' +
-          '<label class="inline-field"><span>Password</span><input class="inline-input" type="password" name="password" autocomplete="current-password" value="' + escapeHtml(formPassword) + '" placeholder="' + (linked ? "saved" : "password") + '"></label>' +
+          '<label class="inline-field"><span>Host</span><input class="inline-input" type="text" name="host" value="' + escapeHtml(formHost) + '" placeholder="192.168.1.1"' + disabled + '></label>' +
+          '<label class="inline-field"><span>Site</span><input class="inline-input" type="text" name="site" value="' + escapeHtml(formSite) + '" placeholder="default"' + disabled + '></label>' +
+          '<label class="inline-field"><span>Username</span><input class="inline-input" type="text" name="username" autocomplete="username" value="' + escapeHtml(formUsername) + '" placeholder="local UniFi user"' + disabled + '></label>' +
+          '<label class="inline-field"><span>Password</span><input class="inline-input" type="password" name="password" autocomplete="current-password" value="' + escapeHtml(formPassword) + '" placeholder="' + (linked ? "saved" : "password") + '"' + disabled + '></label>' +
         '</div>' +
         '<div class="inline-actions network-unifi-actions">' +
-          '<button class="inline-button is-primary" type="submit"' + (state.connecting ? " disabled" : "") + '>' + (state.connecting ? "Connecting" : linked ? "Update link" : "Connect") + '</button>' +
-          (linked || configured ? '<button class="inline-button" type="button" data-action="unifi-disconnect"' + (state.connecting ? " disabled" : "") + '>Forget</button>' : '') +
-          '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
+          '<button class="inline-button is-primary" type="submit"' + disabled + '>' + (state.connecting ? "Connecting" : linked ? "Update link" : "Connect") + '</button>' +
+          (linked || configured ? '<button class="inline-button" type="button" data-action="unifi-disconnect"' + disabled + '>Forget</button>' : '') +
+          '<button class="inline-button" type="button" data-action="refresh"' + disabled + '>Refresh</button>' +
         '</div>' +
         (state.formMessage ? '<div class="network-form-message" data-tone="' + escapeHtml(state.formTone || "muted") + '">' + escapeHtml(state.formMessage) + '</div>' : '') +
       '</form>';
@@ -1076,6 +1077,10 @@
     }
 
     function connect(form) {
+      if (state.connecting) {
+        return Promise.resolve();
+      }
+
       var draft = readUniFiDraft(form);
       state.connecting = true;
       state.formMessage = "";
@@ -1112,6 +1117,10 @@
     }
 
     function disconnect() {
+      if (state.connecting) {
+        return Promise.resolve();
+      }
+
       state.connecting = true;
       state.formMessage = "";
       redraw();
@@ -1140,6 +1149,9 @@
         return;
       }
       event.preventDefault();
+      if (state.connecting) {
+        return;
+      }
       connect(form);
     });
 
@@ -1152,7 +1164,7 @@
 
     addListener(cleanups, container, "click", function (event) {
       var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
-      if (!target) {
+      if (!target || state.connecting) {
         return;
       }
       if (target.getAttribute("data-action") === "refresh") {
