@@ -56,8 +56,8 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - `npm run installer`
   - `npm run release:gauntlet`
   - `npm run release:ready`
-  - `scripts/assert-release-ready.ps1 -AllowDirty -AllowGitHubSupportPath -InstallerPath app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1924.exe`
-  - Fresh installer SHA256 sidecar verification for `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1924.exe`
+  - `scripts/assert-release-ready.ps1 -AllowDirty -AllowGitHubSupportPath -InstallerPath app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1942.exe`
+  - Fresh installer SHA256 sidecar verification for `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1942.exe`
   - Source-to-staged installer script hash comparison for every packaged installer support script.
   - `scripts/test-windows-install.ps1` non-mutating installed-app smoke check
   - Browser visual QA at `2560x720` and `1280x720` using an isolated local bridge.
@@ -113,7 +113,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | Observability | 🔧 fixed | Added `X-Request-ID` response headers and structured `http_request` boundary logs with request ID, method, path, status, and duration for native and legacy local HTTP servers (`73bade9`). `/api/health` already exists for health/readiness. |
 | Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, UniFi credential form stability, release-gauntlet argument validation, installer safety, Safe Mode/Repair shortcut coverage, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. |
 | Documentation | 🔧 fixed | Added `.env.example` documenting no required normal-install env vars plus optional HWiNFO/macOS notarization variables (`81d2247`). Updated `CHANGELOG.md` for the release-readiness changes. README already covers install, configure, run, release, support, and cleanup paths. |
-| Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1924.exe` and matching `.sha256`, verified the sidecar hash, and confirmed packaged support scripts match source. Added dependency audits to CI and release workflow (`81d2247`), explicit CI `npm ci` before audit/check (`c6f3c9c`), and release workflow lockfile installs before Windows/macOS packaging (`5b07c15`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
+| Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1942.exe` and matching `.sha256`, verified the sidecar hash, and confirmed packaged support scripts match source. Added dependency audits to CI and release workflow (`81d2247`), explicit CI `npm ci` before audit/check (`c6f3c9c`), and release workflow lockfile installs before Windows/macOS packaging (`5b07c15`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
 | Performance | ✅ already satisfied | No measured hot path or obvious user-facing O(n²) issue was identified in the scoped changes, so no performance changes were made. |
 
 ## Known Limitations
