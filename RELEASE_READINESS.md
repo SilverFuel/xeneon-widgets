@@ -19,9 +19,11 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Final post-fix CodeRabbit committed-diff review completed with 0 findings.
   - User-reported Windows display-settings interference was mitigated by making monitor retargeting passive.
   - Post-display-safety CodeRabbit review raised 2 issues; both were fixed and covered.
+  - Windows installer audit ran 5 focused passes across install transactions, cleanup safety, startup behavior, generated artifacts, and release validation.
+  - Installer-scoped CodeRabbit review raised 2 major process-stop verification issues; both were fixed and the rerun completed with 0 findings.
 - Findings resolved:
   - P0: 0
-  - P1: 6
+  - P1: 8
   - P2: 4
 - Scoped improvements completed:
   - Added local bridge API integration coverage for health, CORS rejection, invalid JSON, oversized JSON, and dashboard config writes.
@@ -32,6 +34,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Fixed UniFi credential entry so detected-console refreshes do not interrupt username or password typing.
   - Disabled UniFi link controls during in-flight credential requests and guarded release-gauntlet signing mode arguments.
   - Stopped automatic monitor-change recovery from repositioning or saving display targets while Windows settings are changing.
+  - Hardened Windows setup and removal so upgrades stop the running host deterministically, rollback preserves previous installs, `-NoAutoStart` removes stale startup entries, and cleanup paths stay under current-user install/data roots.
 - Tests and checks added:
   - `scripts/check-setup-guide.mjs`
   - `scripts/check-bridge-boundaries.mjs`
@@ -41,20 +44,35 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - `scripts/check-display-recovery.mjs`
   - `scripts/check-unifi-form-draft.mjs`
   - `scripts/check-release-gauntlet.mjs`
+  - `scripts/check-installer-safety.mjs`
   - `scripts/test-bridge-api.mjs`
   - `scripts/run-release-gauntlet.ps1`
 - Local validation passed:
   - `npm run audit:deps`
   - `npm run check`
+  - `npm run installer`
   - `npm run release:gauntlet`
   - `npm run release:ready`
-  - `scripts/assert-release-ready.ps1 -AllowGitHubSupportPath -InstallerPath <built installer>`
+  - `scripts/assert-release-ready.ps1 -AllowDirty -AllowGitHubSupportPath -InstallerPath app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1632.exe`
+  - Fresh installer SHA256 sidecar verification for `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1632.exe`
+  - Source-to-staged installer script hash comparison for every packaged installer support script.
   - `scripts/test-windows-install.ps1` non-mutating installed-app smoke check
   - Browser visual QA at `2560x720` and `1280x720` using an isolated local bridge.
 - Exit criteria status:
   - Local audits, checks, artifact build, and release gates pass.
   - Backend CodeRabbit confirmation is complete for `app` and `bridge`.
   - Full-branch CodeRabbit zero-finding confirmation is complete.
+  - Installer-scoped CodeRabbit zero-finding confirmation is complete.
+
+## Installer Audit Passes
+
+| Pass | Scope | Result |
+| --- | --- | --- |
+| 1 | Installer artifact flow | Confirmed publish, staging, IExpress packaging, SHA256 sidecar generation, and source-to-staged script parity. Fixed IExpress exit-code handling and constrained output deletion to `.exe` targets. |
+| 2 | Install transaction safety | Fixed failed-upgrade rollback so previous installs are restored or fresh partial installs are removed only after setup failure. |
+| 3 | Uninstall and cleanup safety | Added exact-path cleanup, current-user path constraints, running-host shutdown before cleanup, root-task-only removal, and uninstaller exit-code smoke coverage. |
+| 4 | Startup and upgrade behavior | Repaired stale/disabled scheduled tasks with forced re-registration, made `-NoAutoStart` remove existing startup integration, and made launch failure non-fatal after successful install. |
+| 5 | Release validation and review | Added `scripts/check-installer-safety.mjs`, wired it into `npm run check`, rebuilt the installer, verified hashes/signature status, ran local gates, and reran CodeRabbit to 0 issues. |
 
 ## Resolved Findings
 
@@ -76,6 +94,9 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | User issue | P1 | `app/MainWindow.xaml.cs` | Removed automatic Windows display-change retargeting and made startup/tray positioning non-persistent so Xenon does not fight Windows display defaults. | `c1bf008` |
 | CR-11 | P0 | `app/MainWindow.xaml.cs` | Cleared the WebView recovery gate if dispatcher enqueue fails so future recovery attempts are not blocked. | `e7b8a6b` |
 | CR-12 | P1 | `js/inline-widgets.js` | Tightened UniFi form focus detection so only editable credential fields pause polling; buttons and disabled/read-only controls no longer suppress redraws. | `e7b8a6b` |
+| CR-13 | P1 | `app/installer/Install-XenonEdgeHost.ps1` | Verified stopped host processes actually exit before replacing install files, with a retry and clear failure path. | `5b07c15` |
+| CR-14 | P1 | `app/installer/Remove-XenonEdgeHost.ps1` | Verified stopped host processes actually exit before uninstall cleanup, with a retry and clear failure path. | `5b07c15` |
+| Installer audit | P1 | `app/build-installer.ps1`, `app/install.ps1`, `app/installer/Install-XenonEdgeHost.ps1`, `app/installer/Remove-XenonEdgeHost.ps1`, `app/uninstall.ps1`, `scripts/test-windows-install.ps1` | Hardened rollback, autostart repair, `-NoAutoStart`, exact cleanup paths, release workflow dependency installs, and installer safety regression checks. | `5b07c15` |
 
 ## Checklist Status
 
@@ -84,16 +105,16 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | Security | 🔧 fixed | Added root lockfile so root `npm audit` runs (`4e1ec27`), added `npm run audit:deps` for root npm, Electron npm, and NuGet audits in CI/release builds (`81d2247`), verified audits report 0 vulnerabilities, and ran a targeted secret-pattern scan with no credential-shaped matches. Local API origin restrictions and protected secret storage were already covered by `scripts/assert-release-ready.ps1`; bridge API CORS/body handling is now covered by `scripts/test-bridge-api.mjs` (`a911acd`). |
 | Reliability | 🔧 fixed | Added a 256 KiB JSON body limit to the legacy bridge, explicit HTTP 400/413 client errors, and generic HTTP 500 client messages (`0b09773`). Guarded streamed bridge error handling after headers are sent (`fb6178a`). Added bridge API integration coverage and explicit browser-bridge setup states (`a911acd`, `629c9a8`). WebView process-failure recovery remains, while automatic monitor-change retargeting was removed so Windows display settings remain authoritative (`c1bf008`). Native host already had request body limits, localhost binding, external-call timeouts, and graceful stop handling. |
 | Observability | 🔧 fixed | Added `X-Request-ID` response headers and structured `http_request` boundary logs with request ID, method, path, status, and duration for native and legacy local HTTP servers (`73bade9`). `/api/health` already exists for health/readiness. |
-| Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, UniFi credential form stability, release-gauntlet argument validation, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. Existing installed-app smoke validation passes. |
+| Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, UniFi credential form stability, release-gauntlet argument validation, installer safety, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. |
 | Documentation | 🔧 fixed | Added `.env.example` documenting no required normal-install env vars plus optional HWiNFO/macOS notarization variables (`81d2247`). Updated `CHANGELOG.md` for the release-readiness changes. README already covers install, configure, run, release, support, and cleanup paths. |
-| Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260516-1349.exe` and matching `.sha256`. Added dependency audits to CI and release workflow (`81d2247`) and an explicit CI `npm ci` install before audit/check steps (`c6f3c9c`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
+| Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1632.exe` and matching `.sha256`, verified the sidecar hash, and confirmed packaged support scripts match source. Added dependency audits to CI and release workflow (`81d2247`), explicit CI `npm ci` before audit/check (`c6f3c9c`), and release workflow lockfile installs before Windows/macOS packaging (`5b07c15`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
 | Performance | ✅ already satisfied | No measured hot path or obvious user-facing O(n²) issue was identified in the scoped changes, so no performance changes were made. |
 
 ## Known Limitations
 
 - The Windows installer remains unsigned for the free beta; release readiness reports this as an expected beta warning.
 - Support remains GitHub Issues and GitHub Security Advisories for the free beta; this is an expected beta warning.
-- A destructive clean install/uninstall cycle on a fresh Windows profile or VM was not run in this local pass because a current-user installation already exists. The non-mutating installed-app smoke check passed.
+- A destructive clean install/uninstall cycle on a fresh Windows profile or VM was not run in this local pass because this machine intentionally has Xenon stopped and auto-start disabled. The installer smoke helper now validates startup integration when run in a disposable profile.
 
 ## Suggested Follow-ups
 
