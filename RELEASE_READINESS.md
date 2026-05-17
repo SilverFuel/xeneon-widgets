@@ -22,9 +22,10 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Windows installer audit ran 5 focused passes across install transactions, cleanup safety, startup behavior, generated artifacts, and release validation.
   - Installer-scoped CodeRabbit review raised 2 major process-stop verification issues; both were fixed and the rerun completed with 0 findings.
   - Safe Mode and Repair installer recovery shortcuts were added and CodeRabbit reviewed the change with 0 findings.
+  - Final committed CodeRabbit review raised 1 WebView recovery diagnostics issue; it was fixed and covered.
 - Findings resolved:
   - P0: 0
-  - P1: 8
+  - P1: 9
   - P2: 4
 - Scoped improvements completed:
   - Added local bridge API integration coverage for health, CORS rejection, invalid JSON, oversized JSON, and dashboard config writes.
@@ -101,6 +102,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | CR-14 | P1 | `app/installer/Remove-XenonEdgeHost.ps1` | Verified stopped host processes actually exit before uninstall cleanup, with a retry and clear failure path. | `5b07c15` |
 | Installer audit | P1 | `app/build-installer.ps1`, `app/install.ps1`, `app/installer/Install-XenonEdgeHost.ps1`, `app/installer/Remove-XenonEdgeHost.ps1`, `app/uninstall.ps1`, `scripts/test-windows-install.ps1` | Hardened rollback, autostart repair, `-NoAutoStart`, exact cleanup paths, release workflow dependency installs, and installer safety regression checks. | `5b07c15` |
 | Improvement | P1 | `app/AppLaunchOptions.cs`, `app/MainWindow.xaml.cs`, `app/Launch-XenonSafeMode.ps1`, `app/repair.ps1`, `app/installer/Install-XenonEdgeHost.ps1` | Added Safe Mode launch support, a Start Menu Safe Mode shortcut that disables auto-start and opens on the primary display, and a Repair shortcut that restores shortcuts/startup/uninstall registration without touching local data. | `24645d6` |
+| CR-15 | P1 | `app/MainWindow.xaml.cs` | Reset the WebView diagnostics attachment flag before recovery reinitializes WebView2 so diagnostics handlers attach to the replacement CoreWebView2 instance. | `ecae443` |
 
 ## Checklist Status
 
