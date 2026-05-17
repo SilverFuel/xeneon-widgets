@@ -16,6 +16,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Final post-improvement full branch review completed with 0 findings.
   - User-reported UniFi credential-entry regression was fixed and covered before final packaging.
   - Post-UniFi CodeRabbit committed-diff review raised 2 minor issues; both were fixed and covered.
+  - Final post-fix CodeRabbit committed-diff review completed with 0 findings.
 - Findings resolved:
   - P0: 0
   - P1: 6
