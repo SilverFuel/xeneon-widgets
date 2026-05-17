@@ -37,6 +37,23 @@ assert(
 );
 
 assert(
+  /var disabled = state\.connecting \? " disabled" : ""/.test(widgets)
+    && /name="host"[\s\S]+\+ disabled \+/.test(widgets)
+    && /name="site"[\s\S]+\+ disabled \+/.test(widgets)
+    && /name="username"[\s\S]+\+ disabled \+/.test(widgets)
+    && /name="password"[\s\S]+\+ disabled \+/.test(widgets)
+    && /data-action="refresh"'\s*\+ disabled/.test(widgets),
+  "UniFi form fields and actions must disable while a link request is in flight"
+);
+
+assert(
+  /function connect\(form\)\s*\{\s*if \(state\.connecting\)/.test(widgets)
+    && /function disconnect\(\)\s*\{\s*if \(state\.connecting\)/.test(widgets)
+    && /if \(!target \|\| state\.connecting\)/.test(widgets),
+  "UniFi submit and action handlers must ignore duplicate actions while connecting"
+);
+
+assert(
   /function isUniFiFormActive\(\)[\s\S]+form\[data-action="unifi-connect"\]/.test(widgets)
     && /createTimerLoop\(refresh,\s*4000,\s*isUniFiFormActive\)/.test(widgets),
   "UniFi polling must pause while a credential field has focus"

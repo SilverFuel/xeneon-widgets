@@ -10,6 +10,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($RequireSignedInstaller -and $AllowUnsignedBeta) {
+  throw "Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta."
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 
 function Write-Step($message) {
