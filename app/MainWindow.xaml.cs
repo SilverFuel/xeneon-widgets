@@ -364,6 +364,7 @@ public sealed partial class MainWindow : Window
                     return;
                 }
 
+                _webViewDiagnosticsAttached = false;
                 await EnsureWebViewReadyAsync();
                 _navigationFailures = 0;
                 NavigateDashboard(forceReload: true);
