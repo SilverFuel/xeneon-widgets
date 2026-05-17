@@ -21,6 +21,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Post-display-safety CodeRabbit review raised 2 issues; both were fixed and covered.
   - Windows installer audit ran 5 focused passes across install transactions, cleanup safety, startup behavior, generated artifacts, and release validation.
   - Installer-scoped CodeRabbit review raised 2 major process-stop verification issues; both were fixed and the rerun completed with 0 findings.
+  - Safe Mode and Repair installer recovery shortcuts were added and CodeRabbit reviewed the change with 0 findings.
 - Findings resolved:
   - P0: 0
   - P1: 8
@@ -35,6 +36,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Disabled UniFi link controls during in-flight credential requests and guarded release-gauntlet signing mode arguments.
   - Stopped automatic monitor-change recovery from repositioning or saving display targets while Windows settings are changing.
   - Hardened Windows setup and removal so upgrades stop the running host deterministically, rollback preserves previous installs, `-NoAutoStart` removes stale startup entries, and cleanup paths stay under current-user install/data roots.
+  - Added Launch Xenon Safe Mode and Repair XENEON Edge Host Start Menu shortcuts for display recovery and install self-healing without deleting local data.
 - Tests and checks added:
   - `scripts/check-setup-guide.mjs`
   - `scripts/check-bridge-boundaries.mjs`
@@ -53,8 +55,8 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - `npm run installer`
   - `npm run release:gauntlet`
   - `npm run release:ready`
-  - `scripts/assert-release-ready.ps1 -AllowDirty -AllowGitHubSupportPath -InstallerPath app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1632.exe`
-  - Fresh installer SHA256 sidecar verification for `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1632.exe`
+  - `scripts/assert-release-ready.ps1 -AllowDirty -AllowGitHubSupportPath -InstallerPath app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1924.exe`
+  - Fresh installer SHA256 sidecar verification for `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1924.exe`
   - Source-to-staged installer script hash comparison for every packaged installer support script.
   - `scripts/test-windows-install.ps1` non-mutating installed-app smoke check
   - Browser visual QA at `2560x720` and `1280x720` using an isolated local bridge.
@@ -63,6 +65,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Backend CodeRabbit confirmation is complete for `app` and `bridge`.
   - Full-branch CodeRabbit zero-finding confirmation is complete.
   - Installer-scoped CodeRabbit zero-finding confirmation is complete.
+  - Recovery-shortcut CodeRabbit zero-finding confirmation is complete.
 
 ## Installer Audit Passes
 
@@ -97,6 +100,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | CR-13 | P1 | `app/installer/Install-XenonEdgeHost.ps1` | Verified stopped host processes actually exit before replacing install files, with a retry and clear failure path. | `5b07c15` |
 | CR-14 | P1 | `app/installer/Remove-XenonEdgeHost.ps1` | Verified stopped host processes actually exit before uninstall cleanup, with a retry and clear failure path. | `5b07c15` |
 | Installer audit | P1 | `app/build-installer.ps1`, `app/install.ps1`, `app/installer/Install-XenonEdgeHost.ps1`, `app/installer/Remove-XenonEdgeHost.ps1`, `app/uninstall.ps1`, `scripts/test-windows-install.ps1` | Hardened rollback, autostart repair, `-NoAutoStart`, exact cleanup paths, release workflow dependency installs, and installer safety regression checks. | `5b07c15` |
+| Improvement | P1 | `app/AppLaunchOptions.cs`, `app/MainWindow.xaml.cs`, `app/Launch-XenonSafeMode.ps1`, `app/repair.ps1`, `app/installer/Install-XenonEdgeHost.ps1` | Added Safe Mode launch support, a Start Menu Safe Mode shortcut that disables auto-start and opens on the primary display, and a Repair shortcut that restores shortcuts/startup/uninstall registration without touching local data. | `24645d6` |
 
 ## Checklist Status
 
@@ -105,9 +109,9 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | Security | 🔧 fixed | Added root lockfile so root `npm audit` runs (`4e1ec27`), added `npm run audit:deps` for root npm, Electron npm, and NuGet audits in CI/release builds (`81d2247`), verified audits report 0 vulnerabilities, and ran a targeted secret-pattern scan with no credential-shaped matches. Local API origin restrictions and protected secret storage were already covered by `scripts/assert-release-ready.ps1`; bridge API CORS/body handling is now covered by `scripts/test-bridge-api.mjs` (`a911acd`). |
 | Reliability | 🔧 fixed | Added a 256 KiB JSON body limit to the legacy bridge, explicit HTTP 400/413 client errors, and generic HTTP 500 client messages (`0b09773`). Guarded streamed bridge error handling after headers are sent (`fb6178a`). Added bridge API integration coverage and explicit browser-bridge setup states (`a911acd`, `629c9a8`). WebView process-failure recovery remains, while automatic monitor-change retargeting was removed so Windows display settings remain authoritative (`c1bf008`). Native host already had request body limits, localhost binding, external-call timeouts, and graceful stop handling. |
 | Observability | 🔧 fixed | Added `X-Request-ID` response headers and structured `http_request` boundary logs with request ID, method, path, status, and duration for native and legacy local HTTP servers (`73bade9`). `/api/health` already exists for health/readiness. |
-| Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, UniFi credential form stability, release-gauntlet argument validation, installer safety, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. |
+| Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, UniFi credential form stability, release-gauntlet argument validation, installer safety, Safe Mode/Repair shortcut coverage, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. |
 | Documentation | 🔧 fixed | Added `.env.example` documenting no required normal-install env vars plus optional HWiNFO/macOS notarization variables (`81d2247`). Updated `CHANGELOG.md` for the release-readiness changes. README already covers install, configure, run, release, support, and cleanup paths. |
-| Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1632.exe` and matching `.sha256`, verified the sidecar hash, and confirmed packaged support scripts match source. Added dependency audits to CI and release workflow (`81d2247`), explicit CI `npm ci` before audit/check (`c6f3c9c`), and release workflow lockfile installs before Windows/macOS packaging (`5b07c15`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
+| Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260517-1924.exe` and matching `.sha256`, verified the sidecar hash, and confirmed packaged support scripts match source. Added dependency audits to CI and release workflow (`81d2247`), explicit CI `npm ci` before audit/check (`c6f3c9c`), and release workflow lockfile installs before Windows/macOS packaging (`5b07c15`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
 | Performance | ✅ already satisfied | No measured hot path or obvious user-facing O(n²) issue was identified in the scoped changes, so no performance changes were made. |
 
 ## Known Limitations
