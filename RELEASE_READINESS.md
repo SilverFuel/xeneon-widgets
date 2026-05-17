@@ -17,7 +17,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 - Findings resolved:
   - P0: 0
   - P1: 5
-  - P2: 1
+  - P2: 2
 - Scoped improvements completed:
   - Added local bridge API integration coverage for health, CORS rejection, invalid JSON, oversized JSON, and dashboard config writes.
   - Added a support-bundle redaction guard for native support bundle sanitization patterns.
@@ -56,6 +56,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | CR-4 | P1 | `scripts/check-bridge-boundaries.mjs` | Resolved workspace paths explicitly, checked file existence, and emitted clear read failures; applied the same robustness pattern to sibling validation scripts. | `dcb11e0` |
 | CR-5 | P2 | `RELEASE_READINESS.md` | Removed environment-specific branch wording from the readiness report. | `ca75cff` |
 | CR-6 | P1 | `CHANGELOG.md` | Replaced internal CI/tooling details in the public changelog with concise user-facing release notes while keeping technical specifics in this readiness report. | `c0d3474` |
+| CR-7 | P2 | `app/MainWindow.xaml.cs` | Replaced the display-recovery async dispatcher lambda with an explicit fire-and-forget task assignment so exceptions remain contained in the Task-returning recovery method. | `9020892` |
 | Improvement | P1 | `bridge/server.mjs` | Reported browser-bridge provisioning and display setup states explicitly so first-run diagnostics avoid stale fallback states; covered by bridge API integration test. | `629c9a8` |
 | Improvement | P1 | `app/MainWindow.xaml.cs` | Added debounced Windows display-change recovery, non-persistent display retargeting during transient monitor changes, and WebView process-failure reload recovery. | `b855bb9` |
 
