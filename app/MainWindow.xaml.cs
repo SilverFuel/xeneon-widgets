@@ -370,7 +370,7 @@ public sealed partial class MainWindow : Window
                     return;
                 }
 
-                DispatcherQueue.TryEnqueue(async () => await RecoverFromDisplayTopologyChangeAsync());
+                DispatcherQueue.TryEnqueue(() => _ = RecoverFromDisplayTopologyChangeAsync());
             }
             catch (OperationCanceledException)
             {
