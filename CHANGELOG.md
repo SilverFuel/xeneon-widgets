@@ -4,6 +4,7 @@
 
 - Improved first-run setup and diagnostics so readiness states are clearer and optional panels stay out of the way until needed.
 - Improved dashboard recovery when Windows display changes or the embedded browser needs to reload.
+- Stopped automatic monitor-change recovery from repositioning the dashboard while Windows display settings are being changed.
 - Improved local bridge reliability with safer request handling, clearer client errors, and better support diagnostics.
 - Improved installer and release validation before publishing beta builds.
 - Made the beta host build more reproducible and easier to verify.
