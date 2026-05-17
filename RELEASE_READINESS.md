@@ -15,10 +15,11 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Post-improvement full branch review raised 1 public-changelog issue; it was fixed.
   - Final post-improvement full branch review completed with 0 findings.
   - User-reported UniFi credential-entry regression was fixed and covered before final packaging.
+  - Post-UniFi CodeRabbit committed-diff review raised 2 minor issues; both were fixed and covered.
 - Findings resolved:
   - P0: 0
   - P1: 6
-  - P2: 2
+  - P2: 4
 - Scoped improvements completed:
   - Added local bridge API integration coverage for health, CORS rejection, invalid JSON, oversized JSON, and dashboard config writes.
   - Added a support-bundle redaction guard for native support bundle sanitization patterns.
@@ -26,6 +27,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Fixed browser-bridge first-run setup status so display diagnostics and provisioning do not remain in generic fallback states.
   - Added Windows display topology and WebView process-failure recovery so monitor hotplug events reload the dashboard instead of leaving a blank WebView.
   - Fixed UniFi credential entry so detected-console refreshes do not interrupt username or password typing.
+  - Disabled UniFi link controls during in-flight credential requests and guarded release-gauntlet signing mode arguments.
 - Tests and checks added:
   - `scripts/check-setup-guide.mjs`
   - `scripts/check-bridge-boundaries.mjs`
@@ -34,6 +36,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - `scripts/check-support-redaction.mjs`
   - `scripts/check-display-recovery.mjs`
   - `scripts/check-unifi-form-draft.mjs`
+  - `scripts/check-release-gauntlet.mjs`
   - `scripts/test-bridge-api.mjs`
   - `scripts/run-release-gauntlet.ps1`
 - Local validation passed:
@@ -64,6 +67,8 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | Improvement | P1 | `bridge/server.mjs` | Reported browser-bridge provisioning and display setup states explicitly so first-run diagnostics avoid stale fallback states; covered by bridge API integration test. | `629c9a8` |
 | Improvement | P1 | `app/MainWindow.xaml.cs` | Added debounced Windows display-change recovery, non-persistent display retargeting during transient monitor changes, and WebView process-failure reload recovery. | `b855bb9` |
 | User issue | P1 | `js/inline-widgets.js` | Paused Network widget polling while the UniFi credential form has focus, preserved transient form drafts across redraws, and prioritized the credential form when UniFi is detected but not linked. | `0203248` |
+| CR-9 | P2 | `js/inline-widgets.js` | Disabled UniFi host, site, username, password, refresh, submit, and forget controls while link/disconnect requests are in flight; duplicate action handlers now return early while connecting. | `8006d6c` |
+| CR-10 | P2 | `scripts/run-release-gauntlet.ps1` | Added early validation rejecting simultaneous `-RequireSignedInstaller` and `-AllowUnsignedBeta`; covered by a release-gauntlet validation check. | `8006d6c` |
 
 ## Checklist Status
 
@@ -72,7 +77,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | Security | 🔧 fixed | Added root lockfile so root `npm audit` runs (`4e1ec27`), added `npm run audit:deps` for root npm, Electron npm, and NuGet audits in CI/release builds (`81d2247`), verified audits report 0 vulnerabilities, and ran a targeted secret-pattern scan with no credential-shaped matches. Local API origin restrictions and protected secret storage were already covered by `scripts/assert-release-ready.ps1`; bridge API CORS/body handling is now covered by `scripts/test-bridge-api.mjs` (`a911acd`). |
 | Reliability | 🔧 fixed | Added a 256 KiB JSON body limit to the legacy bridge, explicit HTTP 400/413 client errors, and generic HTTP 500 client messages (`0b09773`). Guarded streamed bridge error handling after headers are sent (`fb6178a`). Added bridge API integration coverage and explicit browser-bridge setup states (`a911acd`, `629c9a8`). Added Windows display hotplug and WebView process-failure recovery (`b855bb9`). Native host already had request body limits, localhost binding, external-call timeouts, and graceful stop handling. |
 | Observability | 🔧 fixed | Added `X-Request-ID` response headers and structured `http_request` boundary logs with request ID, method, path, status, and duration for native and legacy local HTTP servers (`73bade9`). `/api/health` already exists for health/readiness. |
-| Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, UniFi credential form stability, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. Existing installed-app smoke validation passes. |
+| Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, UniFi credential form stability, release-gauntlet argument validation, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. Existing installed-app smoke validation passes. |
 | Documentation | 🔧 fixed | Added `.env.example` documenting no required normal-install env vars plus optional HWiNFO/macOS notarization variables (`81d2247`). Updated `CHANGELOG.md` for the release-readiness changes. README already covers install, configure, run, release, support, and cleanup paths. |
 | Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260516-1349.exe` and matching `.sha256`. Added dependency audits to CI and release workflow (`81d2247`) and an explicit CI `npm ci` install before audit/check steps (`c6f3c9c`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
 | Performance | ✅ already satisfied | No measured hot path or obvious user-facing O(n²) issue was identified in the scoped changes, so no performance changes were made. |
