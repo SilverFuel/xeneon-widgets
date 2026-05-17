@@ -95,6 +95,10 @@ function Test-WindowsAppRuntimeInstalled() {
   return [bool]($packages | Select-Object -First 1)
 }
 
+function Get-RootScheduledTask($taskName) {
+  return Get-ScheduledTask -TaskName $taskName -TaskPath "\" -ErrorAction SilentlyContinue
+}
+
 Write-Step "XENEON Edge Host - Install Auto-Start"
 
 Write-Info "App root: $appRoot"
@@ -116,32 +120,28 @@ if (-not (Test-Path $exePath)) {
 
 $taskInstalled = $false
 
-if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+try {
+  $action = New-ScheduledTaskAction -Execute $exePath -WorkingDirectory $appRoot
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
+  $settings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -StartWhenAvailable `
+    -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 0)
+
+  Register-ScheduledTask `
+    -TaskName $taskName `
+    -Action $action `
+    -Trigger $trigger `
+    -Settings $settings `
+    -Description "Starts Xenon Edge Host at logon for the CORSAIR XENEON EDGE display." `
+    -Force | Out-Null
+
+  Enable-ScheduledTask -TaskName $taskName -TaskPath "\" | Out-Null
   $taskInstalled = $true
-  Write-Info "Scheduled task '$taskName' is already installed."
-} else {
-  try {
-    $action = New-ScheduledTaskAction -Execute $exePath -WorkingDirectory $appRoot
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
-    $settings = New-ScheduledTaskSettingsSet `
-      -AllowStartIfOnBatteries `
-      -StartWhenAvailable `
-      -MultipleInstances IgnoreNew `
-      -ExecutionTimeLimit (New-TimeSpan -Hours 0)
-
-    Register-ScheduledTask `
-      -TaskName $taskName `
-      -Action $action `
-      -Trigger $trigger `
-      -Settings $settings `
-      -Description "Starts Xenon Edge Host at logon for the CORSAIR XENEON EDGE display." `
-      -Force | Out-Null
-
-    $taskInstalled = $true
-    Write-Info "Installed scheduled task '$taskName'."
-  } catch {
-    Write-QuietWarning "Unable to install scheduled task '$taskName'. Falling back to startup entry only."
-  }
+  Write-Info "Installed or repaired scheduled task '$taskName'."
+} catch {
+  Write-QuietWarning "Unable to install scheduled task '$taskName'. Falling back to startup entry only."
 }
 
 # --- Registry Run key (backup auto-start method) ---
@@ -165,9 +165,9 @@ if ($taskInstalled) {
 $oldBridgeTask = "XeneonBridge"
 $oldBridgeRun = "XeneonBridge"
 
-if (Get-ScheduledTask -TaskName $oldBridgeTask -ErrorAction SilentlyContinue) {
+if (Get-RootScheduledTask $oldBridgeTask) {
   try {
-    Unregister-ScheduledTask -TaskName $oldBridgeTask -Confirm:$false
+    Unregister-ScheduledTask -TaskName $oldBridgeTask -TaskPath "\" -Confirm:$false
     Write-Info "Removed old bridge-only task '$oldBridgeTask' (the host app manages the bridge now)."
   } catch {
     if ($_.Exception.Message -match "Access is denied") {

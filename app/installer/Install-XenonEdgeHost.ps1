@@ -60,6 +60,45 @@ function Stop-LegacyBridgeIfPresent() {
   }
 }
 
+function Stop-RunningHost {
+  $running = @(Get-Process -Name "XenonEdgeHost" -ErrorAction SilentlyContinue)
+  if ($running.Count -eq 0) {
+    return
+  }
+
+  $processIds = @($running | Select-Object -ExpandProperty Id)
+  try {
+    $running | Stop-Process -Force -ErrorAction Stop
+    foreach ($processId in $processIds) {
+      Wait-Process -Id $processId -Timeout 10 -ErrorAction SilentlyContinue
+    }
+
+    $stillRunning = @()
+    foreach ($processId in $processIds) {
+      $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+      if ($process) {
+        $stillRunning += $process
+      }
+    }
+
+    if ($stillRunning.Count -gt 0) {
+      $stillRunning | Stop-Process -Force -ErrorAction Stop
+      foreach ($process in $stillRunning) {
+        Wait-Process -Id $process.Id -Timeout 5 -ErrorAction SilentlyContinue
+      }
+
+      $stillRunning = @($processIds | ForEach-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+      if ($stillRunning.Count -gt 0) {
+        throw "The running XenonEdgeHost process did not exit."
+      }
+    }
+
+    Write-Info "Stopped running XenonEdgeHost process before replacing files."
+  } catch {
+    throw "Could not stop the running XenonEdgeHost process. Close the app and run setup again."
+  }
+}
+
 function Register-UninstallEntry($installPath, $exePath) {
   $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
   $version = (Get-Item $exePath).VersionInfo.FileVersion
@@ -143,13 +182,14 @@ if (Test-Path -LiteralPath $InstallRoot -PathType Leaf) {
 Write-Info "Install root: $InstallRoot"
 
 Write-Step "Stopping running processes"
-Get-Process XenonEdgeHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Stop-RunningHost
 Stop-LegacyBridgeIfPresent
 
 $extractRoot = Join-Path $env:TEMP ("XenonEdgeHost-Payload-" + [guid]::NewGuid().ToString("N"))
 $stagedInstallRoot = Join-Path $installParent ("XenonEdgeHost.installing-" + [guid]::NewGuid().ToString("N"))
 $backupInstallRoot = Join-Path $installParent ("XenonEdgeHost.backup-" + [guid]::NewGuid().ToString("N"))
 $installMoved = $false
+$installationCompleted = $false
 try {
   Write-Step "Extracting payload"
   New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
@@ -177,12 +217,10 @@ try {
     $installMoved = $true
   } catch {
     if (Test-Path -LiteralPath $backupInstallRoot -PathType Container) {
-      Move-Item -LiteralPath $backupInstallRoot -Destination $InstallRoot -Force -ErrorAction SilentlyContinue
+      Move-Item -LiteralPath $backupInstallRoot -Destination $InstallRoot -Force
     }
     throw
   }
-
-  Remove-DirectoryIfPresent $backupInstallRoot $programsRoot "Backup install folder"
 
   $exePath = Join-Path $InstallRoot "XenonEdgeHost.exe"
   if (-not (Test-Path $exePath)) {
@@ -193,7 +231,7 @@ try {
   $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"
   $legacyShortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host"
   if (Test-Path $legacyShortcutRoot) {
-    Remove-Item $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
   }
   New-Item -ItemType Directory -Path $shortcutRoot -Force | Out-Null
 
@@ -221,7 +259,7 @@ try {
   if (-not $NoDesktopShortcut) {
     $legacyDesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk"
     if (Test-Path $legacyDesktopShortcut) {
-      Remove-Item $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
     }
     New-Shortcut `
       -shortcutPath (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk") `
@@ -242,11 +280,25 @@ try {
     } else {
       & $autoStartScript
     }
+  } else {
+    Write-Step "Disabling auto-start"
+    $autoStartRemoveScript = Join-Path $InstallRoot "uninstall.ps1"
+    if ($Quiet) {
+      & $autoStartRemoveScript -Quiet
+    } else {
+      & $autoStartRemoveScript
+    }
   }
+
+  $installationCompleted = $true
 
   if (-not $SkipLaunch) {
     Write-Step "Launching app"
-    Start-Process $exePath
+    try {
+      Start-Process $exePath
+    } catch {
+      Write-Warning "The app was installed, but it could not be launched automatically. Start it from the Start Menu when ready."
+    }
   }
 
   if (-not $Quiet) {
@@ -257,6 +309,26 @@ try {
   }
 }
 catch {
+  if (-not $installationCompleted -and (Test-Path -LiteralPath $backupInstallRoot -PathType Container)) {
+    try {
+      if (Test-Path -LiteralPath $InstallRoot) {
+        Remove-DirectoryIfPresent $InstallRoot $programsRoot "Partial install folder"
+      }
+
+      Move-Item -LiteralPath $backupInstallRoot -Destination $InstallRoot -Force
+      Write-Info "Restored previous install after setup failed."
+    } catch {
+      Write-Warning "Setup failed and rollback could not restore the previous install. Backup remains at $backupInstallRoot"
+    }
+  } elseif (-not $installationCompleted -and $installMoved -and (Test-Path -LiteralPath $InstallRoot -PathType Container)) {
+    try {
+      Remove-DirectoryIfPresent $InstallRoot $programsRoot "Partial install folder"
+      Write-Info "Removed partial install after setup failed."
+    } catch {
+      Write-Warning "Setup failed and the partial install could not be removed from $InstallRoot"
+    }
+  }
+
   if (-not $Quiet) {
     Write-Host ""
     Write-Host "Installation failed. See $logPath" -ForegroundColor Red
@@ -264,10 +336,12 @@ catch {
   throw
 }
 finally {
-  Remove-Item $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
   if (-not $installMoved) {
     Remove-DirectoryIfPresent $stagedInstallRoot $programsRoot "Staged install folder"
   }
-  Remove-DirectoryIfPresent $backupInstallRoot $programsRoot "Backup install folder"
+  if ($installationCompleted) {
+    Remove-DirectoryIfPresent $backupInstallRoot $programsRoot "Backup install folder"
+  }
   Stop-Transcript | Out-Null
 }
