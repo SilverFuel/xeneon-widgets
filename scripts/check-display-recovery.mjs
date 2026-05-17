@@ -48,8 +48,10 @@ assert(
 
 assert(
   /HandleProcessFailed[\s\S]+ScheduleWebViewRecovery/.test(mainWindow)
-    && /ScheduleWebViewRecovery[\s\S]+NavigateDashboard\(forceReload:\s*true\)/.test(mainWindow),
-  "WebView process failures must schedule dashboard recovery"
+    && /ScheduleWebViewRecovery[\s\S]+NavigateDashboard\(forceReload:\s*true\)/.test(mainWindow)
+    && /if\s*\(!DispatcherQueue\.TryEnqueue/.test(mainWindow)
+    && /Failed to enqueue WebView recovery[\s\S]+Interlocked\.Exchange\(ref _webViewRecoveryScheduled,\s*0\)/.test(mainWindow),
+  "WebView process failures must schedule dashboard recovery and clear the gate when enqueue fails"
 );
 
 assert(

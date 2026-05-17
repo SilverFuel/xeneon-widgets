@@ -55,8 +55,10 @@ assert(
 
 assert(
   /function isUniFiFormActive\(\)[\s\S]+form\[data-action="unifi-connect"\]/.test(widgets)
+    && /active\.disabled \|\| active\.readOnly/.test(widgets)
+    && /tagName !== "input"[\s\S]+\["email", "number", "password", "search", "tel", "text", "url"\]/.test(widgets)
     && /createTimerLoop\(refresh,\s*4000,\s*isUniFiFormActive\)/.test(widgets),
-  "UniFi polling must pause while a credential field has focus"
+  "UniFi polling must pause only while an editable credential field has focus"
 );
 
 assert(

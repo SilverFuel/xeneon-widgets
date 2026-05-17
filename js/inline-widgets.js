@@ -1043,7 +1043,31 @@
 
     function isUniFiFormActive() {
       var active = document.activeElement;
-      return Boolean(active && container.contains(active) && active.closest && active.closest('form[data-action="unifi-connect"]'));
+      var inputType;
+      var tagName;
+      if (!active || !container.contains(active) || !active.closest || !active.matches || !active.closest('form[data-action="unifi-connect"]')) {
+        return false;
+      }
+
+      if (active.disabled || active.readOnly) {
+        return false;
+      }
+
+      if (active.isContentEditable) {
+        return true;
+      }
+
+      tagName = String(active.tagName || "").toLowerCase();
+      if (tagName === "textarea" || tagName === "select") {
+        return true;
+      }
+
+      if (tagName !== "input") {
+        return false;
+      }
+
+      inputType = String(active.getAttribute("type") || "text").toLowerCase();
+      return ["email", "number", "password", "search", "tel", "text", "url"].indexOf(inputType) !== -1;
     }
 
     function redrawWhenFormIdle() {
