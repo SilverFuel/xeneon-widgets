@@ -8,6 +8,7 @@
 - Improved local bridge reliability with safer request handling, clearer client errors, and better support diagnostics.
 - Improved installer and release validation before publishing beta builds.
 - Hardened Windows installer upgrades, startup repair, uninstall cleanup, and release packaging checks.
+- Added Start Menu Safe Mode and Repair shortcuts for display recovery and install self-healing.
 - Made the beta host build more reproducible and easier to verify.
 - Added primary display refresh-rate telemetry from the native host.
 - Upgraded Game Mode with live display refresh, dashboard FPS, CPU, and GPU readouts.

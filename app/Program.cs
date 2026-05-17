@@ -10,10 +10,12 @@ public static class Program
     private const string MutexName = "XenonEdgeHost_SingleInstance_A1B2C3";
     internal const string ShowDisplayEventName = @"Local\XenonEdgeHost_ShowDisplay_A1B2C3";
     private static Mutex? _instanceMutex;
+    internal static AppLaunchOptions LaunchOptions { get; private set; } = AppLaunchOptions.Default;
 
     [STAThread]
     public static void Main(string[] args)
     {
+        LaunchOptions = AppLaunchOptions.Parse(args);
         _instanceMutex = new Mutex(true, MutexName, out var isFirstInstance);
 
         if (!isFirstInstance)

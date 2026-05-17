@@ -17,6 +17,11 @@ The installer handles this automatically:
 - adds `XENEON Edge Host` to Windows Settings > Apps
 - launches the app
 
+The Start Menu folder also includes two recovery shortcuts:
+
+- `Launch Xenon Safe Mode` stops any running Xenon process, disables auto-start, ignores saved display placement, and opens on the primary monitor.
+- `Repair XENEON Edge Host` restores Start Menu/Desktop shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
+
 The free beta installer may show a Windows SmartScreen warning until the app is signed. That warning is from Windows. After the user chooses to run the beta installer, Xenon should not ask more setup questions.
 
 ## Uninstall
@@ -58,5 +63,7 @@ Use this when the user wants a clean reset or is done with the app completely.
 - No uninstall confirmation prompts from Xenon scripts.
 - No leftover Start Menu or Desktop shortcuts after uninstall.
 - No half-installed app if reinstalling fails during file copy.
+- No Safe Mode launch that reuses a stale saved display target.
+- No repair flow that removes `%APPDATA%\XenonEdgeHost` or `%LOCALAPPDATA%\XenonEdgeHost`.
 
 If any of those happen, the installer flow is broken and should be fixed before publishing.

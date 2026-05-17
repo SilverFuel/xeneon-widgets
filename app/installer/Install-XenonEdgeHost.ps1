@@ -162,8 +162,10 @@ $payloadZip = Join-Path $SourceRoot "payload.zip"
 $supportInstall = Join-Path $SourceRoot "install.ps1"
 $supportUninstall = Join-Path $SourceRoot "uninstall.ps1"
 $supportRemove = Join-Path $SourceRoot "Remove-XenonEdgeHost.ps1"
+$supportSafeMode = Join-Path $SourceRoot "Launch-XenonSafeMode.ps1"
+$supportRepair = Join-Path $SourceRoot "repair.ps1"
 
-foreach ($requiredPath in @($payloadZip, $supportInstall, $supportUninstall, $supportRemove)) {
+foreach ($requiredPath in @($payloadZip, $supportInstall, $supportUninstall, $supportRemove, $supportSafeMode, $supportRepair)) {
   if (-not (Test-Path $requiredPath)) {
     throw "Missing installer payload file: $requiredPath"
   }
@@ -201,6 +203,8 @@ try {
   Copy-Item $supportInstall (Join-Path $stagedInstallRoot "install.ps1") -Force
   Copy-Item $supportUninstall (Join-Path $stagedInstallRoot "uninstall.ps1") -Force
   Copy-Item $supportRemove (Join-Path $stagedInstallRoot "Remove-XenonEdgeHost.ps1") -Force
+  Copy-Item $supportSafeMode (Join-Path $stagedInstallRoot "Launch-XenonSafeMode.ps1") -Force
+  Copy-Item $supportRepair (Join-Path $stagedInstallRoot "repair.ps1") -Force
 
   $stagedExePath = Join-Path $stagedInstallRoot "XenonEdgeHost.exe"
   if (-not (Test-Path $stagedExePath)) {
@@ -239,6 +243,20 @@ try {
     -shortcutPath (Join-Path $shortcutRoot "XENEON Edge Host.lnk") `
     -targetPath $exePath `
     -arguments "" `
+    -workingDirectory $InstallRoot `
+    -iconLocation $exePath
+
+  New-Shortcut `
+    -shortcutPath (Join-Path $shortcutRoot "Launch Xenon Safe Mode.lnk") `
+    -targetPath "powershell.exe" `
+    -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Launch-XenonSafeMode.ps1`" -Quiet" `
+    -workingDirectory $InstallRoot `
+    -iconLocation $exePath
+
+  New-Shortcut `
+    -shortcutPath (Join-Path $shortcutRoot "Repair XENEON Edge Host.lnk") `
+    -targetPath "powershell.exe" `
+    -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\repair.ps1`" -Quiet" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 

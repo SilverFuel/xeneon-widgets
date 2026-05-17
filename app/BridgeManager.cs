@@ -91,13 +91,16 @@ public sealed class BridgeManager : IDisposable
 
     public event Action<string>? BridgeStopped;
 
-    public List<DisplayTarget> ListDisplayCandidates()
+    public List<DisplayTarget> ListDisplayCandidates(bool ignoreSavedPreference = false)
     {
         var config = _configStore.Snapshot();
-        return DisplayManager.ListDisplays(config.Dashboard.PreferredDisplayId);
+        return DisplayManager.ListDisplays(ignoreSavedPreference ? null : config.Dashboard.PreferredDisplayId);
     }
 
-    public DisplayTarget SelectDisplayTarget(IReadOnlyList<DisplayTarget>? candidates = null, bool saveSelection = true)
+    public DisplayTarget SelectDisplayTarget(
+        IReadOnlyList<DisplayTarget>? candidates = null,
+        bool saveSelection = true,
+        bool preferPrimary = false)
     {
         var config = _configStore.Snapshot();
         var displayCandidates = candidates?.Count > 0
@@ -109,7 +112,9 @@ public sealed class BridgeManager : IDisposable
             throw new InvalidOperationException("No displays were detected.");
         }
 
-        var selected = displayCandidates[0];
+        var selected = preferPrimary
+            ? displayCandidates.FirstOrDefault(display => display.IsPrimary) ?? displayCandidates[0]
+            : displayCandidates[0];
         if (!saveSelection)
         {
             return selected;
