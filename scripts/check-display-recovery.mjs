@@ -25,21 +25,25 @@ function assert(condition, message) {
 }
 
 assert(
-  /SystemEvents\.DisplaySettingsChanged\s*\+=\s*HandleDisplaySettingsChanged/.test(mainWindow)
-    && /SystemEvents\.DisplaySettingsChanged\s*-=\s*HandleDisplaySettingsChanged/.test(mainWindow),
-  "main window must subscribe and unsubscribe display topology change handling"
+  !/SystemEvents\.DisplaySettingsChanged/.test(mainWindow)
+    && !/HandleDisplaySettingsChanged/.test(mainWindow)
+    && !/ScheduleDisplayTopologyRecovery/.test(mainWindow)
+    && !/RecoverFromDisplayTopologyChangeAsync/.test(mainWindow),
+  "main window must not react to Windows display settings changes automatically"
 );
 
 assert(
-  /HandleDisplaySettingsChanged[\s\S]+ScheduleDisplayTopologyRecovery/.test(mainWindow)
-    && /Task\.Delay\(1200,\s*cancellationToken\)/.test(mainWindow),
-  "display topology recovery must debounce monitor hotplug events"
+  /HandleActivated[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow)
+    && /ShowDisplayWindow[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow),
+  "automatic launch and tray show must position the window without saving display preference"
 );
 
 assert(
-  /RecoverFromDisplayTopologyChangeAsync[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow)
-    && /RecoverFromDisplayTopologyChangeAsync[\s\S]+NavigateDashboard\(forceReload:\s*true\)/.test(mainWindow),
-  "display topology recovery must reposition without overwriting saved preference and reload the dashboard"
+  !/ChangeDisplaySettings/.test(mainWindow)
+    && !/SetDisplayConfig/.test(mainWindow)
+    && !/ChangeDisplaySettings/.test(bridgeManager)
+    && !/SetDisplayConfig/.test(bridgeManager),
+  "native host must not call Windows APIs that change monitor topology or display modes"
 );
 
 assert(
@@ -54,4 +58,4 @@ assert(
   "display selection must support non-persistent recovery after transient monitor changes"
 );
 
-console.log("checked display topology and WebView recovery");
+console.log("checked passive display targeting and WebView recovery");
