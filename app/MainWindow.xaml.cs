@@ -2,6 +2,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using WinRT.Interop;
@@ -36,6 +37,8 @@ public sealed partial class MainWindow : Window
     private bool _taskbarStyleApplied;
     private int _quitRequested;
     private int _navigationFailures;
+    private int _webViewRecoveryScheduled;
+    private CancellationTokenSource? _displayChangeDebounce;
     private EventWaitHandle? _showDisplayEvent;
     private RegisteredWaitHandle? _showDisplayWaitHandle;
 
@@ -58,6 +61,7 @@ public sealed partial class MainWindow : Window
         Activated += HandleActivated;
         Closed += HandleClosed;
         DashboardView.NavigationCompleted += HandleNavigationCompleted;
+        SystemEvents.DisplaySettingsChanged += HandleDisplaySettingsChanged;
         StartShowDisplaySignalListener();
     }
 
@@ -78,11 +82,11 @@ public sealed partial class MainWindow : Window
             onResetDashboard: () => DispatcherQueue.TryEnqueue(() => _ = ResetDashboardStateAsync()),
             onQuit: RequestQuitFromTray,
             logger: _logger);
-        ConfigureWindow();
+        ConfigureWindow(saveSelection: true);
         await InitializeHostAsync();
     }
 
-    private void ConfigureWindow()
+    private void ConfigureWindow(bool saveSelection)
     {
         var windowHandle = WindowNative.GetWindowHandle(this);
         var displayCandidates = _bridgeManager.ListDisplayCandidates();
@@ -91,7 +95,7 @@ public sealed partial class MainWindow : Window
             throw new InvalidOperationException("No displays were detected.");
         }
 
-        var targetDisplay = _bridgeManager.SelectDisplayTarget(displayCandidates);
+        var targetDisplay = _bridgeManager.SelectDisplayTarget(displayCandidates, saveSelection);
         var appWindow = AppWindow;
 
         appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
@@ -323,6 +327,7 @@ public sealed partial class MainWindow : Window
     private void HandleProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs args)
     {
         _logger.Error($"WebView process failed: {args.ProcessFailedKind}");
+        ScheduleWebViewRecovery($"WebView process failed: {args.ProcessFailedKind}");
     }
 
     private async Task RetryNavigationAsync()
@@ -335,6 +340,113 @@ public sealed partial class MainWindow : Window
         }
 
         NavigateDashboard(forceReload: true);
+    }
+
+    private void HandleDisplaySettingsChanged(object? sender, EventArgs args)
+    {
+        _logger.Warn("Windows display settings changed. Scheduling dashboard reposition and reload.");
+        ScheduleDisplayTopologyRecovery();
+    }
+
+    private void ScheduleDisplayTopologyRecovery()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _displayChangeDebounce?.Cancel();
+        var debounce = new CancellationTokenSource();
+        _displayChangeDebounce = debounce;
+        var cancellationToken = debounce.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(1200, cancellationToken);
+                if (cancellationToken.IsCancellationRequested || _disposed)
+                {
+                    return;
+                }
+
+                DispatcherQueue.TryEnqueue(async () => await RecoverFromDisplayTopologyChangeAsync());
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception error)
+            {
+                _logger.Error("Display topology recovery scheduling failed.", error);
+            }
+            finally
+            {
+                if (ReferenceEquals(_displayChangeDebounce, debounce))
+                {
+                    _displayChangeDebounce = null;
+                }
+
+                debounce.Dispose();
+            }
+        }, cancellationToken);
+    }
+
+    private async Task RecoverFromDisplayTopologyChangeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            SetOverlayText("Display changed. Repositioning dashboard...");
+            ConfigureWindow(saveSelection: false);
+            await EnsureWebViewReadyAsync();
+            _navigationFailures = 0;
+            NavigateDashboard(forceReload: true);
+            ShowWindowNoActivate();
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Failed to recover after Windows display topology changed.", error);
+            SetOverlayText($"Display changed, but the dashboard could not recover automatically.\n{error.Message}\n\nUse the tray icon to show the display or restart the server.");
+        }
+    }
+
+    private void ScheduleWebViewRecovery(string reason)
+    {
+        if (_disposed || Interlocked.Exchange(ref _webViewRecoveryScheduled, 1) == 1)
+        {
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                SetOverlayText("Recovering dashboard display...");
+                _logger.Warn($"Recovering dashboard after {reason}.");
+                await Task.Delay(1000);
+                if (_disposed)
+                {
+                    return;
+                }
+
+                await EnsureWebViewReadyAsync();
+                _navigationFailures = 0;
+                NavigateDashboard(forceReload: true);
+            }
+            catch (Exception error)
+            {
+                _logger.Error("WebView recovery failed.", error);
+                SetOverlayText($"Dashboard display recovery failed.\n{error.Message}\n\nUse the tray icon to restart the server.");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _webViewRecoveryScheduled, 0);
+            }
+        });
     }
 
     private void HandleBridgeStatusChanged(string message)
@@ -460,7 +572,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowDisplayWindow()
     {
-        ConfigureWindow();
+        ConfigureWindow(saveSelection: true);
         ShowWindowNoActivate();
     }
 
@@ -615,6 +727,10 @@ public sealed partial class MainWindow : Window
 
         _disposed = true;
         DashboardView.NavigationCompleted -= HandleNavigationCompleted;
+        SystemEvents.DisplaySettingsChanged -= HandleDisplaySettingsChanged;
+        _displayChangeDebounce?.Cancel();
+        _displayChangeDebounce?.Dispose();
+        _displayChangeDebounce = null;
         if (DashboardView.CoreWebView2 is not null && _webViewDiagnosticsAttached)
         {
             DashboardView.CoreWebView2.WebMessageReceived -= HandleWebMessageReceived;

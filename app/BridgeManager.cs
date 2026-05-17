@@ -97,7 +97,7 @@ public sealed class BridgeManager : IDisposable
         return DisplayManager.ListDisplays(config.Dashboard.PreferredDisplayId);
     }
 
-    public DisplayTarget SelectDisplayTarget(IReadOnlyList<DisplayTarget>? candidates = null)
+    public DisplayTarget SelectDisplayTarget(IReadOnlyList<DisplayTarget>? candidates = null, bool saveSelection = true)
     {
         var config = _configStore.Snapshot();
         var displayCandidates = candidates?.Count > 0
@@ -110,6 +110,11 @@ public sealed class BridgeManager : IDisposable
         }
 
         var selected = displayCandidates[0];
+        if (!saveSelection)
+        {
+            return selected;
+        }
+
         _configStore.Update(current =>
         {
             current.Dashboard.PreferredDisplayId = selected.StableId;
