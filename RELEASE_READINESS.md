@@ -17,6 +17,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - User-reported UniFi credential-entry regression was fixed and covered before final packaging.
   - Post-UniFi CodeRabbit committed-diff review raised 2 minor issues; both were fixed and covered.
   - Final post-fix CodeRabbit committed-diff review completed with 0 findings.
+  - User-reported Windows display-settings interference was mitigated by making monitor retargeting passive.
 - Findings resolved:
   - P0: 0
   - P1: 6
@@ -29,6 +30,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Added Windows display topology and WebView process-failure recovery so monitor hotplug events reload the dashboard instead of leaving a blank WebView.
   - Fixed UniFi credential entry so detected-console refreshes do not interrupt username or password typing.
   - Disabled UniFi link controls during in-flight credential requests and guarded release-gauntlet signing mode arguments.
+  - Stopped automatic monitor-change recovery from repositioning or saving display targets while Windows settings are changing.
 - Tests and checks added:
   - `scripts/check-setup-guide.mjs`
   - `scripts/check-bridge-boundaries.mjs`
@@ -70,13 +72,14 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | User issue | P1 | `js/inline-widgets.js` | Paused Network widget polling while the UniFi credential form has focus, preserved transient form drafts across redraws, and prioritized the credential form when UniFi is detected but not linked. | `0203248` |
 | CR-9 | P2 | `js/inline-widgets.js` | Disabled UniFi host, site, username, password, refresh, submit, and forget controls while link/disconnect requests are in flight; duplicate action handlers now return early while connecting. | `8006d6c` |
 | CR-10 | P2 | `scripts/run-release-gauntlet.ps1` | Added early validation rejecting simultaneous `-RequireSignedInstaller` and `-AllowUnsignedBeta`; covered by a release-gauntlet validation check. | `8006d6c` |
+| User issue | P1 | `app/MainWindow.xaml.cs` | Removed automatic Windows display-change retargeting and made startup/tray positioning non-persistent so Xenon does not fight Windows display defaults. | `c1bf008` |
 
 ## Checklist Status
 
 | Area | Status | Evidence |
 | --- | --- | --- |
 | Security | 🔧 fixed | Added root lockfile so root `npm audit` runs (`4e1ec27`), added `npm run audit:deps` for root npm, Electron npm, and NuGet audits in CI/release builds (`81d2247`), verified audits report 0 vulnerabilities, and ran a targeted secret-pattern scan with no credential-shaped matches. Local API origin restrictions and protected secret storage were already covered by `scripts/assert-release-ready.ps1`; bridge API CORS/body handling is now covered by `scripts/test-bridge-api.mjs` (`a911acd`). |
-| Reliability | 🔧 fixed | Added a 256 KiB JSON body limit to the legacy bridge, explicit HTTP 400/413 client errors, and generic HTTP 500 client messages (`0b09773`). Guarded streamed bridge error handling after headers are sent (`fb6178a`). Added bridge API integration coverage and explicit browser-bridge setup states (`a911acd`, `629c9a8`). Added Windows display hotplug and WebView process-failure recovery (`b855bb9`). Native host already had request body limits, localhost binding, external-call timeouts, and graceful stop handling. |
+| Reliability | 🔧 fixed | Added a 256 KiB JSON body limit to the legacy bridge, explicit HTTP 400/413 client errors, and generic HTTP 500 client messages (`0b09773`). Guarded streamed bridge error handling after headers are sent (`fb6178a`). Added bridge API integration coverage and explicit browser-bridge setup states (`a911acd`, `629c9a8`). WebView process-failure recovery remains, while automatic monitor-change retargeting was removed so Windows display settings remain authoritative (`c1bf008`). Native host already had request body limits, localhost binding, external-call timeouts, and graceful stop handling. |
 | Observability | 🔧 fixed | Added `X-Request-ID` response headers and structured `http_request` boundary logs with request ID, method, path, status, and duration for native and legacy local HTTP servers (`73bade9`). `/api/health` already exists for health/readiness. |
 | Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, UniFi credential form stability, release-gauntlet argument validation, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. Existing installed-app smoke validation passes. |
 | Documentation | 🔧 fixed | Added `.env.example` documenting no required normal-install env vars plus optional HWiNFO/macOS notarization variables (`81d2247`). Updated `CHANGELOG.md` for the release-readiness changes. README already covers install, configure, run, release, support, and cleanup paths. |
