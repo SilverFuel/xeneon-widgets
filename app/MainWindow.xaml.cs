@@ -346,7 +346,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        DispatcherQueue.TryEnqueue(async () =>
+        if (!DispatcherQueue.TryEnqueue(async () =>
         {
             try
             {
@@ -371,7 +371,11 @@ public sealed partial class MainWindow : Window
             {
                 Interlocked.Exchange(ref _webViewRecoveryScheduled, 0);
             }
-        });
+        }))
+        {
+            _logger.Warn("Failed to enqueue WebView recovery. Clearing recovery gate.");
+            Interlocked.Exchange(ref _webViewRecoveryScheduled, 0);
+        }
     }
 
     private void HandleBridgeStatusChanged(string message)
