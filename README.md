@@ -40,6 +40,8 @@ Uninstall is also meant to be hands-free:
 - Windows Settings > Apps > Installed apps > XENEON Edge Host removes the app, shortcuts, auto-start, and uninstall entry.
 - Start Menu > XENEON Edge Host > Uninstall XENEON Edge Host does the same thing.
 - Start Menu > XENEON Edge Host > Uninstall and Remove Local Data also removes `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost`.
+- Start Menu > XENEON Edge Host > Launch Xenon Safe Mode disables auto-start, ignores saved display placement, and opens on the primary monitor.
+- Start Menu > XENEON Edge Host > Repair XENEON Edge Host restores shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
 
 Plain-language install/uninstall notes live in [docs/release/WINDOWS-INSTALL-UNINSTALL.md](docs/release/WINDOWS-INSTALL-UNINSTALL.md).
 
@@ -157,6 +159,13 @@ Uninstall paths:
 - Start Menu > XENEON Edge Host > Uninstall XENEON Edge Host
 - Start Menu > XENEON Edge Host > Uninstall and Remove Local Data
 - `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Remove-XenonEdgeHost.ps1" -Quiet -RemoveLocalData`
+
+Recovery paths:
+
+- Start Menu > XENEON Edge Host > Launch Xenon Safe Mode
+- Start Menu > XENEON Edge Host > Repair XENEON Edge Host
+- `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Launch-XenonSafeMode.ps1" -Quiet`
+- `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\repair.ps1" -Quiet`
 
 Before selling a paid/stable version, treat these as release blockers:
 

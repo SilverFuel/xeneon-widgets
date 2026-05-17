@@ -86,13 +86,17 @@ public sealed partial class MainWindow : Window
     private void ConfigureWindow(bool saveSelection)
     {
         var windowHandle = WindowNative.GetWindowHandle(this);
-        var displayCandidates = _bridgeManager.ListDisplayCandidates();
+        var safeMode = Program.LaunchOptions.SafeMode;
+        var displayCandidates = _bridgeManager.ListDisplayCandidates(ignoreSavedPreference: safeMode);
         if (displayCandidates.Count == 0)
         {
             throw new InvalidOperationException("No displays were detected.");
         }
 
-        var targetDisplay = _bridgeManager.SelectDisplayTarget(displayCandidates, saveSelection);
+        var targetDisplay = _bridgeManager.SelectDisplayTarget(
+            displayCandidates,
+            saveSelection: saveSelection && !safeMode,
+            preferPrimary: safeMode);
         var appWindow = AppWindow;
 
         appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
@@ -112,8 +116,10 @@ public sealed partial class MainWindow : Window
         EnsureDisplayWindowStaysOffTaskbar(windowHandle);
 
         _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
-        _logger.Info($"Window positioned on {targetDisplay.Label} (score {targetDisplay.Score}).");
-        SetOverlayText($"Launching on {targetDisplay.Label}.");
+        _logger.Info($"{(safeMode ? "Safe Mode: " : "")}Window positioned on {targetDisplay.Label} (score {targetDisplay.Score}).");
+        SetOverlayText(safeMode
+            ? $"Safe Mode: launching on primary display ({targetDisplay.Label})."
+            : $"Launching on {targetDisplay.Label}.");
     }
 
     private static string DescribeDisplayCandidate(DisplayTarget display)

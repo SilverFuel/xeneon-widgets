@@ -55,7 +55,7 @@ assert(
 );
 
 assert(
-  /SelectDisplayTarget\(IReadOnlyList<DisplayTarget>\?\s*candidates\s*=\s*null,\s*bool\s+saveSelection\s*=\s*true\)/.test(bridgeManager)
+  /SelectDisplayTarget\([\s\S]+IReadOnlyList<DisplayTarget>\?\s+candidates\s*=\s*null,[\s\S]+bool\s+saveSelection\s*=\s*true/.test(bridgeManager)
     && /if\s*\(!saveSelection\)\s*\{\s*return selected;\s*\}/s.test(bridgeManager),
   "display selection must support non-persistent recovery after transient monitor changes"
 );

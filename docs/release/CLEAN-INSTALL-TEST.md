@@ -10,7 +10,7 @@ Run this before every public Windows release. Use a fresh Windows user profile o
 4. Confirm the Start Menu shortcut appears.
 5. Confirm the Desktop shortcut appears if enabled.
 6. Confirm Windows Settings > Apps includes `XENEON Edge Host`.
-7. Confirm the Start Menu includes Uninstall and Remove Local Data.
+7. Confirm the Start Menu includes Launch Xenon Safe Mode, Repair XENEON Edge Host, Uninstall, and Remove Local Data.
 8. Open XENEON Edge Host from the Start Menu.
 9. Confirm the dashboard opens at `http://127.0.0.1:8976/`.
 10. Finish setup without configuring optional integrations.
@@ -41,6 +41,13 @@ The installer should not ask setup questions. A Windows SmartScreen warning is a
 1. Restart Windows.
 2. Confirm the app starts if auto-start is enabled.
 3. Confirm the dashboard still opens from the Start Menu.
+
+## Recovery
+
+1. Launch `Repair XENEON Edge Host` from the Start Menu.
+2. Confirm shortcuts, Windows Apps entry, and startup registration still exist.
+3. Launch `Launch Xenon Safe Mode` from the Start Menu.
+4. Confirm auto-start is disabled and Xenon opens on the primary monitor without changing saved local app data.
 
 ## Uninstall
 

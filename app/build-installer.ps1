@@ -43,6 +43,8 @@ $installScriptPath = Join-Path $installerScriptRoot "Install-XenonEdgeHost.ps1"
 $removeScriptPath = Join-Path $installerScriptRoot "Remove-XenonEdgeHost.ps1"
 $supportInstallPath = Join-Path $scriptRoot "install.ps1"
 $supportUninstallPath = Join-Path $scriptRoot "uninstall.ps1"
+$supportSafeModePath = Join-Path $scriptRoot "Launch-XenonSafeMode.ps1"
+$supportRepairPath = Join-Path $scriptRoot "repair.ps1"
 $payloadZipPath = Join-Path $stageRoot "payload.zip"
 
 function Write-Step($message) {
@@ -77,6 +79,8 @@ function New-IExpressSed($sourceDir, $targetPath, $sedPath) {
     "Remove-XenonEdgeHost.ps1",
     "install.ps1",
     "uninstall.ps1",
+    "Launch-XenonSafeMode.ps1",
+    "repair.ps1",
     "payload.zip"
   )
 
@@ -167,6 +171,8 @@ Copy-Item $installScriptPath (Join-Path $stageRoot "Install-XenonEdgeHost.ps1") 
 Copy-Item $removeScriptPath (Join-Path $stageRoot "Remove-XenonEdgeHost.ps1") -Force
 Copy-Item $supportInstallPath (Join-Path $stageRoot "install.ps1") -Force
 Copy-Item $supportUninstallPath (Join-Path $stageRoot "uninstall.ps1") -Force
+Copy-Item $supportSafeModePath (Join-Path $stageRoot "Launch-XenonSafeMode.ps1") -Force
+Copy-Item $supportRepairPath (Join-Path $stageRoot "repair.ps1") -Force
 
 @"
 @echo off
@@ -214,6 +220,7 @@ Installs to:
 
 Creates:
   - Start Menu shortcuts
+  - Safe Mode and Repair Start Menu shortcuts
   - Desktop shortcut
   - current-user auto-start entry
   - Apps & Features uninstall entry
