@@ -16,7 +16,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
   - Final post-improvement full branch review completed with 0 findings.
 - Findings resolved:
   - P0: 0
-  - P1: 5
+  - P1: 6
   - P2: 2
 - Scoped improvements completed:
   - Added local bridge API integration coverage for health, CORS rejection, invalid JSON, oversized JSON, and dashboard config writes.
@@ -57,6 +57,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | CR-5 | P2 | `RELEASE_READINESS.md` | Removed environment-specific branch wording from the readiness report. | `ca75cff` |
 | CR-6 | P1 | `CHANGELOG.md` | Replaced internal CI/tooling details in the public changelog with concise user-facing release notes while keeping technical specifics in this readiness report. | `c0d3474` |
 | CR-7 | P2 | `app/MainWindow.xaml.cs` | Replaced the display-recovery async dispatcher lambda with an explicit fire-and-forget task assignment so exceptions remain contained in the Task-returning recovery method. | `9020892` |
+| CR-8 | P1 | `.github/workflows/ci.yml` | Added an explicit `npm ci` step before dependency audit and repository checks so CI uses the locked dependency graph. | `c6f3c9c` |
 | Improvement | P1 | `bridge/server.mjs` | Reported browser-bridge provisioning and display setup states explicitly so first-run diagnostics avoid stale fallback states; covered by bridge API integration test. | `629c9a8` |
 | Improvement | P1 | `app/MainWindow.xaml.cs` | Added debounced Windows display-change recovery, non-persistent display retargeting during transient monitor changes, and WebView process-failure reload recovery. | `b855bb9` |
 
@@ -69,7 +70,7 @@ Release-readiness pass run for the current 0.2.0 beta release branch.
 | Observability | 🔧 fixed | Added `X-Request-ID` response headers and structured `http_request` boundary logs with request ID, method, path, status, and duration for native and legacy local HTTP servers (`73bade9`). `/api/health` already exists for health/readiness. |
 | Testing | 🔧 fixed | Added targeted validation checks for every fixed issue and wired them into `npm run check`: setup-guide state, bridge boundaries, observability, dependency pins, support redaction, display/WebView recovery, and bridge API behavior. Validation scripts now resolve workspace files explicitly and fail with clear read errors. `npm run check` passes. Existing installed-app smoke validation passes. |
 | Documentation | 🔧 fixed | Added `.env.example` documenting no required normal-install env vars plus optional HWiNFO/macOS notarization variables (`81d2247`). Updated `CHANGELOG.md` for the release-readiness changes. README already covers install, configure, run, release, support, and cleanup paths. |
-| Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260516-1349.exe` and matching `.sha256`. Added dependency audits to CI and release workflow (`81d2247`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
+| Operational | 🔧 fixed | Built `app/dist/XenonEdgeHost-Setup-0.2.0-20260516-1349.exe` and matching `.sha256`. Added dependency audits to CI and release workflow (`81d2247`) and an explicit CI `npm ci` install before audit/check steps (`c6f3c9c`). Added `npm run release:gauntlet` to run audits, checks, artifact validation, signature policy checks, and release readiness in one command (`1e66790`). Pinned Electron dependency ranges to exact locked versions and added a dependency-pin check (`c9d5578`). Windows runtime is per-user rather than root/container-based. |
 | Performance | ✅ already satisfied | No measured hot path or obvious user-facing O(n²) issue was identified in the scoped changes, so no performance changes were made. |
 
 ## Known Limitations
