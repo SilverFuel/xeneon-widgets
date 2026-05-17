@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install npm dependencies
+        run: npm ci
+
       - name: Audit dependencies
         run: npm run audit:deps
 
@@ -60,7 +63,7 @@ jobs:
           node-version: 22
 
       - name: Install Electron host dependencies
-        run: npm --prefix desktop/electron install
+        run: npm --prefix desktop/electron ci
 
       - name: Validate Electron host
         run: npm --prefix desktop/electron run check

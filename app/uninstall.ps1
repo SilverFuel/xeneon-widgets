@@ -41,6 +41,10 @@ function Write-QuietWarning($message) {
   }
 }
 
+function Get-RootScheduledTask($taskName) {
+  return Get-ScheduledTask -TaskName $taskName -TaskPath "\" -ErrorAction SilentlyContinue
+}
+
 Write-Step "XENEON Edge Host - Uninstall Auto-Start"
 
 if ($appRoot) {
@@ -61,9 +65,9 @@ if ($running) {
 
 # --- Remove scheduled task ---
 
-if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+if (Get-RootScheduledTask $taskName) {
   try {
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+    Unregister-ScheduledTask -TaskName $taskName -TaskPath "\" -Confirm:$false
     Write-Info "Removed scheduled task '$taskName'."
   } catch {
     Write-QuietWarning "Unable to remove scheduled task '$taskName'."

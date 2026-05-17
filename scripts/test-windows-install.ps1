@@ -9,6 +9,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($RemoveLocalData -and -not $RunUninstall) {
+  throw "-RemoveLocalData requires -RunUninstall so local data is removed only through the product uninstaller."
+}
+
 $installRoot = Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost"
 $exePath = Join-Path $installRoot "XenonEdgeHost.exe"
 $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"
@@ -19,6 +23,9 @@ $cleanupUninstallShortcut = Join-Path $shortcutRoot "Uninstall and Remove Local 
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
 $userDataRoot = Join-Path $env:APPDATA "XenonEdgeHost"
 $localDataRoot = Join-Path $env:LOCALAPPDATA "XenonEdgeHost"
+$taskName = "XenonEdgeHost"
+$runValueName = "XenonEdgeHost"
+$runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 
 function Write-Step($message) {
   Write-Host ""
@@ -53,6 +60,41 @@ function Get-ShortcutArguments($path) {
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut($path)
   return $shortcut.Arguments
+}
+
+function Get-XenonStartupTask {
+  return Get-ScheduledTask -TaskName $taskName -TaskPath "\" -ErrorAction SilentlyContinue
+}
+
+function Get-XenonStartupRunValue {
+  return (Get-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue).$runValueName
+}
+
+function Assert-StartupInstalled {
+  $startupTask = Get-XenonStartupTask
+  $startupRunValue = Get-XenonStartupRunValue
+
+  if (-not $startupTask -and [string]::IsNullOrWhiteSpace($startupRunValue)) {
+    throw "Neither scheduled task nor Run key startup integration was installed."
+  }
+
+  if ($startupTask -and $startupTask.State -eq "Disabled") {
+    throw "Scheduled task '$taskName' is installed but disabled."
+  }
+
+  Write-Host "OK: startup integration installed"
+}
+
+function Assert-StartupRemoved {
+  if (Get-XenonStartupTask) {
+    throw "Scheduled task '$taskName' still exists after uninstall."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace((Get-XenonStartupRunValue))) {
+    throw "Run key startup entry '$runValueName' still exists after uninstall."
+  }
+
+  Write-Host "OK: startup integration removed"
 }
 
 if ($RunInstall) {
@@ -109,6 +151,7 @@ if ([string]::IsNullOrWhiteSpace($uninstallEntry.InstallLocation) -or -not (Test
   throw "InstallLocation is missing or invalid in the uninstall entry."
 }
 Write-Host "OK: install location registered"
+Assert-StartupInstalled
 
 if ($RunUninstall) {
   Write-Step "Running uninstaller"
@@ -118,7 +161,10 @@ if ($RunUninstall) {
   if ($RemoveLocalData) {
     $removeArgs += "-RemoveLocalData"
   }
-  Start-Process -FilePath "powershell.exe" -ArgumentList $removeArgs -Wait -WindowStyle Hidden
+  $removeProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $removeArgs -Wait -WindowStyle Hidden -PassThru
+  if ($removeProcess.ExitCode -ne 0) {
+    throw "Uninstaller exited with code $($removeProcess.ExitCode)."
+  }
   Start-Sleep -Seconds 4
 
   Write-Step "Checking uninstall cleanup"
@@ -126,18 +172,11 @@ if ($RunUninstall) {
   Assert-Absent $shortcutRoot "Start Menu shortcut folder"
   Assert-Absent $desktopShortcut "Desktop shortcut"
   Assert-Absent $uninstallKey "Apps and Features uninstall entry"
+  Assert-StartupRemoved
   if ($RemoveLocalData) {
     Write-Step "Checking local data cleanup"
     Assert-Absent $userDataRoot "Roaming local data"
     Assert-Absent $localDataRoot "Local app data"
-  }
-} elseif ($RemoveLocalData) {
-  Write-Step "Removing current-user local data"
-  foreach ($path in @($userDataRoot, $localDataRoot)) {
-    if (Test-Path -LiteralPath $path) {
-      Remove-Item -LiteralPath $path -Recurse -Force
-      Write-Host "Removed $path"
-    }
   }
 }
 
