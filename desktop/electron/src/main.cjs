@@ -11,6 +11,7 @@ const defaultPort = 8976;
 let assetRevision = "local";
 const maxJsonBodyBytes = 256 * 1024;
 const sessionHeaderName = "X-Xenon-Session";
+const sessionBootstrapPath = "/xenon-session-bootstrap.js";
 const sessionToken = randomBytes(32).toString("base64url");
 const releasesUrl = "https://github.com/SilverFuel/xeneon-widgets/releases";
 const latestReleaseApiUrl = "https://api.github.com/repos/SilverFuel/xeneon-widgets/releases/latest";
@@ -234,18 +235,24 @@ async function releaseSnapshot() {
     }
 
     const payload = await response.json();
-    const assets = Array.isArray(payload.assets)
+    const rawAssets = Array.isArray(payload.assets)
       ? payload.assets
         .filter((asset) => asset && asset.name && asset.browser_download_url)
         .map((asset) => ({
           name: String(asset.name),
           downloadUrl: String(asset.browser_download_url),
-          size: Number.isFinite(asset.size) ? asset.size : 0
+          size: Number.isFinite(asset.size) ? asset.size : 0,
+          sha256Url: "",
+          signatureUrl: "",
+          hashStatus: "missing",
+          signatureStatus: "missing"
         }))
       : [];
-    const windowsAsset = findReleaseAsset(assets, (asset) => /setup/i.test(asset.name) && /\.exe$/i.test(asset.name));
-    const macAsset = findReleaseAsset(assets, (asset) => /\.dmg$/i.test(asset.name) || /mac|darwin/i.test(asset.name));
+    const assets = rawAssets.map((asset) => enrichReleaseAssetTrust(asset, rawAssets));
+    const windowsAsset = findReleaseAsset(assets, (asset) => !isReleaseTrustSidecar(asset.name) && /setup/i.test(asset.name) && /\.exe$/i.test(asset.name));
+    const macAsset = findReleaseAsset(assets, (asset) => !isReleaseTrustSidecar(asset.name) && (/\.dmg$/i.test(asset.name) || /mac|darwin/i.test(asset.name)));
     const latestVersion = String(payload.tag_name || payload.name || "");
+    const trust = buildReleaseTrust(windowsAsset);
 
     return {
       supported: true,
@@ -257,6 +264,9 @@ async function releaseSnapshot() {
       installerUrl: windowsAsset ? windowsAsset.downloadUrl : "",
       macUrl: macAsset ? macAsset.downloadUrl : "",
       assets,
+      trust,
+      hashStatus: windowsAsset ? windowsAsset.hashStatus : "missing",
+      signatureStatus: windowsAsset ? windowsAsset.signatureStatus : "missing",
       source: "GitHub Releases",
       sampledAt: nowIso(),
       message: latestVersion ? `Latest public release is ${latestVersion}.` : "Release feed is reachable, but no public release tag was found."
@@ -272,11 +282,72 @@ async function releaseSnapshot() {
       installerUrl: "",
       macUrl: "",
       assets: [],
+      trust: {
+        installer: "missing",
+        hashStatus: "missing",
+        signatureStatus: "missing",
+        trusted: false
+      },
+      hashStatus: "missing",
+      signatureStatus: "missing",
       source: "GitHub Releases",
       sampledAt: nowIso(),
       message: error && error.message ? error.message : "Release check failed."
     };
   }
+}
+
+function enrichReleaseAssetTrust(asset, assets) {
+  if (isReleaseTrustSidecar(asset.name)) {
+    return {
+      ...asset,
+      hashStatus: isReleaseHashSidecar(asset.name) ? "sidecar" : "not-applicable",
+      signatureStatus: isReleaseSignatureSidecar(asset.name) ? "sidecar" : "not-applicable"
+    };
+  }
+
+  const hashAsset = findReleaseAsset(assets, (candidate) => isHashForReleaseAsset(candidate.name, asset.name));
+  const signatureAsset = findReleaseAsset(assets, (candidate) => isSignatureForReleaseAsset(candidate.name, asset.name));
+  return {
+    ...asset,
+    sha256Url: hashAsset ? hashAsset.downloadUrl : "",
+    signatureUrl: signatureAsset ? signatureAsset.downloadUrl : "",
+    hashStatus: hashAsset ? "available" : "missing",
+    signatureStatus: signatureAsset ? "available" : "missing"
+  };
+}
+
+function buildReleaseTrust(installer) {
+  return {
+    installer: installer ? installer.name : "missing",
+    hashStatus: installer ? installer.hashStatus : "missing",
+    signatureStatus: installer ? installer.signatureStatus : "missing",
+    trusted: Boolean(installer && installer.hashStatus === "available" && installer.signatureStatus === "available")
+  };
+}
+
+function isHashForReleaseAsset(candidateName, assetName) {
+  return [".sha256", ".sha256sum", ".sha256.txt", ".hash"]
+    .some((suffix) => candidateName.toLowerCase() === `${assetName}${suffix}`.toLowerCase());
+}
+
+function isSignatureForReleaseAsset(candidateName, assetName) {
+  return [".sig", ".signature", ".asc", ".sigstore"]
+    .some((suffix) => candidateName.toLowerCase() === `${assetName}${suffix}`.toLowerCase());
+}
+
+function isReleaseTrustSidecar(assetName) {
+  return isReleaseHashSidecar(assetName) || isReleaseSignatureSidecar(assetName);
+}
+
+function isReleaseHashSidecar(assetName) {
+  return [".sha256", ".sha256sum", ".sha256.txt", ".hash"]
+    .some((suffix) => assetName.toLowerCase().endsWith(suffix));
+}
+
+function isReleaseSignatureSidecar(assetName) {
+  return [".sig", ".signature", ".asc", ".sigstore"]
+    .some((suffix) => assetName.toLowerCase().endsWith(suffix));
 }
 
 function buildConfigSnapshot() {
@@ -961,6 +1032,10 @@ async function handleRequest(request, response) {
       return;
     }
 
+    if (requestUrl.pathname === sessionBootstrapPath) {
+      return sendSessionBootstrap(response);
+    }
+
     const filePath = resolveStaticPath(requestUrl);
     if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
       return sendText(response, 404, "Not found");
@@ -968,13 +1043,16 @@ async function handleRequest(request, response) {
 
     let body = fs.readFileSync(filePath);
     const contentType = contentTypeFor(filePath);
+    let nonce = "";
     if (contentType.startsWith("text/html")) {
-      body = Buffer.from(injectSessionToken(body.toString("utf8")), "utf8");
+      nonce = randomBytes(16).toString("base64");
+      body = Buffer.from(injectSessionToken(body.toString("utf8"), nonce), "utf8");
     }
     response.writeHead(200, {
       "Content-Type": contentType,
       "Content-Length": body.length,
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      ...securityHeaders(contentType, nonce)
     });
     response.end(body);
   } catch (error) {
@@ -985,14 +1063,30 @@ async function handleRequest(request, response) {
   }
 }
 
-function injectSessionToken(html) {
-  if (!html.includes("</head>") || html.includes("xenon-session-token")) {
+function sendSessionBootstrap(response) {
+  const body = Buffer.from(buildSessionBootstrapScript(), "utf8");
+  response.writeHead(200, {
+    "Content-Type": "application/javascript; charset=utf-8",
+    "Content-Length": body.length,
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; script-src 'self'; connect-src 'self'",
+    ...securityHeaders("application/javascript; charset=utf-8")
+  });
+  response.end(body);
+}
+
+function injectSessionToken(html, nonce) {
+  if (!html.includes("</head>") || html.includes(sessionBootstrapPath)) {
     return html;
   }
 
-  const injection = `  <meta name="xenon-session-token" content="${escapeHtml(sessionToken)}">
-  <script>
-  (() => {
+  const injection = `  <script src="${sessionBootstrapPath}" nonce="${escapeHtml(nonce)}"></script>
+`;
+  return html.replace("</head>", `${injection}</head>`);
+}
+
+function buildSessionBootstrapScript() {
+  return `(() => {
     window.XenonSessionToken = ${JSON.stringify(sessionToken)};
     const originalFetch = window.fetch;
     if (!originalFetch || originalFetch.__xenonSessionWrapped) return;
@@ -1010,9 +1104,32 @@ function injectSessionToken(html) {
     };
     window.fetch.__xenonSessionWrapped = true;
   })();
-  </script>
 `;
-  return html.replace("</head>", `${injection}</head>`);
+}
+
+function securityHeaders(contentType, nonce = "") {
+  const headers = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer"
+  };
+  if (!String(contentType || "").startsWith("text/html")) {
+    return headers;
+  }
+
+  const scriptSource = nonce ? `'self' 'nonce-${nonce}'` : "'self'";
+  headers["Content-Security-Policy"] = [
+    "default-src 'self'",
+    `script-src ${scriptSource}`,
+    "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+    "img-src 'self' data: blob: http: https:",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "media-src 'self' blob: data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+  ].join("; ");
+  return headers;
 }
 
 function escapeHtml(value) {

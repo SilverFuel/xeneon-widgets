@@ -20,6 +20,31 @@
   var statusToneFromPayload = runtime.statusToneFromPayload;
   var text = runtime.text;
 
+  function requiresServerConfirmation(actionId) {
+    return actionId === "empty-recycle-bin" || actionId === "sleep" || actionId === "restart" || actionId === "shutdown";
+  }
+
+  function requestActionConfirmation(env, actionId) {
+    return requestJson(buildBridgeUrl(env, "/api/action-confirmations"), {
+      method: "POST",
+      body: {
+        actionId: actionId
+      }
+    }, 6000);
+  }
+
+  function saveDashboardSettings(env, settings) {
+    return requestJson(buildBridgeUrl(env, "/api/config/dashboard"), {
+      method: "POST",
+      body: settings
+    }, 6000).then(function (payload) {
+      if (payload && typeof payload === "object") {
+        env.bridgeConfig = payload;
+      }
+      return payload;
+    });
+  }
+
   function renderActionButton(item, action, confirmId, disabled) {
     var itemId = text(item && item.id, "");
     var isConfirm = confirmId && confirmId === itemId;
@@ -414,9 +439,19 @@
       state.statusTone = "warn";
       redraw();
 
-      return requestJson(buildBridgeUrl(env, "/api/quick-actions/" + actionId), {
-        method: "POST"
-      }, 8000).then(function (payload) {
+      return Promise.resolve()
+        .then(function () {
+          return requiresServerConfirmation(actionId) ? requestActionConfirmation(env, actionId) : {};
+        })
+        .then(function (confirmation) {
+          return requestJson(buildBridgeUrl(env, "/api/quick-actions/" + actionId), {
+            method: "POST",
+            body: {
+              actionId: actionId,
+              token: text(confirmation && confirmation.token, "")
+            }
+          }, 8000);
+        }).then(function (payload) {
         state.data = normalizeQuickActionsPayload(payload);
         state.busy = false;
         state.statusText = text(payload.message, statusTextFromPayload(payload, "Ready"));
@@ -571,9 +606,19 @@
       state.statusTone = "warn";
       redraw();
 
-      return requestJson(buildBridgeUrl(env, "/api/system-shortcuts/" + actionId), {
-        method: "POST"
-      }, 8000).then(function (payload) {
+      return Promise.resolve()
+        .then(function () {
+          return requiresServerConfirmation(actionId) ? requestActionConfirmation(env, actionId) : {};
+        })
+        .then(function (confirmation) {
+          return requestJson(buildBridgeUrl(env, "/api/system-shortcuts/" + actionId), {
+            method: "POST",
+            body: {
+              actionId: actionId,
+              token: text(confirmation && confirmation.token, "")
+            }
+          }, 8000);
+        }).then(function (payload) {
         state.data = normalizeSystemShortcutsPayload(payload);
         state.busy = false;
         state.statusText = text(payload.message, "Ready");
@@ -695,12 +740,18 @@
       sampledAt: text(payload.sampledAt, ""),
       message: text(payload.message, payload.configured ? "Clipboard history is ready." : "Clipboard history is disabled in Windows."),
       source: text(payload.source, "windows clipboard history"),
+      privacy: {
+        hidePreviews: Boolean(payload.privacy && payload.privacy.hidePreviews),
+        widgetPaused: Boolean(payload.privacy && payload.privacy.widgetPaused),
+        excludeFromDiagnostics: payload.privacy ? payload.privacy.excludeFromDiagnostics !== false : true
+      },
       entries: Array.isArray(payload.entries) ? payload.entries.map(function (entry) {
         return {
           id: text(entry.id, ""),
           kind: text(entry.kind, "unknown"),
           label: text(entry.label, "Clipboard item"),
           preview: text(entry.preview, "Clipboard content"),
+          previewHidden: Boolean(entry.previewHidden),
           canCopy: entry.canCopy !== false
         };
       }) : []
@@ -724,8 +775,13 @@
         '</div>' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Items", String(data.entries.length), data.entries.length ? "Recent history" : (data.configured ? "Nothing recent" : "Enable clipboard history")) +
-          metricCard("Source", text(data.source, "Clipboard history"), data.configured ? "Windows 10+" : "Needs setup") +
+          metricCard("Privacy", data.privacy.widgetPaused ? "Paused" : data.privacy.hidePreviews ? "Hidden" : "Visible", data.privacy.excludeFromDiagnostics ? "Excluded from diagnostics" : "Diagnostics status only") +
           metricCard("Updated", formatAge(data.sampledAt), data.stale ? "Snapshot is stale" : "Fresh snapshot") +
+        '</div>' +
+        '<div class="inline-actions">' +
+          '<button class="inline-button" type="button" data-action="toggle-hide-previews"' + (state.busy ? " disabled" : "") + '>' + (data.privacy.hidePreviews ? "Show previews" : "Hide previews") + '</button>' +
+          '<button class="inline-button" type="button" data-action="toggle-pause-widget"' + (state.busy ? " disabled" : "") + '>' + (data.privacy.widgetPaused ? "Resume widget" : "Pause widget") + '</button>' +
+          '<button class="inline-button" type="button" data-action="toggle-exclude-diagnostics"' + (state.busy ? " disabled" : "") + '>' + (data.privacy.excludeFromDiagnostics ? "Diagnostics excluded" : "Exclude diagnostics") + '</button>' +
         '</div>' +
         '<article class="list-card inline-card">' +
           '<div class="inline-card-header"><div><div class="metric-label">Recent Entries</div><div class="router-inline-copy">Tap an item to copy it back to the current clipboard.</div></div></div>' +
@@ -796,6 +852,27 @@
       });
     }
 
+    function updateClipboardPrivacy(settings) {
+      state.busy = true;
+      state.statusText = "Saving";
+      state.statusTone = "warn";
+      redraw();
+
+      return saveDashboardSettings(env, settings).then(function () {
+        return refresh();
+      }).then(function () {
+        state.busy = false;
+        state.statusText = "Privacy saved";
+        state.statusTone = "good";
+        redraw();
+      }, function (error) {
+        state.busy = false;
+        state.statusText = error.message || "Save failed";
+        state.statusTone = "danger";
+        redraw();
+      });
+    }
+
     addListener(cleanups, container, "click", function (event) {
       var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
       if (!target || state.busy) {
@@ -804,6 +881,27 @@
 
       if (target.getAttribute("data-action") === "refresh") {
         refresh();
+        return;
+      }
+
+      if (target.getAttribute("data-action") === "toggle-hide-previews") {
+        updateClipboardPrivacy({
+          clipboardHidePreviews: !state.data.privacy.hidePreviews
+        });
+        return;
+      }
+
+      if (target.getAttribute("data-action") === "toggle-pause-widget") {
+        updateClipboardPrivacy({
+          clipboardWidgetPaused: !state.data.privacy.widgetPaused
+        });
+        return;
+      }
+
+      if (target.getAttribute("data-action") === "toggle-exclude-diagnostics") {
+        updateClipboardPrivacy({
+          clipboardExcludeFromDiagnostics: !state.data.privacy.excludeFromDiagnostics
+        });
         return;
       }
 

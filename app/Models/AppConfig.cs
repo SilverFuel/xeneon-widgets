@@ -90,6 +90,12 @@ public sealed class DashboardConfig
     public string LastKnownGoodVersion { get; set; } = "";
 
     public string LastKnownGoodPath { get; set; } = "";
+
+    public bool ClipboardHidePreviews { get; set; } = true;
+
+    public bool ClipboardWidgetPaused { get; set; }
+
+    public bool ClipboardExcludeFromDiagnostics { get; set; } = true;
 }
 
 public sealed class LauncherEntryConfig
@@ -142,6 +148,12 @@ public sealed class DashboardConfigRequest
     public string? ReleaseChannel { get; set; }
 
     public bool? UpdateRollbackEnabled { get; set; }
+
+    public bool? ClipboardHidePreviews { get; set; }
+
+    public bool? ClipboardWidgetPaused { get; set; }
+
+    public bool? ClipboardExcludeFromDiagnostics { get; set; }
 }
 
 public sealed class HueLinkRequest
@@ -239,6 +251,13 @@ public sealed class DisplayPreferenceRequest
 public sealed class BrightnessRequest
 {
     public int Brightness { get; set; }
+}
+
+public sealed class ActionConfirmationRequest
+{
+    public string? ActionId { get; set; }
+
+    public string? Token { get; set; }
 }
 
 public sealed class ClipboardCopyRequest

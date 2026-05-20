@@ -30,6 +30,14 @@ assert(
 );
 
 assert(
+  /RedactClipboardEntries/.test(supportController)
+    && /entriesRedacted/.test(supportController)
+    && /previewsRedacted/.test(supportController)
+    && !/health\s*,?\s*\n\s*\}/.test(supportController.match(/RunAutoRepairAsync[\s\S]*?return new[\s\S]*?\n\s*\};/)?.[0] || ""),
+  "support bundle and repair payloads must redact clipboard entries and previews"
+);
+
+assert(
   /WindowsUserPathPattern/.test(supportController)
     && /MacUserPathPattern/.test(supportController)
     && /EmailPattern/.test(supportController)

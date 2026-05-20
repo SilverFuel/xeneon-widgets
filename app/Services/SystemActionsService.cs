@@ -1,7 +1,9 @@
 using Microsoft.Win32;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 
 namespace XenonEdgeHost;
 
@@ -9,7 +11,17 @@ public sealed class SystemActionsService
 {
     private const string PersonalizeRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
     private const string NotificationsRegistryPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Notifications\Settings";
+    private static readonly TimeSpan ConfirmationTokenTtl = TimeSpan.FromSeconds(45);
+    private static readonly HashSet<string> DangerousActionIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "empty-recycle-bin",
+        "sleep",
+        "restart",
+        "shutdown"
+    };
+
     private readonly HostLogger _logger;
+    private readonly ConcurrentDictionary<string, PendingActionConfirmation> _pendingConfirmations = new(StringComparer.Ordinal);
     private bool _brightnessUnavailableLogged;
 
     public SystemActionsService(HostLogger logger)
@@ -154,9 +166,35 @@ public sealed class SystemActionsService
         };
     }
 
-    public QuickActionsSnapshot ExecuteQuickAction(string actionId)
+    public ActionConfirmationPayload IssueConfirmation(ActionConfirmationRequest request)
     {
-        switch ((actionId ?? "").Trim().ToLowerInvariant())
+        var actionId = NormalizeActionId(request.ActionId);
+        if (!DangerousActionIds.Contains(actionId))
+        {
+            throw new InvalidOperationException("This action does not require a confirmation token.");
+        }
+
+        PruneExpiredConfirmations();
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+        var expiresAt = DateTimeOffset.UtcNow.Add(ConfirmationTokenTtl);
+        _pendingConfirmations[token] = new PendingActionConfirmation(actionId, expiresAt);
+
+        return new ActionConfirmationPayload
+        {
+            ActionId = actionId,
+            Token = token,
+            ExpiresAt = expiresAt,
+            TtlSeconds = (int)ConfirmationTokenTtl.TotalSeconds,
+            Message = "Confirm this action within 45 seconds."
+        };
+    }
+
+    public QuickActionsSnapshot ExecuteQuickAction(string actionId, string? confirmationToken = null)
+    {
+        var normalizedActionId = NormalizeActionId(actionId);
+        RequireConfirmation(normalizedActionId, confirmationToken);
+
+        switch (normalizedActionId)
         {
             case "dark-mode":
                 SetDarkMode(!IsDarkModeEnabled());
@@ -186,9 +224,12 @@ public sealed class SystemActionsService
         return GetQuickActionsSnapshot();
     }
 
-    public SystemShortcutsSnapshot ExecuteShortcut(string actionId)
+    public SystemShortcutsSnapshot ExecuteShortcut(string actionId, string? confirmationToken = null)
     {
-        switch ((actionId ?? "").Trim().ToLowerInvariant())
+        var normalizedActionId = NormalizeActionId(actionId);
+        RequireConfirmation(normalizedActionId, confirmationToken);
+
+        switch (normalizedActionId)
         {
             case "toggle-dnd":
                 SetNotificationBannersEnabled(!AreNotificationBannersEnabled());
@@ -210,6 +251,41 @@ public sealed class SystemActionsService
         }
 
         return GetShortcutsSnapshot();
+    }
+
+    private static string NormalizeActionId(string? actionId)
+    {
+        return (actionId ?? "").Trim().ToLowerInvariant();
+    }
+
+    private void RequireConfirmation(string actionId, string? token)
+    {
+        if (!DangerousActionIds.Contains(actionId))
+        {
+            return;
+        }
+
+        PruneExpiredConfirmations();
+        if (string.IsNullOrWhiteSpace(token)
+            || !_pendingConfirmations.TryRemove(token.Trim(), out var confirmation)
+            || !string.Equals(confirmation.ActionId, actionId, StringComparison.OrdinalIgnoreCase)
+            || confirmation.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            _logger.Warn($"Rejected dangerous action {actionId} without a valid server confirmation token.");
+            throw new InvalidOperationException("A fresh confirmation token is required for this action.");
+        }
+    }
+
+    private void PruneExpiredConfirmations()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var entry in _pendingConfirmations)
+        {
+            if (entry.Value.ExpiresAt <= now)
+            {
+                _pendingConfirmations.TryRemove(entry.Key, out _);
+            }
+        }
     }
 
     public SystemShortcutsSnapshot SetBrightness(int brightness)
@@ -504,6 +580,21 @@ public sealed class RestartAdminResult
 
     public string Message { get; set; } = "";
 }
+
+public sealed class ActionConfirmationPayload
+{
+    public string ActionId { get; set; } = "";
+
+    public string Token { get; set; } = "";
+
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    public int TtlSeconds { get; set; }
+
+    public string Message { get; set; } = "";
+}
+
+public sealed record PendingActionConfirmation(string ActionId, DateTimeOffset ExpiresAt);
 
 public sealed class QuickActionsSnapshot
 {

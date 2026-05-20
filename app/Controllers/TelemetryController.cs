@@ -119,7 +119,9 @@ public sealed class TelemetryController
         var calendar = await _calendarService.GetSnapshotAsync(config, cancellationToken);
         var media = await _mediaService.GetSnapshotAsync(cancellationToken);
         var hue = await _hueService.GetSnapshotAsync(config, cancellationToken);
-        var clipboard = await _clipboardHistoryService.GetSnapshotAsync(cancellationToken);
+        var clipboard = await _clipboardHistoryService.GetSnapshotAsync(
+            ClipboardPrivacyOptions.FromDashboard(config.Dashboard),
+            cancellationToken);
         var gpuPower = _gpuPowerMonitor.GetSnapshot();
         var provisioning = _provisioningService.GetSnapshot();
         var displayDiagnostics = _configController.GetDisplayDiagnostics(config);

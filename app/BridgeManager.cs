@@ -457,6 +457,8 @@ public sealed class BridgeManager : IDisposable
     {
         response.StatusCode = statusCode;
         response.ContentType = "application/json; charset=utf-8";
+        response.Headers["X-Content-Type-Options"] = "nosniff";
+        response.Headers["Referrer-Policy"] = "no-referrer";
 
         if (statusCode == 204)
         {

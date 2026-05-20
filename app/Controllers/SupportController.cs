@@ -112,7 +112,7 @@ public sealed class SupportController
             sampledAt = startedAt,
             message = "Auto repair checked display targeting, runtime health, launcher suggestions, and config state.",
             actions,
-            health
+            health = SanitizeSupportObject(health, config)
         };
     }
 
@@ -210,7 +210,90 @@ public sealed class SupportController
     {
         var json = JsonSerializer.Serialize(payload, JsonOptions);
         var sanitized = SanitizeText(json, config);
-        return JsonSerializer.Deserialize<JsonElement>(sanitized, JsonOptions);
+        var element = JsonSerializer.Deserialize<JsonElement>(sanitized, JsonOptions);
+        return RedactClipboardEntries(element) ?? new { };
+    }
+
+    private static object? RedactClipboardEntries(JsonElement element, string? propertyName = null)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                return RedactClipboardObject(element, propertyName);
+            case JsonValueKind.Array:
+                return element.EnumerateArray()
+                    .Select(item => RedactClipboardEntries(item))
+                    .ToArray();
+            case JsonValueKind.String:
+                return element.GetString();
+            case JsonValueKind.Number:
+                return element.TryGetInt64(out var longValue)
+                    ? longValue
+                    : element.TryGetDouble(out var doubleValue)
+                        ? doubleValue
+                        : element.GetRawText();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+            default:
+                return null;
+        }
+    }
+
+    private static object RedactClipboardObject(JsonElement element, string? propertyName)
+    {
+        var isClipboardPayload = string.Equals(propertyName, "clipboard", StringComparison.OrdinalIgnoreCase)
+            || HasClipboardShape(element);
+        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        var entryCount = 0;
+        var redactedEntries = false;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (isClipboardPayload
+                && string.Equals(property.Name, "entries", StringComparison.OrdinalIgnoreCase))
+            {
+                entryCount = property.Value.ValueKind == JsonValueKind.Array
+                    ? property.Value.GetArrayLength()
+                    : 0;
+                redactedEntries = true;
+                continue;
+            }
+
+            if (isClipboardPayload
+                && (string.Equals(property.Name, "preview", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(property.Name, "text", StringComparison.OrdinalIgnoreCase)))
+            {
+                redactedEntries = true;
+                continue;
+            }
+
+            result[property.Name] = RedactClipboardEntries(property.Value, property.Name);
+        }
+
+        if (isClipboardPayload)
+        {
+            result["entryCount"] = entryCount;
+            result["entriesRedacted"] = true;
+            result["previewsRedacted"] = true;
+            if (redactedEntries)
+            {
+                result["diagnosticNote"] = "Clipboard entries and previews are excluded from support diagnostics.";
+            }
+        }
+
+        return result;
+    }
+
+    private static bool HasClipboardShape(JsonElement element)
+    {
+        return element.TryGetProperty("source", out var source)
+            && source.ValueKind == JsonValueKind.String
+            && (source.GetString() ?? "").Contains("clipboard", StringComparison.OrdinalIgnoreCase)
+            && element.TryGetProperty("entries", out _);
     }
 
     private static string ReplaceIfPresent(string source, string? value, string replacement)

@@ -292,6 +292,9 @@
       latestUrl: "https://github.com/SilverFuel/xeneon-widgets/releases",
       downloadUrl: "",
       macUrl: "",
+      hashStatus: "missing",
+      signatureStatus: "missing",
+      trustReady: false,
       channel: "stable",
       rollback: {
         configured: false,
@@ -320,6 +323,7 @@
           metricCard("Current build", env.assetRevision || "local", "Dashboard asset revision", null) +
           metricCard("Latest release", state.latest || "Not checked", state.message, null) +
           metricCard("Installer", state.downloadUrl ? "Found" : "Not checked", state.macUrl ? "Windows and Mac assets" : "Windows asset expected", null) +
+          metricCard("Trust", state.trustReady ? "Verified" : "Needs proof", "Hash " + state.hashStatus + " / signature " + state.signatureStatus, null) +
           metricCard("Rollback", state.rollback.configured ? "Ready" : "Pending", state.rollback.message, null) +
         '</div>' +
         '<form class="inline-form product-control-panel" data-form="updates">' +
@@ -337,7 +341,7 @@
           '<a class="inline-button" href="' + escapeHtml(state.latestUrl) + '" target="_blank" rel="noreferrer">Open releases</a>' +
         '</div>' +
         '<div class="product-checklist">' +
-          '<span>Signed installer</span><span>Release notes</span><span>Versioned setup EXE</span><span>Rollback download</span>' +
+          '<span>Hash ' + escapeHtml(state.hashStatus) + '</span><span>Signature ' + escapeHtml(state.signatureStatus) + '</span><span>Versioned setup EXE</span><span>Rollback download</span>' +
         '</div>'
       );
     }
@@ -354,6 +358,9 @@
         state.latestUrl = text(payload && (payload.htmlUrl || payload.html_url), state.latestUrl);
         state.downloadUrl = text(payload && payload.installerUrl, "");
         state.macUrl = text(payload && payload.macUrl, "");
+        state.hashStatus = text(payload && payload.hashStatus, "missing");
+        state.signatureStatus = text(payload && payload.signatureStatus, "missing");
+        state.trustReady = Boolean(payload && payload.trust && payload.trust.trusted);
         state.message = text(payload && payload.message, "Release feed checked.");
         state.statusText = payload && payload.status === "live" ? "Release feed ready" : "Check failed";
         state.statusTone = payload && payload.status === "live" ? "good" : "danger";
