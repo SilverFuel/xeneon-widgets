@@ -84,7 +84,10 @@ public sealed class ConfigController
                 releaseChannel = config.Dashboard.ReleaseChannel,
                 updateRollbackEnabled = config.Dashboard.UpdateRollbackEnabled,
                 lastKnownGoodVersion = config.Dashboard.LastKnownGoodVersion,
-                lastKnownGoodPath = string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath) ? "" : "<local-app-path>"
+                lastKnownGoodPath = string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath) ? "" : "<local-app-path>",
+                clipboardHidePreviews = config.Dashboard.ClipboardHidePreviews,
+                clipboardWidgetPaused = config.Dashboard.ClipboardWidgetPaused,
+                clipboardExcludeFromDiagnostics = config.Dashboard.ClipboardExcludeFromDiagnostics
             }
         };
     }
@@ -151,7 +154,13 @@ public sealed class ConfigController
                 themeReadability = config.Dashboard.ThemeReadability,
                 releaseChannel = config.Dashboard.ReleaseChannel,
                 updateRollbackEnabled = config.Dashboard.UpdateRollbackEnabled,
-                lastKnownGoodConfigured = !string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath)
+                lastKnownGoodConfigured = !string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath),
+                clipboard = new
+                {
+                    previewsHidden = config.Dashboard.ClipboardHidePreviews,
+                    paused = config.Dashboard.ClipboardWidgetPaused,
+                    excludedFromDiagnostics = config.Dashboard.ClipboardExcludeFromDiagnostics
+                }
             }
         };
     }
@@ -220,6 +229,21 @@ public sealed class ConfigController
             if (payload.UpdateRollbackEnabled.HasValue)
             {
                 current.Dashboard.UpdateRollbackEnabled = payload.UpdateRollbackEnabled.Value;
+            }
+
+            if (payload.ClipboardHidePreviews.HasValue)
+            {
+                current.Dashboard.ClipboardHidePreviews = payload.ClipboardHidePreviews.Value;
+            }
+
+            if (payload.ClipboardWidgetPaused.HasValue)
+            {
+                current.Dashboard.ClipboardWidgetPaused = payload.ClipboardWidgetPaused.Value;
+            }
+
+            if (payload.ClipboardExcludeFromDiagnostics.HasValue)
+            {
+                current.Dashboard.ClipboardExcludeFromDiagnostics = payload.ClipboardExcludeFromDiagnostics.Value;
             }
 
             return current;

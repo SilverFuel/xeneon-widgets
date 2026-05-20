@@ -11,21 +11,27 @@ public sealed class ClipboardHistoryService
         _logger = logger;
     }
 
-    public Task<ClipboardHistorySnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
+    public Task<ClipboardHistorySnapshot> GetSnapshotAsync(ClipboardPrivacyOptions? privacy = null, CancellationToken cancellationToken = default)
     {
-        return UiDispatcher.InvokeAsync(() => BuildSnapshotAsync(cancellationToken));
+        return UiDispatcher.InvokeAsync(() => BuildSnapshotAsync(privacy ?? ClipboardPrivacyOptions.Default, cancellationToken));
     }
 
-    public Task<ClipboardHistorySnapshot> CopyItemAsync(string? id, CancellationToken cancellationToken = default)
+    public Task<ClipboardHistorySnapshot> CopyItemAsync(string? id, ClipboardPrivacyOptions? privacy = null, CancellationToken cancellationToken = default)
     {
         return UiDispatcher.InvokeAsync(async () =>
         {
+            var effectivePrivacy = privacy ?? ClipboardPrivacyOptions.Default;
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (effectivePrivacy.WidgetPaused)
+            {
+                throw new InvalidOperationException("Clipboard widget is paused.");
+            }
 
             var result = await Clipboard.GetHistoryItemsAsync();
             if (result.Status != ClipboardHistoryItemsResultStatus.Success)
             {
-                return CreateStatusSnapshot(result.Status);
+                return CreateStatusSnapshot(result.Status, effectivePrivacy);
             }
 
             var item = result.Items.FirstOrDefault(entry =>
@@ -46,25 +52,41 @@ public sealed class ClipboardHistoryService
                 });
             }
 
-            return await BuildSnapshotAsync(cancellationToken);
+            return await BuildSnapshotAsync(effectivePrivacy, cancellationToken);
         });
     }
 
-    private async Task<ClipboardHistorySnapshot> BuildSnapshotAsync(CancellationToken cancellationToken)
+    private async Task<ClipboardHistorySnapshot> BuildSnapshotAsync(ClipboardPrivacyOptions privacy, CancellationToken cancellationToken)
     {
+        if (privacy.WidgetPaused)
+        {
+            return new ClipboardHistorySnapshot
+            {
+                Supported = true,
+                Configured = true,
+                Status = "paused",
+                SampledAt = DateTimeOffset.UtcNow,
+                Stale = false,
+                Message = "Clipboard widget is paused.",
+                Source = "windows clipboard history",
+                Privacy = ClipboardPrivacyPayload.FromOptions(privacy),
+                Entries = []
+            };
+        }
+
         try
         {
             var result = await Clipboard.GetHistoryItemsAsync();
             if (result.Status != ClipboardHistoryItemsResultStatus.Success)
             {
-                return CreateStatusSnapshot(result.Status);
+                return CreateStatusSnapshot(result.Status, privacy);
             }
 
             var entries = new List<ClipboardHistoryEntryPayload>();
             foreach (var item in result.Items.Take(12))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                entries.Add(await BuildEntryAsync(item));
+                entries.Add(ApplyPrivacy(await BuildEntryAsync(item), privacy));
             }
 
             return new ClipboardHistorySnapshot
@@ -78,6 +100,7 @@ public sealed class ClipboardHistoryService
                     ? "Clipboard history is live."
                     : "Clipboard history is enabled but currently empty.",
                 Source = "windows clipboard history",
+                Privacy = ClipboardPrivacyPayload.FromOptions(privacy),
                 Entries = entries
             };
         }
@@ -93,12 +116,13 @@ public sealed class ClipboardHistoryService
                 Stale = false,
                 Message = error.Message,
                 Source = "windows clipboard history",
+                Privacy = ClipboardPrivacyPayload.FromOptions(privacy),
                 Entries = []
             };
         }
     }
 
-    private static ClipboardHistorySnapshot CreateStatusSnapshot(ClipboardHistoryItemsResultStatus status)
+    private static ClipboardHistorySnapshot CreateStatusSnapshot(ClipboardHistoryItemsResultStatus status, ClipboardPrivacyOptions privacy)
     {
         return status switch
         {
@@ -109,6 +133,7 @@ public sealed class ClipboardHistoryService
                 Status = "error",
                 Message = "Clipboard history access is denied.",
                 Source = "windows clipboard history",
+                Privacy = ClipboardPrivacyPayload.FromOptions(privacy),
                 Entries = []
             },
             ClipboardHistoryItemsResultStatus.ClipboardHistoryDisabled => new ClipboardHistorySnapshot
@@ -118,6 +143,7 @@ public sealed class ClipboardHistoryService
                 Status = "setup",
                 Message = "Clipboard history is disabled in Windows.",
                 Source = "windows clipboard history",
+                Privacy = ClipboardPrivacyPayload.FromOptions(privacy),
                 Entries = []
             },
             _ => new ClipboardHistorySnapshot
@@ -127,9 +153,21 @@ public sealed class ClipboardHistoryService
                 Status = "error",
                 Message = "Clipboard history is unavailable.",
                 Source = "windows clipboard history",
+                Privacy = ClipboardPrivacyPayload.FromOptions(privacy),
                 Entries = []
             }
         };
+    }
+
+    private static ClipboardHistoryEntryPayload ApplyPrivacy(ClipboardHistoryEntryPayload payload, ClipboardPrivacyOptions privacy)
+    {
+        if (privacy.HidePreviews)
+        {
+            payload.Preview = "Hidden by privacy mode";
+            payload.PreviewHidden = true;
+        }
+
+        return payload;
     }
 
     private static async Task<ClipboardHistoryEntryPayload> BuildEntryAsync(ClipboardHistoryItem item)
@@ -217,6 +255,51 @@ public sealed class ClipboardHistoryService
     }
 }
 
+public sealed class ClipboardPrivacyOptions
+{
+    public static ClipboardPrivacyOptions Default { get; } = new()
+    {
+        HidePreviews = true,
+        WidgetPaused = false,
+        ExcludeFromDiagnostics = true
+    };
+
+    public bool HidePreviews { get; set; } = true;
+
+    public bool WidgetPaused { get; set; }
+
+    public bool ExcludeFromDiagnostics { get; set; } = true;
+
+    public static ClipboardPrivacyOptions FromDashboard(DashboardConfig dashboard)
+    {
+        return new ClipboardPrivacyOptions
+        {
+            HidePreviews = dashboard.ClipboardHidePreviews,
+            WidgetPaused = dashboard.ClipboardWidgetPaused,
+            ExcludeFromDiagnostics = dashboard.ClipboardExcludeFromDiagnostics
+        };
+    }
+}
+
+public sealed class ClipboardPrivacyPayload
+{
+    public bool HidePreviews { get; set; }
+
+    public bool WidgetPaused { get; set; }
+
+    public bool ExcludeFromDiagnostics { get; set; }
+
+    public static ClipboardPrivacyPayload FromOptions(ClipboardPrivacyOptions options)
+    {
+        return new ClipboardPrivacyPayload
+        {
+            HidePreviews = options.HidePreviews,
+            WidgetPaused = options.WidgetPaused,
+            ExcludeFromDiagnostics = options.ExcludeFromDiagnostics
+        };
+    }
+}
+
 public sealed class ClipboardHistorySnapshot
 {
     public bool Supported { get; set; } = true;
@@ -233,6 +316,8 @@ public sealed class ClipboardHistorySnapshot
 
     public string Source { get; set; } = "windows clipboard history";
 
+    public ClipboardPrivacyPayload Privacy { get; set; } = ClipboardPrivacyPayload.FromOptions(ClipboardPrivacyOptions.Default);
+
     public List<ClipboardHistoryEntryPayload> Entries { get; set; } = [];
 }
 
@@ -245,6 +330,8 @@ public sealed class ClipboardHistoryEntryPayload
     public string Label { get; set; } = "";
 
     public string Preview { get; set; } = "";
+
+    public bool PreviewHidden { get; set; }
 
     public bool CanCopy { get; set; }
 }

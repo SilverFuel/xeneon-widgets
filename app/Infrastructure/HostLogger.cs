@@ -2,6 +2,8 @@ namespace XenonEdgeHost;
 
 public sealed class HostLogger : IDisposable
 {
+    private const long MaxLogBytes = 512 * 1024;
+    private const int MaxLogLines = 500;
     private readonly string _logPath;
     private readonly object _writeLock = new();
     private bool _disposed;
@@ -53,6 +55,7 @@ public sealed class HostLogger : IDisposable
             try
             {
                 File.AppendAllText(_logPath, line + Environment.NewLine);
+                TrimLogFile();
             }
             catch
             {
@@ -62,8 +65,6 @@ public sealed class HostLogger : IDisposable
 
     private void TrimLogFile()
     {
-        const long maxBytes = 512 * 1024;
-
         try
         {
             if (!File.Exists(_logPath))
@@ -72,13 +73,13 @@ public sealed class HostLogger : IDisposable
             }
 
             var info = new FileInfo(_logPath);
-            if (info.Length <= maxBytes)
+            if (info.Length <= MaxLogBytes)
             {
                 return;
             }
 
             var lines = File.ReadAllLines(_logPath);
-            var keepFrom = Math.Max(0, lines.Length - 500);
+            var keepFrom = Math.Max(0, lines.Length - MaxLogLines);
             File.WriteAllLines(_logPath, lines[keepFrom..]);
         }
         catch

@@ -99,9 +99,14 @@ public sealed class ActionController
         return _systemActionsService.RestartHostAsAdministrator();
     }
 
-    public bool TryExecuteQuickAction(string path, string method, out object? payload)
+    public ActionConfirmationPayload IssueActionConfirmation(ActionConfirmationRequest request)
     {
-        payload = null;
+        return _systemActionsService.IssueConfirmation(request);
+    }
+
+    public bool TryMatchQuickAction(string path, string method, out string actionId)
+    {
+        actionId = "";
         if (!string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -113,14 +118,18 @@ public sealed class ActionController
             return false;
         }
 
-        var actionId = Uri.UnescapeDataString(match.Groups[1].Value);
-        payload = _systemActionsService.ExecuteQuickAction(actionId);
+        actionId = Uri.UnescapeDataString(match.Groups[1].Value);
         return true;
     }
 
-    public bool TryExecuteSystemShortcut(string path, string method, out object? payload)
+    public QuickActionsSnapshot ExecuteQuickAction(string actionId, ActionConfirmationRequest request)
     {
-        payload = null;
+        return _systemActionsService.ExecuteQuickAction(actionId, request.Token);
+    }
+
+    public bool TryMatchSystemShortcut(string path, string method, out string actionId)
+    {
+        actionId = "";
         if (!string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -132,9 +141,13 @@ public sealed class ActionController
             return false;
         }
 
-        var actionId = Uri.UnescapeDataString(match.Groups[1].Value);
-        payload = _systemActionsService.ExecuteShortcut(actionId);
+        actionId = Uri.UnescapeDataString(match.Groups[1].Value);
         return true;
+    }
+
+    public SystemShortcutsSnapshot ExecuteSystemShortcut(string actionId, ActionConfirmationRequest request)
+    {
+        return _systemActionsService.ExecuteShortcut(actionId, request.Token);
     }
 
     public Task<MediaSnapshot> GetMediaAsync(CancellationToken cancellationToken)
@@ -227,12 +240,19 @@ public sealed class ActionController
 
     public Task<ClipboardHistorySnapshot> GetClipboardAsync(CancellationToken cancellationToken)
     {
-        return _clipboardHistoryService.GetSnapshotAsync(cancellationToken);
+        var config = _configStore.Snapshot();
+        return _clipboardHistoryService.GetSnapshotAsync(
+            ClipboardPrivacyOptions.FromDashboard(config.Dashboard),
+            cancellationToken);
     }
 
     public Task<ClipboardHistorySnapshot> CopyClipboardAsync(ClipboardCopyRequest request, CancellationToken cancellationToken)
     {
-        return _clipboardHistoryService.CopyItemAsync(request.Id, cancellationToken);
+        var config = _configStore.Snapshot();
+        return _clipboardHistoryService.CopyItemAsync(
+            request.Id,
+            ClipboardPrivacyOptions.FromDashboard(config.Dashboard),
+            cancellationToken);
     }
 
     private static string DecodePathValue(Match match)

@@ -71,12 +71,31 @@ const actionsWidget = readWorkspaceFile("js/widgets/actions.js");
 const integrationsWidget = readWorkspaceFile("js/widgets/integrations.js");
 const gameModeWidget = readWorkspaceFile("js/widgets/game-mode.js");
 const bridgeExampleConfig = readWorkspaceFile("bridge/config.example.json");
+const appConfig = readWorkspaceFile("app/Models/AppConfig.cs");
+const launcherService = readWorkspaceFile("app/Services/LauncherService.cs");
+const launcherTargetValidator = readWorkspaceFile("app/Infrastructure/LauncherTargetValidator.cs");
+const systemActionsService = readWorkspaceFile("app/Services/SystemActionsService.cs");
+const clipboardHistoryService = readWorkspaceFile("app/Services/ClipboardHistoryService.cs");
+const releaseService = readWorkspaceFile("app/Services/ReleaseService.cs");
+const hostLogger = readWorkspaceFile("app/Infrastructure/HostLogger.cs");
+const releaseWorkflow = readWorkspaceFile(".github/workflows/release.yml");
+const buildStamp = readWorkspaceFile("build/build-stamp.props");
 
 assert(
   /SessionHeaderName\s*=\s*"X-Xenon-Session"/.test(bridgeManager)
     && /TryAuthorizeNoOriginMutation/.test(bridgeManager)
-    && /InjectSessionToken/.test(staticAssetController),
-  "native bridge must protect no-origin mutating requests with an injected session token"
+    && /WriteSessionBootstrapAsync/.test(staticAssetController)
+    && /xenon-session-bootstrap\.js/.test(staticAssetController),
+  "native bridge must protect no-origin mutating requests with a locked-down session bootstrap script"
+);
+
+assert(
+  /Content-Security-Policy/.test(staticAssetController)
+    && /nonce-/.test(staticAssetController)
+    && /X-Content-Type-Options/.test(staticAssetController)
+    && /Referrer-Policy/.test(staticAssetController)
+    && !/meta name="xenon-session-token"/.test(staticAssetController),
+  "native static HTML must use CSP/security headers and must not inject the session token into a meta tag"
 );
 
 const genericNativeCatch = bridgeManager.match(/catch\s*\(Exception\s+error\)\s*\{\s*_logger\.Error\("Failed to process request\."[\s\S]*?WriteJsonAsync\(context\.Response,\s*500[\s\S]*?\n\s*\}/)?.[0] || "";
@@ -118,10 +137,14 @@ assert(
   /sessionHeaderName\s*=\s*"X-Xenon-Session"/.test(legacyBridge)
     && /authorizeNoOriginMutation/.test(legacyBridge)
     && /injectSessionToken/.test(legacyBridge)
+    && /securityHeaders/.test(legacyBridge)
+    && /xenon-session-bootstrap\.js/.test(legacyBridge)
     && /sessionHeaderName\s*=\s*"X-Xenon-Session"/.test(electronMain)
     && /authorizeNoOriginMutation/.test(electronMain)
-    && /injectSessionToken/.test(electronMain),
-  "legacy and Electron hosts must match the native no-origin mutation boundary"
+    && /injectSessionToken/.test(electronMain)
+    && /securityHeaders/.test(electronMain)
+    && /xenon-session-bootstrap\.js/.test(electronMain),
+  "legacy and Electron hosts must match the native no-origin mutation and local HTML security boundary"
 );
 
 assert(
@@ -169,7 +192,7 @@ assert(
 assert(
   /StaticAssetController/.test(staticAssetController)
     && /TryHandleAsync/.test(staticAssetController)
-    && /InjectSessionToken/.test(staticAssetController)
+    && /InjectSessionBootstrap/.test(staticAssetController)
     && /_staticAssets\.TryHandleAsync/.test(apiRouter),
   "native static asset serving must stay outside the BridgeManager route switch"
 );
@@ -223,15 +246,26 @@ assert(
 assert(
   /ActionController/.test(actionController)
     && /GetLaunchers/.test(actionController)
-    && /TryExecuteQuickAction/.test(actionController)
-    && /TryExecuteSystemShortcut/.test(actionController)
+    && /TryMatchQuickAction/.test(actionController)
+    && /TryMatchSystemShortcut/.test(actionController)
     && /TryExecuteHueActionAsync/.test(actionController)
     && /_actionController\.GetLaunchers/.test(apiRouter)
-    && /_actionController\.TryExecuteQuickAction/.test(apiRouter)
+    && /_actionController\.TryMatchQuickAction/.test(apiRouter)
     && /_actionController\.TryExecuteHueActionAsync/.test(apiRouter)
     && !/TryHandleQuickActionAsync/.test(bridgeManager)
     && !/TryHandleHueActionAsync/.test(bridgeManager),
   "launcher, quick action, shortcut, Hue, media, and clipboard endpoints must route through ActionController"
+);
+
+assert(
+  /ActionConfirmationRequest/.test(appConfig)
+    && /IssueConfirmation/.test(systemActionsService)
+    && /PendingActionConfirmation/.test(systemActionsService)
+    && /TryRemove\(token\.Trim\(\)/.test(systemActionsService)
+    && /case "\/api\/action-confirmations" when request\.HttpMethod == "POST"/.test(apiRouter)
+    && /requestActionConfirmation/.test(actionsWidget)
+    && /requiresServerConfirmation/.test(actionsWidget),
+  "dangerous local actions must require short-lived server-issued confirmation tokens"
 );
 
 assert(
@@ -278,8 +312,27 @@ for (const relativePath of [
 }
 
 assert(
-  readWorkspaceFile("app/XenonEdgeHost.csproj").includes(`0.2.0+${currentAssetRevision.slice(0, 8)}`),
+  assetRevisionPayload.informationalVersion === `0.2.0+${currentAssetRevision.slice(0, 8)}`,
   "native assembly informational version must match the current release date"
+);
+
+assert(
+  buildStamp.includes(`<XenonAssetRevision>${currentAssetRevision}</XenonAssetRevision>`)
+    && buildStamp.includes(`<XenonInformationalVersion>${assetRevisionPayload.informationalVersion}</XenonInformationalVersion>`)
+    && readWorkspaceFile("app/XenonEdgeHost.csproj").includes("$(XenonInformationalVersion)")
+    && assetRevisionPayload.informationalVersion === `0.2.0+${currentAssetRevision.slice(0, 8)}`,
+  "native informational version and asset revision must share build/build-stamp.props"
+);
+
+assert(
+  /LauncherTargetValidator/.test(launcherService)
+    && /\.exe/.test(launcherTargetValidator)
+    && /\.lnk/.test(launcherTargetValidator)
+    && /steam:\/\/rungameid/.test(launcherTargetValidator)
+    && /AllowedUriSchemes/.test(launcherTargetValidator)
+    && /ValidateAndNormalizeTarget\(entry\.ExecutablePath,\s*entry\.Arguments\)/.test(launcherService)
+    && /TryValidateAndNormalizeTarget/.test(readWorkspaceFile("app/Infrastructure/ConfigStore.cs")),
+  "launcher entries must validate targets at save and launch time"
 );
 
 assert(
@@ -315,6 +368,14 @@ assert(
   /Interlocked\.Exchange\(ref _usageSampling,\s*1\)/.test(systemMetricsService)
     && /Interlocked\.Exchange\(ref _temperatureSampling,\s*1\)/.test(systemMetricsService),
   "native system metrics timers must guard against overlapping samples"
+);
+
+assert(
+  /File\.AppendAllText/.test(hostLogger)
+    && /File\.AppendAllText[\s\S]*TrimLogFile\(\)/.test(hostLogger)
+    && /MaxLogBytes/.test(hostLogger)
+    && /MaxLogLines/.test(hostLogger),
+  "host logging must trim rolling files after writes, not only on startup"
 );
 
 assert(
@@ -420,6 +481,19 @@ assert(
 );
 
 assert(
+  /ClipboardHidePreviews/.test(appConfig)
+    && /ClipboardWidgetPaused/.test(appConfig)
+    && /ClipboardExcludeFromDiagnostics/.test(appConfig)
+    && /ClipboardPrivacyOptions/.test(clipboardHistoryService)
+    && /PreviewHidden/.test(clipboardHistoryService)
+    && /RedactClipboardEntries/.test(supportController)
+    && /toggle-hide-previews/.test(actionsWidget)
+    && /toggle-pause-widget/.test(actionsWidget)
+    && /toggle-exclude-diagnostics/.test(actionsWidget),
+  "clipboard widget must expose privacy controls and diagnostics must redact entries/previews"
+);
+
+assert(
   /css\/widgets\/setup\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
     && /js\/widgets\/setup\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
     && /runtime\.registerRenderer\("setup",\s*mountSetupWidget\)/.test(setupWidget)
@@ -451,6 +525,18 @@ assert(
     && !/productPacks/.test(inlineWidgets)
     && !/product-theme-grid|product-layout-row|product-checklist|product-control-panel/.test(readWorkspaceFile("css/widgets.css")),
   "Product panels and shared product widget CSS must stay split from the shared inline widget runtime"
+);
+
+assert(
+  /HashStatus/.test(releaseService)
+    && /SignatureStatus/.test(releaseService)
+    && /BuildReleaseTrust/.test(releaseService)
+    && /Verify Windows signing policy/.test(releaseWorkflow)
+    && /Public stable releases require a valid Authenticode signature/.test(releaseWorkflow)
+    && /signature-status\.txt/.test(releaseWorkflow)
+    && /hashStatus/.test(productWidget)
+    && /signatureStatus/.test(productWidget),
+  "release payloads and CI must surface/enforce installer hash and signature status"
 );
 
 assert(

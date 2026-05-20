@@ -33,19 +33,19 @@ public sealed class LauncherService
         var normalized = new List<LauncherEntryConfig>();
         foreach (var entry in entries ?? [])
         {
-            var executablePath = entry.ExecutablePath?.Trim() ?? "";
-            if (string.IsNullOrWhiteSpace(executablePath))
+            if (string.IsNullOrWhiteSpace(entry.ExecutablePath))
             {
                 continue;
             }
 
+            var target = LauncherTargetValidator.ValidateAndNormalizeTarget(entry.ExecutablePath, entry.Arguments);
             normalized.Add(new LauncherEntryConfig
             {
                 Id = string.IsNullOrWhiteSpace(entry.Id) ? Guid.NewGuid().ToString("N") : entry.Id.Trim(),
-                DisplayName = ResolveDisplayName(executablePath, entry.DisplayName),
+                DisplayName = ResolveDisplayName(target.Target, entry.DisplayName),
                 IconPath = entry.IconPath?.Trim() ?? "",
-                ExecutablePath = executablePath,
-                Arguments = entry.Arguments?.Trim() ?? ""
+                ExecutablePath = target.Target,
+                Arguments = target.Arguments
             });
         }
 
@@ -60,25 +60,22 @@ public sealed class LauncherService
             throw new InvalidOperationException("Launcher entry not found.");
         }
 
+        var target = LauncherTargetValidator.ValidateAndNormalizeTarget(entry.ExecutablePath, entry.Arguments);
         var startInfo = new ProcessStartInfo
         {
-            FileName = entry.ExecutablePath,
-            UseShellExecute = true
+            FileName = target.Target,
+            UseShellExecute = target.Kind == LauncherTargetKind.Uri
+                || string.Equals(Path.GetExtension(target.Target), ".lnk", StringComparison.OrdinalIgnoreCase)
         };
 
-        if (!string.IsNullOrWhiteSpace(entry.Arguments))
+        if (!string.IsNullOrWhiteSpace(target.Arguments))
         {
-            startInfo.Arguments = entry.Arguments;
+            startInfo.Arguments = target.Arguments;
         }
 
-        if (File.Exists(entry.ExecutablePath))
+        if (!string.IsNullOrWhiteSpace(target.WorkingDirectory))
         {
-            var fullPath = Path.GetFullPath(entry.ExecutablePath);
-            var workingDirectory = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrWhiteSpace(workingDirectory))
-            {
-                startInfo.WorkingDirectory = workingDirectory;
-            }
+            startInfo.WorkingDirectory = target.WorkingDirectory;
         }
 
         Process.Start(startInfo);

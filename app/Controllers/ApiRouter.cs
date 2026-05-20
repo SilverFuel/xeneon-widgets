@@ -145,6 +145,9 @@ public sealed class ApiRouter
             case "/api/system/restart-admin" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _actionController.RestartHostAsAdministrator(), cancellationToken);
                 return;
+            case "/api/action-confirmations" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _actionController.IssueActionConfirmation(await ReadJsonAsync<ActionConfirmationRequest>(request, cancellationToken)), cancellationToken);
+                return;
             case "/api/gpu-power":
                 await WriteJsonAsync(response, 200, _telemetryController.GetGpuPowerSnapshot(), cancellationToken);
                 return;
@@ -237,15 +240,17 @@ public sealed class ApiRouter
 
     private async Task HandleFallbackAsync(HttpListenerRequest request, HttpListenerResponse response, string path, CancellationToken cancellationToken)
     {
-        if (_actionController.TryExecuteQuickAction(path, request.HttpMethod, out var quickActionPayload))
+        if (_actionController.TryMatchQuickAction(path, request.HttpMethod, out var quickActionId))
         {
-            await WriteJsonAsync(response, 200, quickActionPayload!, cancellationToken);
+            var confirmation = await ReadJsonAsync<ActionConfirmationRequest>(request, cancellationToken);
+            await WriteJsonAsync(response, 200, _actionController.ExecuteQuickAction(quickActionId, confirmation), cancellationToken);
             return;
         }
 
-        if (_actionController.TryExecuteSystemShortcut(path, request.HttpMethod, out var shortcutPayload))
+        if (_actionController.TryMatchSystemShortcut(path, request.HttpMethod, out var shortcutId))
         {
-            await WriteJsonAsync(response, 200, shortcutPayload!, cancellationToken);
+            var confirmation = await ReadJsonAsync<ActionConfirmationRequest>(request, cancellationToken);
+            await WriteJsonAsync(response, 200, _actionController.ExecuteSystemShortcut(shortcutId, confirmation), cancellationToken);
             return;
         }
 
@@ -404,6 +409,8 @@ public sealed class ApiRouter
     {
         response.StatusCode = statusCode;
         response.ContentType = "application/json; charset=utf-8";
+        response.Headers["X-Content-Type-Options"] = "nosniff";
+        response.Headers["Referrer-Policy"] = "no-referrer";
 
         if (statusCode == 204)
         {
@@ -423,6 +430,8 @@ public sealed class ApiRouter
         var bytes = Encoding.UTF8.GetBytes(text);
         response.StatusCode = statusCode;
         response.ContentType = "text/plain; charset=utf-8";
+        response.Headers["X-Content-Type-Options"] = "nosniff";
+        response.Headers["Referrer-Policy"] = "no-referrer";
         response.ContentLength64 = bytes.LongLength;
         await response.OutputStream.WriteAsync(bytes, cancellationToken);
         response.Close();
@@ -433,6 +442,8 @@ public sealed class ApiRouter
         response.StatusCode = statusCode;
         response.ContentType = contentType;
         response.Headers["Cache-Control"] = "public, max-age=604800";
+        response.Headers["X-Content-Type-Options"] = "nosniff";
+        response.Headers["Referrer-Policy"] = "no-referrer";
         response.ContentLength64 = content.LongLength;
         await response.OutputStream.WriteAsync(content, cancellationToken);
         response.Close();

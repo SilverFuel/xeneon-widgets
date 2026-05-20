@@ -40,6 +40,23 @@ jobs:
       - name: Build installer
         run: npm run installer
 
+      - name: Verify Windows signing policy
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path app/dist -Filter "*.exe" -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $installer) {
+            throw "Windows installer was not produced."
+          }
+
+          $tag = "${{ github.ref_name }}"
+          $isPublicStable = "${{ github.ref_type }}" -eq "tag" -and $tag -notmatch "(?i)(alpha|beta|preview|rc|nightly)"
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          "SignatureStatus=$($signature.Status)" | Out-File -FilePath app/dist/signature-status.txt -Encoding utf8
+
+          if ($isPublicStable -and $signature.Status -ne "Valid") {
+            throw "Public stable releases require a valid Authenticode signature."
+          }
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -47,6 +64,8 @@ jobs:
           path: |
             app/dist/*.exe
             app/dist/*.sha256
+            app/dist/*.sig
+            app/dist/signature-status.txt
             app/dist/README-install.txt
 
   mac:

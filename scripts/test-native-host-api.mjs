@@ -1,0 +1,66 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+function readWorkspaceFile(relativePath) {
+  const filePath = resolve(process.cwd(), relativePath);
+  if (!existsSync(filePath)) {
+    throw new Error(`${relativePath} does not exist`);
+  }
+
+  return readFileSync(filePath, "utf8");
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
+const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
+const actionController = readWorkspaceFile("app/Controllers/ActionController.cs");
+const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
+const configController = readWorkspaceFile("app/Controllers/ConfigController.cs");
+const staticAssets = readWorkspaceFile("app/Controllers/StaticAssetController.cs");
+
+for (const route of [
+  "/api/health",
+  "/api/config",
+  "/api/config/dashboard",
+  "/api/action-confirmations",
+  "/api/quick-actions",
+  "/api/system-shortcuts",
+  "/api/clipboard",
+  "/api/support/bundle",
+  "/api/releases/latest"
+]) {
+  assert(apiRouter.includes(route), `native ApiRouter must expose ${route}`);
+}
+
+assert(
+  /_apiRouter\.HandleAsync\(request,\s*response,\s*DashboardUri,\s*cancellationToken\)/.test(bridgeManager)
+    && !/bridge\/server\.mjs/.test(apiRouter),
+  "native API contract test must target the C# host route surface, not the legacy Node bridge"
+);
+
+assert(
+  /IssueActionConfirmation/.test(actionController)
+    && /ExecuteQuickAction/.test(actionController)
+    && /ExecuteSystemShortcut/.test(actionController),
+  "native action controller must expose confirmation-gated action execution"
+);
+
+assert(
+  /ClipboardPrivacyOptions\.FromDashboard/.test(actionController)
+    && /ClipboardPrivacyOptions\.FromDashboard/.test(telemetryController)
+    && /clipboardHidePreviews/.test(configController),
+  "native clipboard API must honor privacy settings across action, telemetry, and config controllers"
+);
+
+assert(
+  /Content-Security-Policy/.test(staticAssets)
+    && /xenon-session-bootstrap\.js/.test(staticAssets),
+  "native static asset API must emit security headers and bootstrap the session token through a script route"
+);
+
+console.log("checked native host API contract routes");

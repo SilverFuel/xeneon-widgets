@@ -21,6 +21,7 @@ const dashboardOnboardingVersion = 1;
 const maxJsonBodyBytes = 256 * 1024;
 const maxIcsBytes = 512 * 1024;
 const sessionHeaderName = "X-Xenon-Session";
+const sessionBootstrapPath = "/xenon-session-bootstrap.js";
 const sessionToken = randomBytes(32).toString("base64url");
 const sensitiveQueryPattern = /((?:api[_-]?key|appid|token|secret|password|pass|sig|signature|auth|key)=)[^&\s"]+/gi;
 let config = loadConfig();
@@ -229,7 +230,8 @@ function authorizeNoOriginMutation(request) {
 function sendText(response, statusCode, text) {
   response.writeHead(statusCode, {
     "Content-Type": "text/plain; charset=utf-8",
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    ...securityHeaders("text/plain; charset=utf-8")
   });
   response.end(text);
 }
@@ -248,6 +250,12 @@ function safeResolveStaticPath(requestUrl) {
 }
 
 function serveStaticFile(requestUrl, response) {
+  const pathname = new URL(requestUrl, `http://127.0.0.1:${config.port}`).pathname;
+  if (pathname === sessionBootstrapPath) {
+    sendSessionBootstrap(response);
+    return;
+  }
+
   const filePath = safeResolveStaticPath(requestUrl);
 
   if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
@@ -258,13 +266,16 @@ function serveStaticFile(requestUrl, response) {
   const extension = path.extname(filePath).toLowerCase();
   const mimeType = mimeTypes[extension] || "application/octet-stream";
   let body = null;
+  let nonce = "";
   if (mimeType.startsWith("text/html")) {
-    body = injectSessionToken(fs.readFileSync(filePath, "utf8"));
+    nonce = randomBytes(16).toString("base64");
+    body = injectSessionToken(fs.readFileSync(filePath, "utf8"), nonce);
   }
 
   response.writeHead(200, {
     "Content-Type": mimeType,
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    ...securityHeaders(mimeType, nonce)
   });
   if (body !== null) {
     response.end(body);
@@ -274,14 +285,30 @@ function serveStaticFile(requestUrl, response) {
   fs.createReadStream(filePath).pipe(response);
 }
 
-function injectSessionToken(html) {
-  if (!html.includes("</head>") || html.includes("xenon-session-token")) {
+function sendSessionBootstrap(response) {
+  const body = buildSessionBootstrapScript();
+  response.writeHead(200, {
+    "Content-Type": "application/javascript; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; script-src 'self'; connect-src 'self'",
+    ...securityHeaders("application/javascript; charset=utf-8")
+  });
+  response.end(body);
+}
+
+function injectSessionToken(html, nonce) {
+  if (!html.includes("</head>") || html.includes(sessionBootstrapPath)) {
     return html;
   }
 
-  const injection = `  <meta name="xenon-session-token" content="${escapeHtml(sessionToken)}">
-  <script>
-  (() => {
+  const injection = `  <script src="${sessionBootstrapPath}" nonce="${escapeHtml(nonce)}"></script>
+`;
+  return html.replace("</head>", `${injection}</head>`);
+}
+
+function buildSessionBootstrapScript() {
+  return `(() => {
     window.XenonSessionToken = ${JSON.stringify(sessionToken)};
     const originalFetch = window.fetch;
     if (!originalFetch || originalFetch.__xenonSessionWrapped) return;
@@ -299,9 +326,32 @@ function injectSessionToken(html) {
     };
     window.fetch.__xenonSessionWrapped = true;
   })();
-  </script>
 `;
-  return html.replace("</head>", `${injection}</head>`);
+}
+
+function securityHeaders(contentType, nonce = "") {
+  const headers = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer"
+  };
+  if (!String(contentType || "").startsWith("text/html")) {
+    return headers;
+  }
+
+  const scriptSource = nonce ? `'self' 'nonce-${nonce}'` : "'self'";
+  headers["Content-Security-Policy"] = [
+    "default-src 'self'",
+    `script-src ${scriptSource}`,
+    "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+    "img-src 'self' data: blob: http: https:",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "media-src 'self' blob: data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+  ].join("; ");
+  return headers;
 }
 
 function escapeHtml(value) {

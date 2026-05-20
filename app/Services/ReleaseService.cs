@@ -41,11 +41,15 @@ public sealed class ReleaseService
             }
 
             var assets = ReadAssets(root);
-            var windowsAsset = FindAsset(assets, asset => asset.Name.Contains("setup", StringComparison.OrdinalIgnoreCase) && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
-            var macAsset = FindAsset(assets, asset => asset.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase)
-                || asset.Name.Contains("mac", StringComparison.OrdinalIgnoreCase)
-                || asset.Name.Contains("darwin", StringComparison.OrdinalIgnoreCase));
+            var windowsAsset = FindAsset(assets, asset => !IsTrustSidecar(asset.Name)
+                && asset.Name.Contains("setup", StringComparison.OrdinalIgnoreCase)
+                && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+            var macAsset = FindAsset(assets, asset => !IsTrustSidecar(asset.Name)
+                && (asset.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase)
+                    || asset.Name.Contains("mac", StringComparison.OrdinalIgnoreCase)
+                    || asset.Name.Contains("darwin", StringComparison.OrdinalIgnoreCase)));
             var latestVersion = TextOr(GetString(root, "tag_name"), GetString(root, "name"));
+            var trust = BuildReleaseTrust(windowsAsset);
 
             return new
             {
@@ -59,6 +63,9 @@ public sealed class ReleaseService
                 installerUrl = windowsAsset?.DownloadUrl ?? "",
                 macUrl = macAsset?.DownloadUrl ?? "",
                 assets,
+                trust,
+                hashStatus = windowsAsset?.HashStatus ?? "missing",
+                signatureStatus = windowsAsset?.SignatureStatus ?? "missing",
                 source = "GitHub Releases",
                 sampledAt = DateTime.UtcNow.ToString("O"),
                 message = string.IsNullOrWhiteSpace(latestVersion)
@@ -90,6 +97,15 @@ public sealed class ReleaseService
             installerUrl = "",
             macUrl = "",
             assets = Array.Empty<ReleaseAsset>(),
+            trust = new
+            {
+                installer = "missing",
+                hashStatus = "missing",
+                signatureStatus = "missing",
+                trusted = false
+            },
+            hashStatus = "missing",
+            signatureStatus = "missing",
             source = "GitHub Releases",
             sampledAt = DateTime.UtcNow.ToString("O"),
             message
@@ -158,7 +174,7 @@ public sealed class ReleaseService
             return [];
         }
 
-        var assets = new List<ReleaseAsset>();
+        var rawAssets = new List<ReleaseAsset>();
         foreach (var assetElement in assetsElement.EnumerateArray())
         {
             var name = GetString(assetElement, "name");
@@ -168,13 +184,90 @@ public sealed class ReleaseService
                 continue;
             }
 
-            assets.Add(new ReleaseAsset(
+            rawAssets.Add(new ReleaseAsset(
                 name,
                 downloadUrl,
-                assetElement.TryGetProperty("size", out var sizeElement) && sizeElement.TryGetInt64(out var size) ? size : 0));
+                assetElement.TryGetProperty("size", out var sizeElement) && sizeElement.TryGetInt64(out var size) ? size : 0,
+                "",
+                "",
+                "missing",
+                "missing"));
         }
 
-        return assets;
+        return rawAssets
+            .Select(asset => EnrichTrustStatus(asset, rawAssets))
+            .ToList();
+    }
+
+    private static ReleaseAsset EnrichTrustStatus(ReleaseAsset asset, IReadOnlyCollection<ReleaseAsset> assets)
+    {
+        if (IsTrustSidecar(asset.Name))
+        {
+            return asset with
+            {
+                HashStatus = IsHashSidecar(asset.Name) ? "sidecar" : "not-applicable",
+                SignatureStatus = IsSignatureSidecar(asset.Name) ? "sidecar" : "not-applicable"
+            };
+        }
+
+        var hashAsset = FindAsset(assets, candidate => IsHashForAsset(candidate.Name, asset.Name));
+        var signatureAsset = FindAsset(assets, candidate => IsSignatureForAsset(candidate.Name, asset.Name));
+        return asset with
+        {
+            Sha256Url = hashAsset?.DownloadUrl ?? "",
+            SignatureUrl = signatureAsset?.DownloadUrl ?? "",
+            HashStatus = hashAsset is null ? "missing" : "available",
+            SignatureStatus = signatureAsset is null ? "missing" : "available"
+        };
+    }
+
+    private static object BuildReleaseTrust(ReleaseAsset? installer)
+    {
+        return new
+        {
+            installer = installer is null ? "missing" : installer.Name,
+            hashStatus = installer?.HashStatus ?? "missing",
+            signatureStatus = installer?.SignatureStatus ?? "missing",
+            trusted = string.Equals(installer?.HashStatus, "available", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(installer?.SignatureStatus, "available", StringComparison.OrdinalIgnoreCase)
+        };
+    }
+
+    private static bool IsHashForAsset(string candidateName, string assetName)
+    {
+        return string.Equals(candidateName, assetName + ".sha256", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidateName, assetName + ".sha256sum", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidateName, assetName + ".sha256.txt", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidateName, assetName + ".hash", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSignatureForAsset(string candidateName, string assetName)
+    {
+        return string.Equals(candidateName, assetName + ".sig", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidateName, assetName + ".signature", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidateName, assetName + ".asc", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidateName, assetName + ".sigstore", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTrustSidecar(string assetName)
+    {
+        return IsHashSidecar(assetName) || IsSignatureSidecar(assetName);
+    }
+
+    private static bool IsHashSidecar(string assetName)
+    {
+        return assetName.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase)
+            || assetName.EndsWith(".sha256sum", StringComparison.OrdinalIgnoreCase)
+            || assetName.EndsWith(".sha256.txt", StringComparison.OrdinalIgnoreCase)
+            || assetName.EndsWith(".hash", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSignatureSidecar(string assetName)
+    {
+        return assetName.EndsWith(".sig", StringComparison.OrdinalIgnoreCase)
+            || assetName.EndsWith(".signature", StringComparison.OrdinalIgnoreCase)
+            || assetName.EndsWith(".asc", StringComparison.OrdinalIgnoreCase)
+            || assetName.EndsWith(".sigstore", StringComparison.OrdinalIgnoreCase);
     }
 
     private static ReleaseAsset? FindAsset(IEnumerable<ReleaseAsset> assets, Func<ReleaseAsset, bool> predicate)
@@ -195,4 +288,11 @@ public sealed class ReleaseService
     }
 }
 
-public sealed record ReleaseAsset(string Name, string DownloadUrl, long Size);
+public sealed record ReleaseAsset(
+    string Name,
+    string DownloadUrl,
+    long Size,
+    string Sha256Url,
+    string SignatureUrl,
+    string HashStatus,
+    string SignatureStatus);

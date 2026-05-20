@@ -142,17 +142,7 @@ public sealed class ConfigStore
         normalized.Dashboard.ReleaseChannel = NormalizeChoice(normalized.Dashboard.ReleaseChannel, "stable", "stable", "beta", "nightly");
         normalized.Dashboard.LastKnownGoodVersion = normalized.Dashboard.LastKnownGoodVersion?.Trim() ?? "";
         normalized.Dashboard.LastKnownGoodPath = normalized.Dashboard.LastKnownGoodPath?.Trim() ?? "";
-        normalized.Launchers = normalized.Launchers
-            .Where(entry => !string.IsNullOrWhiteSpace(entry.ExecutablePath))
-            .Select(entry => new LauncherEntryConfig
-            {
-                Id = string.IsNullOrWhiteSpace(entry.Id) ? Guid.NewGuid().ToString("N") : entry.Id.Trim(),
-                DisplayName = NormalizeLauncherDisplayName(entry.ExecutablePath, entry.DisplayName),
-                IconPath = entry.IconPath?.Trim() ?? "",
-                ExecutablePath = entry.ExecutablePath.Trim(),
-                Arguments = entry.Arguments?.Trim() ?? ""
-            })
-            .ToList();
+        normalized.Launchers = NormalizeLaunchers(normalized.Launchers);
         return normalized;
     }
 
@@ -209,6 +199,32 @@ public sealed class ConfigStore
 
         var fileName = Path.GetFileNameWithoutExtension(trimmedPath);
         return string.IsNullOrWhiteSpace(fileName) ? trimmedPath : fileName;
+    }
+
+    private static List<LauncherEntryConfig> NormalizeLaunchers(IEnumerable<LauncherEntryConfig>? launchers)
+    {
+        var normalized = new List<LauncherEntryConfig>();
+        foreach (var entry in launchers ?? [])
+        {
+            if (!LauncherTargetValidator.TryValidateAndNormalizeTarget(
+                    entry.ExecutablePath,
+                    entry.Arguments,
+                    out var target))
+            {
+                continue;
+            }
+
+            normalized.Add(new LauncherEntryConfig
+            {
+                Id = string.IsNullOrWhiteSpace(entry.Id) ? Guid.NewGuid().ToString("N") : entry.Id.Trim(),
+                DisplayName = NormalizeLauncherDisplayName(target.Target, entry.DisplayName),
+                IconPath = entry.IconPath?.Trim() ?? "",
+                ExecutablePath = target.Target,
+                Arguments = target.Arguments
+            });
+        }
+
+        return normalized;
     }
 
     private void MigratePlainTextSecrets(AppConfig config)
