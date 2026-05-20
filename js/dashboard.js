@@ -2022,7 +2022,7 @@
           '</div>' +
           '<div id="dashboard-opacity-value" class="router-settings__global-value">' + opacity + '%</div>' +
         '</div>' +
-        '<input id="dashboard-opacity-slider" class="router-settings__slider" type="range" min="35" max="100" step="1" value="' + opacity + '">' +
+        '<input id="dashboard-opacity-slider" class="router-settings__slider" type="range" min="35" max="100" step="1" aria-label="Dashboard opacity" value="' + opacity + '">' +
         '<div class="router-settings__global-controls">' +
           '<label class="router-settings__field"><span>Readability</span><select id="dashboard-readability-select" class="router-settings__select">' +
             '<option value="normal"' + (readability === "normal" ? " selected" : "") + '>Normal</option>' +

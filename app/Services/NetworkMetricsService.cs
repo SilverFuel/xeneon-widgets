@@ -5,6 +5,7 @@ namespace XenonEdgeHost;
 public sealed class NetworkMetricsService : IDisposable
 {
     private readonly HostLogger _logger;
+    private readonly ConfigStore _configStore;
     private readonly object _sync = new();
     private System.Threading.Timer? _throughputTimer;
     private System.Threading.Timer? _pingTimer;
@@ -12,11 +13,15 @@ public sealed class NetworkMetricsService : IDisposable
     private long _lastBytesReceived;
     private long _lastBytesSent;
     private DateTimeOffset _lastSampleTime = DateTimeOffset.MinValue;
+    private DateTimeOffset _nextPingAt = DateTimeOffset.MinValue;
+    private int _pingSampling;
+    private int _pingFailureCount;
     private bool _started;
 
-    public NetworkMetricsService(HostLogger logger)
+    public NetworkMetricsService(HostLogger logger, ConfigStore configStore)
     {
         _logger = logger;
+        _configStore = configStore;
     }
 
     public void Start()
@@ -110,6 +115,7 @@ public sealed class NetworkMetricsService : IDisposable
                 .FirstOrDefault();
             var type = MapNetworkType(primaryInterface);
             var details = ReadInterfaceDetails(primaryInterface);
+            var healthTarget = ResolveHealthTarget(details);
 
             lock (_sync)
             {
@@ -123,6 +129,8 @@ public sealed class NetworkMetricsService : IDisposable
                 _snapshot.IpAddress = details.IpAddress;
                 _snapshot.Gateway = details.Gateway;
                 _snapshot.DnsServers = details.DnsServers;
+                _snapshot.HealthTarget = healthTarget.Target;
+                _snapshot.HealthTargetSource = healthTarget.Source;
                 _snapshot.Supported = true;
                 _snapshot.Status = "live";
                 _snapshot.SampledAt = sampledAt;
@@ -139,28 +147,90 @@ public sealed class NetworkMetricsService : IDisposable
 
     private void SamplePing()
     {
+        if (DateTimeOffset.UtcNow < _nextPingAt
+            || Interlocked.Exchange(ref _pingSampling, 1) == 1)
+        {
+            return;
+        }
+
         _ = Task.Run(async () =>
         {
             try
             {
+                var target = ResolveHealthTargetFromSnapshot();
                 using var ping = new Ping();
-                var reply = await ping.SendPingAsync("1.1.1.1", 1000);
+                var reply = await ping.SendPingAsync(target.Target, 1000);
                 lock (_sync)
                 {
                     _snapshot.Ping = reply.Status == IPStatus.Success ? reply.RoundtripTime : null;
+                    _snapshot.HealthTarget = target.Target;
+                    _snapshot.HealthTargetSource = target.Source;
                     _snapshot.SampledAt = DateTimeOffset.UtcNow;
                     _snapshot.Stale = false;
                 }
+                _pingFailureCount = reply.Status == IPStatus.Success ? 0 : Math.Min(_pingFailureCount + 1, 5);
+                _nextPingAt = DateTimeOffset.UtcNow.Add(ResolvePingDelay());
             }
             catch (Exception error)
             {
                 _logger.Warn($"Ping sample failed: {error.Message}");
+                _pingFailureCount = Math.Min(_pingFailureCount + 1, 5);
+                _nextPingAt = DateTimeOffset.UtcNow.Add(ResolvePingDelay());
                 lock (_sync)
                 {
                     _snapshot.Ping = null;
                 }
             }
+            finally
+            {
+                Interlocked.Exchange(ref _pingSampling, 0);
+            }
         });
+    }
+
+    private NetworkHealthTarget ResolveHealthTargetFromSnapshot()
+    {
+        lock (_sync)
+        {
+            var details = new NetworkInterfaceDetails
+            {
+                Gateway = _snapshot.Gateway,
+                DnsServers = _snapshot.DnsServers.ToList()
+            };
+            return ResolveHealthTarget(details);
+        }
+    }
+
+    private NetworkHealthTarget ResolveHealthTarget(NetworkInterfaceDetails details)
+    {
+        var configured = _configStore.Snapshot().Network.HealthTarget;
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return new NetworkHealthTarget(configured, "configured");
+        }
+
+        if (!string.IsNullOrWhiteSpace(details.Gateway))
+        {
+            return new NetworkHealthTarget(details.Gateway, "gateway");
+        }
+
+        var dns = details.DnsServers.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(dns))
+        {
+            return new NetworkHealthTarget(dns, "dns");
+        }
+
+        return new NetworkHealthTarget("1.1.1.1", "fallback");
+    }
+
+    private TimeSpan ResolvePingDelay()
+    {
+        if (_pingFailureCount <= 0)
+        {
+            return TimeSpan.FromSeconds(5);
+        }
+
+        return TimeSpan.FromSeconds(Math.Min(60, 5 * Math.Pow(2, _pingFailureCount)));
     }
 
     private static string MapNetworkType(NetworkInterface? networkInterface)
@@ -265,6 +335,10 @@ public sealed class NetworkSnapshot
 
     public List<string> DnsServers { get; set; } = [];
 
+    public string HealthTarget { get; set; } = "";
+
+    public string HealthTargetSource { get; set; } = "";
+
     public NetworkSnapshot Clone()
     {
         return new NetworkSnapshot
@@ -284,10 +358,14 @@ public sealed class NetworkSnapshot
             LinkSpeedMbps = LinkSpeedMbps,
             IpAddress = IpAddress,
             Gateway = Gateway,
-            DnsServers = DnsServers.ToList()
+            DnsServers = DnsServers.ToList(),
+            HealthTarget = HealthTarget,
+            HealthTargetSource = HealthTargetSource
         };
     }
 }
+
+internal sealed record NetworkHealthTarget(string Target, string Source);
 
 internal sealed class NetworkInterfaceDetails
 {

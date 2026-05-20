@@ -560,7 +560,7 @@
                     '<div><div class="inline-list-title">' + escapeHtml(text(light.name, "Light")) + '</div><div class="inline-list-copy">' + escapeHtml(light.on ? "On" : "Off") + '</div></div>' +
                     '<button class="inline-button' + (light.on ? " is-primary" : "") + '" type="button" data-action="toggle-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (writable ? "" : " disabled") + '>' + (light.on ? "On" : "Off") + '</button>' +
                   '</div>' +
-                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(light.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(optionalNumber(light.brightness) || 0) + '" data-action="brightness-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (writable ? "" : " disabled") + '></div>' +
+                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(light.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(light.name, "light")) + '" value="' + Math.round(optionalNumber(light.brightness) || 0) + '" data-action="brightness-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (writable ? "" : " disabled") + '></div>' +
                 '</div>';
             }).join("") : emptyState("No lights", getSetting(env, "automationEndpoint") ? "No light state was returned by this connector." : "Smart-home controls will light up after the native connector is added.")) + '</div>' +
           '</article>' +

@@ -38,6 +38,14 @@ assert(
 );
 
 assert(
+  /sessionsRedacted/.test(supportController)
+    && /metadataRedacted/.test(supportController)
+    && /HasSourceShape\(element,\s*"core audio"\)/.test(supportController)
+    && /HasSourceShape\(element,\s*"media session"\)/.test(supportController),
+  "support bundle diagnostics must minimize audio sessions and media metadata"
+);
+
+assert(
   /WindowsUserPathPattern/.test(supportController)
     && /MacUserPathPattern/.test(supportController)
     && /EmailPattern/.test(supportController)

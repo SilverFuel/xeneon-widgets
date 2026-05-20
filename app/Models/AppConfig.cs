@@ -12,6 +12,8 @@ public sealed class AppConfig
 
     public UniFiConfig UniFi { get; set; } = new();
 
+    public NetworkConfig Network { get; set; } = new();
+
     public DashboardConfig Dashboard { get; set; } = new();
 
     public List<LauncherEntryConfig> Launchers { get; set; } = [];
@@ -51,6 +53,11 @@ public sealed class UniFiConfig
     public string Site { get; set; } = "default";
 
     public string CertificateThumbprint { get; set; } = "";
+}
+
+public sealed class NetworkConfig
+{
+    public string HealthTarget { get; set; } = "";
 }
 
 public sealed class DashboardConfig
@@ -96,6 +103,12 @@ public sealed class DashboardConfig
     public bool ClipboardWidgetPaused { get; set; }
 
     public bool ClipboardExcludeFromDiagnostics { get; set; } = true;
+
+    public bool GameTelemetryDiagnosticsRetention { get; set; }
+
+    public bool MediaMetadataVisible { get; set; }
+
+    public bool AudioSessionLabelsVisible { get; set; }
 }
 
 public sealed class LauncherEntryConfig
@@ -154,6 +167,28 @@ public sealed class DashboardConfigRequest
     public bool? ClipboardWidgetPaused { get; set; }
 
     public bool? ClipboardExcludeFromDiagnostics { get; set; }
+
+    public bool? GameTelemetryDiagnosticsRetention { get; set; }
+
+    public bool? MediaMetadataVisible { get; set; }
+
+    public bool? AudioSessionLabelsVisible { get; set; }
+}
+
+public sealed class NetworkConfigRequest
+{
+    public string? HealthTarget { get; set; }
+}
+
+public sealed class GameModeSessionRequest
+{
+    public bool Refresh { get; set; }
+
+    public bool SteamRefresh { get; set; }
+
+    public bool ActivityRefresh { get; set; }
+
+    public bool PerformanceSession { get; set; }
 }
 
 public sealed class HueLinkRequest

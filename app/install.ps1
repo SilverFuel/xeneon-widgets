@@ -140,6 +140,7 @@ $taskInstalled = $false
 try {
   $action = New-ScheduledTaskAction -Execute $exePath -WorkingDirectory $appRoot
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
+  $trigger.Delay = "PT20S"
   $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -StartWhenAvailable `

@@ -40,6 +40,7 @@ public sealed class BridgeManager : IDisposable
     private readonly SteamService _steamService;
     private readonly GameActivityService _gameActivityService;
     private readonly GamePerformanceService _gamePerformanceService;
+    private readonly GameModeSessionService _gameModeSessionService;
     private readonly GameController _gameController;
     private readonly ProvisioningService _provisioningService;
     private readonly SystemActionsService _systemActionsService;
@@ -60,8 +61,8 @@ public sealed class BridgeManager : IDisposable
         _dashboardAssetRevision = _staticAssets.AssetRevision;
         _systemMetrics = new SystemMetricsService(_logger);
         _gpuPowerMonitor = new GpuPowerMonitorService(_logger);
-        _networkMetrics = new NetworkMetricsService(_logger);
-        _audioService = new AudioService(_logger);
+        _networkMetrics = new NetworkMetricsService(_logger, _configStore);
+        _audioService = new AudioService(_logger, _configStore);
         _weatherHttpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(10)
@@ -71,12 +72,21 @@ public sealed class BridgeManager : IDisposable
         _hueService = new HueService(_configStore, _logger);
         _uniFiService = new UniFiService(_configStore, _logger);
         _releaseService = new ReleaseService(_weatherHttpClient);
-        _mediaService = new MediaService(_logger);
+        _mediaService = new MediaService(_logger, _configStore);
         _launcherService = new LauncherService();
         _steamService = new SteamService(_logger);
         _gameActivityService = new GameActivityService(_steamService, _launcherService, _configStore, _logger);
-        _gamePerformanceService = new GamePerformanceService(_logger);
-        _gameController = new GameController(_steamService, _gameActivityService, _gamePerformanceService);
+        _gamePerformanceService = new GamePerformanceService(_logger, _configStore);
+        _gameModeSessionService = new GameModeSessionService(
+            _systemMetrics,
+            _networkMetrics,
+            _audioService,
+            _uniFiService,
+            _steamService,
+            _gameActivityService,
+            _gamePerformanceService,
+            _logger);
+        _gameController = new GameController(_steamService, _gameActivityService, _gamePerformanceService, _gameModeSessionService);
         _provisioningService = new ProvisioningService(_configStore, _steamService, _logger);
         _systemActionsService = new SystemActionsService(_logger);
         _clipboardHistoryService = new ClipboardHistoryService(_logger);

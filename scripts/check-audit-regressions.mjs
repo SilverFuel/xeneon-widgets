@@ -42,6 +42,8 @@ const currentAssetRevision = String(assetRevisionPayload.assetRevision || "").tr
 assert(/^20\d{6}-\d{2}$/.test(currentAssetRevision), "assets/revision.json must define the current dashboard asset revision");
 
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
+const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
+const installScript = readWorkspaceFile("app/install.ps1");
 const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
 const actionController = readWorkspaceFile("app/Controllers/ActionController.cs");
 const staticAssetController = readWorkspaceFile("app/Controllers/StaticAssetController.cs");
@@ -51,7 +53,13 @@ const releaseController = readWorkspaceFile("app/Controllers/ReleaseController.c
 const supportController = readWorkspaceFile("app/Controllers/SupportController.cs");
 const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
 const systemMetricsService = readWorkspaceFile("app/Services/SystemMetricsService.cs");
+const networkMetricsService = readWorkspaceFile("app/Services/NetworkMetricsService.cs");
+const audioService = readWorkspaceFile("app/Services/AudioService.cs");
+const mediaService = readWorkspaceFile("app/Services/MediaService.cs");
+const steamService = readWorkspaceFile("app/Services/SteamService.cs");
+const gameActivityService = readWorkspaceFile("app/Services/GameActivityService.cs");
 const gamePerformanceService = readWorkspaceFile("app/Services/GamePerformanceService.cs");
+const gameModeSessionService = readWorkspaceFile("app/Services/GameModeSessionService.cs");
 const hueService = readWorkspaceFile("app/Services/HueService.cs");
 const uniFiService = readWorkspaceFile("app/Services/UniFiService.cs");
 const calendarService = readWorkspaceFile("app/Services/CalendarService.cs");
@@ -371,6 +379,16 @@ assert(
 );
 
 assert(
+  /SystemEvents\.DisplaySettingsChanged\s*\+=\s*HandleDisplaySettingsChanged/.test(mainWindow)
+    && /SystemEvents\.DisplaySettingsChanged\s*-=\s*HandleDisplaySettingsChanged/.test(mainWindow)
+    && /ScheduleDisplayRecovery\("startup display backoff"\)/.test(mainWindow)
+    && /ScheduleDisplayRecovery\("display topology changed"\)/.test(mainWindow)
+    && /TryRecoverDisplayPlacementAsync/.test(mainWindow)
+    && /\$trigger\.Delay\s*=\s*"PT20S"/.test(installScript),
+  "reboot display recovery must delay startup and retry non-persistent placement after topology changes"
+);
+
+assert(
   /File\.AppendAllText/.test(hostLogger)
     && /File\.AppendAllText[\s\S]*TrimLogFile\(\)/.test(hostLogger)
     && /MaxLogBytes/.test(hostLogger)
@@ -383,6 +401,71 @@ assert(
     && /case "\/api\/game\/performance\/session" when request\.HttpMethod == "POST":[\s\S]*?_gameController\.EnsurePerformanceSession/.test(apiRouter)
     && /public GamePerformanceSnapshot EnsureSession/.test(gamePerformanceService),
   "Game Mode FPS capture must split POST session mutation from GET performance reads"
+);
+
+assert(
+  /case "\/api\/game\/session" when request\.HttpMethod == "POST"/.test(apiRouter)
+    && /GameModeSessionService/.test(bridgeManager)
+    && /GetSnapshotAsync\(GameModeSessionRequest/.test(gameModeSessionService)
+    && /CollectorTimings/.test(gameModeSessionService)
+    && /OverBudget/.test(gameModeSessionService)
+    && /refreshGameModeSession/.test(gameModeWidget)
+    && /\/api\/game\/session/.test(gameModeWidget)
+    && /createTimerLoop\(function \(\) \{[\s\S]*refreshGameModeSession/.test(gameModeWidget)
+    && !/var systemLoop = createTimerLoop/.test(gameModeWidget)
+    && !/var performanceLoop = createTimerLoop/.test(gameModeWidget),
+  "Game Mode must use one budgeted native session snapshot instead of independent UI polling loops"
+);
+
+assert(
+  /PruneTelemetryFiles/.test(gamePerformanceService)
+    && /MaxTelemetryDirectoryBytes/.test(gamePerformanceService)
+    && /MaxTelemetryFileAge/.test(gamePerformanceService)
+    && /GameTelemetryDiagnosticsRetention/.test(gamePerformanceService)
+    && /CleanupCaptureFile/.test(gamePerformanceService)
+    && /TryDeleteFile/.test(gamePerformanceService),
+  "PresentMon FPS telemetry files must be deleted or size/age capped unless diagnostics retention is enabled"
+);
+
+assert(
+  /\[JsonIgnore\][\s\S]*ProcessId/.test(gameActivityService)
+    && /\[JsonIgnore\][\s\S]*ExecutablePath/.test(gameActivityService)
+    && /HasRuntimeIdentity/.test(gameActivityService)
+    && /CanPin/.test(gameActivityService)
+    && /foregroundAppActive/.test(gameModeWidget)
+    && !/data-process-id/.test(gameModeWidget),
+  "Game activity API must keep raw PIDs and executable paths out of default JSON while preserving capability flags"
+);
+
+assert(
+  /steam-library-index\.json/.test(steamService)
+    && /BuildManifestSignatures/.test(steamService)
+    && /TryReadLibraryIndex/.test(steamService)
+    && /SaveLibraryIndex/.test(steamService)
+    && /ResolveRunningGame\(games\)/.test(steamService),
+  "Steam scans must persist a manifest index and separate active-process checks from full library refresh"
+);
+
+assert(
+  /NetworkConfig/.test(appConfig)
+    && /HealthTarget/.test(appConfig)
+    && /UpdateNetwork/.test(configController)
+    && /case "\/api\/config\/network" when request\.HttpMethod == "POST"/.test(apiRouter)
+    && /Interlocked\.Exchange\(ref _pingSampling,\s*1\)/.test(networkMetricsService)
+    && /ResolveHealthTarget/.test(networkMetricsService)
+    && /ResolvePingDelay/.test(networkMetricsService)
+    && !/SendPingAsync\("1\.1\.1\.1"/.test(networkMetricsService),
+  "network health checks must be configurable, prefer local targets, and guard against overlapping ping samples"
+);
+
+assert(
+  /MediaMetadataVisible/.test(appConfig)
+    && /AudioSessionLabelsVisible/.test(appConfig)
+    && /MediaMetadataVisible/.test(mediaService)
+    && /AudioSessionLabelsVisible/.test(audioService)
+    && /metadataRedacted/.test(supportController)
+    && /sessionsRedacted/.test(supportController),
+  "audio/media APIs and support bundles must minimize private listening/watching context by default"
 );
 
 assert(
@@ -412,6 +495,17 @@ assert(
     && !/container\.getAttribute\("data-game-focus-intro"\)\s*===/.test(gameModeWidget)
     && /runtime\.registerRenderer\("game-mode",\s*mountGameModeWidget\)/.test(gameModeWidget),
   "active Game Mode HUD must patch mounted metric nodes instead of redrawing the full scene on every poll"
+);
+
+assert(
+  /input\[type="range"\]:focus-visible/.test(readWorkspaceFile("css/widgets.css"))
+    && /aria-label="Display brightness"/.test(actionsWidget)
+    && /aria-label="Master volume"/.test(audioWidget)
+    && /aria-label="Dashboard opacity"/.test(dashboardJs)
+    && /aria-label="Brightness for/.test(homelabWidget)
+    && /aria-label="Brightness for/.test(integrationsWidget)
+    && /aria-label="Animation intensity"/.test(productWidget),
+  "generated range controls must keep accessible names and a visible keyboard focus baseline"
 );
 
 assert(

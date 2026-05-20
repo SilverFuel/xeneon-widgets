@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
@@ -9,6 +10,7 @@ public sealed class SteamService
 {
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(20);
     private readonly HostLogger _logger;
+    private readonly string _libraryIndexPath;
     private readonly object _sync = new();
     private SteamGamesSnapshot? _cachedSnapshot;
     private DateTimeOffset _cachedAt = DateTimeOffset.MinValue;
@@ -16,6 +18,11 @@ public sealed class SteamService
     public SteamService(HostLogger logger)
     {
         _logger = logger;
+        _libraryIndexPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "XenonEdgeHost",
+            "Cache",
+            "steam-library-index.json");
     }
 
     public SteamGamesSnapshot GetSnapshot(bool forceRefresh = false)
@@ -29,7 +36,7 @@ public sealed class SteamService
                 return _cachedSnapshot;
             }
 
-            _cachedSnapshot = BuildSnapshot();
+            _cachedSnapshot = BuildSnapshot(forceRefresh);
             _cachedAt = DateTimeOffset.UtcNow;
             return _cachedSnapshot;
         }
@@ -90,7 +97,7 @@ public sealed class SteamService
         return true;
     }
 
-    private SteamGamesSnapshot BuildSnapshot()
+    private SteamGamesSnapshot BuildSnapshot(bool forceRefresh)
     {
         try
         {
@@ -109,14 +116,27 @@ public sealed class SteamService
             }
 
             var libraries = ResolveLibraryPaths(steamRoot);
-            var games = libraries
-                .SelectMany(library => ReadLibraryGames(steamRoot, library))
-                .GroupBy(game => game.AppId, StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .Where(game => IsLikelyGame(game))
-                .OrderByDescending(game => game.LastPlayed ?? DateTimeOffset.MinValue)
-                .ThenBy(game => game.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            var manifestSignatures = BuildManifestSignatures(steamRoot, libraries);
+            List<SteamGamePayload> games;
+            var indexHit = false;
+            if (!forceRefresh && TryReadLibraryIndex(steamRoot, libraries, manifestSignatures, out var indexedGames))
+            {
+                games = indexedGames;
+                indexHit = true;
+            }
+            else
+            {
+                games = libraries
+                    .SelectMany(library => ReadLibraryGames(steamRoot, library))
+                    .GroupBy(game => game.AppId, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First())
+                    .Where(game => IsLikelyGame(game))
+                    .OrderByDescending(game => game.LastPlayed ?? DateTimeOffset.MinValue)
+                    .ThenBy(game => game.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                SaveLibraryIndex(steamRoot, libraries, manifestSignatures, games);
+            }
+
             var activeGame = ResolveRunningGame(games);
 
             var sampledAt = DateTimeOffset.UtcNow;
@@ -127,7 +147,7 @@ public sealed class SteamService
                 Status = games.Count > 0 ? "live" : "setup",
                 SampledAt = sampledAt,
                 Stale = false,
-                Source = "Steam library manifests",
+                Source = indexHit ? "Steam library index" : "Steam library manifests",
                 Message = activeGame is not null
                     ? $"{activeGame.Name} is running."
                     : games.Count > 0
@@ -270,6 +290,146 @@ public sealed class SteamService
             .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(Path.Combine(path, "steamapps")))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private List<SteamManifestSignature> BuildManifestSignatures(string steamRoot, IReadOnlyList<string> libraries)
+    {
+        var paths = new List<string>
+        {
+            Path.Combine(steamRoot, "steamapps", "libraryfolders.vdf")
+        };
+
+        foreach (var library in libraries)
+        {
+            var steamAppsPath = Path.Combine(library, "steamapps");
+            paths.AddRange(EnumerateFilesSafe(steamAppsPath, "appmanifest_*.acf", SearchOption.TopDirectoryOnly));
+        }
+
+        return paths
+            .Select(path => CreateManifestSignature(path))
+            .Where(signature => signature is not null)
+            .Select(signature => signature!)
+            .OrderBy(signature => signature.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private bool TryReadLibraryIndex(
+        string steamRoot,
+        IReadOnlyList<string> libraries,
+        IReadOnlyList<SteamManifestSignature> signatures,
+        out List<SteamGamePayload> games)
+    {
+        games = [];
+        try
+        {
+            if (!File.Exists(_libraryIndexPath))
+            {
+                return false;
+            }
+
+            var index = JsonSerializer.Deserialize<SteamLibraryIndex>(File.ReadAllText(_libraryIndexPath));
+            if (index is null
+                || !string.Equals(NormalizePath(index.SteamRoot), NormalizePath(steamRoot), StringComparison.OrdinalIgnoreCase)
+                || !StringSetsEqual(index.Libraries, libraries)
+                || !ManifestSignaturesEqual(index.Signatures, signatures))
+            {
+                return false;
+            }
+
+            games = index.Games
+                .Select(entry => entry.ToPayload())
+                .Where(game => IsLikelyGame(game))
+                .OrderByDescending(game => game.LastPlayed ?? DateTimeOffset.MinValue)
+                .ThenBy(game => game.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return true;
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Steam library index could not be read: {error.Message}");
+            return false;
+        }
+    }
+
+    private void SaveLibraryIndex(
+        string steamRoot,
+        IReadOnlyList<string> libraries,
+        IReadOnlyList<SteamManifestSignature> signatures,
+        IReadOnlyList<SteamGamePayload> games)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(_libraryIndexPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var index = new SteamLibraryIndex
+            {
+                SteamRoot = NormalizePath(steamRoot),
+                Libraries = libraries.Select(NormalizePath).Order(StringComparer.OrdinalIgnoreCase).ToList(),
+                Signatures = signatures.ToList(),
+                Games = games.Select(SteamGameIndexEntry.FromPayload).ToList(),
+                IndexedAt = DateTimeOffset.UtcNow
+            };
+            File.WriteAllText(_libraryIndexPath, JsonSerializer.Serialize(index));
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Steam library index could not be saved: {error.Message}");
+        }
+    }
+
+    private static SteamManifestSignature? CreateManifestSignature(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists)
+            {
+                return null;
+            }
+
+            return new SteamManifestSignature
+            {
+                Path = NormalizePath(info.FullName),
+                LastWriteTimeUtcTicks = info.LastWriteTimeUtc.Ticks,
+                Length = info.Length
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool StringSetsEqual(IReadOnlyList<string> left, IReadOnlyList<string> right)
+    {
+        return left.Select(NormalizePath).Order(StringComparer.OrdinalIgnoreCase)
+            .SequenceEqual(right.Select(NormalizePath).Order(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool ManifestSignaturesEqual(IReadOnlyList<SteamManifestSignature> left, IReadOnlyList<SteamManifestSignature> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        var orderedLeft = left.OrderBy(signature => signature.Path, StringComparer.OrdinalIgnoreCase).ToList();
+        var orderedRight = right.OrderBy(signature => signature.Path, StringComparer.OrdinalIgnoreCase).ToList();
+        for (var index = 0; index < orderedLeft.Count; index++)
+        {
+            if (!string.Equals(orderedLeft[index].Path, orderedRight[index].Path, StringComparison.OrdinalIgnoreCase)
+                || orderedLeft[index].LastWriteTimeUtcTicks != orderedRight[index].LastWriteTimeUtcTicks
+                || orderedLeft[index].Length != orderedRight[index].Length)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static string ResolveArtworkPath(string steamRoot, string appId)
@@ -495,6 +655,85 @@ public sealed class SteamService
             ".webp" => "image/webp",
             _ => "application/octet-stream"
         };
+    }
+
+    private sealed class SteamLibraryIndex
+    {
+        public string SteamRoot { get; set; } = "";
+
+        public List<string> Libraries { get; set; } = [];
+
+        public List<SteamManifestSignature> Signatures { get; set; } = [];
+
+        public List<SteamGameIndexEntry> Games { get; set; } = [];
+
+        public DateTimeOffset IndexedAt { get; set; }
+    }
+
+    private sealed class SteamManifestSignature
+    {
+        public string Path { get; set; } = "";
+
+        public long LastWriteTimeUtcTicks { get; set; }
+
+        public long Length { get; set; }
+    }
+
+    private sealed class SteamGameIndexEntry
+    {
+        public string AppId { get; set; } = "";
+
+        public string Name { get; set; } = "";
+
+        public bool Installed { get; set; }
+
+        public DateTimeOffset? LastPlayed { get; set; }
+
+        public long? SizeOnDisk { get; set; }
+
+        public string ArtworkUrl { get; set; } = "";
+
+        public string TileLabel { get; set; } = "S";
+
+        public string LibraryPath { get; set; } = "";
+
+        public string InstallPath { get; set; } = "";
+
+        public string ArtworkPath { get; set; } = "";
+
+        public static SteamGameIndexEntry FromPayload(SteamGamePayload payload)
+        {
+            return new SteamGameIndexEntry
+            {
+                AppId = payload.AppId,
+                Name = payload.Name,
+                Installed = payload.Installed,
+                LastPlayed = payload.LastPlayed,
+                SizeOnDisk = payload.SizeOnDisk,
+                ArtworkUrl = payload.ArtworkUrl,
+                TileLabel = payload.TileLabel,
+                LibraryPath = payload.LibraryPath,
+                InstallPath = payload.InstallPath,
+                ArtworkPath = payload.ArtworkPath
+            };
+        }
+
+        public SteamGamePayload ToPayload()
+        {
+            return new SteamGamePayload
+            {
+                AppId = AppId,
+                Name = Name,
+                Installed = Installed,
+                LastPlayed = LastPlayed,
+                SizeOnDisk = SizeOnDisk,
+                ArtworkUrl = ArtworkUrl,
+                TileLabel = TileLabel,
+                LibraryPath = LibraryPath,
+                InstallPath = InstallPath,
+                ArtworkPath = ArtworkPath
+            };
+        }
     }
 }
 

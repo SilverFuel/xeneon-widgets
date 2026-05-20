@@ -32,7 +32,8 @@ for (const route of [
   "/api/system-shortcuts",
   "/api/clipboard",
   "/api/support/bundle",
-  "/api/releases/latest"
+  "/api/releases/latest",
+  "/api/game/session"
 ]) {
   assert(apiRouter.includes(route), `native ApiRouter must expose ${route}`);
 }
@@ -61,6 +62,13 @@ assert(
   /Content-Security-Policy/.test(staticAssets)
     && /xenon-session-bootstrap\.js/.test(staticAssets),
   "native static asset API must emit security headers and bootstrap the session token through a script route"
+);
+
+assert(
+  /case "\/api\/game\/session" when request\.HttpMethod == "POST"/.test(apiRouter)
+    && /GetSessionAsync/.test(readWorkspaceFile("app/Controllers/GameController.cs"))
+    && /GameModeSessionService/.test(bridgeManager),
+  "native Game Mode contract must expose the composed POST session endpoint through the C# host"
 );
 
 console.log("checked native host API contract routes");

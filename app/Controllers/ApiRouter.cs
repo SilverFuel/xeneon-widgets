@@ -106,6 +106,9 @@ public sealed class ApiRouter
             case "/api/config/calendar" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _configController.UpdateCalendar(await ReadJsonAsync<CalendarConfigRequest>(request, cancellationToken)), cancellationToken);
                 return;
+            case "/api/config/network" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _configController.UpdateNetwork(await ReadJsonAsync<NetworkConfigRequest>(request, cancellationToken)), cancellationToken);
+                return;
             case "/api/launchers" when request.HttpMethod == "GET":
                 await WriteJsonAsync(response, 200, _actionController.GetLaunchers(), cancellationToken);
                 return;
@@ -129,6 +132,9 @@ public sealed class ApiRouter
                 return;
             case "/api/game/activity" when request.HttpMethod == "GET":
                 await WriteJsonAsync(response, 200, _gameController.GetActivity(IsTruthyQueryValue(request, "refresh")), cancellationToken);
+                return;
+            case "/api/game/session" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, await _gameController.GetSessionAsync(await ReadJsonAsync<GameModeSessionRequest>(request, cancellationToken), cancellationToken), cancellationToken);
                 return;
             case "/api/game/performance" when request.HttpMethod == "GET":
                 await WriteJsonAsync(response, 200, _gameController.GetPerformance(), cancellationToken);

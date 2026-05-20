@@ -140,7 +140,7 @@
             '</div>' +
             '<button class="inline-button" type="button" data-action="session-mute" data-session-id="' + escapeHtml(text(session.id, "")) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
           '</div>' +
-          '<div class="audio-session-row__level"><strong>' + escapeHtml(formatPercent(session.volume)) + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(optionalNumber(session.volume) || 0) + '" data-action="session-volume" data-session-id="' + escapeHtml(text(session.id, "")) + '"></div>' +
+          '<div class="audio-session-row__level"><strong>' + escapeHtml(formatPercent(session.volume)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Audio session volume" value="' + Math.round(optionalNumber(session.volume) || 0) + '" data-action="session-volume" data-session-id="' + escapeHtml(text(session.id, "")) + '"></div>' +
         '</div>';
     }).join("") : emptyState("No app audio", "Apps appear here only while they are making sound.");
     if (hiddenSessionCount > 0) {
@@ -172,7 +172,7 @@
             '</div>' +
             '<div class="audio-master-row">' +
               '<strong>' + escapeHtml(Math.round(data.masterVolume) + "%") + '</strong>' +
-              '<input class="inline-range" type="range" min="0" max="100" value="' + Math.round(data.masterVolume) + '" data-action="master-volume">' +
+              '<input class="inline-range" type="range" min="0" max="100" aria-label="Master volume" value="' + Math.round(data.masterVolume) + '" data-action="master-volume">' +
             '</div>' +
             '<div class="audio-card-subhead">' +
               '<div>' +

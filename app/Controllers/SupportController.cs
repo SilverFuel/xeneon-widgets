@@ -247,9 +247,14 @@ public sealed class SupportController
     {
         var isClipboardPayload = string.Equals(propertyName, "clipboard", StringComparison.OrdinalIgnoreCase)
             || HasClipboardShape(element);
+        var isAudioPayload = string.Equals(propertyName, "audio", StringComparison.OrdinalIgnoreCase)
+            || HasSourceShape(element, "core audio");
+        var isMediaPayload = string.Equals(propertyName, "media", StringComparison.OrdinalIgnoreCase)
+            || HasSourceShape(element, "media session");
         var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         var entryCount = 0;
         var redactedEntries = false;
+        var sessionCount = 0;
 
         foreach (var property in element.EnumerateObject())
         {
@@ -271,6 +276,26 @@ public sealed class SupportController
                 continue;
             }
 
+            if (isAudioPayload
+                && string.Equals(property.Name, "sessions", StringComparison.OrdinalIgnoreCase))
+            {
+                sessionCount = property.Value.ValueKind == JsonValueKind.Array
+                    ? property.Value.GetArrayLength()
+                    : 0;
+                continue;
+            }
+
+            if (isMediaPayload
+                && (string.Equals(property.Name, "title", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(property.Name, "artist", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(property.Name, "albumTitle", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(property.Name, "albumArtist", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(property.Name, "thumbnailDataUrl", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(property.Name, "appId", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
             result[property.Name] = RedactClipboardEntries(property.Value, property.Name);
         }
 
@@ -285,6 +310,17 @@ public sealed class SupportController
             }
         }
 
+        if (isAudioPayload)
+        {
+            result["sessionCount"] = sessionCount;
+            result["sessionsRedacted"] = true;
+        }
+
+        if (isMediaPayload)
+        {
+            result["metadataRedacted"] = true;
+        }
+
         return result;
     }
 
@@ -294,6 +330,13 @@ public sealed class SupportController
             && source.ValueKind == JsonValueKind.String
             && (source.GetString() ?? "").Contains("clipboard", StringComparison.OrdinalIgnoreCase)
             && element.TryGetProperty("entries", out _);
+    }
+
+    private static bool HasSourceShape(JsonElement element, string sourceFragment)
+    {
+        return element.TryGetProperty("source", out var source)
+            && source.ValueKind == JsonValueKind.String
+            && (source.GetString() ?? "").Contains(sourceFragment, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ReplaceIfPresent(string source, string? value, string replacement)

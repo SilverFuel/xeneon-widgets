@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
+const installScript = readWorkspaceFile("app/install.ps1");
 
 function readWorkspaceFile(relativePath) {
   const filePath = resolve(process.cwd(), relativePath);
@@ -25,11 +26,19 @@ function assert(condition, message) {
 }
 
 assert(
-  !/SystemEvents\.DisplaySettingsChanged/.test(mainWindow)
-    && !/HandleDisplaySettingsChanged/.test(mainWindow)
-    && !/ScheduleDisplayTopologyRecovery/.test(mainWindow)
-    && !/RecoverFromDisplayTopologyChangeAsync/.test(mainWindow),
-  "main window must not react to Windows display settings changes automatically"
+  /SystemEvents\.DisplaySettingsChanged\s*\+=\s*HandleDisplaySettingsChanged/.test(mainWindow)
+    && /SystemEvents\.DisplaySettingsChanged\s*-=\s*HandleDisplaySettingsChanged/.test(mainWindow)
+    && /ScheduleDisplayRecovery\("startup display backoff"\)/.test(mainWindow)
+    && /ScheduleDisplayRecovery\("display topology changed"\)/.test(mainWindow)
+    && /DisplayRecoveryDelays/.test(mainWindow)
+    && /TryRecoverDisplayPlacementAsync/.test(mainWindow)
+    && /ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow),
+  "main window must retry non-persistent EDGE display placement after startup and display topology changes"
+);
+
+assert(
+  /\$trigger\.Delay\s*=\s*"PT20S"/.test(installScript),
+  "installed startup task must delay launch so display topology can settle after reboot"
 );
 
 assert(
@@ -61,4 +70,4 @@ assert(
   "display selection must support non-persistent recovery after transient monitor changes"
 );
 
-console.log("checked passive display targeting and WebView recovery");
+console.log("checked startup display recovery and WebView recovery");
