@@ -17,10 +17,19 @@
       : "Weather request failed for " + city;
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function renderForecast(entries) {
     document.getElementById("hosted-weather-forecast").innerHTML = entries.map(function (entry) {
-      return '<div class="hosted-weather-forecast__item"><span>' + entry.hour + '</span><strong>' +
-        entry.temp + '°</strong><small>' + entry.condition + "</small></div>";
+      return '<div class="hosted-weather-forecast__item"><span>' + escapeHtml(entry.hour) + '</span><strong>' +
+        escapeHtml(entry.temp) + '°</strong><small>' + escapeHtml(entry.condition) + "</small></div>";
     }).join("");
   }
 

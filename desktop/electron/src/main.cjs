@@ -3,12 +3,15 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
+const { randomBytes } = require("node:crypto");
 const { URL } = require("node:url");
 
 const productName = "XENEON Edge Host";
 const defaultPort = 8976;
-const assetRevision = "20260425-25";
+let assetRevision = "local";
 const maxJsonBodyBytes = 256 * 1024;
+const sessionHeaderName = "X-Xenon-Session";
+const sessionToken = randomBytes(32).toString("base64url");
 const releasesUrl = "https://github.com/SilverFuel/xeneon-widgets/releases";
 const latestReleaseApiUrl = "https://api.github.com/repos/SilverFuel/xeneon-widgets/releases/latest";
 
@@ -62,6 +65,29 @@ function readJsonFile(filePath, fallback) {
 function writeJsonFile(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function loadAssetRevision(root) {
+  const revision = readJsonFile(path.join(root, "assets", "revision.json"), {});
+  return text(revision.assetRevision, "local");
+}
+
+function isAllowedExternalUrl(rawUrl) {
+  try {
+    const protocol = new URL(rawUrl).protocol;
+    return protocol === "https:" || protocol === "http:" || protocol === "mailto:";
+  } catch {
+    return false;
+  }
+}
+
+function openExternalIfAllowed(rawUrl) {
+  if (isAllowedExternalUrl(rawUrl)) {
+    shell.openExternal(rawUrl);
+    return true;
+  }
+
+  return false;
 }
 
 function normalizeConfig(input) {
@@ -815,7 +841,7 @@ function sendJson(response, statusCode, payload, corsOrigin = "") {
   const headers = {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": body.length,
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": `Content-Type, ${sessionHeaderName}`,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Cache-Control": "no-store"
   };
@@ -855,9 +881,20 @@ function applyCorsHeaders(response, corsOrigin) {
   }
 
   response.setHeader("Access-Control-Allow-Origin", corsOrigin);
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Allow-Headers", `Content-Type, ${sessionHeaderName}`);
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   response.setHeader("Vary", "Origin");
+}
+
+function isSafeMethod(request) {
+  return ["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
+}
+
+function authorizeNoOriginMutation(request) {
+  if (isSafeMethod(request) || request.headers.origin) {
+    return true;
+  }
+  return request.headers[String(sessionHeaderName).toLowerCase()] === sessionToken;
 }
 
 function sendText(response, statusCode, body) {
@@ -908,6 +945,10 @@ async function handleRequest(request, response) {
       return sendJson(response, 403, { ok: false, error: "Origin not allowed." });
     }
 
+    if (!authorizeNoOriginMutation(request)) {
+      return sendJson(response, 403, { ok: false, error: "Session token required." });
+    }
+
     applyCorsHeaders(response, corsOrigin);
 
     if (request.method === "OPTIONS") {
@@ -925,9 +966,13 @@ async function handleRequest(request, response) {
       return sendText(response, 404, "Not found");
     }
 
-    const body = fs.readFileSync(filePath);
+    let body = fs.readFileSync(filePath);
+    const contentType = contentTypeFor(filePath);
+    if (contentType.startsWith("text/html")) {
+      body = Buffer.from(injectSessionToken(body.toString("utf8")), "utf8");
+    }
     response.writeHead(200, {
-      "Content-Type": contentTypeFor(filePath),
+      "Content-Type": contentType,
       "Content-Length": body.length,
       "Cache-Control": "no-store"
     });
@@ -938,6 +983,45 @@ async function handleRequest(request, response) {
       error: error.message || "Request failed."
     });
   }
+}
+
+function injectSessionToken(html) {
+  if (!html.includes("</head>") || html.includes("xenon-session-token")) {
+    return html;
+  }
+
+  const injection = `  <meta name="xenon-session-token" content="${escapeHtml(sessionToken)}">
+  <script>
+  (() => {
+    window.XenonSessionToken = ${JSON.stringify(sessionToken)};
+    const originalFetch = window.fetch;
+    if (!originalFetch || originalFetch.__xenonSessionWrapped) return;
+    function requestMethod(input, init) {
+      return String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+    }
+    window.fetch = function(input, init) {
+      const method = requestMethod(input, init || {});
+      if (!/^(GET|HEAD|OPTIONS)$/.test(method)) {
+        const headers = new Headers((init && init.headers) || (input && input.headers) || undefined);
+        if (!headers.has("${sessionHeaderName}")) headers.set("${sessionHeaderName}", window.XenonSessionToken);
+        init = Object.assign({}, init || {}, { headers });
+      }
+      return originalFetch.call(this, input, init);
+    };
+    window.fetch.__xenonSessionWrapped = true;
+  })();
+  </script>
+`;
+  return html.replace("</head>", `${injection}</head>`);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function startServer(preferredPort) {
@@ -978,14 +1062,14 @@ function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openExternalIfAllowed(url);
     return { action: "deny" };
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith(`http://127.0.0.1:${activePort}/`)) {
       event.preventDefault();
-      shell.openExternal(url);
+      openExternalIfAllowed(url);
     }
   });
 
@@ -997,6 +1081,7 @@ app.whenReady().then(async () => {
   ensureDataPaths();
   const config = loadConfig();
   webRoot = app.isPackaged ? path.join(process.resourcesPath, "web") : path.resolve(__dirname, "../../..");
+  assetRevision = loadAssetRevision(webRoot);
   await startServer(config.port || defaultPort);
   createWindow();
 

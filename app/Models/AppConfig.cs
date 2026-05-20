@@ -49,6 +49,8 @@ public sealed class UniFiConfig
     public string Password { get; set; } = "";
 
     public string Site { get; set; } = "default";
+
+    public string CertificateThumbprint { get; set; } = "";
 }
 
 public sealed class DashboardConfig
@@ -156,6 +158,10 @@ public sealed class UniFiLinkRequest
     public string? Password { get; set; }
 
     public string? Site { get; set; }
+
+    public bool TrustCertificate { get; set; }
+
+    public string? TrustedCertificateThumbprint { get; set; }
 }
 
 public sealed class AudioDeviceRequest

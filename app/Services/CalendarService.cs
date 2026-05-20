@@ -4,6 +4,8 @@ namespace XenonEdgeHost;
 
 public sealed class CalendarService
 {
+    private const int MaxIcsBytes = 512 * 1024;
+
     private readonly HttpClient _httpClient;
     private readonly HostLogger _logger;
     private readonly object _sync = new();
@@ -31,6 +33,21 @@ public sealed class CalendarService
             }
         }
 
+        try
+        {
+            icsUrl = NetworkEndpointGuard.NormalizeRemoteHttpUrl(icsUrl, "Calendar ICS URL");
+        }
+        catch (InvalidOperationException error)
+        {
+            lock (_sync)
+            {
+                _snapshot = CalendarSnapshot.CreateError(error.Message);
+                _cachedUrl = icsUrl;
+                _lastRefresh = DateTimeOffset.UtcNow;
+                return _snapshot.Clone();
+            }
+        }
+
         if (DateTimeOffset.UtcNow - _lastRefresh > TimeSpan.FromMinutes(5)
             || !string.Equals(_cachedUrl, icsUrl, StringComparison.OrdinalIgnoreCase))
         {
@@ -54,9 +71,15 @@ public sealed class CalendarService
     {
         try
         {
-            using var response = await _httpClient.GetAsync(icsUrl, cancellationToken);
+            var normalizedUrl = NetworkEndpointGuard.NormalizeRemoteHttpUrl(icsUrl, "Calendar ICS URL");
+            using var response = await _httpClient.GetAsync(normalizedUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (response.Content.Headers.ContentLength is > MaxIcsBytes)
+            {
+                throw new InvalidOperationException("Calendar feed is larger than the supported 512 KiB limit.");
+            }
+
             response.EnsureSuccessStatusCode();
-            var text = await response.Content.ReadAsStringAsync(cancellationToken);
+            var text = await ReadContentWithLimitAsync(response.Content, MaxIcsBytes, cancellationToken);
             var entries = ParseIcs(text);
             var sampledAt = DateTimeOffset.UtcNow;
 
@@ -73,7 +96,7 @@ public sealed class CalendarService
                     Entries = entries,
                     Source = "ics"
                 };
-                _cachedUrl = icsUrl;
+                _cachedUrl = normalizedUrl;
                 _lastRefresh = sampledAt;
             }
         }
@@ -89,6 +112,31 @@ public sealed class CalendarService
                 _lastRefresh = DateTimeOffset.UtcNow;
             }
         }
+    }
+
+    private static async Task<string> ReadContentWithLimitAsync(HttpContent content, int maxBytes, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        using var memory = new MemoryStream();
+        var buffer = new byte[8192];
+
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (memory.Length + read > maxBytes)
+            {
+                throw new InvalidOperationException("Calendar feed is larger than the supported 512 KiB limit.");
+            }
+
+            memory.Write(buffer, 0, read);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(memory.ToArray());
     }
 
     private static List<CalendarEntry> ParseIcs(string icsText)

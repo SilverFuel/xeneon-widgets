@@ -99,6 +99,23 @@ function Get-RootScheduledTask($taskName) {
   return Get-ScheduledTask -TaskName $taskName -TaskPath "\" -ErrorAction SilentlyContinue
 }
 
+function Enable-XenonStartupTask($taskName) {
+  Enable-ScheduledTask -TaskName $taskName -TaskPath "\" -ErrorAction Stop | Out-Null
+
+  $task = Get-RootScheduledTask $taskName
+  if ($task -and $task.State -eq "Disabled") {
+    & schtasks.exe /Change /TN "\$taskName" /ENABLE | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      throw "schtasks could not enable scheduled task '$taskName' (exit code $LASTEXITCODE)."
+    }
+  }
+
+  $task = Get-RootScheduledTask $taskName
+  if (-not $task -or $task.State -eq "Disabled") {
+    throw "Scheduled task '$taskName' is still disabled after repair."
+  }
+}
+
 Write-Step "XENEON Edge Host - Install Auto-Start"
 
 Write-Info "App root: $appRoot"
@@ -137,7 +154,7 @@ try {
     -Description "Starts Xenon Edge Host at logon for the CORSAIR XENEON EDGE display." `
     -Force | Out-Null
 
-  Enable-ScheduledTask -TaskName $taskName -TaskPath "\" | Out-Null
+  Enable-XenonStartupTask $taskName
   $taskInstalled = $true
   Write-Info "Installed or repaired scheduled task '$taskName'."
 } catch {

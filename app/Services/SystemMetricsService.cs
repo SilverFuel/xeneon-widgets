@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace XenonEdgeHost;
 
@@ -17,6 +18,8 @@ public sealed class SystemMetricsService : IDisposable
     private ulong _lastIdleTime;
     private ulong _lastKernelTime;
     private ulong _lastUserTime;
+    private int _usageSampling;
+    private int _temperatureSampling;
     private bool _started;
 
     public SystemMetricsService(HostLogger logger)
@@ -70,6 +73,11 @@ public sealed class SystemMetricsService : IDisposable
 
     private void SampleUsage()
     {
+        if (Interlocked.Exchange(ref _usageSampling, 1) == 1)
+        {
+            return;
+        }
+
         try
         {
             var cpu = ReadCpuUsage();
@@ -97,6 +105,10 @@ public sealed class SystemMetricsService : IDisposable
         catch (Exception error)
         {
             _logger.Error("Failed to sample native system usage.", error);
+        }
+        finally
+        {
+            Volatile.Write(ref _usageSampling, 0);
         }
     }
 
@@ -219,6 +231,11 @@ public sealed class SystemMetricsService : IDisposable
 
     private void SampleHardwareTemperatures()
     {
+        if (Interlocked.Exchange(ref _temperatureSampling, 1) == 1)
+        {
+            return;
+        }
+
         try
         {
             var cpuTemp = TryReadHardwareTemperature("CPU Package", "Core Average", "Tctl", "Tdie", "cpu");
@@ -235,6 +252,10 @@ public sealed class SystemMetricsService : IDisposable
         {
             _logger.Warn($"Failed to sample hardware temperatures: {error.Message}");
         }
+        finally
+        {
+            Volatile.Write(ref _temperatureSampling, 0);
+        }
     }
 
     private static double? TryReadGpuUsage()
@@ -245,21 +266,32 @@ public sealed class SystemMetricsService : IDisposable
                 @"root\cimv2",
                 "SELECT Name, UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine");
 
-            var maximum = double.MinValue;
+            var graphicsMaximum = double.MinValue;
+            var fallbackMaximum = double.MinValue;
             foreach (ManagementObject item in searcher.Get())
             {
                 var name = Convert.ToString(item["Name"]) ?? "";
-                if (name.Contains("engtype_VideoDecode", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("engtype_VideoEncode", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("engtype_Copy", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase))
+                var utilization = Convert.ToDouble(item["UtilizationPercentage"] ?? 0);
+                if (name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("engtype_Graphics", StringComparison.OrdinalIgnoreCase))
                 {
-                    maximum = Math.Max(maximum, Convert.ToDouble(item["UtilizationPercentage"] ?? 0));
+                    graphicsMaximum = Math.Max(graphicsMaximum, utilization);
+                    continue;
+                }
+
+                if (name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("engtype_Copy", StringComparison.OrdinalIgnoreCase))
+                {
+                    fallbackMaximum = Math.Max(fallbackMaximum, utilization);
                 }
             }
 
-            return maximum == double.MinValue ? null : Round(maximum);
+            if (graphicsMaximum != double.MinValue)
+            {
+                return Round(graphicsMaximum);
+            }
+
+            return fallbackMaximum == double.MinValue ? null : Round(fallbackMaximum);
         }
         catch
         {

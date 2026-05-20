@@ -465,6 +465,15 @@
         return isFinite(value) ? value : fallback;
       }
 
+      function escapeHtml(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       function getJsonParam(name, fallback) {
         var raw = params.get(name);
         if (!raw) {
@@ -656,10 +665,10 @@
             '<article class="stream-item">' +
               '<div class="stream-top">' +
                 '<div>' +
-                  '<div class="stream-title">' + stream.title + '</div>' +
-                  '<div class="stream-meta">' + stream.user + ' • ' + stream.device + ' • ' + stream.quality + '</div>' +
+                  '<div class="stream-title">' + escapeHtml(stream.title) + '</div>' +
+                  '<div class="stream-meta">' + escapeHtml(stream.user) + ' • ' + escapeHtml(stream.device) + ' • ' + escapeHtml(stream.quality) + '</div>' +
                 '</div>' +
-                '<div class="badge" data-tone="' + toneName + '">' + stream.state + '</div>' +
+                '<div class="badge" data-tone="' + escapeHtml(toneName) + '">' + escapeHtml(stream.state) + '</div>' +
               '</div>' +
               '<div class="meter"><span style="width:' + progress + '%"></span></div>' +
               '<div class="stream-footer">' +

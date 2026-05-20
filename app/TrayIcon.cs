@@ -110,7 +110,7 @@ public sealed class TrayIcon : IDisposable
     {
         if (message == CallbackMessage)
         {
-            switch (unchecked((uint) lParam.ToInt64()))
+            switch (unchecked((uint)lParam.ToInt64()))
             {
                 case WmLButtonDblClk:
                     _onShowDisplay();
@@ -195,7 +195,7 @@ public sealed class TrayIcon : IDisposable
     {
         return new NOTIFYICONDATA
         {
-            cbSize = (uint) Marshal.SizeOf<NOTIFYICONDATA>(),
+            cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATA>(),
             hWnd = _windowHandle,
             uID = 1,
             uFlags = NotifyIconFlags.Message | NotifyIconFlags.Icon | NotifyIconFlags.Tip,
@@ -219,7 +219,7 @@ public sealed class TrayIcon : IDisposable
 
     private static int LowWord(IntPtr value)
     {
-        return unchecked((short) (value.ToInt64() & 0xFFFF));
+        return unchecked((short)(value.ToInt64() & 0xFFFF));
     }
 
     private static (IntPtr Handle, bool OwnsHandle) LoadApplicationIconHandle()

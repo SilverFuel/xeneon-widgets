@@ -1,0 +1,69 @@
+.setup-diagnostics-grid {
+  align-items: stretch;
+}
+
+.setup-diagnostics-card {
+  min-width: 0;
+}
+
+.setup-display-target {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(67, 255, 157, 0.16);
+  border-radius: 14px;
+  background: rgba(67, 255, 157, calc(0.06 * var(--dashboard-widget-opacity)));
+}
+
+.setup-display-target strong,
+.setup-display-target span,
+.setup-launcher-suggestion strong,
+.setup-launcher-suggestion small {
+  display: block;
+  min-width: 0;
+}
+
+.setup-display-target strong,
+.setup-launcher-suggestion strong {
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  line-height: 1.18;
+}
+
+.setup-display-target span,
+.setup-launcher-suggestion small {
+  color: var(--color-text-dim);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.setup-display-list,
+.setup-launcher-suggestions {
+  display: grid;
+  gap: 8px;
+  max-height: 250px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.setup-display-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.setup-launcher-suggestion {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.setup-launcher-suggestion input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+}

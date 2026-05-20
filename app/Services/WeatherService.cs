@@ -58,22 +58,18 @@ public sealed class WeatherService
         var currentContent = await currentResponse.Content.ReadAsStringAsync(cancellationToken);
         var forecastContent = await forecastResponse.Content.ReadAsStringAsync(cancellationToken);
 
-        using var current = JsonDocument.Parse(currentContent);
-        using var forecast = JsonDocument.Parse(forecastContent);
-
         if (!currentResponse.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(current.RootElement.TryGetProperty("message", out var messageNode)
-                ? messageNode.GetString() ?? "Weather request failed"
-                : "Weather request failed");
+            throw new InvalidOperationException(ReadErrorMessage(currentContent, "Weather request failed"));
         }
 
         if (!forecastResponse.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(forecast.RootElement.TryGetProperty("message", out var messageNode)
-                ? messageNode.GetString() ?? "Forecast request failed"
-                : "Forecast request failed");
+            throw new InvalidOperationException(ReadErrorMessage(forecastContent, "Forecast request failed"));
         }
+
+        using var current = ParseUpstreamJson(currentContent, "Weather");
+        using var forecast = ParseUpstreamJson(forecastContent, "Forecast");
 
         var forecastList = forecast.RootElement.GetProperty("list").EnumerateArray().ToList();
         var hourly = forecastList.Take(5).Select(entry =>
@@ -167,6 +163,33 @@ public sealed class WeatherService
         public Dictionary<string, int> ConditionCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public Dictionary<string, int> IconCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static JsonDocument ParseUpstreamJson(string content, string label)
+    {
+        try
+        {
+            return JsonDocument.Parse(content);
+        }
+        catch (JsonException error)
+        {
+            throw new InvalidOperationException($"{label} service returned invalid JSON.", error);
+        }
+    }
+
+    private static string ReadErrorMessage(string content, string fallback)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            return document.RootElement.TryGetProperty("message", out var messageNode)
+                ? messageNode.GetString() ?? fallback
+                : fallback;
+        }
+        catch (JsonException)
+        {
+            return fallback;
+        }
     }
 
     private sealed class WeatherCacheEntry

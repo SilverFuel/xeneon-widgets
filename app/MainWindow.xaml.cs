@@ -17,11 +17,12 @@ public sealed partial class MainWindow : Window
     private const long WsExNoActivate = 0x08000000L;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
-    private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpFrameChanged = 0x0020;
+    private const uint SwpShowWindow = 0x0040;
     private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
+    private static readonly IntPtr HwndTopmost = new(-1);
 
     private readonly BridgeManager _bridgeManager;
     private TrayIcon? _trayIcon;
@@ -604,25 +605,17 @@ public sealed partial class MainWindow : Window
         var currentStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
         var nextStyle = (currentStyle | WsExToolWindow | WsExNoActivate) & ~WsExAppWindow;
 
-        if (nextStyle == currentStyle)
+        var styleChanged = nextStyle != currentStyle;
+        if (styleChanged)
         {
-            _taskbarStyleApplied = true;
-            return;
+            SetWindowLongPtr(windowHandle, GwlExStyle, new IntPtr(nextStyle));
+            ShowWindow(windowHandle, SwHide);
         }
 
-        SetWindowLongPtr(windowHandle, GwlExStyle, new IntPtr(nextStyle));
-        SetWindowPos(
-            windowHandle,
-            IntPtr.Zero,
-            0,
-            0,
-            0,
-            0,
-            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
-        ShowWindow(windowHandle, SwHide);
+        KeepDisplayWindowOnTop(windowHandle, includeFrameChanged: styleChanged);
         ShowWindow(windowHandle, SwShowNoActivate);
         _taskbarStyleApplied = true;
-        _logger.Info("Applied no-activate tool-window style so the EDGE display stays off the taskbar and does not steal audio focus.");
+        _logger.Info("Applied no-activate topmost tool-window style so the EDGE display stays visible, stays off the taskbar, and does not steal audio focus.");
     }
 
     private void ShowWindowNoActivate()
@@ -633,15 +626,26 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        KeepDisplayWindowOnTop(windowHandle);
+        ShowWindow(windowHandle, SwShowNoActivate);
+    }
+
+    private static void KeepDisplayWindowOnTop(IntPtr windowHandle, bool includeFrameChanged = false)
+    {
+        var flags = SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow;
+        if (includeFrameChanged)
+        {
+            flags |= SwpFrameChanged;
+        }
+
         SetWindowPos(
             windowHandle,
-            IntPtr.Zero,
+            HwndTopmost,
             0,
             0,
             0,
             0,
-            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate);
-        ShowWindow(windowHandle, SwShowNoActivate);
+            flags);
     }
 
     private void ScheduleForceExitIfShutdownStalls()

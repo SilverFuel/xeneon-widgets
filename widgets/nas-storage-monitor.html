@@ -462,6 +462,15 @@
         return isFinite(value) ? value : fallback;
       }
 
+      function escapeHtml(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       function getJsonParam(name, fallback) {
         var raw = params.get(name);
         if (!raw) {
@@ -630,20 +639,20 @@
             '<article class="pool-card">' +
               '<div class="pool-top">' +
                 '<div>' +
-                  '<div class="pool-name">' + pool.name + '</div>' +
-                  '<div class="pool-detail">' + pool.health + '</div>' +
+                  '<div class="pool-name">' + escapeHtml(pool.name) + '</div>' +
+                  '<div class="pool-detail">' + escapeHtml(pool.health) + '</div>' +
                 '</div>' +
-                '<div class="badge" data-tone="' + tone + '">' + Math.round(pool.usedPercent) + '% used</div>' +
+                '<div class="badge" data-tone="' + escapeHtml(tone) + '">' + Math.round(pool.usedPercent) + '% used</div>' +
               '</div>' +
-              '<div class="pool-usage">' + pool.usedLabel + ' / ' + pool.totalLabel + '</div>' +
+              '<div class="pool-usage">' + escapeHtml(pool.usedLabel) + ' / ' + escapeHtml(pool.totalLabel) + '</div>' +
               '<div class="meter"><span style="width:' + clamp(pool.usedPercent, 0, 100) + '%"></span></div>' +
-              '<div class="pool-detail">' + pool.freeLabel + '</div>' +
+              '<div class="pool-detail">' + escapeHtml(pool.freeLabel) + '</div>' +
             '</article>';
         }).join("") : '<div class="empty-state">NAS storage will light up after the native connector is added.</div>';
 
         document.getElementById("insight-strip").innerHTML = [
-          '<div class="insight-chip"><strong>' + (data.pools.length ? data.pools.map(function (pool) { return pool.usedLabel; }).join(" + ") : "--") + '</strong><span>Used</span></div>',
-          '<div class="insight-chip"><strong>' + (hottestDrive ? hottestDrive.name + " " + hottestDrive.tempC + "C" : "--") + '</strong><span>Hottest</span></div>',
+          '<div class="insight-chip"><strong>' + escapeHtml(data.pools.length ? data.pools.map(function (pool) { return pool.usedLabel; }).join(" + ") : "--") + '</strong><span>Used</span></div>',
+          '<div class="insight-chip"><strong>' + escapeHtml(hottestDrive ? hottestDrive.name + " " + hottestDrive.tempC + "C" : "--") + '</strong><span>Hottest</span></div>',
           '<div class="insight-chip"><strong>' + (data.drives.length ? healthyCount + '/' + data.drives.length : "--") + '</strong><span>Healthy</span></div>'
         ].join("");
 
@@ -657,13 +666,13 @@
           return '' +
             '<article class="drive-card" data-tone="' + tone + '">' +
               '<div class="drive-top">' +
-                '<div class="drive-name">' + drive.name + '</div>' +
-                '<div class="badge" data-tone="' + tone + '">' + drive.health + '</div>' +
+                '<div class="drive-name">' + escapeHtml(drive.name) + '</div>' +
+                '<div class="badge" data-tone="' + escapeHtml(tone) + '">' + escapeHtml(drive.health) + '</div>' +
               '</div>' +
               '<div class="drive-temp">' + drive.tempC + 'C</div>' +
               '<div class="meter"><span style="width:' + clamp(drive.usagePercent, 0, 100) + '%"></span></div>' +
               '<div class="drive-meta">' +
-                '<span>' + drive.status + '</span>' +
+                '<span>' + escapeHtml(drive.status) + '</span>' +
                 '<span>' + Math.round(drive.usagePercent) + '% utilized</span>' +
               '</div>' +
             '</article>';

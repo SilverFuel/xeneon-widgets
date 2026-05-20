@@ -109,7 +109,8 @@ try {
   const invalidJson = await request("/api/config/dashboard", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      Origin: baseUrl
     },
     body: "{"
   });
@@ -118,11 +119,24 @@ try {
   const oversizedJson = await request("/api/config/dashboard", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      Origin: baseUrl
     },
     body: JSON.stringify({ value: "x".repeat((256 * 1024) + 1) })
   });
   await assertResponse("oversized JSON", oversizedJson, 413);
+
+  const noOriginMutation = await request("/api/config/dashboard", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      onboardingCompleted: true,
+      onboardingVersion: 1
+    })
+  });
+  await assertResponse("no-origin mutation", noOriginMutation, 403);
 
   const dashboardUpdate = await request("/api/config/dashboard", {
     method: "POST",

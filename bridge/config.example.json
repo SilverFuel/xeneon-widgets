@@ -1,7 +1,6 @@
 {
   "port": 8976,
   "weather": {
-    "apiKey": "",
     "city": "",
     "units": "metric"
   },
@@ -9,9 +8,7 @@
     "icsUrl": ""
   },
   "hue": {
-    "bridgeIp": "",
-    "appKey": "",
-    "clientKey": ""
+    "bridgeIp": ""
   },
   "dashboard": {
     "onboardingCompleted": false,

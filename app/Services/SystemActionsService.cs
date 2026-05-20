@@ -248,6 +248,46 @@ public sealed class SystemActionsService
         return GetShortcutsSnapshot();
     }
 
+    public RestartAdminResult RestartHostAsAdministrator()
+    {
+        var executablePath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+        {
+            executablePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+        }
+
+        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+        {
+            throw new InvalidOperationException("Unable to locate the Xenon host executable.");
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executablePath,
+            UseShellExecute = true,
+            Verb = "runas",
+            WorkingDirectory = AppContext.BaseDirectory
+        };
+        if (Process.Start(startInfo) is null)
+        {
+            throw new InvalidOperationException("Elevated restart was not started.");
+        }
+
+        _logger.Info("Requested elevated restart for Game Mode FPS capture.");
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(900);
+            Environment.Exit(0);
+        });
+
+        return new RestartAdminResult
+        {
+            Ok = true,
+            Message = "Restarting Xenon as administrator."
+        };
+    }
+
     private static bool IsDarkModeEnabled()
     {
         using var key = Registry.CurrentUser.OpenSubKey(PersonalizeRegistryPath, false);
@@ -456,6 +496,13 @@ public sealed class SystemActionItem
     public string Style { get; set; } = "command";
 
     public bool Enabled { get; set; } = true;
+}
+
+public sealed class RestartAdminResult
+{
+    public bool Ok { get; set; }
+
+    public string Message { get; set; } = "";
 }
 
 public sealed class QuickActionsSnapshot
