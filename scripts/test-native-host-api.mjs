@@ -22,6 +22,7 @@ const actionController = readWorkspaceFile("app/Controllers/ActionController.cs"
 const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
 const configController = readWorkspaceFile("app/Controllers/ConfigController.cs");
 const staticAssets = readWorkspaceFile("app/Controllers/StaticAssetController.cs");
+const embeddedAssetProvider = readWorkspaceFile("app/Infrastructure/EmbeddedAssetProvider.cs");
 
 for (const route of [
   "/api/health",
@@ -69,6 +70,13 @@ assert(
     && /GetSessionAsync/.test(readWorkspaceFile("app/Controllers/GameController.cs"))
     && /GameModeSessionService/.test(bridgeManager),
   "native Game Mode contract must expose the composed POST session endpoint through the C# host"
+);
+
+assert(
+  /NormalizeResourceName/.test(embeddedAssetProvider)
+    && /Replace\('\\\\',\s*'\/'\)/.test(embeddedAssetProvider)
+    && /normalizedResourceName\.EndsWith\(\$"WebAssets\/\{normalizedPath\}"/.test(embeddedAssetProvider),
+  "native embedded asset provider must serve split widget files from nested resource paths"
 );
 
 console.log("checked native host API contract routes");

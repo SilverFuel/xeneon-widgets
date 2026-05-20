@@ -83,22 +83,24 @@ public sealed class EmbeddedAssetProvider
         var candidates = new[]
         {
             $"WebAssets/{normalizedPath}",
-            $"WebAssets\\{normalizedPath}",
             $"{_namespacePrefix}.WebAssets.{dottedPath}"
         };
 
-        foreach (var candidate in candidates)
+        foreach (var resourceName in _resourceNames)
         {
-            if (_resourceNames.Any(name => string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase)))
+            var normalizedResourceName = NormalizeResourceName(resourceName);
+            if (candidates.Any(candidate => string.Equals(normalizedResourceName, candidate, StringComparison.OrdinalIgnoreCase)))
             {
-                return _resourceNames.First(name => string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase));
+                return resourceName;
             }
         }
 
         return _resourceNames.FirstOrDefault(name =>
-            name.EndsWith($"WebAssets/{normalizedPath}", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith($"WebAssets\\{normalizedPath}", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith($".WebAssets.{dottedPath}", StringComparison.OrdinalIgnoreCase));
+        {
+            var normalizedResourceName = NormalizeResourceName(name);
+            return normalizedResourceName.EndsWith($"WebAssets/{normalizedPath}", StringComparison.OrdinalIgnoreCase)
+                || normalizedResourceName.EndsWith($".WebAssets.{dottedPath}", StringComparison.OrdinalIgnoreCase);
+        });
     }
 
     private string NormalizeRequestPath(string requestPath)
@@ -108,6 +110,11 @@ public sealed class EmbeddedAssetProvider
             : requestPath.TrimStart('/').Replace('\\', '/');
 
         return string.IsNullOrWhiteSpace(path) ? "dashboard.html" : path;
+    }
+
+    private static string NormalizeResourceName(string resourceName)
+    {
+        return resourceName.Replace('\\', '/');
     }
 
     private string GetMimeType(string normalizedPath)
