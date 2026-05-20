@@ -6,13 +6,15 @@ namespace XenonEdgeHost;
 public sealed class AudioService
 {
     private readonly HostLogger _logger;
+    private readonly ConfigStore _configStore;
     private readonly object _sync = new();
     private AudioSnapshotPayload _snapshot = AudioSnapshotPayload.CreateStarting();
     private DateTimeOffset _lastRefresh = DateTimeOffset.MinValue;
 
-    public AudioService(HostLogger logger)
+    public AudioService(HostLogger logger, ConfigStore configStore)
     {
         _logger = logger;
+        _configStore = configStore;
     }
 
     public Task<AudioSnapshotPayload> GetSnapshotAsync(CancellationToken cancellationToken = default)
@@ -117,6 +119,7 @@ public sealed class AudioService
 
         try
         {
+            var exposeSessionLabels = _configStore.Snapshot().Dashboard.AudioSessionLabelsVisible;
             var raw = AudioBridge.GetSnapshot();
             var devices = raw.Devices
                 .Where(device => device.IsDefault || string.Equals(device.State, "Active", StringComparison.OrdinalIgnoreCase))
@@ -138,9 +141,9 @@ public sealed class AudioService
                 .Select(session => new AudioSessionPayload
                 {
                     Id = EncodeSessionToken(session.Identifier),
-                    Name = ResolveSessionLabel(session),
-                    Detail = ResolveSessionDetail(session),
-                    ProcessId = unchecked((int)session.ProcessId),
+                    Name = exposeSessionLabels ? ResolveSessionLabel(session) : ResolvePrivateSessionLabel(session),
+                    Detail = exposeSessionLabels ? ResolveSessionDetail(session) : ResolvePrivateSessionDetail(session),
+                    ProcessId = exposeSessionLabels ? unchecked((int)session.ProcessId) : 0,
                     State = session.State ?? "Inactive",
                     Volume = Clamp(session.Volume, 0, 100),
                     Muted = session.Muted,
@@ -289,6 +292,18 @@ public sealed class AudioService
         }
 
         return string.IsNullOrWhiteSpace(session.State) ? "Inactive" : session.State;
+    }
+
+    private static string ResolvePrivateSessionLabel(AudioSessionRecord session)
+    {
+        return session.IsSystemSounds ? "System Sounds" : "Audio App";
+    }
+
+    private static string ResolvePrivateSessionDetail(AudioSessionRecord session)
+    {
+        return session.IsSystemSounds
+            ? "Windows notifications and shared system audio"
+            : "Private audio session";
     }
 
     private static string EncodeSessionToken(string? value)

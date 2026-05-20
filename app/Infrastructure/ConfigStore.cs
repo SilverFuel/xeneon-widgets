@@ -122,6 +122,7 @@ public sealed class ConfigStore
         normalized.Calendar ??= new CalendarConfig();
         normalized.Hue ??= new HueConfig();
         normalized.UniFi ??= new UniFiConfig();
+        normalized.Network ??= new NetworkConfig();
         normalized.Dashboard ??= new DashboardConfig();
         normalized.Launchers ??= [];
         normalized.Weather.City = normalized.Weather.City?.Trim() ?? "";
@@ -132,6 +133,7 @@ public sealed class ConfigStore
         normalized.UniFi.Username = normalized.UniFi.Username?.Trim() ?? "";
         normalized.UniFi.Site = NormalizeSite(normalized.UniFi.Site);
         normalized.UniFi.CertificateThumbprint = NormalizeThumbprint(normalized.UniFi.CertificateThumbprint);
+        normalized.Network.HealthTarget = NormalizePingTarget(normalized.Network.HealthTarget);
         normalized.Dashboard.AutoProvisioningVersion = normalized.Dashboard.AutoProvisioningVersion <= 0 ? 1 : normalized.Dashboard.AutoProvisioningVersion;
         normalized.Dashboard.OnboardingVersion = normalized.Dashboard.OnboardingVersion <= 0 ? 1 : normalized.Dashboard.OnboardingVersion;
         normalized.Dashboard.PreferredDisplayId = normalized.Dashboard.PreferredDisplayId?.Trim() ?? "";
@@ -168,6 +170,24 @@ public sealed class ConfigStore
     {
         var trimmed = input?.Trim() ?? "";
         return string.IsNullOrWhiteSpace(trimmed) ? "default" : trimmed;
+    }
+
+    private static string NormalizePingTarget(string? input)
+    {
+        var value = input?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        if (value.Length > 120)
+        {
+            return "";
+        }
+
+        return value.All(ch => char.IsLetterOrDigit(ch) || ch is '.' or '-' or ':')
+            ? value
+            : "";
     }
 
     private static string NormalizeThumbprint(string? input)

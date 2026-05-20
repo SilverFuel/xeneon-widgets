@@ -47,6 +47,12 @@ const gameModeWidget = readWorkspaceFile("js/widgets/game-mode.js");
 const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
 const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
 const configController = readWorkspaceFile("app/Controllers/ConfigController.cs");
+const dashboardJs = readWorkspaceFile("js/dashboard.js");
+const actionWidget = readWorkspaceFile("js/widgets/actions.js");
+const audioWidget = readWorkspaceFile("js/widgets/audio.js");
+const homelabWidgetJs = readWorkspaceFile("js/widgets/homelab.js");
+const integrationWidget = readWorkspaceFile("js/widgets/integrations.js");
+const productWidget = readWorkspaceFile("js/widgets/product.js");
 
 const expectedCssAssets = [
   "css/theme.css",
@@ -109,9 +115,24 @@ assert(
 assert(
   /@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(sharedCss)
     && /@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(gameModeCss)
-    && /:focus-visible/.test(sharedCss),
+    && /:focus-visible/.test(sharedCss)
+    && /input\[type="range"\]:focus-visible/.test(sharedCss),
   "dashboard must keep reduced-motion and visible keyboard focus coverage"
 );
+
+for (const [relativePath, text] of [
+  ["js/dashboard.js", dashboardJs],
+  ["js/widgets/actions.js", actionWidget],
+  ["js/widgets/audio.js", audioWidget],
+  ["js/widgets/homelab.js", homelabWidgetJs],
+  ["js/widgets/integrations.js", integrationWidget],
+  ["js/widgets/product.js", productWidget]
+]) {
+  const rangeInputs = [...text.matchAll(/<input\b[^>]*type="range"[^>]*>/g)].map(match => match[0]);
+  for (const input of rangeInputs) {
+    assert(/aria-label\s*=|title\s*=/.test(input), `${relativePath} range input must have an accessible name: ${input}`);
+  }
+}
 
 const htmlButtons = [...dashboardHtml.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)];
 assert(htmlButtons.length > 0, "dashboard.html must expose shell controls as buttons");

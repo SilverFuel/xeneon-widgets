@@ -19,7 +19,6 @@
   var formatPercent = runtime.formatPercent;
   var formatTemp = runtime.formatTemp;
   var getAudioSessionLabel = runtime.getAudioSessionLabel;
-  var getUniFiNetworkEndpoint = runtime.getUniFiNetworkEndpoint;
   var isUsefulAudioSession = runtime.isUsefulAudioSession;
   var metricCard = runtime.metricCard;
   var networkLinkSpeed = runtime.networkLinkSpeed;
@@ -142,6 +141,8 @@
       processId: optionalNumber(game.processId),
       processName: text(game.processName, ""),
       executablePath: text(game.executablePath, ""),
+      hasRuntimeIdentity: Boolean(game.hasRuntimeIdentity),
+      canPin: Boolean(game.canPin),
       confidence: optionalNumber(game.confidence),
       reason: text(game.reason, ""),
       state: text(game.state, ""),
@@ -172,6 +173,7 @@
       source: text(payload.source, "running processes"),
       foregroundProcessId: optionalNumber(payload.foregroundProcessId),
       foregroundProcessName: text(payload.foregroundProcessName, ""),
+      foregroundAppActive: Boolean(payload.foregroundAppActive),
       activeGame: normalizeGameActivityGame(payload.activeGame),
       lastGame: normalizeGameActivityGame(payload.lastGame),
       candidates: Array.isArray(payload.candidates) ? payload.candidates.map(normalizeGameActivityGame).filter(Boolean) : []
@@ -233,6 +235,25 @@
       }).filter(function (game) {
         return Boolean(game.appId);
       }) : []
+    };
+  }
+
+  function normalizeGameModeSessionPayload(payload) {
+    payload = payload || {};
+    return {
+      supported: payload.supported !== false,
+      status: text(payload.status, "live"),
+      message: text(payload.message, "Game Mode telemetry is live."),
+      sampledAt: text(payload.sampledAt, ""),
+      system: payload.system || {},
+      audio: normalizeAudioPayload(payload.audio || {}),
+      network: Object.assign({}, payload.network || {}, {
+        unifi: normalizeUnifiSnapshot(payload.unifi || (payload.network && payload.network.unifi) || {})
+      }),
+      steam: normalizeSteamGamesPayload(payload.steam || {}),
+      activity: normalizeGameActivityPayload(payload.activity || {}),
+      performance: normalizeGamePerformancePayload(payload.performance || {}),
+      collectorTimings: Array.isArray(payload.collectorTimings) ? payload.collectorTimings : []
     };
   }
 
@@ -617,7 +638,7 @@
     var adminAction = performanceData.canRestartAsAdmin
       ? '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">Restart as admin</button>'
       : '';
-    var processName = text(game && game.processName, "Detected process");
+    var processName = game && game.hasRuntimeIdentity ? text(game.processName, "Private process") : "Private process";
     var source = text(game && game.source, platform);
     var audioData = normalizeAudioPayload(audio || {});
     var audioOutput = gameFocusAudioOutput(audioData);
@@ -670,7 +691,7 @@
             '<div class="game-focus-facts">' +
               renderGameFocusFact("State", stateLabel) +
               renderGameFocusFact("Match", confidence) +
-              renderGameFocusFact("Process", processName) +
+              renderGameFocusFact("Runtime", processName) +
               renderGameFocusFact("Source", source) +
             '</div>' +
           '</section>' +
@@ -912,7 +933,7 @@
   function renderGameModeCandidatesPanel(activity) {
     var candidates = activity && Array.isArray(activity.candidates) ? activity.candidates : [];
     var visible = candidates.filter(function (candidate) {
-      return candidate && candidate.confidence < 60 && candidate.executablePath;
+      return candidate && candidate.confidence < 60 && candidate.canPin;
     }).slice(0, 3);
     if (!visible.length) {
       return "";
@@ -933,9 +954,9 @@
             '<div class="game-mode-candidate-row">' +
               '<div>' +
                 '<strong>' + escapeHtml(text(candidate.name, "Running app")) + '</strong>' +
-                '<span>' + escapeHtml(text(candidate.processName, text(candidate.platform, "Process")) + " - " + text(candidate.reason, "Candidate")) + '</span>' +
+                '<span>' + escapeHtml(text(candidate.platform, "Candidate") + " - " + text(candidate.reason, "Candidate")) + '</span>' +
               '</div>' +
-              '<button class="inline-button" type="button" data-action="game-pin-candidate" data-candidate-id="' + escapeHtml(text(candidate.id, "")) + '" data-process-id="' + escapeHtml(String(candidate.processId || "")) + '">Treat as game</button>' +
+              '<button class="inline-button" type="button" data-action="game-pin-candidate" data-candidate-id="' + escapeHtml(text(candidate.id, "")) + '">Treat as game</button>' +
             '</div>';
         }).join("") + '</div>' +
       '</article>';
@@ -960,13 +981,13 @@
       focusActiveGameId: "",
       focusIntroGameId: "",
       performanceRestarting: false,
+      collectorTimings: [],
       interacting: false
     };
     var suppressNextSteamLaunchId = "";
     var longPressTimerId = 0;
     var focusIntroTimerId = 0;
     var sessionClockTimerId = 0;
-    var performanceSessionGameId = "";
     var longPressStartX = 0;
     var longPressStartY = 0;
     var longPressAppId = "";
@@ -1101,7 +1122,6 @@
       }
 
       stopGameSessionClock();
-      performanceSessionGameId = "";
       container.removeAttribute("data-game-focus-active-id");
       container.removeAttribute("data-game-focus-intro");
       container.innerHTML = productShell(
@@ -1130,133 +1150,43 @@
       );
     }
 
-    function refreshSystem() {
-      return requestJson(buildBridgeUrl(env, "/api/system"), {}, 5000).then(function (payload) {
-        state.system = payload || {};
-        state.statusText = statusTextFromPayload(payload, "Live");
-        state.statusTone = statusToneFromPayload(payload, "live");
-        if (!state.interacting) {
-          redraw();
+    function refreshGameModeSession(options) {
+      options = options || {};
+      return requestJson(buildBridgeUrl(env, "/api/game/session"), {
+        method: "POST",
+        body: {
+          refresh: Boolean(options.refresh),
+          steamRefresh: Boolean(options.steamRefresh),
+          activityRefresh: Boolean(options.activityRefresh),
+          performanceSession: options.performanceSession !== false
         }
-      }, function (error) {
-        state.system = {};
-        state.statusText = error.message || "Unavailable";
-        state.statusTone = "danger";
-        if (!state.interacting) {
-          redraw();
-        }
-      });
-    }
-
-    function refreshAudio() {
-      return requestJson(buildBridgeUrl(env, "/api/audio"), {}, 5000).then(function (payload) {
-        state.audio = normalizeAudioPayload(payload);
-        if (!state.interacting) {
-          redraw();
-        }
-      }, function () {
-        state.audio = normalizeAudioPayload({});
-        if (!state.interacting) {
-          redraw();
-        }
-      });
-    }
-
-    function refreshNetwork() {
-      var nativeRequest = requestJson(buildBridgeUrl(env, "/api/network"), {}, 5000);
-      var unifiRequest = requestJson(getUniFiNetworkEndpoint(env), {}, 6000).then(normalizeUnifiSnapshot).catch(function () {
-        return normalizeUnifiSnapshot({});
-      });
-      return Promise.all([nativeRequest, unifiRequest]).then(function (results) {
-        state.network = Object.assign({}, results[0] || {}, {
-          unifi: results[1] || normalizeUnifiSnapshot({})
-        });
-        if (!state.interacting) {
-          redraw();
-        }
-      }, function () {
-        state.network = {
-          unifi: normalizeUnifiSnapshot({})
-        };
-        if (!state.interacting) {
-          redraw();
-        }
-      });
-    }
-
-    function refreshSteam(force) {
-      var path = force ? "/api/steam/games?refresh=1" : "/api/steam/games";
-      return requestJson(buildBridgeUrl(env, path), {}, 6000).then(function (payload) {
-        state.steam = normalizeSteamGamesPayload(payload);
-        state.steamStatusText = statusTextFromPayload(payload, state.steam.games.length ? "Ready" : "Setup");
-        state.steamStatusTone = statusToneFromPayload(payload, state.steam.status);
+      }, 8000).then(function (payload) {
+        var session = normalizeGameModeSessionPayload(payload);
+        state.system = session.system;
+        state.audio = session.audio;
+        state.network = session.network;
+        state.steam = session.steam;
+        state.activity = session.activity;
+        state.performance = session.performance;
+        state.collectorTimings = session.collectorTimings;
+        state.statusText = statusTextFromPayload(payload, session.status === "budget-warning" ? "Budget warning" : "Live");
+        state.statusTone = session.status === "budget-warning" ? "warn" : statusToneFromPayload(payload, "live");
+        state.steamStatusText = statusTextFromPayload(payload && payload.steam, state.steam.games.length ? "Ready" : "Setup");
+        state.steamStatusTone = statusToneFromPayload(payload && payload.steam, state.steam.status);
         if (state.steam.activeGame && state.steam.activeGame.appId) {
           applyDetectedGameTheme(steamGameAsActivity(state.steam.activeGame));
         }
-        if (!state.interacting) {
-          redraw();
-        }
-      }, function (error) {
-        state.steam = normalizeSteamGamesPayload({});
-        state.steamStatusText = error.message || "Unavailable";
-        state.steamStatusTone = "danger";
-        if (!state.interacting) {
-          redraw();
-        }
-      });
-    }
-
-    function refreshGameActivity(force) {
-      var path = force ? "/api/game/activity?refresh=1" : "/api/game/activity";
-      return requestJson(buildBridgeUrl(env, path), {}, 5000).then(function (payload) {
-        state.activity = normalizeGameActivityPayload(payload);
         if (state.activity.activeGame) {
           applyDetectedGameTheme(state.activity.activeGame);
         }
         if (!state.interacting) {
           redraw();
         }
-      }, function () {
-        state.activity = normalizeGameActivityPayload({});
-        if (!state.interacting) {
-          redraw();
-        }
-      });
-    }
-
-    function ensurePerformanceSession() {
-      var activeGame = state.activity && state.activity.activeGame ? state.activity.activeGame : null;
-      var activeId = gameActivityId(activeGame);
-      if (!activeId) {
-        performanceSessionGameId = "";
-        return Promise.resolve();
-      }
-
-      if (performanceSessionGameId === activeId) {
-        return Promise.resolve();
-      }
-
-      performanceSessionGameId = activeId;
-      return requestJson(buildBridgeUrl(env, "/api/game/performance/session"), {
-        method: "POST",
-        body: {}
-      }, 3500).then(function (payload) {
-        state.performance = normalizeGamePerformancePayload(payload);
-      }, function () {
-        performanceSessionGameId = "";
-      });
-    }
-
-    function refreshPerformance() {
-      return ensurePerformanceSession().then(function () {
-        return requestJson(buildBridgeUrl(env, "/api/game/performance"), {}, 2500);
-      }).then(function (payload) {
-        state.performance = normalizeGamePerformancePayload(payload);
-        if (!state.interacting) {
-          redraw();
-        }
-      }, function () {
-        state.performance = normalizeGamePerformancePayload({});
+      }, function (error) {
+        state.statusText = error.message || "Unavailable";
+        state.statusTone = "danger";
+        state.steamStatusText = error.message || "Unavailable";
+        state.steamStatusTone = "danger";
         if (!state.interacting) {
           redraw();
         }
@@ -1340,6 +1270,7 @@
         state.steamStatusTone = "good";
         emitTouchFeedback(env, "Launching " + game.name);
         redraw();
+        refreshGameModeSession({ activityRefresh: true, performanceSession: true });
       }, function (error) {
         state.steamLaunchingId = "";
         state.steamStatusText = error.message || "Launch failed";
@@ -1355,9 +1286,9 @@
           muted: !state.audio.muted
         }
       }, 5000).then(function () {
-        refreshAudio();
+        refreshGameModeSession({ performanceSession: true });
       }, function () {
-        refreshAudio();
+        refreshGameModeSession({ performanceSession: true });
       });
     }
 
@@ -1376,9 +1307,9 @@
           muted: !session.muted
         }
       }, 5000).then(function () {
-        refreshAudio();
+        refreshGameModeSession({ performanceSession: true });
       }, function () {
-        refreshAudio();
+        refreshGameModeSession({ performanceSession: true });
       });
     }
 
@@ -1386,13 +1317,12 @@
       requestJson(buildBridgeUrl(env, "/api/game/activity/pin"), {
         method: "POST",
         body: {
-          id: String(target.getAttribute("data-candidate-id") || ""),
-          processId: Number(target.getAttribute("data-process-id") || 0) || null
+          id: String(target.getAttribute("data-candidate-id") || "")
         }
       }, 6000).then(function (payload) {
         state.statusText = text(payload && payload.message, "Game pinned");
         state.statusTone = "good";
-        return Promise.all([refreshGameActivity(true), refreshSteam(false)]);
+        return refreshGameModeSession({ refresh: true, activityRefresh: true, performanceSession: true });
       }, function (error) {
         state.statusText = error.message || "Pin failed";
         state.statusTone = "danger";
@@ -1487,7 +1417,7 @@
         state.steamStatusText = "Scanning";
         state.steamStatusTone = "warn";
         redraw();
-        Promise.all([refreshSteam(true), refreshGameActivity(true)]);
+        refreshGameModeSession({ refresh: true, steamRefresh: true, activityRefresh: true, performanceSession: true });
       } else if (action === "game-face-home") {
         if (env && typeof env.returnHomeFromGameFace === "function") {
           env.returnHomeFromGameFace();
@@ -1514,43 +1444,20 @@
       }
     });
 
-    var systemLoop = createTimerLoop(refreshSystem, 2000, function () {
+    var gameModeLoop = createTimerLoop(function () {
+      return refreshGameModeSession({ performanceSession: true });
+    }, 2500, function () {
       return state.interacting;
-    });
-    var audioLoop = createTimerLoop(refreshAudio, 3000, function () {
-      return state.interacting;
-    });
-    var networkLoop = createTimerLoop(refreshNetwork, 3000, function () {
-      return state.interacting;
-    });
-    var steamLoop = createTimerLoop(refreshSteam, 30000, function () {
-      return state.interacting || Boolean(state.steamLaunchingId);
-    });
-    var gameActivityLoop = createTimerLoop(refreshGameActivity, 5000, function () {
-      return state.interacting;
-    });
-    var performanceLoop = createTimerLoop(refreshPerformance, 1000, function () {
-      return state.interacting || !(state.activity && state.activity.activeGame);
     });
     redraw();
-    systemLoop.start();
-    audioLoop.start();
-    networkLoop.start();
-    gameActivityLoop.start();
-    performanceLoop.start();
-    steamLoop.start();
+    gameModeLoop.start();
     return {
       refresh: function () {
-        return Promise.all([systemLoop.refresh(), audioLoop.refresh(), networkLoop.refresh(), gameActivityLoop.refresh(), performanceLoop.refresh(), steamLoop.refresh()]);
+        return gameModeLoop.refresh();
       },
       destroy: function () {
         clearSteamLongPress();
-        systemLoop.destroy();
-        audioLoop.destroy();
-        networkLoop.destroy();
-        gameActivityLoop.destroy();
-        performanceLoop.destroy();
-        steamLoop.destroy();
+        gameModeLoop.destroy();
         stopGameSessionClock();
         clearFocusIntroTimer();
         runCleanups(cleanups);

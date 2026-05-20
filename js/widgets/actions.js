@@ -557,7 +557,7 @@
               }).join("") : emptyState("No toggles", "This PC did not return any system toggles.")) +
               '<div class="inline-list-item">' +
                 '<div class="inline-card-header"><div><div class="inline-list-title">Brightness</div><div class="inline-list-copy">' + escapeHtml(data.brightnessSupported ? "Use the slider to adjust the active display." : "This display does not support WMI brightness control.") + '</div></div><div class="inline-list-meta">' + escapeHtml(data.brightnessSupported && data.brightness != null ? brightnessValue + "%" : "--") + '</div></div>' +
-                '<input class="inline-range" type="range" min="0" max="100" step="1" value="' + brightnessValue + '" data-action="brightness"' + ((state.busy || !data.brightnessSupported) ? " disabled" : "") + '>' +
+                '<input class="inline-range" type="range" min="0" max="100" step="1" aria-label="Display brightness" value="' + brightnessValue + '" data-action="brightness"' + ((state.busy || !data.brightnessSupported) ? " disabled" : "") + '>' +
               '</div>' +
             '</div>' +
           '</article>' +

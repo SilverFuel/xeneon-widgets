@@ -2,6 +2,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using WinRT.Interop;
@@ -22,6 +23,14 @@ public sealed partial class MainWindow : Window
     private const uint SwpShowWindow = 0x0040;
     private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
+    private static readonly TimeSpan DisplayRecoveryWindow = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan[] DisplayRecoveryDelays =
+    [
+        TimeSpan.FromSeconds(2),
+        TimeSpan.FromSeconds(4),
+        TimeSpan.FromSeconds(7),
+        TimeSpan.FromSeconds(10)
+    ];
     private static readonly IntPtr HwndTopmost = new(-1);
 
     private readonly BridgeManager _bridgeManager;
@@ -38,8 +47,10 @@ public sealed partial class MainWindow : Window
     private int _quitRequested;
     private int _navigationFailures;
     private int _webViewRecoveryScheduled;
+    private int _displayRecoveryScheduled;
     private EventWaitHandle? _showDisplayEvent;
     private RegisteredWaitHandle? _showDisplayWaitHandle;
+    private CancellationTokenSource? _displayRecoveryCancellation;
 
     public MainWindow()
     {
@@ -60,6 +71,7 @@ public sealed partial class MainWindow : Window
         Activated += HandleActivated;
         Closed += HandleClosed;
         DashboardView.NavigationCompleted += HandleNavigationCompleted;
+        SystemEvents.DisplaySettingsChanged += HandleDisplaySettingsChanged;
         StartShowDisplaySignalListener();
     }
 
@@ -81,6 +93,7 @@ public sealed partial class MainWindow : Window
             onQuit: RequestQuitFromTray,
             logger: _logger);
         ConfigureWindow(saveSelection: false);
+        ScheduleDisplayRecovery("startup display backoff");
         await InitializeHostAsync();
     }
 
@@ -121,6 +134,82 @@ public sealed partial class MainWindow : Window
         SetOverlayText(safeMode
             ? $"Safe Mode: launching on primary display ({targetDisplay.Label})."
             : $"Launching on {targetDisplay.Label}.");
+    }
+
+    private void HandleDisplaySettingsChanged(object? sender, EventArgs args)
+    {
+        _logger.Info("Display topology changed; scheduling EDGE window recovery.");
+        ScheduleDisplayRecovery("display topology changed");
+    }
+
+    private void ScheduleDisplayRecovery(string reason)
+    {
+        if (_disposed || Interlocked.Exchange(ref _displayRecoveryScheduled, 1) == 1)
+        {
+            return;
+        }
+
+        _displayRecoveryCancellation?.Cancel();
+        _displayRecoveryCancellation?.Dispose();
+        _displayRecoveryCancellation = new CancellationTokenSource();
+        var token = _displayRecoveryCancellation.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var startedAt = DateTimeOffset.UtcNow;
+                foreach (var delay in DisplayRecoveryDelays)
+                {
+                    await Task.Delay(delay, token);
+                    if (_disposed || token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    var recovered = await TryRecoverDisplayPlacementAsync(reason, token);
+                    if (recovered || DateTimeOffset.UtcNow - startedAt > DisplayRecoveryWindow)
+                    {
+                        return;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _displayRecoveryScheduled, 0);
+            }
+        }, token);
+    }
+
+    private Task<bool> TryRecoverDisplayPlacementAsync(string reason, CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var diagnostics = DisplayManager.BuildDiagnostics();
+                ConfigureWindow(saveSelection: false);
+                ShowWindowNoActivate();
+                var recovered = diagnostics.EdgeCandidateCount > 0;
+                _logger.Info($"Display recovery pass after {reason}: edgeCandidates={diagnostics.EdgeCandidateCount}; recovered={recovered}.");
+                completion.TrySetResult(recovered);
+            }
+            catch (Exception error)
+            {
+                _logger.Warn($"Display recovery pass failed after {reason}: {error.Message}");
+                completion.TrySetResult(false);
+            }
+        }))
+        {
+            completion.TrySetResult(false);
+        }
+
+        return completion.Task;
     }
 
     private static string DescribeDisplayCandidate(DisplayTarget display)
@@ -667,6 +756,7 @@ public sealed partial class MainWindow : Window
 
         _disposed = true;
         DashboardView.NavigationCompleted -= HandleNavigationCompleted;
+        SystemEvents.DisplaySettingsChanged -= HandleDisplaySettingsChanged;
         if (DashboardView.CoreWebView2 is not null && _webViewDiagnosticsAttached)
         {
             DashboardView.CoreWebView2.WebMessageReceived -= HandleWebMessageReceived;
@@ -677,6 +767,8 @@ public sealed partial class MainWindow : Window
         _bridgeManager.BridgeStopped -= HandleBridgeStopped;
         _showDisplayWaitHandle?.Unregister(null);
         _showDisplayEvent?.Dispose();
+        _displayRecoveryCancellation?.Cancel();
+        _displayRecoveryCancellation?.Dispose();
         _trayIcon?.Dispose();
         _bridgeManager.Dispose();
         _logger.Info("Resources disposed. Exiting.");

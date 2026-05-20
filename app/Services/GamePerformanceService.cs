@@ -1,14 +1,19 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Principal;
+using System.Text.Json.Serialization;
 
 namespace XenonEdgeHost;
 
 public sealed class GamePerformanceService : IDisposable
 {
     private const string CaptureSessionName = "XenonGameFps";
+    private const long MaxActiveCaptureBytes = 4 * 1024 * 1024;
+    private const long MaxTelemetryDirectoryBytes = 32 * 1024 * 1024;
     private static readonly TimeSpan RestartCooldown = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan MaxTelemetryFileAge = TimeSpan.FromHours(6);
     private readonly HostLogger _logger;
+    private readonly ConfigStore _configStore;
     private readonly object _sync = new();
     private Process? _captureProcess;
     private int? _captureProcessId;
@@ -19,9 +24,11 @@ public sealed class GamePerformanceService : IDisposable
     private DateTimeOffset _lastStartAttemptAt = DateTimeOffset.MinValue;
     private bool _warnedMissingPresentMon;
 
-    public GamePerformanceService(HostLogger logger)
+    public GamePerformanceService(HostLogger logger, ConfigStore configStore)
     {
         _logger = logger;
+        _configStore = configStore;
+        PruneTelemetryFiles();
     }
 
     public GamePerformanceSnapshot EnsureSession(GameActivitySnapshot activity)
@@ -107,6 +114,7 @@ public sealed class GamePerformanceService : IDisposable
             "XenonEdgeHost",
             "Telemetry");
         Directory.CreateDirectory(telemetryDirectory);
+        PruneTelemetryFiles();
         _capturePath = Path.Combine(telemetryDirectory, $"presentmon-{processId}-{Guid.NewGuid():N}.csv");
         _captureProcessId = processId;
         _captureProcessName = processName ?? "";
@@ -180,6 +188,7 @@ public sealed class GamePerformanceService : IDisposable
 
             var averageFrameTime = frameTimes.Average();
             var fps = 1000d / averageFrameTime;
+            TrimActiveCaptureIfNeeded();
             return new GamePerformanceSnapshot
             {
                 Supported = true,
@@ -242,9 +251,111 @@ public sealed class GamePerformanceService : IDisposable
             }
         }
 
+        var capturePath = _capturePath;
         _captureProcessId = null;
         _captureProcessName = "";
         _capturePath = "";
+        CleanupCaptureFile(capturePath);
+    }
+
+    private void CleanupCaptureFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || IsDiagnosticsRetentionEnabled())
+        {
+            return;
+        }
+
+        TryDeleteFile(path);
+    }
+
+    private void TrimActiveCaptureIfNeeded()
+    {
+        if (string.IsNullOrWhiteSpace(_capturePath) || IsDiagnosticsRetentionEnabled())
+        {
+            return;
+        }
+
+        try
+        {
+            var info = new FileInfo(_capturePath);
+            if (info.Exists && info.Length > MaxActiveCaptureBytes)
+            {
+                _logger.Info("PresentMon capture reached the privacy size cap; rotating capture file.");
+                StopCapture();
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void PruneTelemetryFiles()
+    {
+        try
+        {
+            var directory = GetTelemetryDirectory();
+            if (!Directory.Exists(directory))
+            {
+                return;
+            }
+
+            var files = Directory.EnumerateFiles(directory, "presentmon-*.csv", SearchOption.TopDirectoryOnly)
+                .Select(path => new FileInfo(path))
+                .Where(file => file.Exists)
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .ToList();
+            var retainDiagnostics = IsDiagnosticsRetentionEnabled();
+            var cutoff = DateTimeOffset.UtcNow.Subtract(MaxTelemetryFileAge);
+            var totalBytes = 0L;
+
+            foreach (var file in files)
+            {
+                var isActive = !string.IsNullOrWhiteSpace(_capturePath)
+                    && string.Equals(file.FullName, _capturePath, StringComparison.OrdinalIgnoreCase);
+                if (isActive)
+                {
+                    totalBytes += file.Length;
+                    continue;
+                }
+
+                totalBytes += file.Length;
+                if (!retainDiagnostics || file.LastWriteTimeUtc < cutoff.UtcDateTime || totalBytes > MaxTelemetryDirectoryBytes)
+                {
+                    TryDeleteFile(file.FullName);
+                }
+            }
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Failed to prune PresentMon telemetry files: {error.Message}");
+        }
+    }
+
+    private bool IsDiagnosticsRetentionEnabled()
+    {
+        return _configStore.Snapshot().Dashboard.GameTelemetryDiagnosticsRetention;
+    }
+
+    private static string GetTelemetryDirectory()
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "XenonEdgeHost",
+            "Telemetry");
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+        }
     }
 
     private string DescribeStoppedCapture()
@@ -452,8 +563,10 @@ public sealed class GamePerformanceSnapshot
 
     public bool Stale { get; set; }
 
+    [JsonIgnore]
     public int? ProcessId { get; set; }
 
+    [JsonIgnore]
     public string ProcessName { get; set; } = "";
 
     public double? Fps { get; set; }

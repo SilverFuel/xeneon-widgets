@@ -192,7 +192,7 @@
                     '<div><div class="inline-list-title">' + escapeHtml(text(light.name, "Light")) + '</div><div class="inline-list-copy">' + escapeHtml(text(light.type, light.on ? "On" : "Off")) + '</div></div>' +
                     '<button class="inline-button' + (light.on ? " is-primary" : "") + '" type="button" data-action="toggle-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '>' + (light.on ? "On" : "Off") + '</button>' +
                   '</div>' +
-                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(light.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(optionalNumber(light.brightness) || 0) + '" data-action="brightness-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '></div>' +
+                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(light.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(light.name, "light")) + '" value="' + Math.round(optionalNumber(light.brightness) || 0) + '" data-action="brightness-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '></div>' +
                 '</div>';
             }).join("") : emptyState("No Hue lights", data.configured ? "No Hue lights were returned by the bridge." : "Enter the bridge IP and try linking again.")) + '</div>' +
           '</article>' +
@@ -211,7 +211,7 @@
                     '<div><div class="inline-list-title">' + escapeHtml(text(group.name, "Room")) + '</div><div class="inline-list-copy">' + escapeHtml(text(group.type, "Group")) + '</div></div>' +
                     '<button class="inline-button' + (group.on ? " is-primary" : "") + '" type="button" data-action="toggle-group" data-id="' + escapeHtml(text(group.id, "")) + '"' + (controlsEnabled ? "" : " disabled") + '>' + (group.on ? "On" : "Off") + '</button>' +
                   '</div>' +
-                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(group.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" value="' + Math.round(optionalNumber(group.brightness) || 0) + '" data-action="brightness-group" data-id="' + escapeHtml(text(group.id, "")) + '"' + (controlsEnabled ? "" : " disabled") + '></div>' +
+                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(group.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(group.name, "group")) + '" value="' + Math.round(optionalNumber(group.brightness) || 0) + '" data-action="brightness-group" data-id="' + escapeHtml(text(group.id, "")) + '"' + (controlsEnabled ? "" : " disabled") + '></div>' +
                 '</div>';
             }).join("") : emptyState("No groups", "Rooms and zones appear here after the bridge is linked.")) + '</div>' +
           '</article>' +

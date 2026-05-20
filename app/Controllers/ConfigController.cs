@@ -31,6 +31,11 @@ public sealed class ConfigController
                 configured = !string.IsNullOrWhiteSpace(config.Calendar.IcsUrl),
                 icsUrl = config.Calendar.IcsUrl
             },
+            network = new
+            {
+                healthTarget = config.Network.HealthTarget,
+                healthTargetConfigured = !string.IsNullOrWhiteSpace(config.Network.HealthTarget)
+            },
             launchers = new
             {
                 configured = config.Launchers.Count > 0,
@@ -87,7 +92,10 @@ public sealed class ConfigController
                 lastKnownGoodPath = string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath) ? "" : "<local-app-path>",
                 clipboardHidePreviews = config.Dashboard.ClipboardHidePreviews,
                 clipboardWidgetPaused = config.Dashboard.ClipboardWidgetPaused,
-                clipboardExcludeFromDiagnostics = config.Dashboard.ClipboardExcludeFromDiagnostics
+                clipboardExcludeFromDiagnostics = config.Dashboard.ClipboardExcludeFromDiagnostics,
+                gameTelemetryDiagnosticsRetention = config.Dashboard.GameTelemetryDiagnosticsRetention,
+                mediaMetadataVisible = config.Dashboard.MediaMetadataVisible,
+                audioSessionLabelsVisible = config.Dashboard.AudioSessionLabelsVisible
             }
         };
     }
@@ -107,6 +115,10 @@ public sealed class ConfigController
             calendar = new
             {
                 configured = !string.IsNullOrWhiteSpace(config.Calendar.IcsUrl)
+            },
+            network = new
+            {
+                healthTargetConfigured = !string.IsNullOrWhiteSpace(config.Network.HealthTarget)
             },
             launchers = new
             {
@@ -160,7 +172,10 @@ public sealed class ConfigController
                     previewsHidden = config.Dashboard.ClipboardHidePreviews,
                     paused = config.Dashboard.ClipboardWidgetPaused,
                     excludedFromDiagnostics = config.Dashboard.ClipboardExcludeFromDiagnostics
-                }
+                },
+                gameTelemetryDiagnosticsRetention = config.Dashboard.GameTelemetryDiagnosticsRetention,
+                mediaMetadataVisible = config.Dashboard.MediaMetadataVisible,
+                audioSessionLabelsVisible = config.Dashboard.AudioSessionLabelsVisible
             }
         };
     }
@@ -246,6 +261,21 @@ public sealed class ConfigController
                 current.Dashboard.ClipboardExcludeFromDiagnostics = payload.ClipboardExcludeFromDiagnostics.Value;
             }
 
+            if (payload.GameTelemetryDiagnosticsRetention.HasValue)
+            {
+                current.Dashboard.GameTelemetryDiagnosticsRetention = payload.GameTelemetryDiagnosticsRetention.Value;
+            }
+
+            if (payload.MediaMetadataVisible.HasValue)
+            {
+                current.Dashboard.MediaMetadataVisible = payload.MediaMetadataVisible.Value;
+            }
+
+            if (payload.AudioSessionLabelsVisible.HasValue)
+            {
+                current.Dashboard.AudioSessionLabelsVisible = payload.AudioSessionLabelsVisible.Value;
+            }
+
             return current;
         });
 
@@ -281,6 +311,17 @@ public sealed class ConfigController
         _configStore.Update(current =>
         {
             current.Calendar.IcsUrl = normalizedIcsUrl;
+            return current;
+        });
+
+        return GetSnapshot();
+    }
+
+    public object UpdateNetwork(NetworkConfigRequest payload)
+    {
+        _configStore.Update(current =>
+        {
+            current.Network.HealthTarget = payload.HealthTarget?.Trim() ?? "";
             return current;
         });
 

@@ -6,14 +6,16 @@ namespace XenonEdgeHost;
 public sealed class MediaService
 {
     private readonly HostLogger _logger;
+    private readonly ConfigStore _configStore;
     private readonly object _sync = new();
     private MediaSnapshot _snapshot = MediaSnapshot.CreateStarting();
     private DateTimeOffset _lastRefresh = DateTimeOffset.MinValue;
     private Task? _refreshTask;
 
-    public MediaService(HostLogger logger)
+    public MediaService(HostLogger logger, ConfigStore configStore)
     {
         _logger = logger;
+        _configStore = configStore;
     }
 
     public async Task<MediaSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
@@ -154,6 +156,7 @@ public sealed class MediaService
             var sampledAt = DateTimeOffset.UtcNow;
             var playbackStatus = playback.PlaybackStatus.ToString().ToLowerInvariant();
             var duration = timeline.EndTime > TimeSpan.Zero ? timeline.EndTime - timeline.StartTime : TimeSpan.Zero;
+            var exposeMetadata = _configStore.Snapshot().Dashboard.MediaMetadataVisible;
 
             lock (_sync)
             {
@@ -166,11 +169,11 @@ public sealed class MediaService
                     Stale = false,
                     Message = playbackStatus == "closed" ? "No active Windows media session is available." : "Windows media session data is live.",
                     Source = "windows media session",
-                    AppId = session.SourceAppUserModelId ?? "",
-                    Title = properties.Title ?? "",
-                    Artist = properties.Artist ?? "",
-                    AlbumTitle = properties.AlbumTitle ?? "",
-                    AlbumArtist = properties.AlbumArtist ?? "",
+                    AppId = exposeMetadata ? session.SourceAppUserModelId ?? "" : "",
+                    Title = exposeMetadata ? properties.Title ?? "" : playbackStatus == "closed" ? "" : "Media playing",
+                    Artist = exposeMetadata ? properties.Artist ?? "" : "",
+                    AlbumTitle = exposeMetadata ? properties.AlbumTitle ?? "" : "",
+                    AlbumArtist = exposeMetadata ? properties.AlbumArtist ?? "" : "",
                     PlaybackStatus = playbackStatus,
                     PositionMs = (long)Math.Max(0, timeline.Position.TotalMilliseconds),
                     DurationMs = (long)Math.Max(0, duration.TotalMilliseconds),
@@ -183,7 +186,7 @@ public sealed class MediaService
                 _lastRefresh = sampledAt;
             }
 
-            var artwork = await TryReadArtworkAsync(properties.Thumbnail);
+            var artwork = exposeMetadata ? await TryReadArtworkAsync(properties.Thumbnail) : "";
             lock (_sync)
             {
                 _snapshot.ThumbnailDataUrl = artwork;

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace XenonEdgeHost;
 
@@ -282,6 +283,7 @@ public sealed class GameActivityService
                 Candidates = orderedCandidates,
                 ForegroundProcessId = foregroundProcess?.ProcessId,
                 ForegroundProcessName = foregroundProcess?.ProcessName ?? "",
+                ForegroundAppActive = foregroundProcess is not null,
                 Source = "running processes",
                 Message = activeGame is null
                     ? mode == "ended" && lastGame is not null
@@ -1228,9 +1230,13 @@ public sealed class GameActivitySnapshot
 
     public List<GameActivityPayload> Candidates { get; set; } = [];
 
+    [JsonIgnore]
     public int? ForegroundProcessId { get; set; }
 
+    [JsonIgnore]
     public string ForegroundProcessName { get; set; } = "";
+
+    public bool ForegroundAppActive { get; set; }
 }
 
 public sealed class GameActivityPayload
@@ -1243,10 +1249,13 @@ public sealed class GameActivityPayload
 
     public string Source { get; set; } = "";
 
+    [JsonIgnore]
     public int? ProcessId { get; set; }
 
+    [JsonIgnore]
     public string ProcessName { get; set; } = "";
 
+    [JsonIgnore]
     public string ExecutablePath { get; set; } = "";
 
     public int Confidence { get; set; }
@@ -1257,7 +1266,12 @@ public sealed class GameActivityPayload
 
     public bool Focused { get; set; }
 
+    [JsonIgnore]
     public string ForegroundProcessName { get; set; } = "";
+
+    public bool HasRuntimeIdentity => ProcessId.HasValue || !string.IsNullOrWhiteSpace(ProcessName);
+
+    public bool CanPin => !string.IsNullOrWhiteSpace(ExecutablePath);
 
     public DateTimeOffset? StartedAt { get; set; }
 

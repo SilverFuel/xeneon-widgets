@@ -1430,7 +1430,10 @@ a.is-touch-pressing,
 .inline-button:focus-visible,
 .control-button:focus-visible,
 .button:focus-visible,
-.widget-link:focus-visible {
+.widget-link:focus-visible,
+.inline-range:focus-visible,
+.router-settings__slider:focus-visible,
+input[type="range"]:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
 }
