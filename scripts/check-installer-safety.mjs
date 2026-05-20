@@ -104,8 +104,10 @@ assert(
 assert(
   /Register-ScheduledTask[\s\S]+-Force/.test(autoStartInstall)
     && /Enable-ScheduledTask -TaskName \$taskName -TaskPath/.test(autoStartInstall)
+    && /schtasks\.exe \/Change \/TN/.test(autoStartInstall)
+    && /still disabled after repair/.test(autoStartInstall)
     && /Installed or repaired scheduled task/.test(autoStartInstall),
-  "autostart install must repair and enable an existing scheduled task"
+  "autostart install must repair, enable, and verify an existing scheduled task"
 );
 
 assert(

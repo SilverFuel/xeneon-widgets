@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const widgets = readWorkspaceFile("js/inline-widgets.js");
-const styles = readWorkspaceFile("css/widgets.css");
+const widgets = readWorkspaceFile("js/widgets/network.js");
+const styles = readWorkspaceFile("css/widgets/network.css");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 
 function readWorkspaceFile(relativePath) {

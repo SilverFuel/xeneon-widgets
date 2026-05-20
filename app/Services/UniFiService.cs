@@ -1,8 +1,11 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Security;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -35,7 +38,7 @@ public sealed class UniFiService : IDisposable
         _logger = logger;
         _discoveryClient = new HttpClient(new HttpClientHandler
         {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            ServerCertificateCustomValidationCallback = ValidateUniFiDiscoveryCertificate
         })
         {
             Timeout = TimeSpan.FromSeconds(2)
@@ -94,6 +97,15 @@ public sealed class UniFiService : IDisposable
         var username = request.Username?.Trim() ?? "";
         var password = request.Password?.Trim() ?? "";
         var site = NormalizeSite(request.Site);
+        var existingCertificateThumbprint = existing.Host.Equals(host, StringComparison.OrdinalIgnoreCase)
+            ? existing.CertificateThumbprint
+            : "";
+        var requestedCertificateThumbprint = request.TrustCertificate
+            ? NormalizeThumbprint(request.TrustedCertificateThumbprint)
+            : "";
+        var certificateThumbprint = string.IsNullOrWhiteSpace(requestedCertificateThumbprint)
+            ? existingCertificateThumbprint
+            : requestedCertificateThumbprint;
 
         if (string.IsNullOrWhiteSpace(host))
         {
@@ -120,14 +132,24 @@ public sealed class UniFiService : IDisposable
             throw new InvalidOperationException("UniFi password is required.");
         }
 
-        var linkedConfig = new UniFiConfigSnapshot(host, username, password, site);
-        var payload = await FetchLinkedPayloadAsync(linkedConfig, discovery, network, cancellationToken);
+        var linkedConfig = new UniFiConfigSnapshot(host, username, password, site, certificateThumbprint);
+        UniFiNetworkPayload payload;
+        try
+        {
+            payload = await FetchLinkedPayloadAsync(linkedConfig, discovery, network, cancellationToken);
+        }
+        catch (UniFiCertificateTrustRequiredException error)
+        {
+            return BuildCertificateTrustPayload(linkedConfig, discovery, network, error);
+        }
+
         _configStore.Update(current =>
         {
             current.UniFi.Host = host;
             current.UniFi.Username = username;
             current.UniFi.Password = password;
             current.UniFi.Site = site;
+            current.UniFi.CertificateThumbprint = linkedConfig.CertificateThumbprint;
             return current;
         });
 
@@ -143,6 +165,7 @@ public sealed class UniFiService : IDisposable
             current.UniFi.Username = "";
             current.UniFi.Password = "";
             current.UniFi.Site = "default";
+            current.UniFi.CertificateThumbprint = "";
             return current;
         });
 
@@ -216,6 +239,11 @@ public sealed class UniFiService : IDisposable
             CacheLinkedPayload(payload, config);
             return payload;
         }
+        catch (UniFiCertificateTrustRequiredException error)
+        {
+            _logger.Warn($"UniFi certificate review required for {config.Host}: {error.Subject}");
+            return BuildCertificateTrustPayload(config, discovery, network, error);
+        }
         catch (Exception error) when (error is HttpRequestException or InvalidOperationException or TaskCanceledException or JsonException)
         {
             _logger.Warn($"UniFi refresh failed: {error.Message}");
@@ -229,68 +257,78 @@ public sealed class UniFiService : IDisposable
         NetworkSnapshot network,
         CancellationToken cancellationToken)
     {
-        using var session = CreateSession(config.Host);
-        var mode = await LoginAsync(session, config, cancellationToken);
-        var site = Uri.EscapeDataString(config.Site);
-
-        using var clientsDocument = await ReadDocumentAsync(session, $"{mode.NetworkPrefix}/api/s/{site}/stat/sta", cancellationToken);
-        var clientSummary = NormalizeClients(clientsDocument.RootElement);
-
-        var aps = new List<UniFiApPayload>();
-        using (var devicesDocument = await TryReadDocumentAsync(session, $"{mode.NetworkPrefix}/api/s/{site}/stat/device", cancellationToken))
+        using var session = CreateSession(config);
+        try
         {
-            if (devicesDocument is not null)
+            var mode = await LoginAsync(session, config, cancellationToken);
+            var site = Uri.EscapeDataString(config.Site);
+
+            using var clientsDocument = await ReadDocumentAsync(session, $"{mode.NetworkPrefix}/api/s/{site}/stat/sta", cancellationToken);
+            var clientSummary = NormalizeClients(clientsDocument.RootElement);
+
+            var aps = new List<UniFiApPayload>();
+            using (var devicesDocument = await TryReadDocumentAsync(session, $"{mode.NetworkPrefix}/api/s/{site}/stat/device", cancellationToken))
             {
-                aps = NormalizeAps(devicesDocument.RootElement);
+                if (devicesDocument is not null)
+                {
+                    aps = NormalizeAps(devicesDocument.RootElement);
+                }
             }
-        }
 
-        var connectivity = new List<UniFiHealthPayload>
-        {
-            new() { Label = "Internet", Value = network.Ping.HasValue ? 100 : 55 },
-            new() { Label = "UniFi API", Value = 100 },
-            new() { Label = "Clients", Value = clientSummary.Clients.Total > 0 ? 100 : 72 }
-        };
-        long? latency = network.Ping;
-
-        using (var healthDocument = await TryReadDocumentAsync(session, $"{mode.NetworkPrefix}/api/s/{site}/stat/health", cancellationToken))
-        {
-            if (healthDocument is not null)
+            var connectivity = new List<UniFiHealthPayload>
             {
-                connectivity = NormalizeHealth(healthDocument.RootElement, connectivity);
-                latency ??= ReadHealthLatency(healthDocument.RootElement);
+                new() { Label = "Internet", Value = network.Ping.HasValue ? 100 : 55 },
+                new() { Label = "UniFi API", Value = 100 },
+                new() { Label = "Clients", Value = clientSummary.Clients.Total > 0 ? 100 : 72 }
+            };
+            long? latency = network.Ping;
+
+            using (var healthDocument = await TryReadDocumentAsync(session, $"{mode.NetworkPrefix}/api/s/{site}/stat/health", cancellationToken))
+            {
+                if (healthDocument is not null)
+                {
+                    connectivity = NormalizeHealth(healthDocument.RootElement, connectivity);
+                    latency ??= ReadHealthLatency(healthDocument.RootElement);
+                }
             }
-        }
 
-        return new UniFiNetworkPayload
-        {
-            Supported = true,
-            Configured = true,
-            Linked = true,
-            Detected = true,
-            Status = "live",
-            Message = "UniFi Network is linked locally.",
-            Gateway = string.IsNullOrWhiteSpace(discovery.Name) || !discovery.Detected ? $"UniFi {config.Host}" : discovery.Name,
-            GatewayCopy = $"Connected locally to https://{config.Host}.",
-            Source = mode.Label,
-            Provider = "UniFi Network",
-            GatewayIp = config.Host,
-            Site = config.Site,
-            Wan = new UniFiWanPayload
+            return new UniFiNetworkPayload
             {
-                Name = "Local WAN sample",
-                DownloadMbps = network.Download,
-                UploadMbps = network.Upload,
-                CapacityDownMbps = Math.Max(100, network.LinkSpeedMbps ?? 1000),
-                CapacityUpMbps = Math.Max(100, network.LinkSpeedMbps ?? 1000)
-            },
-            LatencyMs = latency,
-            PacketLoss = network.Ping.HasValue ? 0 : null,
-            Clients = clientSummary.Clients,
-            Aps = aps,
-            TopClients = clientSummary.TopClients,
-            Connectivity = connectivity
-        };
+                Supported = true,
+                Configured = true,
+                Linked = true,
+                Detected = true,
+                Status = "live",
+                Message = "UniFi Network is linked locally.",
+                Gateway = string.IsNullOrWhiteSpace(discovery.Name) || !discovery.Detected ? $"UniFi {config.Host}" : discovery.Name,
+                GatewayCopy = $"Connected locally to https://{config.Host}.",
+                Source = mode.Label,
+                Provider = "UniFi Network",
+                GatewayIp = config.Host,
+                Site = config.Site,
+                CertificateTrusted = session.Certificate.Trusted,
+                CertificateThumbprint = FormatThumbprint(session.Certificate.RemoteThumbprint),
+                CertificateSubject = session.Certificate.RemoteSubject,
+                Wan = new UniFiWanPayload
+                {
+                    Name = "Local WAN sample",
+                    DownloadMbps = network.Download,
+                    UploadMbps = network.Upload,
+                    CapacityDownMbps = Math.Max(100, network.LinkSpeedMbps ?? 1000),
+                    CapacityUpMbps = Math.Max(100, network.LinkSpeedMbps ?? 1000)
+                },
+                LatencyMs = latency,
+                PacketLoss = network.Ping.HasValue ? 0 : null,
+                Clients = clientSummary.Clients,
+                Aps = aps,
+                TopClients = clientSummary.TopClients,
+                Connectivity = connectivity
+            };
+        }
+        catch (Exception error) when (session.Certificate.TrustRequired && IsCertificateTrustFailure(error))
+        {
+            throw new UniFiCertificateTrustRequiredException(session.Certificate, error);
+        }
     }
 
     private static UniFiNetworkPayload BuildDiscoveryPayload(NetworkSnapshot network, UniFiDiscovery discovery, bool checking)
@@ -354,6 +392,8 @@ public sealed class UniFiService : IDisposable
         payload.GatewayIp = config.Host;
         payload.Site = config.Site;
         payload.GatewayCopy = $"Saved console https://{config.Host}.";
+        payload.CertificateTrusted = !string.IsNullOrWhiteSpace(config.CertificateThumbprint);
+        payload.CertificateThumbprint = FormatThumbprint(config.CertificateThumbprint);
         return payload;
     }
 
@@ -363,6 +403,35 @@ public sealed class UniFiService : IDisposable
         payload.Status = "error";
         payload.Message = string.IsNullOrWhiteSpace(message) ? "UniFi link failed." : message;
         payload.Source = "UniFi local API";
+        return payload;
+    }
+
+    private static UniFiNetworkPayload BuildCertificateTrustPayload(
+        UniFiConfigSnapshot config,
+        UniFiDiscovery discovery,
+        NetworkSnapshot network,
+        UniFiCertificateTrustRequiredException error)
+    {
+        var detected = discovery.Detected
+            ? discovery
+            : CreateDetected(config.Host, $"https://{config.Host}/", "UniFi Network");
+        var payload = BuildConfiguredSetupPayload(config, detected, network);
+        payload.Configured = true;
+        payload.Linked = false;
+        payload.Detected = true;
+        payload.Status = "certificate-trust-required";
+        payload.Message = "Review the UniFi console certificate fingerprint before linking.";
+        payload.Source = "UniFi certificate review";
+        payload.Provider = "UniFi Network";
+        payload.GatewayIp = config.Host;
+        payload.Site = config.Site;
+        payload.CertificateTrustRequired = true;
+        payload.CertificateTrusted = false;
+        payload.CertificateThumbprint = FormatThumbprint(error.Thumbprint);
+        payload.CertificateSubject = error.Subject;
+        payload.CertificateMessage = string.IsNullOrWhiteSpace(error.PolicyError)
+            ? "This UniFi console uses a certificate that is not trusted by Windows."
+            : error.PolicyError;
         return payload;
     }
 
@@ -443,16 +512,76 @@ public sealed class UniFiService : IDisposable
         }
     }
 
-    private static UniFiSession CreateSession(string host)
+    private static UniFiSession CreateSession(UniFiConfigSnapshot config)
     {
         var cookies = new CookieContainer();
+        var certificateState = new UniFiCertificateTrustState
+        {
+            TrustedThumbprint = config.CertificateThumbprint
+        };
         var handler = new HttpClientHandler
         {
             CookieContainer = cookies,
             UseCookies = true,
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            ServerCertificateCustomValidationCallback = (request, certificate, chain, errors) =>
+                ValidateUniFiCertificate(request, certificate, chain, errors, certificateState)
         };
-        return new UniFiSession(new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) }, new Uri($"https://{host.TrimEnd('/')}/"));
+        return new UniFiSession(new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) }, new Uri($"https://{config.Host.TrimEnd('/')}/"), certificateState);
+    }
+
+    private static bool ValidateUniFiDiscoveryCertificate(
+        HttpRequestMessage request,
+        X509Certificate2? certificate,
+        X509Chain? chain,
+        SslPolicyErrors sslPolicyErrors)
+    {
+        _ = request;
+        _ = chain;
+        return sslPolicyErrors == SslPolicyErrors.None
+            || (certificate is not null && !sslPolicyErrors.HasFlag(SslPolicyErrors.RemoteCertificateNotAvailable));
+    }
+
+    private static bool ValidateUniFiCertificate(
+        HttpRequestMessage request,
+        X509Certificate2? certificate,
+        X509Chain? chain,
+        SslPolicyErrors sslPolicyErrors,
+        UniFiCertificateTrustState state)
+    {
+        _ = request;
+        _ = chain;
+
+        if (certificate is null)
+        {
+            state.TrustRequired = true;
+            state.PolicyError = "The UniFi console did not present a certificate.";
+            return false;
+        }
+
+        state.RemoteThumbprint = ReadCertificateThumbprint(certificate);
+        state.RemoteSubject = certificate.Subject ?? "";
+
+        if (sslPolicyErrors == SslPolicyErrors.None)
+        {
+            state.Trusted = true;
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(state.TrustedThumbprint)
+            && string.Equals(state.TrustedThumbprint, state.RemoteThumbprint, StringComparison.OrdinalIgnoreCase))
+        {
+            state.Trusted = true;
+            return true;
+        }
+
+        state.TrustRequired = true;
+        state.PolicyError = DescribeCertificateErrors(sslPolicyErrors);
+        return false;
+    }
+
+    private static bool IsCertificateTrustFailure(Exception error)
+    {
+        return error is HttpRequestException or TaskCanceledException or InvalidOperationException;
     }
 
     private static async Task<UniFiApiMode> LoginAsync(UniFiSession session, UniFiConfigSnapshot config, CancellationToken cancellationToken)
@@ -771,35 +900,83 @@ public sealed class UniFiService : IDisposable
         var host = NormalizeHost(config.UniFi.Host) ?? "";
         var username = config.UniFi.Username?.Trim() ?? "";
         var password = config.UniFi.Password?.Trim() ?? "";
-        return new UniFiConfigSnapshot(host, username, password, NormalizeSite(config.UniFi.Site));
+        return new UniFiConfigSnapshot(host, username, password, NormalizeSite(config.UniFi.Site), NormalizeThumbprint(config.UniFi.CertificateThumbprint));
     }
 
     private static string? NormalizeHost(string? input)
     {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            return null;
-        }
-
-        var trimmed = input.Trim();
-        try
-        {
-            var uri = trimmed.Contains("://", StringComparison.Ordinal)
-                ? new Uri(trimmed)
-                : new Uri($"https://{trimmed}");
-            return uri.Host;
-        }
-        catch
-        {
-            var slashIndex = trimmed.IndexOf('/');
-            return slashIndex >= 0 ? trimmed[..slashIndex] : trimmed;
-        }
+        var host = NetworkEndpointGuard.NormalizeLocalHttpsAuthority(input, "UniFi console");
+        return string.IsNullOrWhiteSpace(host) ? null : host;
     }
 
     private static string NormalizeSite(string? input)
     {
         var trimmed = input?.Trim() ?? "";
         return string.IsNullOrWhiteSpace(trimmed) ? "default" : trimmed;
+    }
+
+    private static string NormalizeThumbprint(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return "";
+        }
+
+        var chars = input
+            .Where(Uri.IsHexDigit)
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+        return new string(chars);
+    }
+
+    private static string FormatThumbprint(string? input)
+    {
+        var normalized = NormalizeThumbprint(input);
+        if (normalized.Length <= 2)
+        {
+            return normalized;
+        }
+
+        var pairs = new List<string>();
+        for (var index = 0; index < normalized.Length; index += 2)
+        {
+            pairs.Add(normalized.Substring(index, Math.Min(2, normalized.Length - index)));
+        }
+
+        return string.Join(":", pairs);
+    }
+
+    private static string ReadCertificateThumbprint(X509Certificate2 certificate)
+    {
+        return NormalizeThumbprint(certificate.GetCertHashString(HashAlgorithmName.SHA256));
+    }
+
+    private static string DescribeCertificateErrors(SslPolicyErrors sslPolicyErrors)
+    {
+        if (sslPolicyErrors == SslPolicyErrors.None)
+        {
+            return "";
+        }
+
+        var errors = new List<string>();
+        if (sslPolicyErrors.HasFlag(SslPolicyErrors.RemoteCertificateNameMismatch))
+        {
+            errors.Add("name mismatch");
+        }
+
+        if (sslPolicyErrors.HasFlag(SslPolicyErrors.RemoteCertificateChainErrors))
+        {
+            errors.Add("untrusted certificate chain");
+        }
+
+        if (sslPolicyErrors.HasFlag(SslPolicyErrors.RemoteCertificateNotAvailable))
+        {
+            errors.Add("certificate missing");
+        }
+
+        return errors.Count == 0
+            ? "The UniFi console certificate is not trusted by Windows."
+            : $"The UniFi console certificate needs review ({string.Join(", ", errors)}).";
     }
 
     private static string ReadTitle(string html)
@@ -993,19 +1170,51 @@ public sealed class UniFiService : IDisposable
         return JsonSerializer.Deserialize<UniFiNetworkPayload>(JsonSerializer.Serialize(payload, JsonOptions), JsonOptions) ?? new UniFiNetworkPayload();
     }
 
-    private sealed record UniFiConfigSnapshot(string Host, string Username, string Password, string Site)
+    private sealed record UniFiConfigSnapshot(string Host, string Username, string Password, string Site, string CertificateThumbprint)
     {
         public bool Configured => !string.IsNullOrWhiteSpace(Host) && !string.IsNullOrWhiteSpace(Username);
 
-        public string CacheKey => $"{Host}|{Username}|{Site}";
+        public string CacheKey => $"{Host}|{Username}|{Site}|{CertificateThumbprint}";
     }
 
-    private sealed record UniFiSession(HttpClient Client, Uri BaseUri) : IDisposable
+    private sealed record UniFiSession(HttpClient Client, Uri BaseUri, UniFiCertificateTrustState Certificate) : IDisposable
     {
         public void Dispose()
         {
             Client.Dispose();
         }
+    }
+
+    private sealed class UniFiCertificateTrustState
+    {
+        public string TrustedThumbprint { get; init; } = "";
+
+        public string RemoteThumbprint { get; set; } = "";
+
+        public string RemoteSubject { get; set; } = "";
+
+        public string PolicyError { get; set; } = "";
+
+        public bool TrustRequired { get; set; }
+
+        public bool Trusted { get; set; }
+    }
+
+    private sealed class UniFiCertificateTrustRequiredException : InvalidOperationException
+    {
+        public UniFiCertificateTrustRequiredException(UniFiCertificateTrustState state, Exception inner)
+            : base("UniFi certificate requires trust review.", inner)
+        {
+            Thumbprint = state.RemoteThumbprint;
+            Subject = state.RemoteSubject;
+            PolicyError = state.PolicyError;
+        }
+
+        public string Thumbprint { get; }
+
+        public string Subject { get; }
+
+        public string PolicyError { get; }
     }
 
     private sealed record UniFiApiMode(string Label, string LoginPath, string NetworkPrefix);
@@ -1051,6 +1260,16 @@ public sealed class UniFiNetworkPayload
     public string GatewayIp { get; set; } = "";
 
     public string Site { get; set; } = "default";
+
+    public bool CertificateTrusted { get; set; }
+
+    public bool CertificateTrustRequired { get; set; }
+
+    public string CertificateThumbprint { get; set; } = "";
+
+    public string CertificateSubject { get; set; } = "";
+
+    public string CertificateMessage { get; set; } = "";
 
     public UniFiWanPayload Wan { get; set; } = new();
 

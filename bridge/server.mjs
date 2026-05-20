@@ -2,9 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import https from "node:https";
+import { isIP } from "node:net";
 import { fileURLToPath } from "node:url";
 import { execFile, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import http from "node:http";
 
@@ -18,6 +19,9 @@ const exampleConfigPath = path.join(__dirname, "config.example.json");
 const audioControlPath = path.join(__dirname, "audio-control.ps1");
 const dashboardOnboardingVersion = 1;
 const maxJsonBodyBytes = 256 * 1024;
+const maxIcsBytes = 512 * 1024;
+const sessionHeaderName = "X-Xenon-Session";
+const sessionToken = randomBytes(32).toString("base64url");
 const sensitiveQueryPattern = /((?:api[_-]?key|appid|token|secret|password|pass|sig|signature|auth|key)=)[^&\s"]+/gi;
 let config = loadConfig();
 const statusCache = {
@@ -94,12 +98,15 @@ function normalizeConfig(rawConfig) {
 
   return {
     port: loaded.port || 8976,
-    weather: loaded.weather || {},
+    weather: {
+      ...(loaded.weather || {}),
+      apiKey: process.env.XENON_WEATHER_API_KEY || loaded.weather?.apiKey || ""
+    },
     calendar: loaded.calendar || {},
     hue: {
       bridgeIp: loaded.hue?.bridgeIp || "",
-      appKey: loaded.hue?.appKey || "",
-      clientKey: loaded.hue?.clientKey || ""
+      appKey: process.env.XENON_HUE_APP_KEY || loaded.hue?.appKey || "",
+      clientKey: process.env.XENON_HUE_CLIENT_KEY || loaded.hue?.clientKey || ""
     },
     dashboard: normalizeDashboardConfig(loaded.dashboard)
   };
@@ -108,19 +115,41 @@ function normalizeConfig(rawConfig) {
 function loadConfig() {
   const sourcePath = fs.existsSync(configPath) ? configPath : exampleConfigPath;
   const loaded = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
-  return normalizeConfig(loaded);
+  const normalized = normalizeConfig(loaded);
+  if (sourcePath === configPath && hasPlainConfigSecrets(loaded)) {
+    fs.writeFileSync(configPath, `${JSON.stringify(stripConfigSecrets(normalized), null, 2)}\n`, "utf8");
+  }
+  return normalized;
 }
 
 function saveConfig(nextConfig) {
   config = normalizeConfig(nextConfig);
-  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  fs.writeFileSync(configPath, `${JSON.stringify(stripConfigSecrets(config), null, 2)}\n`, "utf8");
+}
+
+function hasPlainConfigSecrets(value) {
+  return Boolean(value?.weather?.apiKey || value?.hue?.appKey || value?.hue?.clientKey);
+}
+
+function stripConfigSecrets(value) {
+  const snapshot = normalizeConfig(value);
+  return {
+    ...snapshot,
+    weather: {
+      city: snapshot.weather.city || "",
+      units: snapshot.weather.units || "metric"
+    },
+    hue: {
+      bridgeIp: snapshot.hue.bridgeIp || ""
+    }
+  };
 }
 
 function json(response, statusCode, payload, corsOrigin = "") {
   const headers = {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
+    "Access-Control-Allow-Headers": `Content-Type, ${sessionHeaderName}`
   };
 
   if (corsOrigin) {
@@ -178,8 +207,23 @@ function applyCorsHeaders(response, corsOrigin) {
 
   response.setHeader("Access-Control-Allow-Origin", corsOrigin);
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Allow-Headers", `Content-Type, ${sessionHeaderName}`);
   response.setHeader("Vary", "Origin");
+}
+
+function isSafeMethod(request) {
+  return ["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
+}
+
+function hasValidSessionToken(request) {
+  return request.headers[String(sessionHeaderName).toLowerCase()] === sessionToken;
+}
+
+function authorizeNoOriginMutation(request) {
+  if (isSafeMethod(request) || request.headers.origin) {
+    return true;
+  }
+  return hasValidSessionToken(request);
 }
 
 function sendText(response, statusCode, text) {
@@ -194,8 +238,9 @@ function safeResolveStaticPath(requestUrl) {
   const pathname = new URL(requestUrl, `http://127.0.0.1:${config.port}`).pathname;
   const relativePath = pathname === "/" ? "dashboard.html" : pathname.replace(/^\/+/, "");
   const resolvedPath = path.resolve(rootDir, relativePath);
+  const relative = path.relative(rootDir, resolvedPath);
 
-  if (!resolvedPath.startsWith(rootDir)) {
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
     return null;
   }
 
@@ -212,12 +257,60 @@ function serveStaticFile(requestUrl, response) {
 
   const extension = path.extname(filePath).toLowerCase();
   const mimeType = mimeTypes[extension] || "application/octet-stream";
+  let body = null;
+  if (mimeType.startsWith("text/html")) {
+    body = injectSessionToken(fs.readFileSync(filePath, "utf8"));
+  }
 
   response.writeHead(200, {
     "Content-Type": mimeType,
     "Cache-Control": "no-store"
   });
+  if (body !== null) {
+    response.end(body);
+    return;
+  }
+
   fs.createReadStream(filePath).pipe(response);
+}
+
+function injectSessionToken(html) {
+  if (!html.includes("</head>") || html.includes("xenon-session-token")) {
+    return html;
+  }
+
+  const injection = `  <meta name="xenon-session-token" content="${escapeHtml(sessionToken)}">
+  <script>
+  (() => {
+    window.XenonSessionToken = ${JSON.stringify(sessionToken)};
+    const originalFetch = window.fetch;
+    if (!originalFetch || originalFetch.__xenonSessionWrapped) return;
+    function requestMethod(input, init) {
+      return String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+    }
+    window.fetch = function(input, init) {
+      const method = requestMethod(input, init || {});
+      if (!/^(GET|HEAD|OPTIONS)$/.test(method)) {
+        const headers = new Headers((init && init.headers) || (input && input.headers) || undefined);
+        if (!headers.has("${sessionHeaderName}")) headers.set("${sessionHeaderName}", window.XenonSessionToken);
+        init = Object.assign({}, init || {}, { headers });
+      }
+      return originalFetch.call(this, input, init);
+    };
+    window.fetch.__xenonSessionWrapped = true;
+  })();
+  </script>
+`;
+  return html.replace("</head>", `${injection}</head>`);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function clamp(value, min, max) {
@@ -889,10 +982,92 @@ function normalizeBridgeIp(rawValue) {
 
   try {
     const parsed = input.includes("://") ? new URL(input) : new URL(`https://${input}`);
-    return parsed.hostname;
+    return normalizeLocalBridgeHost(parsed.hostname);
   } catch (error) {
-    return input.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+    return normalizeLocalBridgeHost(input.replace(/^https?:\/\//i, "").replace(/\/.*$/, ""));
   }
+}
+
+function normalizeLocalBridgeHost(hostname) {
+  const host = String(hostname || "").trim().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "").toLowerCase();
+  if (!host) {
+    return "";
+  }
+  if (!isLocalHost(host)) {
+    throw new Error("Hue bridge must be a local/private IP address or local hostname.");
+  }
+  return host;
+}
+
+function isLocalHost(host) {
+  if (host === "localhost" || host.endsWith(".localhost")) {
+    return true;
+  }
+
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    return isLocalIpv4(host);
+  }
+  if (ipVersion === 6) {
+    return isLocalIpv6(host);
+  }
+
+  return !host.includes(".")
+    || host.endsWith(".local")
+    || host.endsWith(".lan")
+    || host.endsWith(".home")
+    || host.endsWith(".home.arpa")
+    || host.endsWith(".localdomain");
+}
+
+function isLocalIpv4(host) {
+  const bytes = host.split(".").map((part) => Number(part));
+  return bytes[0] === 10
+    || bytes[0] === 127
+    || (bytes[0] === 169 && bytes[1] === 254)
+    || (bytes[0] === 172 && bytes[1] >= 16 && bytes[1] <= 31)
+    || (bytes[0] === 192 && bytes[1] === 168)
+    || (bytes[0] === 100 && bytes[1] >= 64 && bytes[1] <= 127);
+}
+
+function isLocalIpv6(host) {
+  const normalized = host.toLowerCase();
+  return normalized === "::1"
+    || normalized.startsWith("fe80:")
+    || normalized.startsWith("fc")
+    || normalized.startsWith("fd");
+}
+
+function normalizeRemoteHttpUrl(rawValue, label) {
+  let input = String(rawValue || "").trim();
+  if (!input) {
+    return "";
+  }
+  if (/^webcal:\/\//i.test(input)) {
+    input = `https://${input.slice("webcal://".length)}`;
+  }
+
+  const parsed = input.includes("://") ? new URL(input) : new URL(`https://${input}`);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`${label} must use HTTP(S).`);
+  }
+  if (isLocalHost(parsed.hostname) || parsed.hostname.toLowerCase() === "metadata.google.internal") {
+    throw new Error(`${label} must point to a public HTTP(S) calendar feed.`);
+  }
+  return parsed.toString();
+}
+
+async function readTextWithLimit(response, maxBytes, label) {
+  const length = Number(response.headers.get("content-length") || 0);
+  if (length > maxBytes) {
+    throw new Error(`${label} is larger than the supported 512 KiB limit.`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > maxBytes) {
+    throw new Error(`${label} is larger than the supported 512 KiB limit.`);
+  }
+  return buffer.toString("utf8");
 }
 
 function extractHueError(payload) {
@@ -1218,11 +1393,12 @@ async function getCalendarSnapshot() {
     };
   }
 
-  const response = await fetch(icsUrl);
+  const normalizedUrl = normalizeRemoteHttpUrl(icsUrl, "Calendar ICS URL");
+  const response = await fetch(normalizedUrl);
   if (!response.ok) {
     throw new Error("Calendar feed request failed");
   }
-  const text = await response.text();
+  const text = await readTextWithLimit(response, maxIcsBytes, "Calendar feed");
 
   return {
     configured: true,
@@ -1790,6 +1966,11 @@ const server = http.createServer(async (request, response) => {
     const corsOrigin = corsOriginForRequest(request);
     if (corsOrigin === null) {
       json(response, 403, { error: "Origin not allowed" });
+      return;
+    }
+
+    if (!authorizeNoOriginMutation(request)) {
+      json(response, 403, { error: "Session token required" });
       return;
     }
 

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
+const supportController = readWorkspaceFile("app/Controllers/SupportController.cs");
 
 function readWorkspaceFile(relativePath) {
   const filePath = resolve(process.cwd(), relativePath);
@@ -24,17 +24,17 @@ function assert(condition, message) {
 }
 
 assert(
-  /SanitizeSupportObject\(health,\s*config\)/.test(bridgeManager)
-    && /ReadRecentLogLines\(120,\s*config\)/.test(bridgeManager),
+  /SanitizeSupportObject\(health,\s*config\)/.test(supportController)
+    && /ReadRecentLogLines\(120,\s*config\)/.test(supportController),
   "support bundle must sanitize health payloads and recent logs"
 );
 
 assert(
-  /WindowsUserPathPattern/.test(bridgeManager)
-    && /MacUserPathPattern/.test(bridgeManager)
-    && /EmailPattern/.test(bridgeManager)
-    && /PrivateIpPattern/.test(bridgeManager)
-    && /SensitiveQueryPattern/.test(bridgeManager),
+  /WindowsUserPathPattern/.test(supportController)
+    && /MacUserPathPattern/.test(supportController)
+    && /EmailPattern/.test(supportController)
+    && /PrivateIpPattern/.test(supportController)
+    && /SensitiveQueryPattern/.test(supportController),
   "support bundle redaction must cover user paths, emails, private IPs, and sensitive query strings"
 );
 
@@ -49,7 +49,7 @@ for (const replacement of [
   "<redacted>"
 ]) {
   assert(
-    bridgeManager.includes(replacement),
+    supportController.includes(replacement),
     `support bundle redaction must include ${replacement}`
   );
 }

@@ -194,24 +194,7 @@ public sealed class HueService
 
     private static string NormalizeBridgeIp(string? input)
     {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            return "";
-        }
-
-        var trimmed = input.Trim();
-        try
-        {
-            var uri = trimmed.Contains("://", StringComparison.Ordinal)
-                ? new Uri(trimmed)
-                : new Uri($"https://{trimmed}");
-            return uri.Host;
-        }
-        catch
-        {
-            var slashIndex = trimmed.IndexOf('/');
-            return slashIndex >= 0 ? trimmed[..slashIndex] : trimmed;
-        }
+        return NetworkEndpointGuard.NormalizeLocalHttpsAuthority(input, "Hue bridge");
     }
 
     private async Task<JsonDocument> SendRequestAsync(string bridgeIp, string path, HttpMethod method, object? body, CancellationToken cancellationToken)

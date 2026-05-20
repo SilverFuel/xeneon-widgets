@@ -381,6 +381,15 @@
         return isFinite(value) ? value : fallback;
       }
 
+      function escapeHtml(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       function getJsonParam(name, fallback) {
         var raw = params.get(name);
         if (!raw) {
@@ -569,7 +578,7 @@
         document.getElementById("summary-strip").innerHTML = [
           '<div class="summary-chip"><strong>' + data.counts.lastHour + '</strong><span>Last hour</span></div>',
           '<div class="summary-chip"><strong>' + data.counts.activeCameras + '</strong><span>Active cameras</span></div>',
-          '<div class="summary-chip"><strong>' + (last ? last.label : "None") + '</strong><span>Latest object</span></div>'
+          '<div class="summary-chip"><strong>' + escapeHtml(last ? last.label : "None") + '</strong><span>Latest object</span></div>'
         ].join("");
 
         if (!data.alerts.length) {
@@ -582,11 +591,11 @@
           return '' +
             '<article class="alert-item">' +
               '<div class="alert-top">' +
-                '<div class="alert-title">' + alert.label + ' on ' + alert.camera + '</div>' +
-                '<div class="badge" data-tone="' + tone + '">' + Math.round(Number(alert.score || 0) * 100) + '%</div>' +
+                '<div class="alert-title">' + escapeHtml(alert.label) + ' on ' + escapeHtml(alert.camera) + '</div>' +
+                '<div class="badge" data-tone="' + escapeHtml(tone) + '">' + Math.round(Number(alert.score || 0) * 100) + '%</div>' +
               '</div>' +
               '<div class="alert-meta">' +
-                '<span>' + alert.zone + '</span>' +
+                '<span>' + escapeHtml(alert.zone) + '</span>' +
                 '<span>' + formatAgo(alert.time) + '</span>' +
               '</div>' +
             '</article>';

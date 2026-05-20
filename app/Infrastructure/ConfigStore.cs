@@ -131,6 +131,7 @@ public sealed class ConfigStore
         normalized.UniFi.Host = NormalizeHost(normalized.UniFi.Host);
         normalized.UniFi.Username = normalized.UniFi.Username?.Trim() ?? "";
         normalized.UniFi.Site = NormalizeSite(normalized.UniFi.Site);
+        normalized.UniFi.CertificateThumbprint = NormalizeThumbprint(normalized.UniFi.CertificateThumbprint);
         normalized.Dashboard.AutoProvisioningVersion = normalized.Dashboard.AutoProvisioningVersion <= 0 ? 1 : normalized.Dashboard.AutoProvisioningVersion;
         normalized.Dashboard.OnboardingVersion = normalized.Dashboard.OnboardingVersion <= 0 ? 1 : normalized.Dashboard.OnboardingVersion;
         normalized.Dashboard.PreferredDisplayId = normalized.Dashboard.PreferredDisplayId?.Trim() ?? "";
@@ -163,23 +164,13 @@ public sealed class ConfigStore
 
     private static string NormalizeHost(string? input)
     {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            return "";
-        }
-
-        var trimmed = input.Trim();
         try
         {
-            var uri = trimmed.Contains("://", StringComparison.Ordinal)
-                ? new Uri(trimmed)
-                : new Uri($"https://{trimmed}");
-            return uri.Host;
+            return NetworkEndpointGuard.NormalizeLocalHttpsAuthority(input, "UniFi console");
         }
-        catch
+        catch (InvalidOperationException)
         {
-            var slashIndex = trimmed.IndexOf('/');
-            return slashIndex >= 0 ? trimmed[..slashIndex] : trimmed;
+            return "";
         }
     }
 
@@ -187,6 +178,20 @@ public sealed class ConfigStore
     {
         var trimmed = input?.Trim() ?? "";
         return string.IsNullOrWhiteSpace(trimmed) ? "default" : trimmed;
+    }
+
+    private static string NormalizeThumbprint(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return "";
+        }
+
+        var chars = input
+            .Where(Uri.IsHexDigit)
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+        return new string(chars);
     }
 
     private static string NormalizeLauncherDisplayName(string executablePath, string? displayName)

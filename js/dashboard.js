@@ -3,7 +3,7 @@
   var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
-  var assetRevision = "20260516-02";
+  var assetRevision = params.get("v") || "";
   var onboardingVersion = 1;
   var showAdvanced = params.get("advanced") === "1";
   var stageWidth = 2560;
@@ -559,6 +559,24 @@
   function getParam(name) {
     var value = params.get(name);
     return value == null || value === "" ? "" : value;
+  }
+
+  function loadAssetRevision() {
+    if (assetRevision) {
+      return Promise.resolve(assetRevision);
+    }
+
+    return fetch("./assets/revision.json", {
+      cache: "no-store"
+    }).then(function (response) {
+      return response.ok ? response.json() : {};
+    }).then(function (payload) {
+      assetRevision = text(payload && payload.assetRevision, "local");
+      return assetRevision;
+    }, function () {
+      assetRevision = "local";
+      return assetRevision;
+    });
   }
 
   function escapeHtml(value) {
@@ -1445,6 +1463,7 @@
     return [
       {
         id: "setup",
+        requiresBridge: true,
         getTitle: function () {
           return bridgeSetup.onboardingCompleted ? "Diagnostics" : "Auto Setup";
         },
@@ -1478,6 +1497,7 @@
       {
         id: "game-mode",
         title: "Game Mode",
+        requiresBridge: true,
         tier: "product",
         kicker: "Launch mode",
         copy: "Launch games, then let the EDGE surface switch into a focused in-game HUD.",
@@ -1486,6 +1506,7 @@
       {
         id: "theme-studio",
         title: "Theme Studio",
+        requiresBridge: false,
         tier: "product",
         kicker: "Visual style",
         copy: "Theme, readability, performance budget, and Game Mode tuning for the EDGE surface.",
@@ -1494,6 +1515,7 @@
       {
         id: "updates",
         title: "Updates",
+        requiresBridge: true,
         tier: "product",
         kicker: "Release safety",
         copy: "Stable, beta, and nightly release checks with rollback state from the local host.",
@@ -1502,6 +1524,7 @@
       {
         id: "system",
         title: "System Monitor",
+        requiresBridge: true,
         copy: "CPU, GPU, and RAM telemetry from the local bridge.",
         getViewerLabel: function () {
           return "Local bridge";
@@ -1518,6 +1541,7 @@
         {
           id: "network",
           title: "Network",
+          requiresBridge: true,
           copy: "Gaming latency, throughput, local adapter state, and optional UniFi gateway detail.",
           getViewerLabel: function () {
             return getWidgetState("unifi-network") === "Ready" ? "UniFi linked" : "Network health";
@@ -1536,6 +1560,7 @@
       {
         id: "audio",
         title: "Audio & Media",
+        requiresBridge: true,
         copy: "Volume, output switching, active app audio, and now-playing controls in one place.",
         getViewerLabel: function () {
           return "Sound and playback";
@@ -1552,6 +1577,7 @@
       {
         id: "launchers",
         title: "App Launcher",
+        requiresBridge: true,
         copy: "Pinned apps and shortcuts for one-tap launches from the EDGE display.",
         getViewerLabel: function () {
           return getWidgetState("launchers") === "Ready"
@@ -1562,6 +1588,7 @@
       {
         id: "quick-actions",
         title: "Quick Actions",
+        requiresBridge: true,
         copy: "Dark mode, Night Light, locking, Task Manager, Settings, and Recycle Bin actions.",
         getViewerLabel: function () {
           return "Windows shell";
@@ -1570,6 +1597,7 @@
       {
         id: "shortcuts",
         title: "System Shortcuts",
+        requiresBridge: true,
         copy: "Power actions, brightness, and do-not-disturb controls for the local PC.",
         getViewerLabel: function () {
           return "Windows shell";
@@ -1578,6 +1606,7 @@
       {
         id: "clipboard",
         title: "Clipboard",
+        requiresBridge: true,
         copy: "Recent clipboard history with one-tap restore.",
         getViewerLabel: function () {
           return "Windows clipboard";
@@ -1586,6 +1615,7 @@
       {
         id: "weather",
         title: "Weather",
+        requiresBridge: true,
         copy: "Current, hourly, and five-day weather from the bridge.",
         getViewerLabel: function () {
           return getWidgetState("weather") === "Optional" ? "Optional" : (getSetting("city") + " / " + getSetting("units"));
@@ -1604,6 +1634,7 @@
       {
         id: "calendar",
         title: "Calendar",
+        requiresBridge: true,
         copy: "Upcoming events from the configured ICS feed.",
         getViewerLabel: function () {
           return getWidgetState("calendar") === "Optional" ? "Optional" : "ICS feed";
@@ -1619,6 +1650,7 @@
       {
         id: "hue",
         title: "Philips Hue",
+        requiresBridge: true,
         copy: "Direct local light control with compact bridge diagnostics.",
         getViewerLabel: function () {
           return bridgeConfig.hue.linked ? "Local bridge" : "Optional";
@@ -1655,16 +1687,7 @@
   }
 
   function widgetRequiresBridge(widget) {
-    return widget.id === "setup"
-      || widget.id === "game-mode"
-      || widget.id === "system"
-      || widget.id === "network"
-      || widget.id === "audio"
-      || widget.id === "media"
-      || widget.id === "updates"
-      || widget.id === "weather"
-      || widget.id === "calendar"
-      || widget.id === "hue";
+    return Boolean(widget && widget.requiresBridge);
   }
 
   function clearInlineWidget() {
@@ -2458,7 +2481,7 @@
     );
   });
 
-  document.addEventListener("DOMContentLoaded", function () {
+  function bootDashboard() {
     try {
       var explicitWidgetParam = params.has("widget") && params.get("widget") !== "";
       var preferredWidgetId = getParam("widget") || readStoredWidget(widgetStorageKey) || "";
@@ -2559,5 +2582,9 @@
         "The dashboard could not finish starting."
       );
     }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    loadAssetRevision().then(bootDashboard, bootDashboard);
   });
 }());
