@@ -52,6 +52,8 @@ const gameController = readWorkspaceFile("app/Controllers/GameController.cs");
 const releaseController = readWorkspaceFile("app/Controllers/ReleaseController.cs");
 const supportController = readWorkspaceFile("app/Controllers/SupportController.cs");
 const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
+const programCs = readWorkspaceFile("app/Program.cs");
+const appLaunchOptions = readWorkspaceFile("app/AppLaunchOptions.cs");
 const systemMetricsService = readWorkspaceFile("app/Services/SystemMetricsService.cs");
 const networkMetricsService = readWorkspaceFile("app/Services/NetworkMetricsService.cs");
 const audioService = readWorkspaceFile("app/Services/AudioService.cs");
@@ -483,6 +485,10 @@ assert(
     && /Windows is still waiting for elevated FPS capture approval/.test(gamePerformanceService)
     && /RestartHostAsAdministrator/.test(actionController)
     && /case "\/api\/system\/restart-admin" when request\.HttpMethod == "POST"/.test(apiRouter)
+    && /--wait-for-previous-instance/.test(systemActionsService)
+    && /WaitForPreviousInstance/.test(appLaunchOptions)
+    && /TryAcquireInstanceMutex\(LaunchOptions\.WaitForPreviousInstance\)/.test(programCs)
+    && /PreviousInstanceExitWait/.test(programCs)
     && /restart-game-admin/.test(gameModeWidget)
     && /Fix FPS \(admin\)/.test(gameModeWidget)
     && /function\s+gameFocusCanFixFps/.test(gameModeWidget)

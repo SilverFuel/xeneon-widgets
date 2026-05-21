@@ -8,17 +8,20 @@ namespace XenonEdgeHost;
 public static class Program
 {
     private const string MutexName = "XenonEdgeHost_SingleInstance_A1B2C3";
+    private static readonly TimeSpan PreviousInstanceExitWait = TimeSpan.FromSeconds(30);
     internal const string ShowDisplayEventName = @"Local\XenonEdgeHost_ShowDisplay_A1B2C3";
     private static Mutex? _instanceMutex;
+    private static bool _ownsInstanceMutex;
     internal static AppLaunchOptions LaunchOptions { get; private set; } = AppLaunchOptions.Default;
 
     [STAThread]
     public static void Main(string[] args)
     {
         LaunchOptions = AppLaunchOptions.Parse(args);
-        _instanceMutex = new Mutex(true, MutexName, out var isFirstInstance);
+        _instanceMutex = new Mutex(false, MutexName);
+        _ownsInstanceMutex = TryAcquireInstanceMutex(LaunchOptions.WaitForPreviousInstance);
 
-        if (!isFirstInstance)
+        if (!_ownsInstanceMutex)
         {
             SignalExistingInstance();
             _instanceMutex.Dispose();
@@ -42,8 +45,28 @@ public static class Program
         }
         finally
         {
-            _instanceMutex?.ReleaseMutex();
+            if (_ownsInstanceMutex)
+            {
+                _instanceMutex?.ReleaseMutex();
+            }
             _instanceMutex?.Dispose();
+        }
+    }
+
+    private static bool TryAcquireInstanceMutex(bool waitForPreviousInstance)
+    {
+        if (_instanceMutex is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return _instanceMutex.WaitOne(waitForPreviousInstance ? PreviousInstanceExitWait : TimeSpan.Zero);
+        }
+        catch (AbandonedMutexException)
+        {
+            return true;
         }
     }
 
