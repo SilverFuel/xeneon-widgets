@@ -597,6 +597,20 @@
     return (activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + normalized;
   }
 
+  function gameFocusFpsAdminLabel(restarting) {
+    return restarting ? "Restarting" : "Fix FPS (admin)";
+  }
+
+  function gameFocusCanFixFps(performance) {
+    var message = text(performance && performance.message, "").toLowerCase();
+    var readiness = text(performance && performance.readiness, "").toLowerCase();
+    return Boolean(performance && (performance.canRestartAsAdmin || performance.needsAdmin))
+      || readiness === "needs-admin"
+      || message.indexOf("admin") !== -1
+      || message.indexOf("elevated") !== -1
+      || message.indexOf("approve") !== -1;
+  }
+
   function renderGameFocusScene(game, theme, system, performance, audio, network, env, introActive) {
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
@@ -609,8 +623,8 @@
     var performanceData = normalizeGamePerformancePayload(performance || {});
     var mainFps = nullableNumber(performanceData.fps);
     var frameSource = mainFps == null ? text(performanceData.message, "Waiting for game frames") : performanceData.source;
-    var adminAction = performanceData.canRestartAsAdmin
-      ? '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">Restart as admin</button>'
+    var adminAction = gameFocusCanFixFps(performanceData)
+      ? '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">Fix FPS (admin)</button>'
       : '';
     var source = text(game && game.source, platform);
     var audioData = normalizeAudioPayload(audio || {});
@@ -787,10 +801,12 @@
 
     var adminButton = container.querySelector(".game-focus-admin");
     var reasonNode = container.querySelector(".game-focus-reason");
-    if (performanceData.canRestartAsAdmin && !adminButton && reasonNode) {
-      reasonNode.insertAdjacentHTML("beforebegin", '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">Restart as admin</button>');
-    } else if (!performanceData.canRestartAsAdmin && adminButton) {
+    if (gameFocusCanFixFps(performanceData) && !adminButton && reasonNode) {
+      reasonNode.insertAdjacentHTML("beforebegin", '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">' + escapeHtml(gameFocusFpsAdminLabel(state.performanceRestarting)) + '</button>');
+    } else if (!gameFocusCanFixFps(performanceData) && adminButton) {
       adminButton.remove();
+    } else if (adminButton) {
+      adminButton.textContent = gameFocusFpsAdminLabel(state.performanceRestarting);
     }
 
     setGameFocusText(container, ".game-focus-reason", gameFocusReasonText(detail, source, activeAudioSessions));
@@ -910,8 +926,8 @@
       var readiness = text(performance.readiness, performance.status);
       var needsAdmin = Boolean(performance.needsAdmin);
       var tone = needsAdmin ? "warn" : readiness === "live" ? "good" : readiness === "starting" ? "warn" : "muted";
-      var action = performance.canRestartAsAdmin
-        ? '<button class="inline-button is-primary" type="button" data-action="restart-game-admin">' + (state.performanceRestarting ? "Restarting" : "Restart as admin") + '</button>'
+      var action = gameFocusCanFixFps(performance)
+        ? '<button class="inline-button is-primary" type="button" data-action="restart-game-admin">' + gameFocusFpsAdminLabel(state.performanceRestarting) + '</button>'
         : '';
       return '' +
         '<article class="list-card inline-card game-mode-telemetry-card" data-tone="' + escapeHtml(tone) + '">' +
@@ -1257,7 +1273,7 @@
     }
 
     function restartHostAsAdmin() {
-      if (state.performanceRestarting || !(state.performance && state.performance.canRestartAsAdmin)) {
+      if (state.performanceRestarting || !gameFocusCanFixFps(state.performance)) {
         return;
       }
 
