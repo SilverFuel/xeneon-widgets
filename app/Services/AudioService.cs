@@ -69,6 +69,34 @@ public sealed class AudioService
         return GetSnapshotAsync(cancellationToken);
     }
 
+    public Task<AudioSnapshotPayload> SetInputVolumeAsync(double volume, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = GetSnapshotSync(force: true);
+        if (string.IsNullOrWhiteSpace(snapshot.DefaultInputDeviceId))
+        {
+            throw new InvalidOperationException("No microphone input device was detected.");
+        }
+
+        AudioBridge.SetInputVolume(snapshot.DefaultInputDeviceId, (float)(Clamp(volume, 0, 100) / 100d));
+        RefreshSnapshot(force: true);
+        return GetSnapshotAsync(cancellationToken);
+    }
+
+    public Task<AudioSnapshotPayload> SetInputMuteAsync(bool muted, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = GetSnapshotSync(force: true);
+        if (string.IsNullOrWhiteSpace(snapshot.DefaultInputDeviceId))
+        {
+            throw new InvalidOperationException("No microphone input device was detected.");
+        }
+
+        AudioBridge.SetInputMute(snapshot.DefaultInputDeviceId, muted);
+        RefreshSnapshot(force: true);
+        return GetSnapshotAsync(cancellationToken);
+    }
+
     public Task<AudioSnapshotPayload> SetSessionVolumeAsync(string? sessionId, double volume, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -136,6 +164,21 @@ public sealed class AudioService
                 .ThenBy(device => device.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
+            var inputDevices = raw.InputDevices
+                .Where(device => device.IsDefault || string.Equals(device.State, "Active", StringComparison.OrdinalIgnoreCase))
+                .Select(device => new AudioDevicePayload
+                {
+                    Id = device.Id ?? "",
+                    Name = string.IsNullOrWhiteSpace(device.Name) ? device.Id ?? "Microphone" : device.Name,
+                    State = device.State ?? "Unknown",
+                    Availability = ResolveAvailability(device.State),
+                    IsDefault = device.IsDefault,
+                    Kind = ResolveInputKind(device.Name)
+                })
+                .OrderBy(device => device.IsDefault ? 0 : 1)
+                .ThenBy(device => device.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
             var sessions = raw.Sessions
                 .Where(session => !string.Equals(session.State, "Expired", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(session.Identifier))
                 .Select(session => new AudioSessionPayload
@@ -168,8 +211,12 @@ public sealed class AudioService
                 DefaultDeviceId = raw.DefaultDeviceId ?? "",
                 MasterVolume = Clamp(raw.MasterVolume, 0, 100),
                 Muted = raw.Muted,
+                DefaultInputDeviceId = raw.DefaultInputDeviceId ?? "",
+                InputVolume = raw.InputVolume.HasValue ? Clamp(raw.InputVolume.Value, 0, 100) : null,
+                InputMuted = raw.InputMuted,
                 Source = string.IsNullOrWhiteSpace(raw.Source) ? "windows core audio" : raw.Source,
                 Devices = devices,
+                InputDevices = inputDevices,
                 Sessions = sessions,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
@@ -228,6 +275,32 @@ public sealed class AudioService
         }
 
         return "output";
+    }
+
+    private static string ResolveInputKind(string? friendlyName)
+    {
+        var value = (friendlyName ?? "").ToLowerInvariant();
+        if (value.Contains("headset") || value.Contains("headphone"))
+        {
+            return "headset mic";
+        }
+
+        if (value.Contains("line in") || value.Contains("line-in"))
+        {
+            return "line in";
+        }
+
+        if (value.Contains("array"))
+        {
+            return "mic array";
+        }
+
+        if (value.Contains("microphone") || value.Contains("mic"))
+        {
+            return "microphone";
+        }
+
+        return "input";
     }
 
     private static string ResolveSessionLabel(AudioSessionRecord session)
@@ -366,9 +439,17 @@ public sealed class AudioSnapshotPayload
 
     public bool? Muted { get; set; }
 
+    public string DefaultInputDeviceId { get; set; } = "";
+
+    public int? InputVolume { get; set; }
+
+    public bool? InputMuted { get; set; }
+
     public string Source { get; set; } = "windows core audio";
 
     public List<AudioDevicePayload> Devices { get; set; } = new();
+
+    public List<AudioDevicePayload> InputDevices { get; set; } = new();
 
     public List<AudioSessionPayload> Sessions { get; set; } = new();
 
@@ -387,8 +468,12 @@ public sealed class AudioSnapshotPayload
             DefaultDeviceId = DefaultDeviceId,
             MasterVolume = MasterVolume,
             Muted = Muted,
+            DefaultInputDeviceId = DefaultInputDeviceId,
+            InputVolume = InputVolume,
+            InputMuted = InputMuted,
             Source = Source,
             Devices = Devices.Select(device => device.Clone()).ToList(),
+            InputDevices = InputDevices.Select(device => device.Clone()).ToList(),
             Sessions = Sessions.Select(session => session.Clone()).ToList(),
             UpdatedAt = UpdatedAt
         };

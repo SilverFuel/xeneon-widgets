@@ -34,7 +34,11 @@
       defaultDeviceId: text(payload.defaultDeviceId, ""),
       masterVolume: clamp(optionalNumber(payload.masterVolume) || 0, 0, 100),
       muted: Boolean(payload.muted),
+      defaultInputDeviceId: text(payload.defaultInputDeviceId, ""),
+      inputVolume: optionalNumber(payload.inputVolume),
+      inputMuted: payload.inputMuted == null ? null : Boolean(payload.inputMuted),
       devices: Array.isArray(payload.devices) ? payload.devices : [],
+      inputDevices: Array.isArray(payload.inputDevices) ? payload.inputDevices : [],
       sessions: Array.isArray(payload.sessions) ? payload.sessions : []
     };
   }

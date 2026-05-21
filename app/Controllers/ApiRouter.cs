@@ -190,6 +190,12 @@ public sealed class ApiRouter
             case "/api/audio/master-mute" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _telemetryController.SetAudioMasterMuteAsync(await ReadJsonAsync<AudioMuteRequest>(request, cancellationToken), cancellationToken), cancellationToken);
                 return;
+            case "/api/audio/input-volume" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, await _telemetryController.SetAudioInputVolumeAsync(await ReadJsonAsync<AudioVolumeRequest>(request, cancellationToken), cancellationToken), cancellationToken);
+                return;
+            case "/api/audio/input-mute" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, await _telemetryController.SetAudioInputMuteAsync(await ReadJsonAsync<AudioMuteRequest>(request, cancellationToken), cancellationToken), cancellationToken);
+                return;
             case "/api/audio/session-volume" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _telemetryController.SetAudioSessionVolumeAsync(await ReadJsonAsync<AudioSessionVolumeRequest>(request, cancellationToken), cancellationToken), cancellationToken);
                 return;
