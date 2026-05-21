@@ -38,6 +38,7 @@
   var saveSettings = runtime.saveSettings;
   var settingValue = runtime.settingValue;
   var statusPill = runtime.statusPill;
+  var GAME_FOCUS_TOUCH_GRASS_MS = 3 * 60 * 60 * 1000;
   var statusTextFromPayload = runtime.statusTextFromPayload;
   var statusToneFromPayload = runtime.statusToneFromPayload;
   var text = runtime.text;
@@ -494,12 +495,25 @@
     return fallback;
   }
 
-  function gameFocusSessionText(game) {
+  function gameFocusSessionDurationMs(game) {
     var duration = optionalNumber(game && game.sessionDurationMs);
     if (duration != null && duration > 0) {
-      return formatDurationMs(duration);
+      return duration;
     }
-    return game && game.sessionStartedAt ? formatAge(game.sessionStartedAt) : "Just now";
+
+    var startedAt = text(game && (game.sessionStartedAt || game.startedAt), "");
+    var startedTime = startedAt ? new Date(startedAt).getTime() : NaN;
+    return Number.isFinite(startedTime) && startedTime > 0 ? Math.max(0, Date.now() - startedTime) : 0;
+  }
+
+  function gameFocusSessionDisplay(durationMs) {
+    var duration = optionalNumber(durationMs) || 0;
+    return duration >= GAME_FOCUS_TOUCH_GRASS_MS ? "Go touch grass" : formatDurationMs(duration);
+  }
+
+  function gameFocusSessionText(game) {
+    var duration = gameFocusSessionDurationMs(game);
+    return duration > 0 ? gameFocusSessionDisplay(duration) : "Just now";
   }
 
   function gameFocusAudioSessions(audio, game) {
@@ -553,7 +567,9 @@
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
     var detail = text(game && game.reason, text(game && game.source, "Running now"));
+    var sessionDuration = gameFocusSessionDurationMs(game);
     var session = gameFocusSessionText(game);
+    var sessionStartedAt = text(game && (game.sessionStartedAt || game.startedAt), "");
     var tileLabel = gameFocusTileLabel(game);
     var artUrl = text(game && (game.artworkUrl || game.iconUrl), "");
     var performanceData = normalizeGamePerformancePayload(performance || {});
@@ -590,13 +606,17 @@
           '<button class="inline-button game-focus-home" type="button" data-action="game-face-home">Home</button>' +
         '</header>' +
         '<main class="game-focus-board">' +
-          '<section class="game-focus-card game-focus-card--context">' +
-            '<div class="game-focus-emblem">' + (artUrl
-              ? '<img src="' + escapeHtml(artUrl) + '" alt="' + escapeHtml(gameName) + '" loading="lazy">'
-              : '<span>' + escapeHtml(tileLabel) + '</span>') + '</div>' +
-            '<div class="game-focus-session">' +
-              '<span>Session</span>' +
-              '<strong data-game-session-clock data-started-at="' + escapeHtml(text(game && game.sessionStartedAt, "")) + '" data-duration-ms="' + escapeHtml(String(optionalNumber(game && game.sessionDurationMs) || 0)) + '">' + escapeHtml(session) + '</strong>' +
+          '<section class="game-focus-context">' +
+            '<div class="game-focus-card game-focus-card--art">' +
+              '<div class="game-focus-emblem">' + (artUrl
+                ? '<img src="' + escapeHtml(artUrl) + '" alt="' + escapeHtml(gameName) + '" loading="lazy">'
+                : '<span>' + escapeHtml(tileLabel) + '</span>') + '</div>' +
+            '</div>' +
+            '<div class="game-focus-card game-focus-card--session' + (sessionDuration >= GAME_FOCUS_TOUCH_GRASS_MS ? " is-touch-grass" : "") + '">' +
+              '<div class="game-focus-session">' +
+                '<span>Session</span>' +
+                '<strong data-game-session-clock data-started-at="' + escapeHtml(sessionStartedAt) + '" data-duration-ms="' + escapeHtml(String(sessionDuration || 0)) + '">' + escapeHtml(session) + '</strong>' +
+              '</div>' +
             '</div>' +
           '</section>' +
           '<section class="game-focus-metrics">' +
@@ -890,10 +910,14 @@
         var startedAt = node.getAttribute("data-started-at") || "";
         var durationMs = optionalNumber(node.getAttribute("data-duration-ms")) || 0;
         var startedTime = startedAt ? new Date(startedAt).getTime() : NaN;
+        var sessionCard = node.closest ? node.closest(".game-focus-card--session") : null;
         if (Number.isFinite(startedTime) && startedTime > 0) {
           durationMs = Math.max(0, Date.now() - startedTime);
         }
-        node.textContent = formatDurationMs(durationMs);
+        node.textContent = gameFocusSessionDisplay(durationMs);
+        if (sessionCard) {
+          sessionCard.classList.toggle("is-touch-grass", durationMs >= GAME_FOCUS_TOUCH_GRASS_MS);
+        }
       });
     }
 

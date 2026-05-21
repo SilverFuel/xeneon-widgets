@@ -499,9 +499,13 @@ assert(
 
 assert(
   /renderGameFocusHudItem\("FPS"[\s\S]*renderGameFocusHudItem\("Audio"[\s\S]*renderGameFocusHudItem\("Network"[\s\S]*renderGameFocusHudItem\("Pressure"/.test(gameModeWidget)
+    && /GAME_FOCUS_TOUCH_GRASS_MS/.test(gameModeWidget)
+    && /Go touch grass/.test(gameModeWidget)
+    && /game-focus-card--art/.test(gameModeWidget)
+    && /game-focus-card--session/.test(gameModeWidget)
     && !/renderGameFocusHudItem\("Main FPS"|renderGameFocusHudItem\("Frame"|renderGameFocusHudItem\("Ping"|frame-time|game-focus-top-status|game-focus-status-grid|game-focus-footer|renderGameFocusFact|gameFocusStateLabel|gameFocusVoiceLabel|<span>Match/.test(gameModeWidget)
     && !/game-focus-top-status|game-focus-status-grid|game-focus-footer|game-focus-fact/.test(readWorkspaceFile("css/widgets/game-mode.css")),
-  "active Game Mode HUD must keep FPS, Audio, Network, and Pressure in the center without duplicate state, frame, ping, footer, or utility status panels"
+  "active Game Mode HUD must keep FPS, Audio, Network, Pressure, larger artwork, and the separate 3-hour session nudge without duplicate state, frame, ping, footer, or utility status panels"
 );
 
 assert(
