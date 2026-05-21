@@ -78,6 +78,7 @@ const productWidget = readWorkspaceFile("js/widgets/product.js");
 const actionsWidget = readWorkspaceFile("js/widgets/actions.js");
 const integrationsWidget = readWorkspaceFile("js/widgets/integrations.js");
 const gameModeWidget = readWorkspaceFile("js/widgets/game-mode.js");
+const gameFocusPatchBody = gameModeWidget.match(/function\s+patchGameFocusScene\([\s\S]*?\n  function\s+renderGameModeProfilePanel/);
 const bridgeExampleConfig = readWorkspaceFile("bridge/config.example.json");
 const appConfig = readWorkspaceFile("app/Models/AppConfig.cs");
 const launcherService = readWorkspaceFile("app/Services/LauncherService.cs");
@@ -487,6 +488,13 @@ assert(
     && /function\s+gameFocusCanFixFps/.test(gameModeWidget)
     && /Telemetry readiness/.test(gameModeWidget),
   "Game Mode telemetry readiness must expose FPS source, elevated PresentMon capture, admin capture state, and an elevated restart action"
+);
+
+assert(
+  gameFocusPatchBody
+    && /performanceRestarting/.test(gameFocusPatchBody[0])
+    && !/\bstate\./.test(gameFocusPatchBody[0]),
+  "Game Mode focus patcher must not reference widget state outside its closure during mute/redraw refreshes"
 );
 
 assert(

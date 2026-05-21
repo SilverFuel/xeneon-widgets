@@ -611,7 +611,7 @@
       || message.indexOf("approve") !== -1;
   }
 
-  function renderGameFocusScene(game, theme, system, performance, audio, network, env, introActive) {
+  function renderGameFocusScene(game, theme, system, performance, audio, network, env, introActive, performanceRestarting) {
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
     var detail = text(game && game.reason, text(game && game.source, "Running now"));
@@ -624,7 +624,7 @@
     var mainFps = nullableNumber(performanceData.fps);
     var frameSource = mainFps == null ? text(performanceData.message, "Waiting for game frames") : performanceData.source;
     var adminAction = gameFocusCanFixFps(performanceData)
-      ? '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">Fix FPS (admin)</button>'
+      ? '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">' + escapeHtml(gameFocusFpsAdminLabel(performanceRestarting)) + '</button>'
       : '';
     var source = text(game && game.source, platform);
     var audioData = normalizeAudioPayload(audio || {});
@@ -742,7 +742,7 @@
     progressNode.style.setProperty("--metric-fill", clamp(progressValue, 0, 100) + "%");
   }
 
-  function patchGameFocusScene(container, game, theme, system, performance, audio, network, env, introActive) {
+  function patchGameFocusScene(container, game, theme, system, performance, audio, network, env, introActive, performanceRestarting) {
     var shell = container.querySelector(".game-focus-shell");
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
@@ -802,11 +802,11 @@
     var adminButton = container.querySelector(".game-focus-admin");
     var reasonNode = container.querySelector(".game-focus-reason");
     if (gameFocusCanFixFps(performanceData) && !adminButton && reasonNode) {
-      reasonNode.insertAdjacentHTML("beforebegin", '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">' + escapeHtml(gameFocusFpsAdminLabel(state.performanceRestarting)) + '</button>');
+      reasonNode.insertAdjacentHTML("beforebegin", '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">' + escapeHtml(gameFocusFpsAdminLabel(performanceRestarting)) + '</button>');
     } else if (!gameFocusCanFixFps(performanceData) && adminButton) {
       adminButton.remove();
     } else if (adminButton) {
-      adminButton.textContent = gameFocusFpsAdminLabel(state.performanceRestarting);
+      adminButton.textContent = gameFocusFpsAdminLabel(performanceRestarting);
     }
 
     setGameFocusText(container, ".game-focus-reason", gameFocusReasonText(detail, source, activeAudioSessions));
@@ -1026,7 +1026,7 @@
       if (activeGame) {
         if (container.getAttribute("data-game-focus-active-id") === focusRenderId
           && container.querySelector(".game-focus-shell")) {
-          patchGameFocusScene(container, activeGame, profileTheme, system, state.performance, state.audio, state.network, env, introActive);
+          patchGameFocusScene(container, activeGame, profileTheme, system, state.performance, state.audio, state.network, env, introActive, state.performanceRestarting);
           container.setAttribute("data-game-focus-intro", introActive ? "1" : "0");
         } else {
           container.innerHTML = renderGameFocusScene(
@@ -1037,7 +1037,8 @@
             state.audio,
             state.network,
             env,
-            introActive
+            introActive,
+            state.performanceRestarting
           );
           container.setAttribute("data-game-focus-active-id", focusRenderId);
           container.setAttribute("data-game-focus-intro", introActive ? "1" : "0");
