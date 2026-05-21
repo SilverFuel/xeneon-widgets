@@ -476,11 +476,17 @@ assert(
 assert(
   /NeedsAdmin/.test(gamePerformanceService)
     && /RestartAsAdminEndpoint/.test(gamePerformanceService)
+    && /--restart_as_admin/.test(gamePerformanceService)
+    && /ElevatedBootstrapGrace/.test(gamePerformanceService)
+    && /Waiting for Windows to approve elevated FPS capture/.test(gamePerformanceService)
+    && /Windows is still waiting for elevated FPS capture approval/.test(gamePerformanceService)
     && /RestartHostAsAdministrator/.test(actionController)
     && /case "\/api\/system\/restart-admin" when request\.HttpMethod == "POST"/.test(apiRouter)
     && /restart-game-admin/.test(gameModeWidget)
+    && /Fix FPS \(admin\)/.test(gameModeWidget)
+    && /function\s+gameFocusCanFixFps/.test(gameModeWidget)
     && /Telemetry readiness/.test(gameModeWidget),
-  "Game Mode telemetry readiness must expose FPS source, admin capture state, and an elevated restart action"
+  "Game Mode telemetry readiness must expose FPS source, elevated PresentMon capture, admin capture state, and an elevated restart action"
 );
 
 assert(

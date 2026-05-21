@@ -11,6 +11,7 @@ public sealed class GamePerformanceService : IDisposable
     private const long MaxActiveCaptureBytes = 4 * 1024 * 1024;
     private const long MaxTelemetryDirectoryBytes = 32 * 1024 * 1024;
     private static readonly TimeSpan RestartCooldown = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan ElevatedBootstrapGrace = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan MaxTelemetryFileAge = TimeSpan.FromHours(6);
     private readonly HostLogger _logger;
     private readonly ConfigStore _configStore;
@@ -22,6 +23,8 @@ public sealed class GamePerformanceService : IDisposable
     private string _presentMonPath = "";
     private string _lastCaptureFailureMessage = "";
     private DateTimeOffset _lastStartAttemptAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _captureStartedAt = DateTimeOffset.MinValue;
+    private bool _captureUsesElevatedBootstrap;
     private bool _warnedMissingPresentMon;
 
     public GamePerformanceService(HostLogger logger, ConfigStore configStore)
@@ -118,36 +121,51 @@ public sealed class GamePerformanceService : IDisposable
         _capturePath = Path.Combine(telemetryDirectory, $"presentmon-{processId}-{Guid.NewGuid():N}.csv");
         _captureProcessId = processId;
         _captureProcessName = processName ?? "";
+        _captureStartedAt = DateTimeOffset.UtcNow;
+        _captureUsesElevatedBootstrap = !IsRunningElevated();
         _lastCaptureFailureMessage = "";
 
         try
         {
+            var arguments = new List<string>
+            {
+                "--session_name", Quote(CaptureSessionName),
+                "--stop_existing_session"
+            };
+            if (_captureUsesElevatedBootstrap)
+            {
+                arguments.Add("--restart_as_admin");
+            }
+
+            arguments.AddRange(new[]
+            {
+                "--process_id", processId.ToString(CultureInfo.InvariantCulture),
+                "--output_file", Quote(_capturePath),
+                "--exclude_dropped",
+                "--no_console_stats",
+                "--no_track_gpu",
+                "--no_track_input",
+                "--terminate_on_proc_exit"
+            });
+
             var info = new ProcessStartInfo
             {
                 FileName = presentMonPath,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                Arguments = string.Join(' ', new[]
-                {
-                    "--session_name", Quote(CaptureSessionName),
-                    "--stop_existing_session",
-                    "--process_id", processId.ToString(CultureInfo.InvariantCulture),
-                    "--output_file", Quote(_capturePath),
-                    "--exclude_dropped",
-                    "--no_console_stats",
-                    "--no_track_gpu",
-                    "--no_track_input",
-                    "--terminate_on_proc_exit"
-                })
+                Arguments = string.Join(' ', arguments)
             };
 
             _captureProcess = Process.Start(info);
-            _logger.Info($"Started PresentMon FPS capture for PID {processId}.");
+            _logger.Info(_captureUsesElevatedBootstrap
+                ? $"Requested elevated PresentMon FPS capture for PID {processId}."
+                : $"Started PresentMon FPS capture for PID {processId}.");
         }
         catch (Exception error)
         {
             _captureProcess = null;
+            _captureUsesElevatedBootstrap = false;
             _lastCaptureFailureMessage = "PresentMon could not start. Check NVIDIA FrameView and capture permissions.";
             _logger.Warn($"Failed to start PresentMon FPS capture: {error.Message}");
         }
@@ -165,51 +183,64 @@ public sealed class GamePerformanceService : IDisposable
             return GamePerformanceSnapshot.Unavailable(processId, processName, source, message, NeedsAdminForCapture(message));
         }
 
+        if (!string.IsNullOrWhiteSpace(_capturePath) && File.Exists(_capturePath))
+        {
+            try
+            {
+                var header = ReadCsvHeader(_capturePath);
+                var rows = ReadRecentLines(_capturePath, 420);
+                var frameTimes = ExtractFrameTimes(rows, header, processId);
+                if (frameTimes.Count > 0)
+                {
+                    var averageFrameTime = frameTimes.Average();
+                    var fps = 1000d / averageFrameTime;
+                    TrimActiveCaptureIfNeeded();
+                    return new GamePerformanceSnapshot
+                    {
+                        Supported = true,
+                        Active = true,
+                        Status = "live",
+                        ProcessId = processId,
+                        ProcessName = processName,
+                        Fps = RoundMetric(fps),
+                        FrameTimeMs = Math.Round(averageFrameTime, 1),
+                        Source = source,
+                        Readiness = "live",
+                        FpsSource = source,
+                        SampledAt = DateTimeOffset.UtcNow,
+                        Message = "Main-display frame pacing is live from PresentMon."
+                    };
+                }
+            }
+            catch (Exception error)
+            {
+                _logger.Warn($"Failed to read PresentMon FPS capture: {error.Message}");
+                return GamePerformanceSnapshot.Unavailable(processId, processName, source, "PresentMon data could not be read.");
+            }
+        }
+
         if (_captureProcess.HasExited)
         {
+            if (_captureUsesElevatedBootstrap && DateTimeOffset.UtcNow - _captureStartedAt < ElevatedBootstrapGrace)
+            {
+                return GamePerformanceSnapshot.Starting(
+                    processId,
+                    processName,
+                    source,
+                    "Waiting for Windows to approve elevated FPS capture.");
+            }
+
             var message = DescribeStoppedCapture();
             return GamePerformanceSnapshot.Unavailable(processId, processName, source, message, NeedsAdminForCapture(message));
         }
 
-        if (string.IsNullOrWhiteSpace(_capturePath) || !File.Exists(_capturePath))
+        if (_captureUsesElevatedBootstrap && DateTimeOffset.UtcNow - _captureStartedAt >= ElevatedBootstrapGrace)
         {
-            return GamePerformanceSnapshot.Starting(processId, processName, source);
+            const string message = "Windows is still waiting for elevated FPS capture approval. Approve the admin prompt or click Fix FPS.";
+            return GamePerformanceSnapshot.Unavailable(processId, processName, source, message, needsAdmin: true);
         }
 
-        try
-        {
-            var header = ReadCsvHeader(_capturePath);
-            var rows = ReadRecentLines(_capturePath, 420);
-            var frameTimes = ExtractFrameTimes(rows, header, processId);
-            if (frameTimes.Count == 0)
-            {
-                return GamePerformanceSnapshot.Starting(processId, processName, source);
-            }
-
-            var averageFrameTime = frameTimes.Average();
-            var fps = 1000d / averageFrameTime;
-            TrimActiveCaptureIfNeeded();
-            return new GamePerformanceSnapshot
-            {
-                Supported = true,
-                Active = true,
-                Status = "live",
-                ProcessId = processId,
-                ProcessName = processName,
-                Fps = RoundMetric(fps),
-                FrameTimeMs = Math.Round(averageFrameTime, 1),
-                Source = source,
-                Readiness = "live",
-                FpsSource = source,
-                SampledAt = DateTimeOffset.UtcNow,
-                Message = "Main-display frame pacing is live from PresentMon."
-            };
-        }
-        catch (Exception error)
-        {
-            _logger.Warn($"Failed to read PresentMon FPS capture: {error.Message}");
-            return GamePerformanceSnapshot.Unavailable(processId, processName, source, "PresentMon data could not be read.");
-        }
+        return GamePerformanceSnapshot.Starting(processId, processName, source);
     }
 
     private string ResolvePresentMonPath()
@@ -255,6 +286,8 @@ public sealed class GamePerformanceService : IDisposable
         _captureProcessId = null;
         _captureProcessName = "";
         _capturePath = "";
+        _captureStartedAt = DateTimeOffset.MinValue;
+        _captureUsesElevatedBootstrap = false;
         CleanupCaptureFile(capturePath);
     }
 
@@ -372,6 +405,12 @@ public sealed class GamePerformanceService : IDisposable
         }
         catch
         {
+        }
+
+        if (_captureUsesElevatedBootstrap && !IsRunningElevated())
+        {
+            _lastCaptureFailureMessage = "Windows did not approve elevated FPS capture. Approve the admin prompt or restart Xenon as administrator.";
+            return _lastCaptureFailureMessage;
         }
 
         if (exitCode != 0 && !IsRunningElevated())
@@ -603,7 +642,7 @@ public sealed class GamePerformanceSnapshot
         };
     }
 
-    public static GamePerformanceSnapshot Starting(int processId, string processName, string source)
+    public static GamePerformanceSnapshot Starting(int processId, string processName, string source, string? message = null)
     {
         return new GamePerformanceSnapshot
         {
@@ -615,7 +654,7 @@ public sealed class GamePerformanceSnapshot
             FpsSource = source,
             Readiness = "starting",
             SampledAt = DateTimeOffset.UtcNow,
-            Message = "Waiting for game frames."
+            Message = string.IsNullOrWhiteSpace(message) ? "Waiting for game frames." : message
         };
     }
 
