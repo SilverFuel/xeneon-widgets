@@ -767,8 +767,8 @@
 }
 
 .game-focus-shell {
-  grid-template-rows: 60px minmax(0, 1fr) 36px;
-  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
   padding: 18px 28px 16px;
   background:
     linear-gradient(90deg, rgba(2, 13, 11, 0.98), rgba(6, 20, 18, 0.97) 48%, rgba(20, 14, 8, 0.98)),
@@ -790,21 +790,17 @@
 
 .game-focus-topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   min-height: 0;
 }
 
 .game-focus-identity {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.game-focus-identity span {
-  flex: 0 0 auto;
-  font-size: 0.76rem;
+  display: grid;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .game-focus-identity strong {
@@ -826,50 +822,11 @@
   font-size: 0.94rem;
 }
 
-.game-focus-top-status {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  min-width: 0;
-}
-
-.game-focus-status-block {
-  min-width: 0;
-  padding: 8px 10px;
-  overflow: hidden;
-  border: 1px solid rgba(77, 255, 194, 0.14);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.game-focus-status-block span,
-.game-focus-status-block strong,
-.game-focus-status-block small {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.game-focus-status-block strong {
-  margin-top: 3px;
-  color: var(--game-accent);
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.game-focus-status-block small {
-  margin-top: 4px;
-  color: rgba(221, 241, 229, 0.68);
-  font-size: 0.68rem;
-}
-
 .game-focus-board {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: 330px minmax(0, 1fr) 440px;
+  grid-template-columns: 260px minmax(0, 1fr) 420px;
   gap: 12px;
   min-height: 0;
 }
@@ -887,9 +844,10 @@
 }
 
 .game-focus-card--context {
+  align-self: start;
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto;
   gap: 12px;
   padding: 14px;
 }
@@ -924,11 +882,9 @@
 }
 
 .game-focus-session span,
-.game-focus-fact span,
 .game-focus-metric span,
 .game-focus-audio span,
-.game-focus-network span,
-.game-focus-status-block span {
+.game-focus-network span {
   color: rgba(196, 255, 226, 0.64);
   font-size: 0.82rem;
   font-weight: 850;
@@ -956,35 +912,9 @@
   white-space: nowrap;
 }
 
-.game-focus-facts {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  min-height: 0;
-}
-
-.game-focus-fact {
-  min-width: 0;
-  padding: 9px 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.game-focus-fact strong {
-  display: block;
-  margin-top: 4px;
-  overflow: hidden;
-  color: #f5fff8;
-  font-size: 0.95rem;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .game-focus-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 12px;
   min-height: 0;
@@ -1152,25 +1082,6 @@
   font-size: 1.15rem;
 }
 
-.game-focus-status-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  min-width: 0;
-}
-
-.game-focus-status-grid .game-focus-network {
-  padding: 11px 12px;
-}
-
-.game-focus-status-grid .game-focus-network strong {
-  margin-top: 5px;
-  overflow: hidden;
-  font-size: 1.1rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .game-focus-empty {
   display: grid;
   place-items: center;
@@ -1194,47 +1105,15 @@
   line-height: 1.3;
 }
 
-.game-focus-footer {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: rgba(221, 241, 229, 0.72);
-  font-size: 0.9rem;
-}
-
-.game-focus-footer span {
-  color: var(--game-accent);
-  font-weight: 850;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.game-focus-footer strong {
-  min-width: 0;
-  overflow: hidden;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #f5fff8;
-  font-size: 0.84rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .game-focus-metric.is-good,
 .game-focus-audio.is-good,
-.game-focus-network.is-good,
-.game-focus-status-block.is-good {
+.game-focus-network.is-good {
   border-color: rgba(77, 255, 194, 0.24);
 }
 
 .game-focus-metric.is-warn,
 .game-focus-audio.is-warn,
-.game-focus-network.is-warn,
-.game-focus-status-block.is-warn {
+.game-focus-network.is-warn {
   border-color: rgba(255, 179, 71, 0.34);
   background:
     linear-gradient(135deg, rgba(255, 179, 71, 0.1), transparent 44%),
@@ -1243,8 +1122,7 @@
 
 .game-focus-metric.is-danger,
 .game-focus-audio.is-danger,
-.game-focus-network.is-danger,
-.game-focus-status-block.is-danger {
+.game-focus-network.is-danger {
   border-color: rgba(255, 93, 93, 0.4);
   background:
     linear-gradient(135deg, rgba(255, 93, 93, 0.12), transparent 44%),
@@ -1253,15 +1131,13 @@
 
 .game-focus-metric.is-warn strong,
 .game-focus-audio.is-warn strong,
-.game-focus-network.is-warn strong,
-.game-focus-status-block.is-warn strong {
+.game-focus-network.is-warn strong {
   color: #ffc46b;
 }
 
 .game-focus-metric.is-danger strong,
 .game-focus-audio.is-danger strong,
-.game-focus-network.is-danger strong,
-.game-focus-status-block.is-danger strong {
+.game-focus-network.is-danger strong {
   color: #ff7a7a;
 }
 
@@ -1602,13 +1478,7 @@
     gap: 14px;
   }
 
-  .game-focus-top-status {
-    grid-template-columns: 1fr;
-  }
-
   .game-focus-identity {
-    align-items: flex-start;
-    flex-direction: column;
     gap: 6px;
   }
 

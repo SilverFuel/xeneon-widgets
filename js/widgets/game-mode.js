@@ -340,7 +340,6 @@
     var session = activeGame && activeGame.startedAt ? formatAge(activeGame.startedAt) : "--";
     var artUrl = activeGame ? text(activeGame.artworkUrl || activeGame.iconUrl, "") : "";
     var tileLabel = activeGame ? text(activeGame.tileLabel, "G") : "GX";
-    var confidence = activeGame && activeGame.confidence != null ? Math.round(activeGame.confidence) + "%" : "--";
     return '' +
       '<article class="product-control-panel game-face-panel" style="' + gameModeThemeStyle(theme) + '">' +
         '<div class="game-face-main">' +
@@ -360,7 +359,6 @@
           '<div><span>CPU</span><strong>' + escapeHtml(formatPercent(system && system.cpu)) + '</strong></div>' +
           '<div><span>RAM</span><strong>' + escapeHtml(formatPercent(system && system.ram)) + '</strong></div>' +
           '<div><span>Session</span><strong>' + escapeHtml(session) + '</strong></div>' +
-          '<div><span>Match</span><strong>' + escapeHtml(confidence) + '</strong></div>' +
         '</div>' +
       '</article>';
   }
@@ -398,54 +396,11 @@
     return "good";
   }
 
-  function gameFocusFrameTone(value) {
-    var parsed = nullableNumber(value);
-    if (parsed == null) {
-      return "muted";
-    }
-    if (parsed >= 33.4) {
-      return "danger";
-    }
-    if (parsed >= 16.7) {
-      return "warn";
-    }
-    return "good";
-  }
-
-  function gameFocusFrameProgress(value) {
-    var parsed = nullableNumber(value);
-    return parsed == null ? null : clamp(((33.4 - Math.min(parsed, 33.4)) / 33.4) * 100, 0, 100);
-  }
-
-  function gameFocusPingTone(value) {
-    var parsed = nullableNumber(value);
-    if (parsed == null) {
-      return "muted";
-    }
-    if (parsed >= 100) {
-      return "danger";
-    }
-    if (parsed >= 60) {
-      return "warn";
-    }
-    return "good";
-  }
-
   function gameFocusPressureValue(system) {
     var values = [nullableNumber(system && system.gpu), nullableNumber(system && system.cpu), nullableNumber(system && system.ram)].filter(function (value) {
       return value != null;
     });
     return values.length ? Math.max.apply(Math, values) : null;
-  }
-
-  function renderGameFocusStatusBlock(label, value, detail, tone, statusId) {
-    var statusAttribute = statusId ? ' data-game-focus-status="' + escapeHtml(statusId) + '"' : "";
-    return '' +
-      '<div class="game-focus-status-block' + gameFocusToneClass(tone) + '"' + statusAttribute + '>' +
-        '<span>' + escapeHtml(label) + '</span>' +
-        '<strong data-game-focus-value>' + escapeHtml(value) + '</strong>' +
-        '<small data-game-focus-detail>' + escapeHtml(detail || "") + '</small>' +
-      '</div>';
   }
 
   function renderGameFocusHudItem(label, value, detail, progress, tone, metricId) {
@@ -539,28 +494,6 @@
     return fallback;
   }
 
-  function renderGameFocusFact(label, value) {
-    return '' +
-      '<div class="game-focus-fact">' +
-        '<span>' + escapeHtml(label) + '</span>' +
-        '<strong>' + escapeHtml(value) + '</strong>' +
-      '</div>';
-  }
-
-  function gameFocusStateLabel(game, activity) {
-    var state = text(game && game.state, text(activity && activity.mode, "in-game"));
-    if (state === "launching") {
-      return "Launching";
-    }
-    if (state === "background") {
-      return "Background";
-    }
-    if (state === "ended") {
-      return "Ended";
-    }
-    return game && game.focused === false ? "Background" : "In game";
-  }
-
   function gameFocusSessionText(game) {
     var duration = optionalNumber(game && game.sessionDurationMs);
     if (duration != null && duration > 0) {
@@ -587,21 +520,6 @@
     });
   }
 
-  function gameFocusVoiceLabel(sessions) {
-    var voice = sessions.filter(function (session) {
-      var name = text(session && session.name, "").toLowerCase();
-      return name.indexOf("discord") !== -1
-        || name.indexOf("voice") !== -1
-        || name.indexOf("chat") !== -1;
-    })[0];
-
-    if (!voice) {
-      return "No voice";
-    }
-
-    return (voice.muted ? "Muted" : formatPercent(voice.volume)) + " " + getAudioSessionLabel(voice);
-  }
-
   function renderGameFocusAudioRows(sessions, game) {
     var visible = sessions.slice(0, 3);
     var gameProcessId = optionalNumber(game && game.processId);
@@ -623,22 +541,27 @@
     }).join("");
   }
 
+  function gameFocusReasonText(detail, source, activeAudioSessions) {
+    var normalized = text(detail, source + " is active.");
+    if (normalized.toLowerCase().indexOf("background") !== -1) {
+      normalized = source + " reports this game is running.";
+    }
+    return (activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + normalized;
+  }
+
   function renderGameFocusScene(game, theme, system, performance, audio, network, env, introActive) {
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
     var detail = text(game && game.reason, text(game && game.source, "Running now"));
     var session = gameFocusSessionText(game);
-    var confidence = game && game.confidence != null ? Math.round(game.confidence) + "%" : "--";
     var tileLabel = gameFocusTileLabel(game);
     var artUrl = text(game && (game.artworkUrl || game.iconUrl), "");
     var performanceData = normalizeGamePerformancePayload(performance || {});
     var mainFps = nullableNumber(performanceData.fps);
-    var frameTime = nullableNumber(performanceData.frameTimeMs);
     var frameSource = mainFps == null ? text(performanceData.message, "Waiting for game frames") : performanceData.source;
     var adminAction = performanceData.canRestartAsAdmin
       ? '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">Restart as admin</button>'
       : '';
-    var processName = game && game.hasRuntimeIdentity ? text(game.processName, "Private process") : "Private process";
     var source = text(game && game.source, platform);
     var audioData = normalizeAudioPayload(audio || {});
     var audioOutput = gameFocusAudioOutput(audioData);
@@ -646,15 +569,10 @@
     var audioState = audioData.muted ? "Muted" : Math.round(audioData.masterVolume) + "%";
     var audioSessions = gameFocusAudioSessions(audioData, game);
     var activeAudioSessions = audioSessions.length;
-    var voiceLabel = gameFocusVoiceLabel(audioSessions);
     var networkData = network || {};
     var networkSummary = gameFocusNetworkSummary(networkData);
     var ping = networkSummary.ping;
     var pingLabel = networkSummary.pingLabel;
-    var stateLabel = gameFocusStateLabel(game);
-    var focusDetail = game && game.focused === false
-      ? "Game running in background"
-      : "Game has focus";
     var pressure = gameFocusPressureValue(system || {});
     var pressureLabel = pressure == null ? "--" : Math.round(pressure) + "%";
     var pressureDetail = "GPU " + formatPercent(system && system.gpu) + " / CPU " + formatPercent(system && system.cpu);
@@ -662,19 +580,12 @@
     return '' +
       '<section class="' + shellClass + '" style="' + gameModeThemeStyle(theme) + '">' +
         '<div class="game-focus-wake" aria-hidden="true">' +
-          '<span>' + escapeHtml(stateLabel) + '</span>' +
           '<strong>' + escapeHtml(gameName) + '</strong>' +
         '</div>' +
         '<header class="game-focus-topbar">' +
           '<div class="game-focus-identity">' +
-            '<span>' + escapeHtml(stateLabel) + '</span>' +
             '<strong>' + escapeHtml(gameName) + '</strong>' +
-            '<small>' + escapeHtml(platform + " - " + source + " - " + focusDetail) + '</small>' +
-          '</div>' +
-          '<div class="game-focus-top-status">' +
-            renderGameFocusStatusBlock("Audio", audioState, audioName, audioData.muted ? "warn" : "good", "audio") +
-            renderGameFocusStatusBlock("Network", pingLabel, networkSummary.provider + " / " + networkSummary.detail, networkSummary.tone, "network") +
-            renderGameFocusStatusBlock("Pressure", pressureLabel, pressureDetail, gameFocusLoadTone(pressure, 82, 94), "pressure") +
+            '<small>' + escapeHtml(platform + " - " + source) + '</small>' +
           '</div>' +
           '<button class="inline-button game-focus-home" type="button" data-action="game-face-home">Home</button>' +
         '</header>' +
@@ -686,22 +597,16 @@
             '<div class="game-focus-session">' +
               '<span>Session</span>' +
               '<strong data-game-session-clock data-started-at="' + escapeHtml(text(game && game.sessionStartedAt, "")) + '" data-duration-ms="' + escapeHtml(String(optionalNumber(game && game.sessionDurationMs) || 0)) + '">' + escapeHtml(session) + '</strong>' +
-              '<small>' + escapeHtml(source) + '</small>' +
-            '</div>' +
-            '<div class="game-focus-facts">' +
-              renderGameFocusFact("State", stateLabel) +
-              renderGameFocusFact("Match", confidence) +
-              renderGameFocusFact("Runtime", processName) +
-              renderGameFocusFact("Source", source) +
             '</div>' +
           '</section>' +
           '<section class="game-focus-metrics">' +
-            renderGameFocusHudItem("Main FPS", formatFps(mainFps), frameSource, gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30), "main-fps") +
-            renderGameFocusHudItem("Frame", formatMs(frameTime), mainFps == null ? frameSource : "Display pacing", gameFocusFrameProgress(frameTime), gameFocusFrameTone(frameTime), "frame-time") +
+            renderGameFocusHudItem("FPS", formatFps(mainFps), frameSource, gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30), "main-fps") +
+            renderGameFocusHudItem("Audio", audioState, audioName, audioData.masterVolume, audioData.muted ? "warn" : "good", "audio") +
+            renderGameFocusHudItem("Network", pingLabel, networkSummary.provider + " - " + networkSummary.detail, ping == null ? null : gameFocusProgress(80 - Math.min(ping, 80), 80), networkSummary.tone, "network") +
+            renderGameFocusHudItem("Pressure", pressureLabel, pressureDetail, pressure, gameFocusLoadTone(pressure, 82, 94), "pressure") +
             renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system && system.gpu, gameFocusLoadTone(system && system.gpu, 88, 96), "gpu") +
             renderGameFocusHudItem("CPU", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu, gameFocusLoadTone(system && system.cpu, 82, 94), "cpu") +
             renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram, gameFocusLoadTone(system && system.ram, 82, 92), "ram") +
-            renderGameFocusHudItem("Ping", pingLabel, networkSummary.provider, gameFocusProgress(80 - Math.min(ping || 80, 80), 80), gameFocusPingTone(ping), "ping") +
           '</section>' +
           '<aside class="game-focus-card game-focus-card--utility">' +
             '<div class="game-focus-control-row">' +
@@ -713,34 +618,10 @@
               '<button class="inline-button game-focus-mute" type="button" data-action="game-master-mute">' + (audioData.muted ? "Unmute" : "Mute") + '</button>' +
             '</div>' +
             '<div class="game-focus-audio-list">' + renderGameFocusAudioRows(audioSessions, game) + '</div>' +
-            '<div class="game-focus-status-grid">' +
-              '<div class="game-focus-network' + gameFocusToneClass(voiceLabel === "No voice" ? "muted" : "good") + '">' +
-                '<span>Voice</span>' +
-                '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
-              '</div>' +
-              '<div class="game-focus-network' + gameFocusToneClass(networkSummary.tone) + '">' +
-                '<span>Network</span>' +
-                '<strong>' + escapeHtml(networkSummary.detail) + '</strong>' +
-                '<small>' + escapeHtml("Down " + networkSummary.download + " / Up " + networkSummary.upload) + '</small>' +
-              '</div>' +
-              '<div class="game-focus-network' + gameFocusToneClass(networkSummary.clients === "--" ? "muted" : "good") + '">' +
-                '<span>UniFi</span>' +
-                '<strong>' + escapeHtml(networkSummary.clients) + '</strong>' +
-                '<small>' + escapeHtml(networkSummary.aps + " APs") + '</small>' +
-              '</div>' +
-            '</div>' +
             adminAction +
-            '<div class="game-focus-reason">' + escapeHtml((activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + detail) + '</div>' +
+            '<div class="game-focus-reason">' + escapeHtml(gameFocusReasonText(detail, source, activeAudioSessions)) + '</div>' +
           '</aside>' +
         '</main>' +
-        '<footer class="game-focus-footer">' +
-          '<span>' + escapeHtml(stateLabel) + '</span>' +
-          '<strong>' + escapeHtml(platform) + '</strong>' +
-          '<strong>' + escapeHtml(audioName + " " + audioState) + '</strong>' +
-          '<strong>' + escapeHtml(ping == null ? "Network --" : "Ping " + pingLabel) + '</strong>' +
-          '<strong>' + escapeHtml(networkSummary.download + " down") + '</strong>' +
-          '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
-        '</footer>' +
       '</section>';
   }
 
@@ -783,30 +664,14 @@
     progressNode.style.setProperty("--metric-fill", clamp(progressValue, 0, 100) + "%");
   }
 
-  function patchGameFocusStatus(container, statusId, value, detail, tone) {
-    var node = container.querySelector('[data-game-focus-status="' + statusId + '"]');
-    if (!node) {
-      return;
-    }
-
-    setGameFocusToneClass(node, "game-focus-status-block", tone);
-    setGameFocusText(node, "[data-game-focus-value]", value);
-    setGameFocusText(node, "[data-game-focus-detail]", detail || "");
-  }
-
   function patchGameFocusScene(container, game, theme, system, performance, audio, network, env, introActive) {
     var shell = container.querySelector(".game-focus-shell");
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
     var source = text(game && game.source, platform);
-    var stateLabel = gameFocusStateLabel(game);
-    var focusDetail = game && game.focused === false
-      ? "Game running in background"
-      : "Game has focus";
     var detail = text(game && game.reason, text(game && game.source, "Running now"));
     var performanceData = normalizeGamePerformancePayload(performance || {});
     var mainFps = nullableNumber(performanceData.fps);
-    var frameTime = nullableNumber(performanceData.frameTimeMs);
     var frameSource = mainFps == null ? text(performanceData.message, "Waiting for game frames") : performanceData.source;
     var audioData = normalizeAudioPayload(audio || {});
     var audioOutput = gameFocusAudioOutput(audioData);
@@ -814,7 +679,6 @@
     var audioState = audioData.muted ? "Muted" : Math.round(audioData.masterVolume) + "%";
     var audioSessions = gameFocusAudioSessions(audioData, game);
     var activeAudioSessions = audioSessions.length;
-    var voiceLabel = gameFocusVoiceLabel(audioSessions);
     var networkSummary = gameFocusNetworkSummary(network || {});
     var ping = networkSummary.ping;
     var pressure = gameFocusPressureValue(system || {});
@@ -826,20 +690,16 @@
       shell.setAttribute("style", gameModeThemeStyle(theme));
     }
 
-    setGameFocusText(container, ".game-focus-wake span", stateLabel);
     setGameFocusText(container, ".game-focus-wake strong", gameName);
-    setGameFocusText(container, ".game-focus-identity span", stateLabel);
     setGameFocusText(container, ".game-focus-identity strong", gameName);
-    setGameFocusText(container, ".game-focus-identity small", platform + " - " + source + " - " + focusDetail);
-    patchGameFocusStatus(container, "audio", audioState, audioName, audioData.muted ? "warn" : "good");
-    patchGameFocusStatus(container, "network", networkSummary.pingLabel, networkSummary.provider + " / " + networkSummary.detail, networkSummary.tone);
-    patchGameFocusStatus(container, "pressure", pressureLabel, pressureDetail, gameFocusLoadTone(pressure, 82, 94));
+    setGameFocusText(container, ".game-focus-identity small", platform + " - " + source);
     patchGameFocusMetric(container, "main-fps", formatFps(mainFps), frameSource, gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30));
-    patchGameFocusMetric(container, "frame-time", formatMs(frameTime), mainFps == null ? frameSource : "Display pacing", gameFocusFrameProgress(frameTime), gameFocusFrameTone(frameTime));
+    patchGameFocusMetric(container, "audio", audioState, audioName, audioData.masterVolume, audioData.muted ? "warn" : "good");
+    patchGameFocusMetric(container, "network", networkSummary.pingLabel, networkSummary.provider + " - " + networkSummary.detail, ping == null ? null : gameFocusProgress(80 - Math.min(ping, 80), 80), networkSummary.tone);
+    patchGameFocusMetric(container, "pressure", pressureLabel, pressureDetail, pressure, gameFocusLoadTone(pressure, 82, 94));
     patchGameFocusMetric(container, "gpu", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system && system.gpu, gameFocusLoadTone(system && system.gpu, 88, 96));
     patchGameFocusMetric(container, "cpu", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu, gameFocusLoadTone(system && system.cpu, 82, 94));
     patchGameFocusMetric(container, "ram", formatPercent(system && system.ram), "Memory", system && system.ram, gameFocusLoadTone(system && system.ram, 82, 92));
-    patchGameFocusMetric(container, "ping", networkSummary.pingLabel, networkSummary.provider, gameFocusProgress(80 - Math.min(ping || 80, 80), 80), gameFocusPingTone(ping));
     setGameFocusToneClass(container.querySelector(".game-focus-audio"), "game-focus-audio", audioData.muted ? "warn" : "good");
     setGameFocusText(container, ".game-focus-audio strong", audioState);
     setGameFocusText(container, ".game-focus-audio small", audioName);
@@ -850,44 +710,15 @@
       audioList.innerHTML = renderGameFocusAudioRows(audioSessions, game);
     }
 
-    var statusGrid = container.querySelector(".game-focus-status-grid");
-    if (statusGrid) {
-      statusGrid.innerHTML = '' +
-        '<div class="game-focus-network' + gameFocusToneClass(voiceLabel === "No voice" ? "muted" : "good") + '">' +
-          '<span>Voice</span>' +
-          '<strong>' + escapeHtml(voiceLabel) + '</strong>' +
-        '</div>' +
-        '<div class="game-focus-network' + gameFocusToneClass(networkSummary.tone) + '">' +
-          '<span>Network</span>' +
-          '<strong>' + escapeHtml(networkSummary.detail) + '</strong>' +
-          '<small>' + escapeHtml("Down " + networkSummary.download + " / Up " + networkSummary.upload) + '</small>' +
-        '</div>' +
-        '<div class="game-focus-network' + gameFocusToneClass(networkSummary.clients === "--" ? "muted" : "good") + '">' +
-          '<span>UniFi</span>' +
-          '<strong>' + escapeHtml(networkSummary.clients) + '</strong>' +
-          '<small>' + escapeHtml(networkSummary.aps + " APs") + '</small>' +
-        '</div>';
-    }
-
     var adminButton = container.querySelector(".game-focus-admin");
-    if (performanceData.canRestartAsAdmin && !adminButton && statusGrid) {
-      statusGrid.insertAdjacentHTML("afterend", '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">Restart as admin</button>');
+    var reasonNode = container.querySelector(".game-focus-reason");
+    if (performanceData.canRestartAsAdmin && !adminButton && reasonNode) {
+      reasonNode.insertAdjacentHTML("beforebegin", '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">Restart as admin</button>');
     } else if (!performanceData.canRestartAsAdmin && adminButton) {
       adminButton.remove();
     }
 
-    setGameFocusText(container, ".game-focus-reason", (activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + detail);
-
-    var footer = container.querySelector(".game-focus-footer");
-    if (footer) {
-      footer.innerHTML = '' +
-        '<span>' + escapeHtml(stateLabel) + '</span>' +
-        '<strong>' + escapeHtml(platform) + '</strong>' +
-        '<strong>' + escapeHtml(audioName + " " + audioState) + '</strong>' +
-        '<strong>' + escapeHtml(ping == null ? "Network --" : "Ping " + networkSummary.pingLabel) + '</strong>' +
-        '<strong>' + escapeHtml(networkSummary.download + " down") + '</strong>' +
-        '<strong>' + escapeHtml(voiceLabel) + '</strong>';
-    }
+    setGameFocusText(container, ".game-focus-reason", gameFocusReasonText(detail, source, activeAudioSessions));
   }
 
   function renderGameModeProfilePanel(savedGame, game, profile, theme, steam, env) {
@@ -925,7 +756,6 @@
         '<div class="game-mode-ended-stats">' +
           '<div><span>Duration</span><strong>' + escapeHtml(formatDurationMs(lastGame.sessionDurationMs)) + '</strong></div>' +
           '<div><span>Ended</span><strong>' + escapeHtml(formatAge(activity.lastEndedAt)) + '</strong></div>' +
-          '<div><span>Match</span><strong>' + escapeHtml(lastGame.confidence == null ? "--" : Math.round(lastGame.confidence) + "%") + '</strong></div>' +
         '</div>' +
       '</article>';
   }
@@ -1133,7 +963,7 @@
         '<div class="game-mode-idle-grid">' +
           '<section class="game-mode-idle-top">' +
             '<div class="inline-grid inline-grid--4 game-mode-performance">' +
-              metricCard("Main FPS", formatFps(state.performance.fps), text(state.performance.message, "Starts when a game is active"), fpsProgress(state.performance.fps, 240), "game-mode-metric--primary") +
+              metricCard("FPS", formatFps(state.performance.fps), text(state.performance.message, "Starts when a game is active"), fpsProgress(state.performance.fps, 240), "game-mode-metric--primary") +
               metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system.gpu) +
               metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
               metricCard("RAM", formatPercent(system.ram), "Memory", system.ram) +
