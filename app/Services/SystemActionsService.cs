@@ -342,7 +342,8 @@ public sealed class SystemActionsService
             FileName = executablePath,
             UseShellExecute = true,
             Verb = "runas",
-            WorkingDirectory = AppContext.BaseDirectory
+            WorkingDirectory = AppContext.BaseDirectory,
+            Arguments = "--wait-for-previous-instance"
         };
         if (Process.Start(startInfo) is null)
         {
