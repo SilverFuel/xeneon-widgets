@@ -458,6 +458,40 @@
     })[0] || data.devices[0] || null;
   }
 
+  function gameFocusMicInput(audio) {
+    var data = normalizeAudioPayload(audio || {});
+    return data.inputDevices.filter(function (device) {
+      return device && device.isDefault;
+    })[0] || data.inputDevices[0] || null;
+  }
+
+  function gameFocusMicState(audio) {
+    var data = normalizeAudioPayload(audio || {});
+    var input = gameFocusMicInput(data);
+    var volume = optionalNumber(data.inputVolume);
+    var muted = data.inputMuted === true;
+
+    if (!input) {
+      return {
+        available: false,
+        label: "No mic",
+        detail: "No input device",
+        button: "No mic",
+        progress: null,
+        tone: "muted"
+      };
+    }
+
+    return {
+      available: true,
+      label: muted ? "Muted" : volume == null ? "Live" : Math.round(volume) + "%",
+      detail: compactAudioName(input.name),
+      button: muted ? "Unmute mic" : "Mute mic",
+      progress: volume,
+      tone: muted ? "warn" : "good"
+    };
+  }
+
   function compactAudioName(name) {
     var value = text(name, "No output");
     value = value.replace(/\s*\([^)]*\)/g, "").trim();
@@ -583,6 +617,7 @@
     var audioOutput = gameFocusAudioOutput(audioData);
     var audioName = compactAudioName(audioOutput && audioOutput.name);
     var audioState = audioData.muted ? "Muted" : Math.round(audioData.masterVolume) + "%";
+    var micState = gameFocusMicState(audioData);
     var audioSessions = gameFocusAudioSessions(audioData, game);
     var activeAudioSessions = audioSessions.length;
     var networkData = network || {};
@@ -622,6 +657,7 @@
           '<section class="game-focus-metrics">' +
             renderGameFocusHudItem("FPS", formatFps(mainFps), frameSource, gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30), "main-fps") +
             renderGameFocusHudItem("Audio", audioState, audioName, audioData.masterVolume, audioData.muted ? "warn" : "good", "audio") +
+            renderGameFocusHudItem("Mic", micState.label, micState.detail, micState.progress, micState.tone, "mic") +
             renderGameFocusHudItem("Network", pingLabel, networkSummary.provider + " - " + networkSummary.detail, ping == null ? null : gameFocusProgress(80 - Math.min(ping, 80), 80), networkSummary.tone, "network") +
             renderGameFocusHudItem("Pressure", pressureLabel, pressureDetail, pressure, gameFocusLoadTone(pressure, 82, 94), "pressure") +
             renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system && system.gpu, gameFocusLoadTone(system && system.gpu, 88, 96), "gpu") +
@@ -629,6 +665,14 @@
             renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram, gameFocusLoadTone(system && system.ram, 82, 92), "ram") +
           '</section>' +
           '<aside class="game-focus-card game-focus-card--utility">' +
+            '<div class="game-focus-mic-panel' + gameFocusToneClass(micState.tone) + '">' +
+              '<div>' +
+                '<span>Mic</span>' +
+                '<strong data-game-mic-state>' + escapeHtml(micState.label) + '</strong>' +
+                '<small data-game-mic-detail>' + escapeHtml(micState.detail) + '</small>' +
+              '</div>' +
+              '<button class="inline-button game-focus-mic-toggle" type="button" data-action="game-mic-mute" aria-label="' + escapeHtml(micState.button) + '"' + (micState.available ? "" : " disabled") + '>' + escapeHtml(micState.button) + '</button>' +
+            '</div>' +
             '<div class="game-focus-control-row">' +
               '<div class="game-focus-audio' + gameFocusToneClass(audioData.muted ? "warn" : "good") + '">' +
                 '<span>Audio</span>' +
@@ -697,6 +741,7 @@
     var audioOutput = gameFocusAudioOutput(audioData);
     var audioName = compactAudioName(audioOutput && audioOutput.name);
     var audioState = audioData.muted ? "Muted" : Math.round(audioData.masterVolume) + "%";
+    var micState = gameFocusMicState(audioData);
     var audioSessions = gameFocusAudioSessions(audioData, game);
     var activeAudioSessions = audioSessions.length;
     var networkSummary = gameFocusNetworkSummary(network || {});
@@ -715,6 +760,7 @@
     setGameFocusText(container, ".game-focus-identity small", platform + " - " + source);
     patchGameFocusMetric(container, "main-fps", formatFps(mainFps), frameSource, gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30));
     patchGameFocusMetric(container, "audio", audioState, audioName, audioData.masterVolume, audioData.muted ? "warn" : "good");
+    patchGameFocusMetric(container, "mic", micState.label, micState.detail, micState.progress, micState.tone);
     patchGameFocusMetric(container, "network", networkSummary.pingLabel, networkSummary.provider + " - " + networkSummary.detail, ping == null ? null : gameFocusProgress(80 - Math.min(ping, 80), 80), networkSummary.tone);
     patchGameFocusMetric(container, "pressure", pressureLabel, pressureDetail, pressure, gameFocusLoadTone(pressure, 82, 94));
     patchGameFocusMetric(container, "gpu", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system && system.gpu, gameFocusLoadTone(system && system.gpu, 88, 96));
@@ -724,6 +770,15 @@
     setGameFocusText(container, ".game-focus-audio strong", audioState);
     setGameFocusText(container, ".game-focus-audio small", audioName);
     setGameFocusText(container, ".game-focus-mute", audioData.muted ? "Unmute" : "Mute");
+    setGameFocusToneClass(container.querySelector(".game-focus-mic-panel"), "game-focus-mic-panel", micState.tone);
+    setGameFocusText(container, "[data-game-mic-state]", micState.label);
+    setGameFocusText(container, "[data-game-mic-detail]", micState.detail);
+    setGameFocusText(container, ".game-focus-mic-toggle", micState.button);
+    var micButton = container.querySelector(".game-focus-mic-toggle");
+    if (micButton) {
+      micButton.disabled = !micState.available;
+      micButton.setAttribute("aria-label", micState.button);
+    }
 
     var audioList = container.querySelector(".game-focus-audio-list");
     if (audioList) {
@@ -1146,6 +1201,23 @@
       });
     }
 
+    function toggleGameMicMute() {
+      if (!state.audio.defaultInputDeviceId) {
+        return;
+      }
+
+      requestJson(buildBridgeUrl(env, "/api/audio/input-mute"), {
+        method: "POST",
+        body: {
+          muted: state.audio.inputMuted !== true
+        }
+      }, 5000).then(function () {
+        refreshGameModeSession({ performanceSession: true });
+      }, function () {
+        refreshGameModeSession({ performanceSession: true });
+      });
+    }
+
     function toggleGameSessionMute(sessionId) {
       var session = state.audio.sessions.filter(function (entry) {
         return entry.id === sessionId;
@@ -1280,6 +1352,8 @@
         }
       } else if (action === "game-master-mute") {
         toggleGameMasterMute();
+      } else if (action === "game-mic-mute") {
+        toggleGameMicMute();
       } else if (action === "game-session-mute") {
         toggleGameSessionMute(String(target.getAttribute("data-session-id") || ""));
       } else if (action === "game-pin-candidate") {

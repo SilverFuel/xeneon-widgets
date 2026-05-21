@@ -31,6 +31,7 @@ for (const route of [
   "/api/action-confirmations",
   "/api/quick-actions",
   "/api/system-shortcuts",
+  "/api/audio/input-mute",
   "/api/clipboard",
   "/api/support/bundle",
   "/api/releases/latest",

@@ -893,6 +893,7 @@
 .game-focus-session span,
 .game-focus-metric span,
 .game-focus-audio span,
+.game-focus-mic-panel span,
 .game-focus-network span {
   color: rgba(196, 255, 226, 0.64);
   font-size: 0.82rem;
@@ -993,18 +994,24 @@
 
 .game-focus-card--utility {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   gap: 9px;
   padding: 14px;
 }
 
 .game-focus-audio,
+.game-focus-mic-panel,
 .game-focus-network {
   min-width: 0;
   padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.045);
+}
+
+.game-focus-mic-panel {
+  display: grid;
+  gap: 12px;
 }
 
 .game-focus-control-row {
@@ -1021,7 +1028,23 @@
   background: rgba(255, 149, 42, 0.12);
 }
 
+.game-focus-mic-toggle {
+  justify-content: center;
+  min-height: 64px;
+  width: 100%;
+  border-color: rgba(255, 174, 86, 0.34);
+  background: rgba(255, 149, 42, 0.16);
+  color: #fff4dc;
+  font-size: 1.08rem;
+  font-weight: 850;
+}
+
+.game-focus-mic-toggle:disabled {
+  opacity: 0.52;
+}
+
 .game-focus-audio strong,
+.game-focus-mic-panel strong,
 .game-focus-network strong {
   display: block;
   margin-top: 8px;
@@ -1031,6 +1054,7 @@
 }
 
 .game-focus-audio small,
+.game-focus-mic-panel small,
 .game-focus-network small {
   display: block;
   margin-top: 8px;
@@ -1127,12 +1151,14 @@
 
 .game-focus-metric.is-good,
 .game-focus-audio.is-good,
+.game-focus-mic-panel.is-good,
 .game-focus-network.is-good {
   border-color: rgba(77, 255, 194, 0.24);
 }
 
 .game-focus-metric.is-warn,
 .game-focus-audio.is-warn,
+.game-focus-mic-panel.is-warn,
 .game-focus-network.is-warn {
   border-color: rgba(255, 179, 71, 0.34);
   background:
@@ -1142,6 +1168,7 @@
 
 .game-focus-metric.is-danger,
 .game-focus-audio.is-danger,
+.game-focus-mic-panel.is-danger,
 .game-focus-network.is-danger {
   border-color: rgba(255, 93, 93, 0.4);
   background:
@@ -1151,12 +1178,14 @@
 
 .game-focus-metric.is-warn strong,
 .game-focus-audio.is-warn strong,
+.game-focus-mic-panel.is-warn strong,
 .game-focus-network.is-warn strong {
   color: #ffc46b;
 }
 
 .game-focus-metric.is-danger strong,
 .game-focus-audio.is-danger strong,
+.game-focus-mic-panel.is-danger strong,
 .game-focus-network.is-danger strong {
   color: #ff7a7a;
 }
@@ -1506,6 +1535,7 @@
   .game-focus-session strong,
   .game-focus-session small,
   .game-focus-audio small,
+  .game-focus-mic-panel small,
   .game-focus-network small {
     white-space: normal;
   }

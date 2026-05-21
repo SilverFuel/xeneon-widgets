@@ -99,6 +99,16 @@ public sealed class TelemetryController
         return _audioService.SetMasterMuteAsync(request.Muted, cancellationToken);
     }
 
+    public Task<AudioSnapshotPayload> SetAudioInputVolumeAsync(AudioVolumeRequest request, CancellationToken cancellationToken)
+    {
+        return _audioService.SetInputVolumeAsync(request.Volume, cancellationToken);
+    }
+
+    public Task<AudioSnapshotPayload> SetAudioInputMuteAsync(AudioMuteRequest request, CancellationToken cancellationToken)
+    {
+        return _audioService.SetInputMuteAsync(request.Muted, cancellationToken);
+    }
+
     public Task<AudioSnapshotPayload> SetAudioSessionVolumeAsync(AudioSessionVolumeRequest request, CancellationToken cancellationToken)
     {
         return _audioService.SetSessionVolumeAsync(request.SessionId, request.Volume, cancellationToken);

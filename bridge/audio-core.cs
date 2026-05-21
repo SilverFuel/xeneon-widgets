@@ -75,16 +75,22 @@ namespace Xeneon.Audio
         public AudioSnapshotRecord()
         {
             DefaultDeviceId = "";
+            DefaultInputDeviceId = "";
             Source = "local bridge";
             Devices = new RenderDeviceRecord[0];
+            InputDevices = new RenderDeviceRecord[0];
             Sessions = new AudioSessionRecord[0];
         }
 
         public string DefaultDeviceId { get; set; }
         public int MasterVolume { get; set; }
         public bool Muted { get; set; }
+        public string DefaultInputDeviceId { get; set; }
+        public int? InputVolume { get; set; }
+        public bool? InputMuted { get; set; }
         public string Source { get; set; }
         public RenderDeviceRecord[] Devices { get; set; }
+        public RenderDeviceRecord[] InputDevices { get; set; }
         public AudioSessionRecord[] Sessions { get; set; }
     }
 
@@ -308,14 +314,41 @@ namespace Xeneon.Audio
             var defaultDevice = GetDefaultRenderDevice();
             string defaultDeviceId;
             defaultDevice.GetId(out defaultDeviceId);
+            string defaultInputDeviceId = "";
+            int? inputVolume = null;
+            bool? inputMuted = null;
+            var inputDevices = new RenderDeviceRecord[0];
+
+            try
+            {
+                if (TryGetDefaultCaptureDevice(out var defaultInputDevice))
+                {
+                    defaultInputDevice.GetId(out defaultInputDeviceId);
+                    inputVolume = GetEndpointVolumePercent(defaultInputDevice);
+                    inputMuted = GetEndpointMuteState(defaultInputDevice);
+                }
+
+                inputDevices = GetCaptureDevices(defaultInputDeviceId ?? "");
+            }
+            catch
+            {
+                defaultInputDeviceId = "";
+                inputVolume = null;
+                inputMuted = null;
+                inputDevices = new RenderDeviceRecord[0];
+            }
 
             return new AudioSnapshotRecord
             {
                 DefaultDeviceId = defaultDeviceId ?? "",
                 MasterVolume = GetEndpointVolumePercent(defaultDevice),
                 Muted = GetEndpointMuteState(defaultDevice),
+                DefaultInputDeviceId = defaultInputDeviceId ?? "",
+                InputVolume = inputVolume,
+                InputMuted = inputMuted,
                 Source = "windows core audio",
                 Devices = GetRenderDevices(defaultDeviceId ?? ""),
+                InputDevices = inputDevices,
                 Sessions = GetRenderSessions(defaultDevice)
             };
         }
@@ -351,6 +384,19 @@ namespace Xeneon.Audio
             Marshal.ThrowExceptionForHR(endpoint.SetMute(muted, Guid.Empty));
         }
 
+        public static void SetInputVolume(string deviceId, float scalar)
+        {
+            var endpoint = ActivateEndpointVolume(deviceId, EDataFlow.eCapture);
+            var clamped = Math.Max(0f, Math.Min(1f, scalar));
+            Marshal.ThrowExceptionForHR(endpoint.SetMasterVolumeLevelScalar(clamped, Guid.Empty));
+        }
+
+        public static void SetInputMute(string deviceId, bool muted)
+        {
+            var endpoint = ActivateEndpointVolume(deviceId, EDataFlow.eCapture);
+            Marshal.ThrowExceptionForHR(endpoint.SetMute(muted, Guid.Empty));
+        }
+
         public static void SetSessionVolume(string deviceId, string sessionIdentifier, float scalar)
         {
             if (string.IsNullOrWhiteSpace(sessionIdentifier))
@@ -378,10 +424,20 @@ namespace Xeneon.Audio
 
         private static RenderDeviceRecord[] GetRenderDevices(string defaultDeviceId)
         {
+            return GetDevices(EDataFlow.eRender, defaultDeviceId);
+        }
+
+        private static RenderDeviceRecord[] GetCaptureDevices(string defaultDeviceId)
+        {
+            return GetDevices(EDataFlow.eCapture, defaultDeviceId);
+        }
+
+        private static RenderDeviceRecord[] GetDevices(EDataFlow dataFlow, string defaultDeviceId)
+        {
             var enumerator = CreateEnumerator();
             IMMDeviceCollection collection;
             uint count;
-            Marshal.ThrowExceptionForHR(enumerator.EnumAudioEndpoints(EDataFlow.eRender, DeviceState.MaskAll, out collection));
+            Marshal.ThrowExceptionForHR(enumerator.EnumAudioEndpoints(dataFlow, DeviceState.MaskAll, out collection));
             Marshal.ThrowExceptionForHR(collection.GetCount(out count));
 
             var devices = new List<RenderDeviceRecord>((int)count);
@@ -506,9 +562,28 @@ namespace Xeneon.Audio
 
         private static IMMDevice GetDefaultRenderDevice()
         {
+            return GetDefaultDevice(EDataFlow.eRender);
+        }
+
+        private static bool TryGetDefaultCaptureDevice(out IMMDevice device)
+        {
+            try
+            {
+                device = GetDefaultDevice(EDataFlow.eCapture);
+                return true;
+            }
+            catch
+            {
+                device = null!;
+                return false;
+            }
+        }
+
+        private static IMMDevice GetDefaultDevice(EDataFlow dataFlow)
+        {
             var enumerator = CreateEnumerator();
             IMMDevice device;
-            Marshal.ThrowExceptionForHR(enumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out device));
+            Marshal.ThrowExceptionForHR(enumerator.GetDefaultAudioEndpoint(dataFlow, ERole.eMultimedia, out device));
             return device;
         }
 
@@ -517,6 +592,19 @@ namespace Xeneon.Audio
             if (string.IsNullOrWhiteSpace(deviceId))
             {
                 return GetDefaultRenderDevice();
+            }
+
+            var enumerator = CreateEnumerator();
+            IMMDevice device;
+            Marshal.ThrowExceptionForHR(enumerator.GetDevice(deviceId, out device));
+            return device;
+        }
+
+        private static IMMDevice ResolveCaptureDevice(string deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                return GetDefaultDevice(EDataFlow.eCapture);
             }
 
             var enumerator = CreateEnumerator();
@@ -553,6 +641,13 @@ namespace Xeneon.Audio
         private static IAudioEndpointVolume ActivateEndpointVolume(string deviceId)
         {
             return ActivateEndpointVolume(ResolveRenderDevice(deviceId));
+        }
+
+        private static IAudioEndpointVolume ActivateEndpointVolume(string deviceId, EDataFlow dataFlow)
+        {
+            return ActivateEndpointVolume(dataFlow == EDataFlow.eCapture
+                ? ResolveCaptureDevice(deviceId)
+                : ResolveRenderDevice(deviceId));
         }
 
         private static IAudioEndpointVolume ActivateEndpointVolume(IMMDevice device)
