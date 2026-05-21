@@ -19,6 +19,7 @@ public sealed class GamePerformanceService : IDisposable
     private Process? _captureProcess;
     private int? _captureProcessId;
     private string _captureProcessName = "";
+    private string _captureTargetName = "";
     private string _capturePath = "";
     private string _presentMonPath = "";
     private string _lastCaptureFailureMessage = "";
@@ -86,7 +87,9 @@ public sealed class GamePerformanceService : IDisposable
 
     private void EnsureCapture(int processId, string processName)
     {
+        var captureTargetName = ResolveCaptureTargetName(processId, processName);
         if (_captureProcessId == processId
+            && string.Equals(_captureTargetName, captureTargetName, StringComparison.OrdinalIgnoreCase)
             && _captureProcess is not null
             && !_captureProcess.HasExited)
         {
@@ -121,6 +124,7 @@ public sealed class GamePerformanceService : IDisposable
         _capturePath = Path.Combine(telemetryDirectory, $"presentmon-{processId}-{Guid.NewGuid():N}.csv");
         _captureProcessId = processId;
         _captureProcessName = processName ?? "";
+        _captureTargetName = captureTargetName;
         _captureStartedAt = DateTimeOffset.UtcNow;
         _captureUsesElevatedBootstrap = !IsRunningElevated();
         _lastCaptureFailureMessage = "";
@@ -137,9 +141,23 @@ public sealed class GamePerformanceService : IDisposable
                 arguments.Add("--restart_as_admin");
             }
 
+            if (!string.IsNullOrWhiteSpace(captureTargetName))
+            {
+                arguments.AddRange(new[]
+                {
+                    "--process_name", Quote(captureTargetName)
+                });
+            }
+            else
+            {
+                arguments.AddRange(new[]
+                {
+                    "--process_id", processId.ToString(CultureInfo.InvariantCulture)
+                });
+            }
+
             arguments.AddRange(new[]
             {
-                "--process_id", processId.ToString(CultureInfo.InvariantCulture),
                 "--output_file", Quote(_capturePath),
                 "--exclude_dropped",
                 "--no_console_stats",
@@ -159,8 +177,8 @@ public sealed class GamePerformanceService : IDisposable
 
             _captureProcess = Process.Start(info);
             _logger.Info(_captureUsesElevatedBootstrap
-                ? $"Requested elevated PresentMon FPS capture for PID {processId}."
-                : $"Started PresentMon FPS capture for PID {processId}.");
+                ? $"Requested elevated PresentMon FPS capture for {DescribeCaptureTarget(processId, captureTargetName)}."
+                : $"Started PresentMon FPS capture for {DescribeCaptureTarget(processId, captureTargetName)}.");
         }
         catch (Exception error)
         {
@@ -189,7 +207,8 @@ public sealed class GamePerformanceService : IDisposable
             {
                 var header = ReadCsvHeader(_capturePath);
                 var rows = ReadRecentLines(_capturePath, 420);
-                var frameTimes = ExtractFrameTimes(rows, header, processId);
+                var analysis = AnalyzeCaptureRows(rows, header, processId, _captureTargetName);
+                var frameTimes = analysis.FrameTimes;
                 if (frameTimes.Count > 0)
                 {
                     var averageFrameTime = frameTimes.Average();
@@ -210,6 +229,15 @@ public sealed class GamePerformanceService : IDisposable
                         SampledAt = DateTimeOffset.UtcNow,
                         Message = "Main-display frame pacing is live from PresentMon."
                     };
+                }
+
+                if (!_captureProcess.HasExited)
+                {
+                    return GamePerformanceSnapshot.Starting(
+                        processId,
+                        processName,
+                        source,
+                        analysis.Message);
                 }
             }
             catch (Exception error)
@@ -260,6 +288,41 @@ public sealed class GamePerformanceService : IDisposable
         return _presentMonPath;
     }
 
+    private static string ResolveCaptureTargetName(int processId, string processName)
+    {
+        var name = "";
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            name = process.ProcessName;
+        }
+        catch
+        {
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = processName ?? "";
+        }
+
+        name = Path.GetFileName(name.Trim());
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "";
+        }
+
+        return string.Equals(Path.GetExtension(name), ".exe", StringComparison.OrdinalIgnoreCase)
+            ? name
+            : name + ".exe";
+    }
+
+    private static string DescribeCaptureTarget(int processId, string processName)
+    {
+        return string.IsNullOrWhiteSpace(processName)
+            ? $"PID {processId}"
+            : $"{processName} (PID {processId})";
+    }
+
     private void StopCapture()
     {
         if (_captureProcess is not null)
@@ -285,6 +348,7 @@ public sealed class GamePerformanceService : IDisposable
         var capturePath = _capturePath;
         _captureProcessId = null;
         _captureProcessName = "";
+        _captureTargetName = "";
         _capturePath = "";
         _captureStartedAt = DateTimeOffset.MinValue;
         _captureUsesElevatedBootstrap = false;
@@ -472,18 +536,31 @@ public sealed class GamePerformanceService : IDisposable
         return lines.Count <= maxLines ? lines : lines.TakeLast(maxLines).ToList();
     }
 
-    private static List<double> ExtractFrameTimes(IReadOnlyList<string> rows, string headerLine, int processId)
+    private static CaptureAnalysis AnalyzeCaptureRows(
+        IReadOnlyList<string> rows,
+        string headerLine,
+        int processId,
+        string targetProcessName)
     {
         var columns = SplitCsvLine(headerLine);
+        var applicationIndex = FindColumn(columns, "Application", "ProcessName", "Process");
         var processIndex = FindColumn(columns, "ProcessID", "ProcessId");
         var displayedIndex = FindColumn(columns, "MsBetweenDisplayChange");
         var presentIndex = FindColumn(columns, "MsBetweenPresents");
+        var timeIndex = FindColumn(columns, "TimeInSeconds");
         var droppedIndex = FindColumn(columns, "Dropped");
         var result = new List<double>();
+        var matchingRows = 0;
+        double? previousTimeSeconds = null;
 
-        if (displayedIndex < 0 && presentIndex < 0)
+        if (string.IsNullOrWhiteSpace(headerLine))
         {
-            return result;
+            return new CaptureAnalysis(result, "PresentMon is running; waiting for capture output.");
+        }
+
+        if (displayedIndex < 0 && presentIndex < 0 && timeIndex < 0)
+        {
+            return new CaptureAnalysis(result, "PresentMon is running, but its CSV does not include frame timing columns.");
         }
 
         foreach (var row in rows)
@@ -494,13 +571,12 @@ public sealed class GamePerformanceService : IDisposable
             }
 
             var values = SplitCsvLine(row);
-            if (processIndex >= 0
-                && TryGetValue(values, processIndex, out var pidText)
-                && int.TryParse(pidText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rowProcessId)
-                && rowProcessId != processId)
+            if (!CaptureRowMatches(values, applicationIndex, processIndex, processId, targetProcessName))
             {
                 continue;
             }
+
+            matchingRows++;
 
             if (droppedIndex >= 0
                 && TryGetValue(values, droppedIndex, out var dropped)
@@ -510,13 +586,72 @@ public sealed class GamePerformanceService : IDisposable
             }
 
             var ms = TryReadPositiveDouble(values, displayedIndex) ?? TryReadPositiveDouble(values, presentIndex);
+            if (ms is null
+                && timeIndex >= 0
+                && TryReadPositiveDouble(values, timeIndex) is { } timeSeconds)
+            {
+                if (previousTimeSeconds is not null)
+                {
+                    ms = (timeSeconds - previousTimeSeconds.Value) * 1000d;
+                }
+
+                previousTimeSeconds = timeSeconds;
+            }
+
             if (ms is > 1 and < 1000)
             {
                 result.Add(ms.Value);
             }
         }
 
-        return result;
+        if (result.Count > 0)
+        {
+            return new CaptureAnalysis(result, "Main-display frame pacing is live from PresentMon.");
+        }
+
+        if (rows.Count == 0)
+        {
+            return new CaptureAnalysis(result, "PresentMon is running; waiting for the game to present frames.");
+        }
+
+        return matchingRows == 0
+            ? new CaptureAnalysis(result, "PresentMon is running, but no matching game frames have been captured yet.")
+            : new CaptureAnalysis(result, "PresentMon is running; waiting for usable displayed-frame timings.");
+    }
+
+    private static bool CaptureRowMatches(
+        IReadOnlyList<string> values,
+        int applicationIndex,
+        int processIndex,
+        int processId,
+        string targetProcessName)
+    {
+        if (!string.IsNullOrWhiteSpace(targetProcessName)
+            && applicationIndex >= 0
+            && TryGetValue(values, applicationIndex, out var applicationName)
+            && !ProcessNamesMatch(applicationName, targetProcessName))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(targetProcessName)
+            && processIndex >= 0
+            && TryGetValue(values, processIndex, out var pidText)
+            && int.TryParse(pidText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rowProcessId)
+            && rowProcessId != processId)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ProcessNamesMatch(string left, string right)
+    {
+        var normalizedLeft = Path.GetFileName(left.Trim());
+        var normalizedRight = Path.GetFileName(right.Trim());
+        return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(Path.GetFileNameWithoutExtension(normalizedLeft), Path.GetFileNameWithoutExtension(normalizedRight), StringComparison.OrdinalIgnoreCase);
     }
 
     private static int FindColumn(IReadOnlyList<string> columns, params string[] names)
@@ -590,6 +725,8 @@ public sealed class GamePerformanceService : IDisposable
     {
         return Math.Round(Math.Clamp(value, 0, 1000), value >= 100 ? 0 : 1);
     }
+
+    private readonly record struct CaptureAnalysis(List<double> FrameTimes, string Message);
 }
 
 public sealed class GamePerformanceSnapshot
