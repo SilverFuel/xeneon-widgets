@@ -826,7 +826,7 @@
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 420px;
+  grid-template-columns: 320px minmax(0, 1fr) 420px;
   gap: 12px;
   min-height: 0;
 }
@@ -843,23 +843,33 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.game-focus-card--context {
-  align-self: start;
+.game-focus-context {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  grid-template-rows: auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
+  min-height: 0;
+}
+
+.game-focus-card--art {
+  display: grid;
+  place-items: center;
   padding: 14px;
+  overflow: hidden;
+}
+
+.game-focus-card--session {
+  padding: 16px;
 }
 
 .game-focus-emblem {
   position: relative;
   left: auto;
   top: auto;
-  width: 92px;
-  height: 92px;
-  border-radius: 8px;
-  font-size: 1.7rem;
+  width: min(100%, 292px);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  font-size: 3rem;
   transform: none;
   box-shadow: inset 0 0 32px rgba(77, 255, 194, 0.12);
 }
@@ -870,7 +880,6 @@
 }
 
 .game-focus-session {
-  align-self: center;
   min-width: 0;
 }
 
@@ -896,10 +905,21 @@
   margin-top: 6px;
   overflow: hidden;
   color: #f5fff8;
-  font-size: 1.32rem;
+  font-size: 1.6rem;
   line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.game-focus-card--session.is-touch-grass {
+  border-color: rgba(255, 174, 86, 0.34);
+  background:
+    linear-gradient(135deg, rgba(255, 174, 86, 0.12), transparent 44%),
+    rgba(1, 10, 9, 0.78);
+}
+
+.game-focus-card--session.is-touch-grass .game-focus-session strong {
+  color: #ffc46b;
 }
 
 .game-focus-session small {
@@ -1495,8 +1515,8 @@
   }
 
   .game-focus-emblem {
-    width: 132px;
-    height: 132px;
+    width: min(100%, 220px);
+    height: auto;
     font-size: 1.8rem;
   }
 
