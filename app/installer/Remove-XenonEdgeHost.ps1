@@ -93,12 +93,21 @@ function Stop-RunningHost {
 Write-Step "XENEON Edge Host - Remove"
 Assert-SafeInstallPath $InstallRoot
 
-$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"
-$legacyShortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host"
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"
-$legacyDesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk"
-$publicDesktopShortcut = Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "XENEON Edge Host.lnk"
-$legacyPublicDesktopShortcut = Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "Xenon Edge Host.lnk"
+$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"
+$legacyShortcutRoots = @(
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"),
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host")
+)
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"
+$legacyDesktopShortcuts = @(
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"),
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk")
+)
+$publicDesktopShortcut = Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "XENEON Edge.lnk"
+$legacyPublicDesktopShortcuts = @(
+  (Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "XENEON Edge Host.lnk"),
+  (Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "Xenon Edge Host.lnk")
+)
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
 $cleanupTargets = @([System.IO.Path]::GetFullPath($InstallRoot))
 
@@ -154,20 +163,26 @@ Write-Step "Removing shortcuts and uninstall registration"
 if (Test-Path $shortcutRoot) {
   Remove-Item -LiteralPath $shortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
-if (Test-Path $legacyShortcutRoot) {
-  Remove-Item -LiteralPath $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+foreach ($legacyShortcutRoot in $legacyShortcutRoots) {
+  if (Test-Path $legacyShortcutRoot) {
+    Remove-Item -LiteralPath $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
 }
 if (Test-Path $desktopShortcut) {
   Remove-Item -LiteralPath $desktopShortcut -Force -ErrorAction SilentlyContinue
 }
-if (Test-Path $legacyDesktopShortcut) {
-  Remove-Item -LiteralPath $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+foreach ($legacyDesktopShortcut in $legacyDesktopShortcuts) {
+  if (Test-Path $legacyDesktopShortcut) {
+    Remove-Item -LiteralPath $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+  }
 }
 if (Test-Path $publicDesktopShortcut) {
   Remove-Item -LiteralPath $publicDesktopShortcut -Force -ErrorAction SilentlyContinue
 }
-if (Test-Path $legacyPublicDesktopShortcut) {
-  Remove-Item -LiteralPath $legacyPublicDesktopShortcut -Force -ErrorAction SilentlyContinue
+foreach ($legacyPublicDesktopShortcut in $legacyPublicDesktopShortcuts) {
+  if (Test-Path $legacyPublicDesktopShortcut) {
+    Remove-Item -LiteralPath $legacyPublicDesktopShortcut -Force -ErrorAction SilentlyContinue
+  }
 }
 if (Test-Path $uninstallKey) {
   Remove-Item -LiteralPath $uninstallKey -Recurse -Force -ErrorAction SilentlyContinue

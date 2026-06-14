@@ -10,8 +10,16 @@ $installScript = Join-Path $scriptRoot "install.ps1"
 $removeScript = Join-Path $scriptRoot "Remove-XenonEdgeHost.ps1"
 $safeModeScript = Join-Path $scriptRoot "Launch-XenonSafeMode.ps1"
 $repairScript = Join-Path $scriptRoot "repair.ps1"
-$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"
+$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"
+$legacyShortcutRoots = @(
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"),
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host")
+)
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"
+$legacyDesktopShortcuts = @(
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"),
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk")
+)
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
 
 function Write-Step($message) {
@@ -74,39 +82,49 @@ foreach ($requiredPath in @($exePath, $installScript, $removeScript, $safeModeSc
   }
 }
 
-Write-Step "Repairing Start Menu shortcuts"
+Write-Step "Repairing simple launch shortcuts"
+foreach ($legacyShortcutRoot in $legacyShortcutRoots) {
+  if (Test-Path $legacyShortcutRoot) {
+    Remove-Item -LiteralPath $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+foreach ($legacyDesktopShortcut in $legacyDesktopShortcuts) {
+  if (Test-Path $legacyDesktopShortcut) {
+    Remove-Item -LiteralPath $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+  }
+}
 New-Item -ItemType Directory -Path $shortcutRoot -Force | Out-Null
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "XENEON Edge Host.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "XENEON Edge.lnk") `
   -targetPath $exePath `
   -arguments "" `
   -workingDirectory $scriptRoot `
   -iconLocation $exePath
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "Launch Xenon Safe Mode.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "XENEON Edge Recovery (Safe Mode).lnk") `
   -targetPath "powershell.exe" `
   -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$safeModeScript`" -Quiet" `
   -workingDirectory $scriptRoot `
   -iconLocation $exePath
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "Repair XENEON Edge Host.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "Repair XENEON Edge.lnk") `
   -targetPath "powershell.exe" `
   -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$repairScript`" -Quiet" `
   -workingDirectory $scriptRoot `
   -iconLocation $exePath
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "Uninstall XENEON Edge Host.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "Uninstall XENEON Edge.lnk") `
   -targetPath "powershell.exe" `
   -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$removeScript`" -Quiet" `
   -workingDirectory $scriptRoot `
   -iconLocation $exePath
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "Uninstall and Remove Local Data.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "Remove XENEON Edge and Local Data.lnk") `
   -targetPath "powershell.exe" `
   -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$removeScript`" -Quiet -RemoveLocalData" `
   -workingDirectory $scriptRoot `

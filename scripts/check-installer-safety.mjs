@@ -66,9 +66,10 @@ assert(
 assert(
   /Launch-XenonSafeMode\.ps1/.test(installHost)
     && /repair\.ps1/.test(installHost)
-    && /Launch Xenon Safe Mode\.lnk/.test(installHost)
-    && /Repair XENEON Edge Host\.lnk/.test(installHost),
-  "installer must install Safe Mode and Repair shortcuts"
+    && /XENEON Edge\.lnk/.test(installHost)
+    && /XENEON Edge Recovery \(Safe Mode\)\.lnk/.test(installHost)
+    && /Repair XENEON Edge\.lnk/.test(installHost),
+  "installer must install one obvious app shortcut plus clearly labeled recovery and repair shortcuts"
 );
 
 assert(
@@ -81,8 +82,10 @@ assert(
 
 assert(
   /Register-UninstallEntry/.test(repairInstall)
-    && /Launch Xenon Safe Mode\.lnk/.test(repairInstall)
-    && /Repair XENEON Edge Host\.lnk/.test(repairInstall)
+    && /XENEON Edge\.lnk/.test(repairInstall)
+    && /XENEON Edge Recovery \(Safe Mode\)\.lnk/.test(repairInstall)
+    && /Repair XENEON Edge\.lnk/.test(repairInstall)
+    && /legacyShortcutRoots/.test(repairInstall)
     && /& \$installScript -Quiet/.test(repairInstall)
     && !/ResetLocalData/.test(repairInstall)
     && !/Remove-Item[\s\S]+XenonEdgeHost/.test(repairInstall),

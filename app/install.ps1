@@ -248,8 +248,8 @@ if (Test-WindowsAppRuntimeInstalled) {
 if (-not $Quiet) {
   Write-Host ""
   Write-Host "Auto-start installed." -ForegroundColor Green
-  Write-Host "The XENEON Edge Host will launch after login."
+  Write-Host "XENEON Edge will launch after login."
   Write-Host ""
   Write-Host "To start it now:"
-  Write-Host "  Start-Process `"$exePath`"" -ForegroundColor Yellow
+  Write-Host "  Start Menu > XENEON Edge > XENEON Edge" -ForegroundColor Yellow
 }

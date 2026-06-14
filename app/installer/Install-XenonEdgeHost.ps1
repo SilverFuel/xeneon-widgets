@@ -231,56 +231,66 @@ try {
     throw "Installed executable was not found at $exePath"
   }
 
-  Write-Step "Creating Start Menu shortcuts"
-  $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"
-  $legacyShortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host"
-  if (Test-Path $legacyShortcutRoot) {
-    Remove-Item -LiteralPath $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Write-Step "Creating simple launch shortcuts"
+  $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"
+  $legacyShortcutRoots = @(
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"),
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host")
+  )
+  foreach ($legacyShortcutRoot in $legacyShortcutRoots) {
+    if (Test-Path $legacyShortcutRoot) {
+      Remove-Item -LiteralPath $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
   New-Item -ItemType Directory -Path $shortcutRoot -Force | Out-Null
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "XENEON Edge Host.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "XENEON Edge.lnk") `
     -targetPath $exePath `
     -arguments "" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "Launch Xenon Safe Mode.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "XENEON Edge Recovery (Safe Mode).lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Launch-XenonSafeMode.ps1`" -Quiet" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "Repair XENEON Edge Host.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "Repair XENEON Edge.lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\repair.ps1`" -Quiet" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "Uninstall XENEON Edge Host.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "Uninstall XENEON Edge.lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`" -Quiet" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "Uninstall and Remove Local Data.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "Remove XENEON Edge and Local Data.lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`" -Quiet -RemoveLocalData" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   if (-not $NoDesktopShortcut) {
-    $legacyDesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk"
-    if (Test-Path $legacyDesktopShortcut) {
-      Remove-Item -LiteralPath $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+    $legacyDesktopShortcuts = @(
+      (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"),
+      (Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk")
+    )
+    foreach ($legacyDesktopShortcut in $legacyDesktopShortcuts) {
+      if (Test-Path $legacyDesktopShortcut) {
+        Remove-Item -LiteralPath $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+      }
     }
     New-Shortcut `
-      -shortcutPath (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk") `
+      -shortcutPath (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk") `
       -targetPath $exePath `
       -arguments "" `
       -workingDirectory $InstallRoot `

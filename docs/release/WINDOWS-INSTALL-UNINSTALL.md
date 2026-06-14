@@ -11,16 +11,16 @@ Xenon installs itself for the current Windows user. It does not need admin right
 The installer handles this automatically:
 
 - copies the app to `%LOCALAPPDATA%\Programs\XenonEdgeHost`
-- creates Start Menu shortcuts
-- creates a Desktop shortcut
+- creates `XENEON Edge` in the Start Menu
+- creates a `XENEON Edge` Desktop shortcut
 - registers the app to start when the user logs in
 - adds `XENEON Edge Host` to Windows Settings > Apps
 - launches the app
 
-The Start Menu folder also includes two recovery shortcuts:
+The Start Menu folder also includes clearly labeled recovery shortcuts:
 
-- `Launch Xenon Safe Mode` stops any running Xenon process, disables auto-start, ignores saved display placement, and opens on the primary monitor.
-- `Repair XENEON Edge Host` restores Start Menu/Desktop shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
+- `XENEON Edge Recovery (Safe Mode)` stops any running Xenon process, disables auto-start, ignores saved display placement, and opens on the primary monitor.
+- `Repair XENEON Edge` restores Start Menu/Desktop shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
 
 The free beta installer may show a Windows SmartScreen warning until the app is signed. That warning is from Windows. After the user chooses to run the beta installer, Xenon should not ask more setup questions.
 
@@ -29,7 +29,7 @@ The free beta installer may show a Windows SmartScreen warning until the app is 
 Use either normal Windows path:
 
 - Windows Settings > Apps > Installed apps > XENEON Edge Host
-- Start Menu > XENEON Edge Host > Uninstall XENEON Edge Host
+- Start Menu > XENEON Edge > Uninstall XENEON Edge
 
 Uninstall is hands-free. It removes:
 
@@ -45,7 +45,7 @@ Uninstall is hands-free. It removes:
 Use:
 
 ```text
-Start Menu > XENEON Edge Host > Uninstall and Remove Local Data
+Start Menu > XENEON Edge > Remove XENEON Edge and Local Data
 ```
 
 That removes the app and also removes local Xenon data from:

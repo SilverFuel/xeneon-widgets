@@ -22,7 +22,14 @@ For beta users, use the Windows setup EXE from GitHub Releases instead of the so
 
 1. Download `XenonEdgeHost-Setup-<version>-<date>.exe`.
 2. Run it.
-3. Xenon installs for the current Windows user, creates the Start Menu/Desktop shortcuts, registers auto-start, and launches itself.
+3. Xenon installs for the current Windows user, creates one clear `XENEON Edge` Start Menu/Desktop shortcut, registers auto-start, and launches itself.
+
+After install, the normal app to click is:
+
+- Desktop > `XENEON Edge`
+- Start Menu > `XENEON Edge` > `XENEON Edge`
+
+Use `XENEON Edge Recovery (Safe Mode)` only when the dashboard is stuck on the wrong display or you need to repair a broken startup. Do not launch files from `publish`, `app\bin`, `bridge`, or `desktop\electron` for normal use.
 
 The installer is meant to be hands-free. It does not ask the user to choose folders, services, setup steps, or uninstall behavior. The free beta may still show a Windows SmartScreen warning until the installer is signed, but Xenon itself does not add extra setup questions.
 
@@ -38,10 +45,10 @@ Only permission-based extras still need user input: Weather needs an API key, Ca
 Uninstall is also meant to be hands-free:
 
 - Windows Settings > Apps > Installed apps > XENEON Edge Host removes the app, shortcuts, auto-start, and uninstall entry.
-- Start Menu > XENEON Edge Host > Uninstall XENEON Edge Host does the same thing.
-- Start Menu > XENEON Edge Host > Uninstall and Remove Local Data also removes `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost`.
-- Start Menu > XENEON Edge Host > Launch Xenon Safe Mode disables auto-start, ignores saved display placement, and opens on the primary monitor.
-- Start Menu > XENEON Edge Host > Repair XENEON Edge Host restores shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
+- Start Menu > XENEON Edge > Uninstall XENEON Edge does the same thing.
+- Start Menu > XENEON Edge > Remove XENEON Edge and Local Data also removes `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost`.
+- Start Menu > XENEON Edge > XENEON Edge Recovery (Safe Mode) disables auto-start, ignores saved display placement, and opens on the primary monitor.
+- Start Menu > XENEON Edge > Repair XENEON Edge restores shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
 
 Plain-language install/uninstall notes live in [docs/release/WINDOWS-INSTALL-UNINSTALL.md](docs/release/WINDOWS-INSTALL-UNINSTALL.md).
 
@@ -68,7 +75,7 @@ The update, streaming, and marketplace panels are product-ready foundations. Bef
 
 1. Open PowerShell in `app`.
 2. Run `powershell -File publish.ps1`.
-3. Launch `..\publish\XenonEdgeHost.exe`.
+3. Launch `..\Open XENEON Edge.cmd`.
 4. Optional: run `powershell -File install.ps1` from the `app` folder to register auto-start at login.
 
 For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, auto-start registration, Apps & Features registration, and packaged uninstall flow without asking setup questions.
@@ -156,14 +163,14 @@ The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, crea
 Uninstall paths:
 
 - Windows Settings > Apps > Installed apps > XENEON Edge Host
-- Start Menu > XENEON Edge Host > Uninstall XENEON Edge Host
-- Start Menu > XENEON Edge Host > Uninstall and Remove Local Data
+- Start Menu > XENEON Edge > Uninstall XENEON Edge
+- Start Menu > XENEON Edge > Remove XENEON Edge and Local Data
 - `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Remove-XenonEdgeHost.ps1" -Quiet -RemoveLocalData`
 
 Recovery paths:
 
-- Start Menu > XENEON Edge Host > Launch Xenon Safe Mode
-- Start Menu > XENEON Edge Host > Repair XENEON Edge Host
+- Start Menu > XENEON Edge > XENEON Edge Recovery (Safe Mode)
+- Start Menu > XENEON Edge > Repair XENEON Edge
 - `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Launch-XenonSafeMode.ps1" -Quiet`
 - `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\repair.ps1" -Quiet`
 
