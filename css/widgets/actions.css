@@ -175,6 +175,48 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
+.system-shortcuts-shell {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.system-shortcuts-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1.28fr);
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.system-shortcuts-card {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.system-shortcuts-card .inline-list {
+  overflow: visible;
+  padding-right: 0;
+}
+
+.system-shortcuts-note {
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.system-shortcuts-power-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.system-shortcuts-power-grid .inline-action-button {
+  min-height: 104px;
+  padding: 14px;
+}
+
+.system-shortcuts-power-grid .inline-action-button__detail {
+  font-size: 0.82rem;
+}
+
 .inline-clipboard-preview {
   max-width: 62ch;
   white-space: pre-wrap;
@@ -200,6 +242,10 @@
     grid-template-columns: 1fr;
   }
 
+  .system-shortcuts-grid {
+    grid-template-columns: 1fr;
+  }
+
   .inline-launcher-hit {
     grid-template-columns: 56px minmax(0, 1fr);
   }
@@ -207,6 +253,12 @@
   .inline-launcher-icon {
     width: 56px;
     height: 56px;
+  }
+}
+
+@media (max-width: 900px) {
+  .system-shortcuts-power-grid {
+    grid-template-columns: 1fr;
   }
 }
 

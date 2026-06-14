@@ -1057,6 +1057,10 @@
     }, getGameActivityRefreshInterval());
   }
 
+  function shouldSuppressNowStrip() {
+    return currentWidgetId === "quick-actions" || currentWidgetId === "shortcuts";
+  }
+
   function setNowStrip(targetWidget, label, title, detail) {
     if (!nowStripNode) {
       return;
@@ -1088,7 +1092,7 @@
 
   function updateNowPlayingStrip() {
     var activeGame = gameActivity && gameActivity.active && gameActivity.activeGame ? gameActivity.activeGame : null;
-    if (!nowStripNode || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin()) {
+    if (!nowStripNode || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin() || shouldSuppressNowStrip()) {
       hideNowStrip();
       return;
     }
@@ -1767,7 +1771,7 @@
         id: "shortcuts",
         title: "System Shortcuts",
         requiresBridge: true,
-        copy: "Power actions, brightness, and do-not-disturb controls for the local PC.",
+        copy: "Power actions, notifications, and display controls Windows exposes on this PC.",
         getViewerLabel: function () {
           return "Windows shell";
         }
@@ -2411,6 +2415,7 @@
     setStatus("dashboard-origin-status", bridgeReachable === false ? "Needs Setup" : "Ready", bridgeReachable === false ? "warn" : "good");
     showInlineWidget(widget, reloadFrame);
     renderLauncherDock();
+    updateNowPlayingStrip();
   }
 
   function persistWidgetChoice(widgetId) {
