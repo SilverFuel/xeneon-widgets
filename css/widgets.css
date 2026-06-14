@@ -35,6 +35,7 @@ input[type="range"],
 .router-picker,
 .router-settings__body,
 .router-inline-widget,
+.dashboard-launcher-dock__apps,
 .inline-list {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -1754,6 +1755,188 @@ input[type="range"]:focus-visible {
   z-index: 1;
   padding: 18px;
   overflow: auto;
+}
+
+.dashboard-native-page--launcher-dock .router-inline-widget {
+  inset: 96px 0 0;
+}
+
+.dashboard-launcher-dock {
+  position: absolute;
+  inset: 12px 12px auto;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  padding: 9px 10px;
+  border: 1px solid rgba(0, 224, 255, 0.16);
+  border-radius: 16px;
+  background:
+    linear-gradient(90deg, rgba(0, 224, 255, calc(0.12 * var(--dashboard-surface-opacity))), transparent 38%),
+    rgba(5, 13, 18, calc(0.86 * var(--dashboard-surface-opacity)));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px) saturate(1.12);
+}
+
+.dashboard-launcher-dock__head,
+.dashboard-launcher-dock__more {
+  display: grid;
+  place-items: center;
+  min-width: 62px;
+  min-height: 50px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, calc(0.05 * var(--dashboard-surface-opacity)));
+}
+
+.dashboard-launcher-dock__head span {
+  color: var(--color-accent);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-launcher-dock__head strong {
+  font-size: 1.08rem;
+  line-height: 1;
+}
+
+.dashboard-launcher-dock__apps {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(164px, 1fr);
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 1px;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+
+.dashboard-launcher-dock__apps::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard-launcher-dock__app,
+.dashboard-launcher-dock__more {
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.dashboard-launcher-dock__app {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, calc(0.045 * var(--dashboard-surface-opacity)));
+  text-align: left;
+}
+
+.dashboard-launcher-dock__app:hover:not(:disabled),
+.dashboard-launcher-dock__app:focus-visible:not(:disabled),
+.dashboard-launcher-dock__more:hover,
+.dashboard-launcher-dock__more:focus-visible {
+  border-color: rgba(0, 224, 255, 0.3);
+  background: rgba(0, 224, 255, calc(0.1 * var(--dashboard-surface-opacity)));
+}
+
+.dashboard-launcher-dock__app:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.dashboard-launcher-dock__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--color-accent);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.dashboard-launcher-dock__icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dashboard-launcher-dock__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dashboard-launcher-dock__copy strong,
+.dashboard-launcher-dock__copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-launcher-dock__copy strong {
+  font-size: 0.82rem;
+  line-height: 1.08;
+}
+
+.dashboard-launcher-dock__copy small {
+  color: var(--color-text-dim);
+  font-size: 0.66rem;
+  line-height: 1.1;
+}
+
+.dashboard-launcher-dock__more {
+  padding: 0 12px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.dashboard-native-page--perf.dashboard-native-page--launcher-dock .router-inline-widget {
+  inset: 84px 0 0;
+}
+
+.dashboard-native-page--perf .dashboard-launcher-dock {
+  inset: 8px 8px auto;
+  min-height: 64px;
+  padding: 7px 8px;
+}
+
+.dashboard-native-page--perf .dashboard-launcher-dock__head,
+.dashboard-native-page--perf .dashboard-launcher-dock__more,
+.dashboard-native-page--perf .dashboard-launcher-dock__app {
+  min-height: 46px;
+}
+
+.dashboard-native-page--browser .dashboard-launcher-dock {
+  position: relative;
+  inset: auto;
+  margin: 12px;
+}
+
+.dashboard-native-page--browser.dashboard-native-page--launcher-dock .router-inline-widget {
+  inset: auto;
+}
+
+.dashboard-native-page--game-focus-active .dashboard-launcher-dock {
+  display: none;
+}
+
+.dashboard-native-page--game-focus-active.dashboard-native-page--launcher-dock .router-inline-widget {
+  inset: 0;
 }
 
 .router-inline-card,

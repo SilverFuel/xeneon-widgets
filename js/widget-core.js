@@ -55,6 +55,7 @@
     ".router-picker",
     ".router-settings__body",
     ".router-inline-widget",
+    ".dashboard-launcher-dock__apps",
     ".inline-list",
     ".audio-route-strip",
     ".audio-session-stack",
