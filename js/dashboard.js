@@ -23,6 +23,7 @@
   var settingsToggleNode = null;
   var touchLockToggleNode = null;
   var touchUnlockNode = null;
+  var launcherDockNode = null;
   var nowStripNode = null;
   var touchFeedbackNode = null;
   var inlineWidgetController = null;
@@ -101,6 +102,9 @@
   var settingsDrawerOpen = false;
   var touchFeedbackTimerId = 0;
   var nowStripTimerId = 0;
+  var launcherDockTimerId = 0;
+  var launcherDockEntries = [];
+  var launcherDockLaunchingId = "";
   var defaultSettings = {
     dashboardOpacity: "100",
     profileId: "command",
@@ -833,6 +837,10 @@
     return fetchJson(buildUrl(bridgeOrigin, "/api/game/activity"), 4200);
   }
 
+  function fetchLaunchers() {
+    return fetchJson(buildUrl(bridgeOrigin, "/api/launchers"), 4200);
+  }
+
   function getBridgeRefreshInterval() {
     var budget = getPerformanceBudget();
     if (budget === "battery") {
@@ -1138,6 +1146,158 @@
     updateNowPlayingStrip();
     window.clearInterval(nowStripTimerId);
     nowStripTimerId = window.setInterval(updateNowPlayingStrip, 5000);
+  }
+
+  function normalizeLauncherDockEntries(payload) {
+    return (Array.isArray(payload && payload.entries) ? payload.entries : []).map(function (entry) {
+      return {
+        id: text(entry && entry.id, ""),
+        displayName: text(entry && entry.displayName, "App"),
+        iconUrl: text(entry && entry.iconUrl, ""),
+        tileLabel: text(entry && entry.tileLabel, "?"),
+        source: text(entry && entry.source, ""),
+        executablePath: text(entry && entry.executablePath, ""),
+        arguments: text(entry && entry.arguments, "")
+      };
+    }).filter(function (entry) {
+      return entry.id !== "";
+    });
+  }
+
+  function launcherDockTargetLabel(entry) {
+    var target = text(entry && entry.executablePath, "");
+    var normalized;
+    var parts;
+    if (!target) {
+      return text(entry && entry.source, "Recent app");
+    }
+
+    if (/^shell:AppsFolder\\/i.test(target)) {
+      return "Windows app";
+    }
+
+    normalized = target.replace(/\\/g, "/");
+    parts = normalized.split("/").filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : target;
+  }
+
+  function shouldShowLauncherDock() {
+    return Boolean(
+      launcherDockNode
+      && bridgeReachable !== false
+      && !isLocalBridgeBlockedByPageOrigin()
+      && bridgeCapabilities.launchers === true
+      && currentWidgetId
+      && currentWidgetId !== "setup"
+      && currentWidgetId !== "launchers"
+      && launcherDockEntries.length > 0
+    );
+  }
+
+  function setLauncherDockVisible(visible) {
+    if (!launcherDockNode) {
+      return;
+    }
+
+    launcherDockNode.classList.toggle("is-hidden", !visible);
+    document.body.classList.toggle("dashboard-native-page--launcher-dock", visible);
+  }
+
+  function hideLauncherDock() {
+    setLauncherDockVisible(false);
+  }
+
+  function renderLauncherDock() {
+    var visibleEntries;
+    if (!launcherDockNode || !shouldShowLauncherDock()) {
+      hideLauncherDock();
+      return;
+    }
+
+    visibleEntries = launcherDockEntries.slice(0, 8);
+    launcherDockNode.innerHTML = '' +
+      '<div class="dashboard-launcher-dock__head">' +
+        '<span>Recent</span>' +
+        '<strong>' + escapeHtml(String(launcherDockEntries.length)) + '</strong>' +
+      '</div>' +
+      '<div class="dashboard-launcher-dock__apps">' + visibleEntries.map(function (entry) {
+        var launching = launcherDockLaunchingId === entry.id;
+        var detail = entry.source ? entry.source + " · " + launcherDockTargetLabel(entry) : launcherDockTargetLabel(entry);
+        return '' +
+          '<button class="dashboard-launcher-dock__app" type="button" data-launcher-dock-id="' + escapeHtml(entry.id) + '" title="' + escapeHtml(entry.displayName + " - " + detail) + '"' + (launching ? " disabled" : "") + '>' +
+            '<span class="dashboard-launcher-dock__icon">' + (entry.iconUrl
+              ? '<img src="' + escapeHtml(entry.iconUrl) + '" alt="">'
+              : '<span>' + escapeHtml(entry.tileLabel) + '</span>') + '</span>' +
+            '<span class="dashboard-launcher-dock__copy">' +
+              '<strong>' + escapeHtml(entry.displayName) + '</strong>' +
+              '<small>' + escapeHtml(launching ? "Opening" : detail) + '</small>' +
+            '</span>' +
+          '</button>';
+      }).join("") + '</div>' +
+      '<button class="dashboard-launcher-dock__more" type="button" data-launcher-dock-action="open-full">All</button>';
+    setLauncherDockVisible(true);
+  }
+
+  function refreshLauncherDock() {
+    if (!launcherDockNode || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin()) {
+      hideLauncherDock();
+      return Promise.resolve();
+    }
+
+    return fetchLaunchers().then(function (payload) {
+      launcherDockEntries = normalizeLauncherDockEntries(payload);
+      renderLauncherDock();
+    }, function () {
+      launcherDockEntries = [];
+      hideLauncherDock();
+    });
+  }
+
+  function launchDockApp(entryId) {
+    if (!entryId || launcherDockLaunchingId) {
+      return;
+    }
+
+    launcherDockLaunchingId = entryId;
+    renderLauncherDock();
+    postJson(buildUrl(bridgeOrigin, "/api/launchers/launch"), {
+      id: entryId
+    }, 8000).then(function (payload) {
+      launcherDockLaunchingId = "";
+      showTouchFeedback(text(payload && payload.message, "App opened"));
+      return refreshLauncherDock();
+    }, function (error) {
+      launcherDockLaunchingId = "";
+      renderLauncherDock();
+      showTouchFeedback(error && error.message ? error.message : "Launch failed");
+    });
+  }
+
+  function initLauncherDock() {
+    if (!launcherDockNode) {
+      return;
+    }
+
+    launcherDockNode.addEventListener("click", function (event) {
+      var target = event.target && event.target.closest
+        ? event.target.closest("[data-launcher-dock-id],[data-launcher-dock-action]")
+        : null;
+      if (!target) {
+        return;
+      }
+
+      if (target.getAttribute("data-launcher-dock-action") === "open-full") {
+        selectWidget("launchers", true);
+        showTouchFeedback("App Launcher opened");
+        return;
+      }
+
+      launchDockApp(target.getAttribute("data-launcher-dock-id") || "");
+    });
+
+    refreshLauncherDock();
+    window.clearInterval(launcherDockTimerId);
+    launcherDockTimerId = window.setInterval(refreshLauncherDock, 20000);
   }
 
   function readStoredSettings() {
@@ -2230,6 +2390,7 @@
     renderSettings(widget);
 
     if (bridgeReachable === false && widgetRequiresBridge(widget) && widgetBase === bridgeOrigin) {
+      hideLauncherDock();
       showFrameEmpty(
         "Local bridge unavailable",
         "The widget shell points at " + bridgeOrigin + ", but the localhost bridge is not responding. Start it, then retry."
@@ -2240,6 +2401,7 @@
 
     setStatus("dashboard-origin-status", bridgeReachable === false ? "Needs Setup" : "Ready", bridgeReachable === false ? "warn" : "good");
     showInlineWidget(widget, reloadFrame);
+    renderLauncherDock();
   }
 
   function persistWidgetChoice(widgetId) {
@@ -2382,6 +2544,7 @@
     currentWidgetId = widget.id;
     bridgeReachable = false;
     bridgeSetup = createOfflineSetupSummary();
+    hideLauncherDock();
 
     if (!widgetRequiresBridge(widget)) {
       renderCurrentSelection(true);
@@ -2445,6 +2608,7 @@
       shouldReloadFrame = !(settings.skipFrameReload && wasReachable === true);
       updateWidgetMeta(getWidgetById(currentWidgetId || "system"));
       renderCurrentSelection(shouldReloadFrame);
+      refreshLauncherDock();
     }, function () {
       handleBridgeOffline();
     });
@@ -2498,6 +2662,7 @@
       settingsToggleNode = document.getElementById("dashboard-settings-toggle");
       touchLockToggleNode = document.getElementById("dashboard-touch-lock-toggle");
       touchUnlockNode = document.getElementById("dashboard-touch-unlock");
+      launcherDockNode = document.getElementById("dashboard-launcher-dock");
       nowStripNode = document.getElementById("dashboard-now-strip");
       touchFeedbackNode = document.getElementById("dashboard-touch-feedback");
       document.body.classList.toggle("dashboard-native-page--perf", perfMode);
@@ -2570,6 +2735,7 @@
         );
       });
       initNowPlayingStrip();
+      initLauncherDock();
 
       scheduleBridgeRefreshLoop();
       scheduleGameActivityLoop();
