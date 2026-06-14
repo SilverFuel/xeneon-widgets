@@ -248,14 +248,6 @@
 
     return '' +
       '<div class="inline-widget-shell inline-widget-shell--system">' +
-        '<div class="system-compact-toolbar">' +
-          '<span class="system-compact-summary">' + escapeHtml(health.detail) + '</span>' +
-          '<div class="system-toolbar-actions">' +
-            '<button class="inline-button" type="button" data-action="system-refresh"' + (busy ? " disabled" : "") + '>Refresh</button>' +
-            '<button class="inline-button" type="button" data-action="system-task-manager"' + (busy ? " disabled" : "") + '>Task Manager</button>' +
-            statusPill(statusText, statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="system-monitor-cockpit">' +
           '<section class="system-health-strip">' +
             '<article class="system-health-card" data-tone="' + escapeHtml(health.tone) + '">' +
@@ -270,7 +262,13 @@
           '</section>' +
           '<section class="system-detail-grid">' +
             '<article class="system-panel system-process-panel">' +
-              '<div class="system-panel-head"><div><div class="metric-label">What is using resources?</div><strong>Top apps right now</strong></div></div>' +
+              '<div class="system-panel-head">' +
+                '<div><div class="metric-label">What is using resources?</div><strong>Top apps right now</strong></div>' +
+                '<div class="system-panel-actions">' +
+                  '<button class="inline-button" type="button" data-action="system-refresh"' + (busy ? " disabled" : "") + '>Refresh</button>' +
+                  '<button class="inline-button" type="button" data-action="system-task-manager"' + (busy ? " disabled" : "") + '>Task Manager</button>' +
+                '</div>' +
+              '</div>' +
               renderSystemProcesses(data.topProcesses) +
             '</article>' +
             renderSystemDisplayPanel(data, displayDiagnostics) +

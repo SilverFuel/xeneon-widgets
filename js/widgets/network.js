@@ -222,7 +222,6 @@
   }
 
   function renderNetworkWidget(bridgeData, unifiData, statusText, statusTone, state) {
-    var score = networkQualityScore(bridgeData, unifiData);
     var topClients = (unifiData.topClients || []).slice(0, 4).map(function (client) {
       return '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">' + escapeHtml(text(client.name, "Client")) + '</div><div class="inline-list-copy">' + escapeHtml(text(client.ip, text(client.connection, "Client"))) + '</div></div><div class="inline-list-meta">' + escapeHtml(text(client.usage, text(client.rate, "--"))) + '</div></div>';
     });
@@ -233,12 +232,6 @@
 
     return '' +
       '<div class="inline-widget-shell network-command-shell">' +
-        '<div class="network-compact-toolbar">' +
-          '<span class="network-compact-summary">' + escapeHtml(networkQualityLabel(score) + " / " + (unifiData.linked ? "UniFi linked" : unifiData.detected ? "UniFi detected" : "local metrics")) + '</span>' +
-          '<div class="inline-actions">' +
-            statusPill(statusText, statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="network-command-grid">' +
           renderNetworkQualityCard(bridgeData, unifiData) +
           '<section class="network-kpi-grid">' +

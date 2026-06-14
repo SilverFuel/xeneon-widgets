@@ -1051,29 +1051,23 @@
       container.removeAttribute("data-game-focus-intro");
       container.innerHTML = '' +
         '<div class="inline-widget-shell product-shell game-mode-idle-shell">' +
-          '<div class="game-mode-idle-status">' +
-            statusPill(
-              state.activity && state.activity.stateLabel ? state.activity.stateLabel : state.statusText,
-              state.activity && state.activity.mode === "ended" ? "warn" : state.statusTone
-            ) +
+          '<div class="game-mode-idle-grid">' +
+            '<section class="game-mode-idle-top">' +
+              '<div class="inline-grid inline-grid--4 game-mode-performance">' +
+                metricCard("FPS", formatFps(state.performance.fps), text(state.performance.message, "Starts when a game is active"), fpsProgress(state.performance.fps, 240), "game-mode-metric--primary") +
+                metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system.gpu) +
+                metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
+                metricCard("RAM", formatPercent(system.ram), "Memory", system.ram) +
+              '</div>' +
+            '</section>' +
+            '<section class="game-mode-idle-telemetry">' +
+              renderTelemetryReadiness(state.performance) +
+            '</section>' +
+            (idleStatusPanels ? '<section class="game-mode-idle-notices">' + idleStatusPanels + '</section>' : '') +
+            '<section class="game-mode-idle-launch">' +
+              renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
+            '</section>' +
           '</div>' +
-        '<div class="game-mode-idle-grid">' +
-          '<section class="game-mode-idle-top">' +
-            '<div class="inline-grid inline-grid--4 game-mode-performance">' +
-              metricCard("FPS", formatFps(state.performance.fps), text(state.performance.message, "Starts when a game is active"), fpsProgress(state.performance.fps, 240), "game-mode-metric--primary") +
-              metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system.gpu) +
-              metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
-              metricCard("RAM", formatPercent(system.ram), "Memory", system.ram) +
-            '</div>' +
-          '</section>' +
-          '<section class="game-mode-idle-telemetry">' +
-            renderTelemetryReadiness(state.performance) +
-          '</section>' +
-          (idleStatusPanels ? '<section class="game-mode-idle-notices">' + idleStatusPanels + '</section>' : '') +
-          '<section class="game-mode-idle-launch">' +
-            renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
-          '</section>' +
-        '</div>' +
       '</div>';
     }
 

@@ -20,7 +20,6 @@
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
   var settingValue = runtime.settingValue;
-  var statusPill = runtime.statusPill;
   var statusTextFromPayload = runtime.statusTextFromPayload;
   var statusToneFromPayload = runtime.statusToneFromPayload;
   var text = runtime.text;
@@ -54,20 +53,9 @@
     var data = state.data;
     return '' +
       '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Weather</div>' +
-            '<h3 class="inline-title">' + escapeHtml(data.city) + '</h3>' +
-            '<p class="inline-copy">' + escapeHtml(data.condition) + '</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
-            statusPill(state.statusText, state.statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Current", data.temperature == null ? "--" : Math.round(data.temperature) + "°", /imperial/i.test(data.units) ? "Imperial" : "Metric") +
-          metricCard("Source", data.source, "Bridge weather feed") +
+          metricCard("Source", data.source, state.statusText || "Bridge weather feed") +
           metricCard("Forecast", String(data.daily.length), "Next 5 days") +
         '</div>' +
         '<div class="inline-grid inline-grid--2">' +
@@ -166,19 +154,8 @@
     var controlsEnabled = data.configured && data.linked && !state.busy;
     return '' +
       '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Philips Hue</div>' +
-            '<h3 class="inline-title">' + escapeHtml(data.bridgeIp ? data.bridgeIp : "Bridge setup") + '</h3>' +
-            '<p class="inline-copy">' + escapeHtml(data.message) + '</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
-            statusPill(state.statusText, state.statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="inline-grid inline-grid--3">' +
-          metricCard("Bridge", data.bridgeIp || "--", data.bridgeName || "Philips Hue") +
+          metricCard("Bridge", data.bridgeIp || "--", state.statusText || data.bridgeName || "Philips Hue") +
           metricCard("Lights", String(data.lights.length), data.linked ? "Writable bulbs" : "Setup required") +
           metricCard("Groups", String(data.groups.length), data.linked ? "Writable rooms" : "Link pending") +
         '</div>' +
@@ -411,24 +388,10 @@
 
     return '' +
       '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Media</div>' +
-            '<h3 class="inline-title">Media controls</h3>' +
-            '<p class="inline-copy">' + escapeHtml(text(data.message, "Windows media transport controls are ready.")) + '</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
-            '<button class="inline-button" type="button" data-action="previous"' + (state.busy || !hasSession || !data.canGoPrevious ? " disabled" : "") + '>Prev</button>' +
-            '<button class="inline-button is-primary" type="button" data-action="' + escapeHtml(primaryAction.action) + '"' + (state.busy || !hasSession || !primaryAction.enabled ? " disabled" : "") + '>' + escapeHtml(primaryAction.label) + '</button>' +
-            '<button class="inline-button" type="button" data-action="next"' + (state.busy || !hasSession || !data.canGoNext ? " disabled" : "") + '>Next</button>' +
-            statusPill(state.statusText, state.statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Playback", hasSession ? playbackLabel : "Idle", text(data.source, "Windows media session"), progressPercent) +
           metricCard("Source", formatMediaAppLabel(data.appId), data.albumTitle ? data.albumTitle : "Foreground media app") +
-          metricCard("Updated", formatAge(data.sampledAt), data.stale ? "Sample is stale" : "Fresh snapshot") +
+          metricCard("Status", state.statusText, formatAge(data.sampledAt) || (data.stale ? "Sample is stale" : "Fresh snapshot")) +
         '</div>' +
         '<article class="list-card inline-card">' + (hasSession ? (
           '<div class="inline-media-hero">' +

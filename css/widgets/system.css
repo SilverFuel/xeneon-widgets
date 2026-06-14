@@ -1,29 +1,9 @@
 .inline-widget-shell--system {
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 8px;
   overflow: hidden;
-}
-
-.system-compact-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  min-height: 34px;
-}
-
-.system-compact-summary {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-dim);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .system-toolbar-actions {
@@ -187,6 +167,14 @@
 
 .system-panel-head > div {
   min-width: 0;
+}
+
+.system-panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .system-panel-head strong {

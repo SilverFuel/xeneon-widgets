@@ -112,18 +112,12 @@
 .product-shell:has(.game-mode-idle-grid) {
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
 .game-mode-idle-shell {
   gap: 8px;
-}
-
-.game-mode-idle-status {
-  display: flex;
-  justify-content: flex-end;
-  min-width: 0;
 }
 
 .game-mode-idle-grid {
