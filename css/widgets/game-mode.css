@@ -3,9 +3,31 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   scroll-behavior: auto;
-  touch-action: pan-y;
-  scrollbar-gutter: stable;
+  touch-action: pan-x;
+  scrollbar-color: rgba(77, 255, 194, 0.54) rgba(255, 255, 255, 0.07);
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
   will-change: scroll-position;
+}
+
+.game-mode-steam-dock::-webkit-scrollbar {
+  height: 8px;
+}
+
+.game-mode-steam-dock::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.game-mode-steam-dock::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(77, 255, 194, 0.5), rgba(0, 224, 255, 0.72));
+}
+
+.game-mode-steam-dock::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .dashboard-native-page--game-focus-active .dashboard-router-stage {
@@ -1357,7 +1379,7 @@
   gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 2px 2px 12px;
+  padding: 2px 2px 10px;
   scroll-snap-type: x proximity;
   touch-action: pan-x;
 }
