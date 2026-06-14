@@ -159,7 +159,7 @@ public sealed class TelemetryController
         var network = CreateSetupItem("network", "Network Monitor", "Ready", true, "Native network telemetry is live.");
         var launcherItem = CreateSetupItem(
             "launchers",
-            "App Launcher",
+            "Recent apps",
             launchers.Configured ? "Ready" : "Optional",
             false,
             TextOr(launchers.Message, "Xenon scans Start Menu shortcuts and Steam games automatically."));

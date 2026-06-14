@@ -1761,6 +1761,10 @@ input[type="range"]:focus-visible {
   inset: 96px 0 0;
 }
 
+.dashboard-native-page--launcher-dock-expanded .router-inline-widget {
+  inset: 168px 0 0;
+}
+
 .dashboard-launcher-dock {
   position: absolute;
   inset: 12px 12px auto;
@@ -1815,6 +1819,12 @@ input[type="range"]:focus-visible {
   padding-bottom: 1px;
   touch-action: pan-x;
   scrollbar-width: none;
+}
+
+.dashboard-launcher-dock.is-expanded .dashboard-launcher-dock__apps {
+  grid-template-rows: repeat(2, minmax(52px, auto));
+  grid-auto-columns: minmax(150px, 1fr);
+  align-items: stretch;
 }
 
 .dashboard-launcher-dock__apps::-webkit-scrollbar {
@@ -1909,6 +1919,10 @@ input[type="range"]:focus-visible {
   inset: 84px 0 0;
 }
 
+.dashboard-native-page--perf.dashboard-native-page--launcher-dock-expanded .router-inline-widget {
+  inset: 148px 0 0;
+}
+
 .dashboard-native-page--perf .dashboard-launcher-dock {
   inset: 8px 8px auto;
   min-height: 64px;
@@ -1928,6 +1942,10 @@ input[type="range"]:focus-visible {
 }
 
 .dashboard-native-page--browser.dashboard-native-page--launcher-dock .router-inline-widget {
+  inset: auto;
+}
+
+.dashboard-native-page--browser.dashboard-native-page--launcher-dock-expanded .router-inline-widget {
   inset: auto;
 }
 

@@ -140,7 +140,7 @@ public sealed class ProvisioningService
                     actions.Add(new ProvisioningActionPayload
                     {
                         Id = "launchers",
-                        Label = "App launcher",
+                        Label = "Recent apps",
                         State = "Review",
                         Message = $"Found {suggestedLaunchers.Count} launcher suggestion{(suggestedLaunchers.Count == 1 ? "" : "s")} for review."
                     });
@@ -151,7 +151,7 @@ public sealed class ProvisioningService
                     actions.Add(new ProvisioningActionPayload
                     {
                         Id = "launchers",
-                        Label = "App launcher",
+                        Label = "Recent apps",
                         State = "Ready",
                         Message = $"Pinned {suggestedLaunchers.Count} detected app{(suggestedLaunchers.Count == 1 ? "" : "s")} automatically."
                     });
@@ -164,7 +164,7 @@ public sealed class ProvisioningService
                     actions.Add(new ProvisioningActionPayload
                     {
                         Id = "launchers",
-                        Label = "App launcher",
+                        Label = "Recent apps",
                         State = added > 0 ? "Ready" : "Current",
                         Message = added > 0
                             ? $"Added {added} newly detected app{(added == 1 ? "" : "s")}."
@@ -176,7 +176,7 @@ public sealed class ProvisioningService
                     actions.Add(new ProvisioningActionPayload
                     {
                         Id = "launchers",
-                        Label = "App launcher",
+                        Label = "Recent apps",
                         State = "Ready",
                         Message = $"{current.Launchers.Count} launcher entr{(current.Launchers.Count == 1 ? "y is" : "ies are")} already configured."
                     });
@@ -186,7 +186,7 @@ public sealed class ProvisioningService
                     actions.Add(new ProvisioningActionPayload
                     {
                         Id = "launchers",
-                        Label = "App launcher",
+                        Label = "Recent apps",
                         State = "Optional",
                         Message = shouldScanLaunchers
                             ? "No safe Start Menu shortcuts or Steam games were found. The dashboard still works without them."

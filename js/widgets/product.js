@@ -443,10 +443,10 @@
     {
       id: "gaming",
       name: "Gaming",
-      copy: "System pressure, network state, audio, launchers, and game mode first.",
+      copy: "System pressure, network state, audio, and game mode first.",
       themeId: "deepcore",
       pack: "gaming",
-      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "theme-studio", "updates"]
+      layout: ["game-mode", "system", "network", "audio", "quick-actions", "theme-studio", "updates"]
     },
     {
       id: "streaming",
@@ -484,8 +484,8 @@
     {
       id: "gaming",
       name: "Gaming Desk",
-      copy: "Telemetry, launchers, audio/media, and game mode for a player-focused panel.",
-      layout: ["game-mode", "system", "network", "audio", "launchers", "quick-actions", "theme-studio"]
+      copy: "Telemetry, audio/media, and game mode for a player-focused panel.",
+      layout: ["game-mode", "system", "network", "audio", "quick-actions", "theme-studio"]
     },
     {
       id: "streamer",

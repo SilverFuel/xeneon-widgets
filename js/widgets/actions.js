@@ -885,7 +885,6 @@
     };
   }
 
-  runtime.registerRenderer("launchers", mountLaunchersWidget);
   runtime.registerRenderer("quick-actions", mountQuickActionsWidget);
   runtime.registerRenderer("shortcuts", mountSystemShortcutsWidget);
   runtime.registerRenderer("clipboard", mountClipboardWidget);

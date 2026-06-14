@@ -105,6 +105,7 @@
   var launcherDockTimerId = 0;
   var launcherDockEntries = [];
   var launcherDockLaunchingId = "";
+  var launcherDockExpanded = false;
   var defaultSettings = {
     dashboardOpacity: "100",
     profileId: "command",
@@ -213,7 +214,7 @@
         bridge: createSetupItem("Local bridge", "Needs Setup", true, "Checking the bridge state."),
         system: createSetupItem("System Monitor", "Needs Setup", true, "Waiting for the bridge."),
         network: createSetupItem("Network Monitor", "Needs Setup", true, "Waiting for the bridge."),
-        launchers: createSetupItem("App Launcher", "Needs Setup", false, "Waiting for the bridge."),
+        launchers: createSetupItem("Recent apps", "Needs Setup", false, "Waiting for the bridge."),
         "quick-actions": createSetupItem("Quick Actions", "Needs Setup", false, "Waiting for the bridge."),
         shortcuts: createSetupItem("System Shortcuts", "Needs Setup", false, "Waiting for the bridge."),
         audio: createSetupItem("Audio & Media", "Needs Setup", false, "Waiting for the bridge."),
@@ -237,7 +238,7 @@
         display: createSetupItem("XENEON EDGE display", "Needs Setup", true, "Start the local bridge to check EDGE display targeting."),
         system: createSetupItem("System Monitor", "Needs Setup", true, "System telemetry depends on the local bridge."),
         network: createSetupItem("Network Monitor", "Needs Setup", true, "Network telemetry depends on the local bridge."),
-        launchers: createSetupItem("App Launcher", "Needs Setup", false, "App launching depends on the local bridge."),
+        launchers: createSetupItem("Recent apps", "Needs Setup", false, "App launching depends on the local bridge."),
         "quick-actions": createSetupItem("Quick Actions", "Needs Setup", false, "Quick actions depend on the local bridge."),
         shortcuts: createSetupItem("System Shortcuts", "Needs Setup", false, "System shortcuts depend on the local bridge."),
         audio: createSetupItem("Audio & Media", "Needs Setup", false, "Audio and media controls depend on the local bridge."),
@@ -1189,7 +1190,6 @@
       && bridgeCapabilities.launchers === true
       && currentWidgetId
       && currentWidgetId !== "setup"
-      && currentWidgetId !== "launchers"
       && launcherDockEntries.length > 0
     );
   }
@@ -1201,6 +1201,10 @@
 
     launcherDockNode.classList.toggle("is-hidden", !visible);
     document.body.classList.toggle("dashboard-native-page--launcher-dock", visible);
+    document.body.classList.toggle("dashboard-native-page--launcher-dock-expanded", visible && launcherDockExpanded);
+    if (!visible) {
+      launcherDockNode.classList.remove("is-expanded");
+    }
   }
 
   function hideLauncherDock() {
@@ -1209,15 +1213,22 @@
 
   function renderLauncherDock() {
     var visibleEntries;
+    var hasMore;
     if (!launcherDockNode || !shouldShowLauncherDock()) {
       hideLauncherDock();
       return;
     }
 
-    visibleEntries = launcherDockEntries.slice(0, 8);
+    if (launcherDockEntries.length <= 8) {
+      launcherDockExpanded = false;
+    }
+
+    visibleEntries = launcherDockEntries.slice(0, launcherDockExpanded ? 24 : 8);
+    hasMore = launcherDockEntries.length > 8;
+    launcherDockNode.classList.toggle("is-expanded", launcherDockExpanded);
     launcherDockNode.innerHTML = '' +
       '<div class="dashboard-launcher-dock__head">' +
-        '<span>Recent</span>' +
+        '<span>Apps</span>' +
         '<strong>' + escapeHtml(String(launcherDockEntries.length)) + '</strong>' +
       '</div>' +
       '<div class="dashboard-launcher-dock__apps">' + visibleEntries.map(function (entry) {
@@ -1234,7 +1245,9 @@
             '</span>' +
           '</button>';
       }).join("") + '</div>' +
-      '<button class="dashboard-launcher-dock__more" type="button" data-launcher-dock-action="open-full">All</button>';
+      (hasMore
+        ? '<button class="dashboard-launcher-dock__more" type="button" data-launcher-dock-action="toggle-expanded" aria-expanded="' + (launcherDockExpanded ? "true" : "false") + '">' + (launcherDockExpanded ? "Less" : "More") + '</button>'
+        : '');
     setLauncherDockVisible(true);
   }
 
@@ -1286,9 +1299,10 @@
         return;
       }
 
-      if (target.getAttribute("data-launcher-dock-action") === "open-full") {
-        selectWidget("launchers", true);
-        showTouchFeedback("App Launcher opened");
+      if (target.getAttribute("data-launcher-dock-action") === "toggle-expanded") {
+        launcherDockExpanded = !launcherDockExpanded;
+        renderLauncherDock();
+        showTouchFeedback(launcherDockExpanded ? "Showing recent apps" : "Showing top apps");
         return;
       }
 
@@ -1556,10 +1570,6 @@
       return isWidgetSupported("audio");
     }
 
-    if (widget.id === "launchers") {
-      return isWidgetSupported("launchers") && getWidgetState("launchers") === "Ready";
-    }
-
     if (widget.id === "quick-actions" || widget.id === "shortcuts") {
       return isWidgetSupported(widget.id);
     }
@@ -1597,6 +1607,16 @@
     return widgets.filter(function (entry) {
       return entry.id === widgetId;
     })[0] || widgets[0];
+  }
+
+  function hasWidgetId(widgetId) {
+    if (widgetId === "media") {
+      widgetId = "audio";
+    }
+
+    return widgets.some(function (entry) {
+      return entry.id === widgetId;
+    });
   }
 
   function getSchemaForWidget(widgetId) {
@@ -1732,17 +1752,6 @@
             endpoint: buildUrl(bridgeOrigin, "/api/audio"),
             actionBase: buildUrl(bridgeOrigin, "/api/audio")
           });
-        }
-      },
-      {
-        id: "launchers",
-        title: "App Launcher",
-        requiresBridge: true,
-        copy: "The last 24 apps opened on this PC for one-tap relaunches.",
-        getViewerLabel: function () {
-          return getWidgetState("launchers") === "Ready"
-            ? "Recent apps"
-            : "Setup";
         }
       },
       {
@@ -2148,7 +2157,7 @@
       return "This widget is ready without extra dashboard settings.";
     }
 
-    if (widget.id === "launchers" || widget.id === "quick-actions" || widget.id === "shortcuts" || widget.id === "clipboard") {
+    if (widget.id === "quick-actions" || widget.id === "shortcuts" || widget.id === "clipboard") {
       return "This widget manages its own native settings and actions directly inside the panel.";
     }
 
@@ -2434,7 +2443,13 @@
   }
 
   function resolveInitialWidget(preferredWidgetId, explicitWidgetParam) {
-    var preferredWidget = getWidgetById(preferredWidgetId || "system");
+    var preferredWidget;
+
+    if (preferredWidgetId && !hasWidgetId(preferredWidgetId)) {
+      return getFallbackPrimaryWidget();
+    }
+
+    preferredWidget = getWidgetById(preferredWidgetId || "system");
 
     if (explicitWidgetParam) {
       return shouldShowWidget(preferredWidget) ? preferredWidget.id : getFallbackPrimaryWidget();

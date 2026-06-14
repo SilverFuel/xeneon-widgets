@@ -611,7 +611,10 @@ assert(
 assert(
   /css\/widgets\/actions\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
     && /js\/widgets\/actions\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /runtime\.registerRenderer\("launchers",\s*mountLaunchersWidget\)/.test(actionsWidget)
+    && !/runtime\.registerRenderer\("launchers"/.test(actionsWidget)
+    && /id="dashboard-launcher-dock"/.test(readWorkspaceFile("dashboard.html"))
+    && /data-launcher-dock-action="toggle-expanded"/.test(dashboardJs)
+    && /dashboard-native-page--launcher-dock-expanded/.test(readWorkspaceFile("css/widgets.css"))
     && /runtime\.registerRenderer\("quick-actions",\s*mountQuickActionsWidget\)/.test(actionsWidget)
     && /runtime\.registerRenderer\("shortcuts",\s*mountSystemShortcutsWidget\)/.test(actionsWidget)
     && /runtime\.registerRenderer\("clipboard",\s*mountClipboardWidget\)/.test(actionsWidget)
@@ -620,7 +623,7 @@ assert(
     && !/mountSystemShortcutsWidget/.test(inlineWidgets)
     && !/mountClipboardWidget/.test(inlineWidgets)
     && !/inline-action-grid|inline-launcher-grid|inline-clipboard-preview/.test(readWorkspaceFile("css/widgets.css")),
-  "Launcher, quick action, shortcut, and clipboard widget JS/CSS must stay split from the shared inline widget runtime"
+  "Launcher dock, quick action, shortcut, and clipboard JS/CSS must stay split from the shared inline widget runtime"
 );
 
 assert(
