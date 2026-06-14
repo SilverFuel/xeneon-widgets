@@ -209,3 +209,154 @@
     height: 56px;
   }
 }
+
+.launcher-shell {
+  height: 100%;
+  min-height: 0;
+  align-content: stretch;
+  overflow: hidden;
+}
+
+.launcher-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.75fr);
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.launcher-library-card,
+.launcher-editor-card {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.launcher-library-card {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.launcher-editor-card {
+  align-content: start;
+}
+
+.launcher-card-header {
+  align-items: flex-start;
+}
+
+.launcher-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.launcher-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text);
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.launcher-grid--compact {
+  grid-template-columns: repeat(auto-fill, minmax(204px, 1fr));
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.launcher-grid--compact .inline-launcher-tile {
+  gap: 6px;
+  min-width: 0;
+}
+
+.launcher-grid--compact .inline-launcher-hit {
+  width: 100%;
+  min-height: 72px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+}
+
+.launcher-grid--compact .inline-launcher-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.launcher-grid--compact .inline-launcher-copy strong,
+.launcher-grid--compact .inline-launcher-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launcher-grid--compact .inline-launcher-copy strong {
+  font-size: 0.92rem;
+}
+
+.launcher-grid--compact .inline-launcher-copy small {
+  color: var(--color-text-dim);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  overflow-wrap: normal;
+}
+
+.launcher-grid--compact .inline-launcher-actions {
+  gap: 6px;
+}
+
+.launcher-grid--compact .inline-launcher-actions .inline-button {
+  min-height: 30px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+}
+
+.launcher-form {
+  align-content: start;
+  gap: 10px;
+}
+
+.launcher-editor-card .inline-form-grid--2 {
+  grid-template-columns: 1fr;
+}
+
+.launcher-editor-card .inline-field {
+  gap: 5px;
+}
+
+.launcher-editor-card .inline-input {
+  min-height: 34px;
+  border-radius: 10px;
+}
+
+.launcher-editor-card .inline-actions {
+  margin-top: 2px;
+}
+
+@media (max-width: 1280px) {
+  .launcher-workspace {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .launcher-grid--compact {
+    grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+    max-height: 420px;
+  }
+}
