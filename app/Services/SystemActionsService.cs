@@ -126,9 +126,9 @@ public sealed class SystemActionsService
                 new()
                 {
                     Id = "toggle-dnd",
-                    Label = "DND",
-                    Detail = "Toggle notification banners",
-                    State = dndEnabled ? "On" : "Off",
+                    Label = "Notifications",
+                    Detail = dndEnabled ? "Tap to allow banners" : "Tap to mute banners",
+                    State = dndEnabled ? "Muted" : "On",
                     Style = "toggle",
                     Enabled = true
                 }

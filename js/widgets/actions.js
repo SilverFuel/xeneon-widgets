@@ -511,29 +511,36 @@
   function renderSystemShortcutsWidget(state) {
     var data = state.data;
     var brightnessValue = data.brightness == null ? 0 : Math.round(data.brightness);
+    var brightnessPanel = data.brightnessSupported
+      ? '' +
+        '<div class="inline-list-item">' +
+          '<div class="inline-card-header"><div><div class="inline-list-title">Display brightness</div><div class="inline-list-copy">Adjust the active display brightness.</div></div><div class="inline-list-meta">' + escapeHtml(data.brightness != null ? brightnessValue + "%" : "--") + '</div></div>' +
+          '<input class="inline-range" type="range" min="0" max="100" step="1" aria-label="Display brightness" value="' + brightnessValue + '" data-action="brightness"' + (state.busy ? " disabled" : "") + '>' +
+        '</div>'
+      : '' +
+        '<div class="inline-list-item system-shortcuts-note" data-tone="muted">' +
+          '<div class="inline-card-header"><div><div class="inline-list-title">Display brightness</div><div class="inline-list-copy">This monitor does not expose Windows brightness control, so Xenon hides the slider.</div></div><div class="inline-list-meta">Unavailable</div></div>' +
+        '</div>';
     return '' +
-      '<div class="inline-widget-shell">' +
+      '<div class="inline-widget-shell system-shortcuts-shell">' +
         '<div class="inline-grid inline-grid--3">' +
-          metricCard("Brightness", data.brightnessSupported && data.brightness != null ? Math.round(data.brightness) + "%" : "Unavailable", data.brightnessSupported ? "Active display brightness" : "Display does not expose WMI brightness") +
-          metricCard("DND", data.dndEnabled ? "On" : "Off", "Notification banners") +
+          metricCard("Notifications", data.dndEnabled ? "Muted" : "On", data.dndEnabled ? "Banners are muted" : "Banners are allowed") +
+          metricCard("Power", String(data.powerActions.length), "Sleep / restart / shut down") +
           metricCard("Status", state.statusText, formatAge(data.sampledAt) || (data.stale ? "Snapshot is stale" : "Fresh snapshot")) +
         '</div>' +
-        '<div class="inline-grid inline-grid--2">' +
-          '<article class="list-card inline-card">' +
-            '<div class="inline-card-header"><div><div class="metric-label">Display</div><div class="router-inline-copy">Adjust brightness and notification mode.</div></div></div>' +
+        '<div class="system-shortcuts-grid">' +
+          '<article class="list-card inline-card system-shortcuts-card system-shortcuts-card--controls">' +
+            '<div class="inline-card-header"><div><div class="metric-label">Windows Controls</div><div class="router-inline-copy">Only working controls are tappable.</div></div></div>' +
             '<div class="inline-list">' +
               (data.toggles.length ? data.toggles.map(function (item) {
                 return renderActionButton(item, "shortcut", "", state.busy);
               }).join("") : emptyState("No toggles", "This PC did not return any system toggles.")) +
-              '<div class="inline-list-item">' +
-                '<div class="inline-card-header"><div><div class="inline-list-title">Brightness</div><div class="inline-list-copy">' + escapeHtml(data.brightnessSupported ? "Use the slider to adjust the active display." : "This display does not support WMI brightness control.") + '</div></div><div class="inline-list-meta">' + escapeHtml(data.brightnessSupported && data.brightness != null ? brightnessValue + "%" : "--") + '</div></div>' +
-                '<input class="inline-range" type="range" min="0" max="100" step="1" aria-label="Display brightness" value="' + brightnessValue + '" data-action="brightness"' + ((state.busy || !data.brightnessSupported) ? " disabled" : "") + '>' +
-              '</div>' +
+              brightnessPanel +
             '</div>' +
           '</article>' +
-          '<article class="list-card inline-card">' +
-            '<div class="inline-card-header"><div><div class="metric-label">Power</div><div class="router-inline-copy">Sleep, restart, and shutdown ask for confirmation.</div></div></div>' +
-            '<div class="inline-action-grid">' + (data.powerActions.length ? data.powerActions.map(function (item) {
+          '<article class="list-card inline-card system-shortcuts-card system-shortcuts-card--power">' +
+            '<div class="inline-card-header"><div><div class="metric-label">Power</div><div class="router-inline-copy">Tap once, then tap again to confirm.</div></div></div>' +
+            '<div class="inline-action-grid system-shortcuts-power-grid">' + (data.powerActions.length ? data.powerActions.map(function (item) {
               return renderActionButton(item, "shortcut", state.confirmActionId, state.busy);
             }).join("") : emptyState("No power actions", "This PC did not return any power actions.")) + '</div>' +
           '</article>' +
