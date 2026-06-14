@@ -1578,10 +1578,10 @@
         id: "launchers",
         title: "App Launcher",
         requiresBridge: true,
-        copy: "Pinned apps and shortcuts for one-tap launches from the EDGE display.",
+        copy: "The last 24 apps opened on this PC for one-tap relaunches.",
         getViewerLabel: function () {
           return getWidgetState("launchers") === "Ready"
-            ? (bridgeConfig.launchers && bridgeConfig.launchers.count ? bridgeConfig.launchers.count + " pinned" : "Configured")
+            ? "Recent apps"
             : "Setup";
         }
       },

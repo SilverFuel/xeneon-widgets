@@ -67,8 +67,8 @@
       status: text(payload.status, payload.configured ? "live" : "setup"),
       stale: Boolean(payload.stale),
       sampledAt: text(payload.sampledAt, ""),
-      message: text(payload.message, payload.configured ? "Pinned launchers are ready." : "Add apps or shortcuts to build your launcher grid."),
-      source: text(payload.source, "config"),
+      message: text(payload.message, payload.configured ? "Recent apps are ready." : "Open apps to build your launcher grid."),
+      source: text(payload.source, "Windows app activity"),
       entries: Array.isArray(payload.entries) ? payload.entries.map(function (entry) {
         return {
           id: text(entry.id, ""),
@@ -77,7 +77,10 @@
           executablePath: text(entry.executablePath, ""),
           arguments: text(entry.arguments, ""),
           iconUrl: text(entry.iconUrl, ""),
-          tileLabel: text(entry.tileLabel, "?")
+          tileLabel: text(entry.tileLabel, "?"),
+          source: text(entry.source, ""),
+          lastOpenedAt: text(entry.lastOpenedAt, ""),
+          recent: Boolean(entry.recent)
         };
       }) : []
     };
@@ -98,6 +101,10 @@
       return "Steam game";
     }
 
+    if (/^shell:AppsFolder\\/i.test(target)) {
+      return "Windows app";
+    }
+
     scheme = target.match(/^([a-z][a-z0-9+.-]*):\/\//i);
     if (scheme) {
       return scheme[1].toUpperCase() + " link";
@@ -110,69 +117,38 @@
 
   function renderLaunchersWidget(state) {
     var data = state.data;
-    var entries = data.entries.slice();
-    var editing = Boolean(state.form.id);
+    var entries = data.entries.slice(0, 24);
     var statusText = state.statusText || (data.stale ? "Stale" : "Ready");
-    var updatedText = formatAge(data.sampledAt) || "Just now";
     return '' +
-      '<div class="inline-widget-shell launcher-shell">' +
-        '<div class="launcher-workspace">' +
-          '<article class="list-card inline-card launcher-library-card">' +
-            '<div class="inline-card-header launcher-card-header">' +
-              '<div>' +
-                '<div class="metric-label">Pinned Apps</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(entries.length ? "Tap any tile to launch." : "Add apps on the right to build this surface.") + '</div>' +
-              '</div>' +
-              '<div class="launcher-card-meta">' +
-                '<span class="launcher-pill">' + escapeHtml(String(entries.length)) + ' pinned</span>' +
-                '<span class="launcher-pill">' + escapeHtml(statusText) + '</span>' +
-              '</div>' +
+      '<div class="inline-widget-shell launcher-shell launcher-shell--recent">' +
+        '<article class="list-card inline-card launcher-library-card launcher-library-card--full">' +
+          '<div class="inline-card-header launcher-card-header">' +
+            '<div>' +
+              '<div class="metric-label">Recent Apps</div>' +
+              '<div class="router-inline-copy">' + escapeHtml(entries.length ? "Last 24 apps opened on this PC." : "Open apps on this PC and they will appear here automatically.") + '</div>' +
             '</div>' +
-            '<div class="inline-launcher-grid launcher-grid--compact">' + (entries.length ? entries.map(function (entry) {
-              var fullTarget = entry.arguments ? (entry.executablePath + " " + entry.arguments) : entry.executablePath;
-              return '' +
-                '<article class="inline-launcher-tile">' +
-                  '<button class="inline-launcher-hit" type="button" data-action="launch" data-id="' + escapeHtml(entry.id) + '" title="' + escapeHtml(fullTarget) + '"' + ((state.saving || state.launchingId === entry.id) ? " disabled" : "") + '>' +
-                    '<span class="inline-launcher-icon">' + (entry.iconUrl
-                      ? '<img src="' + escapeHtml(entry.iconUrl) + '" alt="' + escapeHtml(entry.displayName) + '">'
-                      : '<span>' + escapeHtml(entry.tileLabel) + '</span>') + '</span>' +
-                    '<span class="inline-launcher-copy">' +
-                      '<strong title="' + escapeHtml(entry.displayName) + '">' + escapeHtml(entry.displayName) + '</strong>' +
-                      '<small>' + escapeHtml(launcherTargetLabel(entry)) + '</small>' +
-                    '</span>' +
-                  '</button>' +
-                  '<div class="inline-launcher-actions">' +
-                    '<button class="inline-button" type="button" data-action="edit" data-id="' + escapeHtml(entry.id) + '"' + (state.saving ? " disabled" : "") + '>Edit</button>' +
-                    '<button class="inline-button" type="button" data-action="remove" data-id="' + escapeHtml(entry.id) + '"' + (state.saving ? " disabled" : "") + '>Remove</button>' +
-                  '</div>' +
-                '</article>';
-            }).join("") : emptyState("No launchers yet", "Add apps or shortcuts on the right, then they will show up here.")) + '</div>' +
-          '</article>' +
-          '<article class="list-card inline-card launcher-editor-card">' +
-            '<div class="inline-card-header launcher-card-header">' +
-              '<div>' +
-                '<div class="metric-label">' + (editing ? "Edit App" : "Add App") + '</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(editing ? "Update this launcher tile." : "Pin an app, shortcut, Steam game, or approved link.") + '</div>' +
-              '</div>' +
-              '<span class="launcher-pill">' + escapeHtml(editing ? "Editing" : updatedText) + '</span>' +
+            '<div class="launcher-card-meta">' +
+              '<span class="launcher-pill">' + escapeHtml(String(entries.length)) + '/24 recent</span>' +
+              '<span class="launcher-pill">' + escapeHtml(statusText) + '</span>' +
             '</div>' +
-            '<form class="inline-form launcher-form" data-role="launcher-form">' +
-              '<input type="hidden" name="id" value="' + escapeHtml(state.form.id) + '">' +
-              '<div class="inline-form-grid inline-form-grid--2">' +
-                '<label class="inline-field"><span>Name</span><input class="inline-input" type="text" name="displayName" value="' + escapeHtml(state.form.displayName) + '" placeholder="Discord"></label>' +
-                '<label class="inline-field"><span>App Path</span><input class="inline-input" type="text" name="executablePath" value="' + escapeHtml(state.form.executablePath) + '" placeholder="C:\\Program Files\\App\\App.exe"></label>' +
-              '</div>' +
-              '<div class="inline-form-grid inline-form-grid--2">' +
-                '<label class="inline-field"><span>Icon Path</span><input class="inline-input" type="text" name="iconPath" value="' + escapeHtml(state.form.iconPath) + '" placeholder="C:\\Icons\\discord.ico"></label>' +
-                '<label class="inline-field"><span>Arguments</span><input class="inline-input" type="text" name="arguments" value="' + escapeHtml(state.form.arguments) + '" placeholder="--processStart Discord.exe"></label>' +
-              '</div>' +
-              '<div class="inline-actions">' +
-                '<button class="inline-button is-primary" type="submit"' + (state.saving ? " disabled" : "") + '>' + (editing ? "Save app" : "Add app") + '</button>' +
-                '<button class="inline-button" type="button" data-action="cancel-edit"' + (!editing || state.saving ? " disabled" : "") + '>Cancel</button>' +
-              '</div>' +
-            '</form>' +
-          '</article>' +
-        '</div>' +
+          '</div>' +
+          '<div class="inline-launcher-grid launcher-grid--compact launcher-grid--recent">' + (entries.length ? entries.map(function (entry) {
+            var fullTarget = entry.arguments ? (entry.executablePath + " " + entry.arguments) : entry.executablePath;
+            var detail = entry.source ? (entry.source + " · " + launcherTargetLabel(entry)) : launcherTargetLabel(entry);
+            return '' +
+              '<article class="inline-launcher-tile">' +
+                '<button class="inline-launcher-hit" type="button" data-action="launch" data-id="' + escapeHtml(entry.id) + '" title="' + escapeHtml(fullTarget) + '"' + ((state.saving || state.launchingId === entry.id) ? " disabled" : "") + '>' +
+                  '<span class="inline-launcher-icon">' + (entry.iconUrl
+                    ? '<img src="' + escapeHtml(entry.iconUrl) + '" alt="' + escapeHtml(entry.displayName) + '">'
+                    : '<span>' + escapeHtml(entry.tileLabel) + '</span>') + '</span>' +
+                  '<span class="inline-launcher-copy">' +
+                    '<strong title="' + escapeHtml(entry.displayName) + '">' + escapeHtml(entry.displayName) + '</strong>' +
+                    '<small>' + escapeHtml(detail) + '</small>' +
+                  '</span>' +
+                '</button>' +
+              '</article>';
+          }).join("") : emptyState("No recent apps yet", "Open apps on this PC and Xenon will keep the last 24 here.")) + '</div>' +
+        '</article>' +
       '</div>';
   }
 
