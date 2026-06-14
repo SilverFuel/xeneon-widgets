@@ -1344,6 +1344,17 @@
       clearSteamLongPress();
     }, { passive: true });
 
+    addListener(cleanups, container, "wheel", function (event) {
+      var dock = event.target && event.target.closest ? event.target.closest(".game-mode-steam-dock") : null;
+      var verticalDelta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : 0;
+      if (!dock || !verticalDelta || dock.scrollWidth <= dock.clientWidth) {
+        return;
+      }
+
+      dock.scrollLeft += verticalDelta;
+      event.preventDefault();
+    }, { passive: false });
+
     addListener(cleanups, container, "click", function (event) {
       var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
       var action = target ? target.getAttribute("data-action") : "";
