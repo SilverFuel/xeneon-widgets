@@ -233,12 +233,8 @@
 
     return '' +
       '<div class="inline-widget-shell network-command-shell">' +
-        '<div class="inline-toolbar network-command-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Network</div>' +
-            '<h3 class="inline-title">Network health</h3>' +
-            '<p class="inline-copy">' + escapeHtml(networkQualityLabel(score) + " / " + (unifiData.linked ? "UniFi linked" : unifiData.detected ? "UniFi detected" : "local metrics")) + '</p>' +
-          '</div>' +
+        '<div class="network-compact-toolbar">' +
+          '<span class="network-compact-summary">' + escapeHtml(networkQualityLabel(score) + " / " + (unifiData.linked ? "UniFi linked" : unifiData.detected ? "UniFi detected" : "local metrics")) + '</span>' +
           '<div class="inline-actions">' +
             statusPill(statusText, statusTone) +
           '</div>' +
