@@ -10,7 +10,7 @@ XENEON Edge Host 0.2.0 is being released as a free public beta first. Do not cha
 - support is handled through GitHub Issues and GitHub Security Advisories for now
 - this is independent software, not an official CORSAIR product
 
-XENEON Edge Host is a native Windows dashboard for the CORSAIR XENEON EDGE. It serves a 2560x720 local control surface with system telemetry, network stats, audio routing, media controls, weather, calendar, Hue lights, launchers, clipboard history, and optional home-lab panels.
+XENEON Edge Host is a native Windows dashboard for the CORSAIR XENEON EDGE. It serves a 2560x720 local control surface with system telemetry, network stats, audio routing, media controls, weather, calendar, Hue lights, a recent-app dock, clipboard history, and optional home-lab panels.
 
 The primary product is the native Windows host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only. A macOS beta host lives in `desktop/electron` because the Windows app uses WinUI 3 and WebView2, which do not run on macOS.
 
@@ -37,7 +37,7 @@ On first launch, Xenon scans the PC and prepares the normal dashboard automatica
 
 - starts the local dashboard service
 - detects system, GPU, network, audio, media, Steam, local UniFi consoles, and clipboard capabilities where Windows exposes them
-- pins safe launcher defaults from Start Menu shortcuts and recent Steam games when no launchers are configured yet
+- builds the recent-app dock from safe Start Menu shortcuts, Steam games, and live app activity
 - marks the core dashboard ready without asking the user to finish setup manually
 
 Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, Philips Hue needs the bridge link button, and UniFi needs local console credentials if you want client and AP detail.
