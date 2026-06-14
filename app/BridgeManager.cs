@@ -73,7 +73,7 @@ public sealed class BridgeManager : IDisposable
         _uniFiService = new UniFiService(_configStore, _logger);
         _releaseService = new ReleaseService(_weatherHttpClient);
         _mediaService = new MediaService(_logger, _configStore);
-        _launcherService = new LauncherService();
+        _launcherService = new LauncherService(_logger);
         _steamService = new SteamService(_logger);
         _gameActivityService = new GameActivityService(_steamService, _launcherService, _configStore, _logger);
         _gamePerformanceService = new GamePerformanceService(_logger, _configStore);
@@ -251,6 +251,7 @@ public sealed class BridgeManager : IDisposable
             _networkMetrics.Dispose();
             _hueService.Dispose();
             _uniFiService.Dispose();
+            _launcherService.Dispose();
             _gamePerformanceService.Dispose();
             _weatherHttpClient.Dispose();
         }

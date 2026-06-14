@@ -217,6 +217,10 @@
   overflow: hidden;
 }
 
+.launcher-shell--recent {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .launcher-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.75fr);
@@ -234,6 +238,10 @@
 
 .launcher-library-card {
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.launcher-library-card--full {
+  height: 100%;
 }
 
 .launcher-editor-card {
@@ -274,6 +282,10 @@
   scrollbar-width: thin;
 }
 
+.launcher-grid--recent {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
 .launcher-grid--compact .inline-launcher-tile {
   gap: 6px;
   min-width: 0;
@@ -286,6 +298,10 @@
   gap: 10px;
   padding: 10px;
   border-radius: 12px;
+}
+
+.launcher-grid--recent .inline-launcher-hit {
+  min-height: 76px;
 }
 
 .launcher-grid--compact .inline-launcher-icon {
@@ -358,5 +374,9 @@
   .launcher-grid--compact {
     grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
     max-height: 420px;
+  }
+
+  .launcher-grid--recent {
+    grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
   }
 }
