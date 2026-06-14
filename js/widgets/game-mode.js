@@ -31,7 +31,6 @@
   var normalizeUnifiSnapshot = runtime.normalizeUnifiSnapshot;
   var nullableNumber = runtime.nullableNumber;
   var optionalNumber = runtime.optionalNumber;
-  var productShell = runtime.productShell;
   var productThemes = runtime.productThemes;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
@@ -1050,12 +1049,14 @@
       stopGameSessionClock();
       container.removeAttribute("data-game-focus-active-id");
       container.removeAttribute("data-game-focus-intro");
-      container.innerHTML = productShell(
-        "Launch mode",
-        "Game Mode",
-        "Launch a game, then the EDGE switches into a focused play cockpit automatically.",
-        state.activity && state.activity.stateLabel ? state.activity.stateLabel : state.statusText,
-        state.activity && state.activity.mode === "ended" ? "warn" : state.statusTone,
+      container.innerHTML = '' +
+        '<div class="inline-widget-shell product-shell game-mode-idle-shell">' +
+          '<div class="game-mode-idle-status">' +
+            statusPill(
+              state.activity && state.activity.stateLabel ? state.activity.stateLabel : state.statusText,
+              state.activity && state.activity.mode === "ended" ? "warn" : state.statusTone
+            ) +
+          '</div>' +
         '<div class="game-mode-idle-grid">' +
           '<section class="game-mode-idle-top">' +
             '<div class="inline-grid inline-grid--4 game-mode-performance">' +
@@ -1072,8 +1073,8 @@
           '<section class="game-mode-idle-launch">' +
             renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
           '</section>' +
-        '</div>'
-      );
+        '</div>' +
+      '</div>';
     }
 
     function refreshGameModeSession(options) {

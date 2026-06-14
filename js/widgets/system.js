@@ -248,12 +248,8 @@
 
     return '' +
       '<div class="inline-widget-shell inline-widget-shell--system">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">PC health cockpit</div>' +
-            '<h3 class="inline-title">System monitor</h3>' +
-            '<p class="inline-copy">The important health, resource, display, and sensor signals stay visible without scrolling.</p>' +
-          '</div>' +
+        '<div class="system-compact-toolbar">' +
+          '<span class="system-compact-summary">' + escapeHtml(health.detail) + '</span>' +
           '<div class="system-toolbar-actions">' +
             '<button class="inline-button" type="button" data-action="system-refresh"' + (busy ? " disabled" : "") + '>Refresh</button>' +
             '<button class="inline-button" type="button" data-action="system-task-manager"' + (busy ? " disabled" : "") + '>Task Manager</button>' +

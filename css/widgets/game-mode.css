@@ -116,6 +116,16 @@
   overflow: hidden;
 }
 
+.game-mode-idle-shell {
+  gap: 8px;
+}
+
+.game-mode-idle-status {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .game-mode-idle-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
