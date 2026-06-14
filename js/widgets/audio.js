@@ -153,17 +153,6 @@
 
     return '' +
       '<div class="inline-widget-shell inline-widget-shell--audio">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Audio & Media</div>' +
-            '<h3 class="inline-title">Sound and playback</h3>' +
-            '<p class="inline-copy">Master volume, output routing, media controls, and app volume without extra scrolling.</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
-            statusPill(state.statusText, state.statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="inline-grid inline-grid--2 audio-media-control-grid audio-compact-grid">' +
           '<article class="list-card inline-card audio-master-card">' +
             '<div class="inline-card-header">' +
@@ -172,7 +161,10 @@
                 '<div class="audio-current-output">' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '</div>' +
                 '<div class="router-inline-copy">' + escapeHtml(data.muted ? "Master output is muted" : text(defaultDevice && (defaultDevice.kind || defaultDevice.availability), text(data.source, "Windows audio"))) + '</div>' +
               '</div>' +
-              '<button class="inline-button" type="button" data-action="master-mute">' + (data.muted ? "Unmute" : "Mute") + '</button>' +
+              '<div class="inline-actions">' +
+                statusPill(state.statusText, state.statusTone) +
+                '<button class="inline-button" type="button" data-action="master-mute">' + (data.muted ? "Unmute" : "Mute") + '</button>' +
+              '</div>' +
             '</div>' +
             '<div class="audio-master-row">' +
               '<strong>' + escapeHtml(Math.round(data.masterVolume) + "%") + '</strong>' +

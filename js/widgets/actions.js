@@ -15,7 +15,6 @@
   var optionalNumber = runtime.optionalNumber;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
-  var statusPill = runtime.statusPill;
   var statusTextFromPayload = runtime.statusTextFromPayload;
   var statusToneFromPayload = runtime.statusToneFromPayload;
   var text = runtime.text;
@@ -90,21 +89,10 @@
     var editing = Boolean(state.form.id);
     return '' +
       '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Command Center</div>' +
-            '<h3 class="inline-title">App launcher</h3>' +
-            '<p class="inline-copy">' + escapeHtml(text(data.message, "Pin apps and shortcuts for one-tap launches from the EDGE display.")) + '</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh"' + (state.saving ? " disabled" : "") + '>Refresh</button>' +
-            statusPill(state.statusText, state.statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Pinned", String(entries.length), entries.length ? "Ready to launch" : "Add your first app") +
           metricCard("Mode", editing ? "Editing" : "Adding", editing ? "Updating an existing tile" : "Create a new launcher tile") +
-          metricCard("Updated", formatAge(data.sampledAt), data.stale ? "Snapshot is stale" : "Saved in config.json") +
+          metricCard("Updated", formatAge(data.sampledAt), state.statusText || (data.stale ? "Snapshot is stale" : "Saved in config.json")) +
         '</div>' +
         '<div class="inline-grid inline-grid--2">' +
           '<article class="list-card inline-card">' +
@@ -380,21 +368,10 @@
     var data = state.data;
     return '' +
       '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Command Center</div>' +
-            '<h3 class="inline-title">Quick actions</h3>' +
-            '<p class="inline-copy">' + escapeHtml(text(data.message, "One-tap Windows actions for the EDGE display.")) + '</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh"' + (state.busy ? " disabled" : "") + '>Refresh</button>' +
-            statusPill(state.statusText, state.statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Theme", data.darkModeEnabled ? "Dark" : "Light", "Windows app + system theme") +
           metricCard("Actions", String(data.actions.length), "Built-in commands") +
-          metricCard("Updated", formatAge(data.sampledAt), data.stale ? "Snapshot is stale" : "Fresh snapshot") +
+          metricCard("Status", state.statusText, formatAge(data.sampledAt) || (data.stale ? "Snapshot is stale" : "Fresh snapshot")) +
         '</div>' +
         '<article class="list-card inline-card">' +
           '<div class="inline-card-header"><div><div class="metric-label">Action Pad</div><div class="router-inline-copy">Tap once for quick actions. Recycle Bin asks for confirmation.</div></div></div>' +
@@ -532,21 +509,10 @@
     var brightnessValue = data.brightness == null ? 0 : Math.round(data.brightness);
     return '' +
       '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Command Center</div>' +
-            '<h3 class="inline-title">System shortcuts</h3>' +
-            '<p class="inline-copy">' + escapeHtml(text(data.message, "Power, brightness, and DND controls for the local PC.")) + '</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh"' + (state.busy ? " disabled" : "") + '>Refresh</button>' +
-            statusPill(state.statusText, state.statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Brightness", data.brightnessSupported && data.brightness != null ? Math.round(data.brightness) + "%" : "Unavailable", data.brightnessSupported ? "Active display brightness" : "Display does not expose WMI brightness") +
           metricCard("DND", data.dndEnabled ? "On" : "Off", "Notification banners") +
-          metricCard("Updated", formatAge(data.sampledAt), data.stale ? "Snapshot is stale" : "Fresh snapshot") +
+          metricCard("Status", state.statusText, formatAge(data.sampledAt) || (data.stale ? "Snapshot is stale" : "Fresh snapshot")) +
         '</div>' +
         '<div class="inline-grid inline-grid--2">' +
           '<article class="list-card inline-card">' +
@@ -762,21 +728,10 @@
     var data = state.data;
     return '' +
       '<div class="inline-widget-shell">' +
-        '<div class="inline-toolbar">' +
-          '<div>' +
-            '<div class="eyebrow">Command Center</div>' +
-            '<h3 class="inline-title">Clipboard history</h3>' +
-            '<p class="inline-copy">' + escapeHtml(text(data.message, "Recent clipboard entries you can restore with one tap.")) + '</p>' +
-          '</div>' +
-          '<div class="inline-actions">' +
-            '<button class="inline-button" type="button" data-action="refresh"' + (state.busy ? " disabled" : "") + '>Refresh</button>' +
-            statusPill(state.statusText, state.statusTone) +
-          '</div>' +
-        '</div>' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Items", String(data.entries.length), data.entries.length ? "Recent history" : (data.configured ? "Nothing recent" : "Enable clipboard history")) +
           metricCard("Privacy", data.privacy.widgetPaused ? "Paused" : data.privacy.hidePreviews ? "Hidden" : "Visible", data.privacy.excludeFromDiagnostics ? "Excluded from diagnostics" : "Diagnostics status only") +
-          metricCard("Updated", formatAge(data.sampledAt), data.stale ? "Snapshot is stale" : "Fresh snapshot") +
+          metricCard("Status", state.statusText, formatAge(data.sampledAt) || (data.stale ? "Snapshot is stale" : "Fresh snapshot")) +
         '</div>' +
         '<div class="inline-actions">' +
           '<button class="inline-button" type="button" data-action="toggle-hide-previews"' + (state.busy ? " disabled" : "") + '>' + (data.privacy.hidePreviews ? "Show previews" : "Hide previews") + '</button>' +
