@@ -310,7 +310,6 @@ for (const relativePath of [
   "dashboard.html",
   "hosted-dashboard.html",
   "index.html",
-  "start-xeneon.ps1",
   "bridge/install-bridge.ps1",
   "widgets/weather-widget.html",
   "widgets/network-widget.html",
@@ -321,6 +320,14 @@ for (const relativePath of [
   assert(revisions.length > 0, `${relativePath} must include cache-busting dashboard asset revisions`);
   assert(revisions.every(revision => revision === currentAssetRevision), `${relativePath} must use ${currentAssetRevision} for dashboard asset revisions`);
 }
+
+assert(
+  /Programs\\XenonEdgeHost\\XenonEdgeHost\.exe/.test(readWorkspaceFile("start-xeneon.ps1"))
+    && /publish\\XenonEdgeHost\.exe/.test(readWorkspaceFile("start-xeneon.ps1"))
+    && /api\/health/.test(readWorkspaceFile("start-xeneon.ps1"))
+    && !/dashboard\.html/.test(readWorkspaceFile("start-xeneon.ps1")),
+  "start-xeneon.ps1 must launch the installed app first and avoid opening the raw dashboard URL"
+);
 
 assert(
   assetRevisionPayload.informationalVersion === `0.2.0+${currentAssetRevision.slice(0, 8)}`,

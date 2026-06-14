@@ -7,11 +7,11 @@ Run this before every public Windows release. Use a fresh Windows user profile o
 1. Download the signed installer from GitHub Releases.
 2. Run the installer from a normal user account.
 3. Confirm the app installs to `%LOCALAPPDATA%\Programs\XenonEdgeHost`.
-4. Confirm the Start Menu shortcut appears.
-5. Confirm the Desktop shortcut appears if enabled.
+4. Confirm Start Menu > XENEON Edge > XENEON Edge appears.
+5. Confirm the Desktop shortcut is named `XENEON Edge` if enabled.
 6. Confirm Windows Settings > Apps includes `XENEON Edge Host`.
-7. Confirm the Start Menu includes Launch Xenon Safe Mode, Repair XENEON Edge Host, Uninstall, and Remove Local Data.
-8. Open XENEON Edge Host from the Start Menu.
+7. Confirm the Start Menu includes `XENEON Edge Recovery (Safe Mode)`, `Repair XENEON Edge`, `Uninstall XENEON Edge`, and `Remove XENEON Edge and Local Data`.
+8. Open `XENEON Edge` from the Start Menu.
 9. Confirm the dashboard opens at `http://127.0.0.1:8976/`.
 10. Finish setup without configuring optional integrations.
 
@@ -44,9 +44,9 @@ The installer should not ask setup questions. A Windows SmartScreen warning is a
 
 ## Recovery
 
-1. Launch `Repair XENEON Edge Host` from the Start Menu.
+1. Launch `Repair XENEON Edge` from the Start Menu.
 2. Confirm shortcuts, Windows Apps entry, and startup registration still exist.
-3. Launch `Launch Xenon Safe Mode` from the Start Menu.
+3. Launch `XENEON Edge Recovery (Safe Mode)` from the Start Menu.
 4. Confirm auto-start is disabled and Xenon opens on the primary monitor without changing saved local app data.
 
 ## Uninstall
@@ -56,7 +56,7 @@ The installer should not ask setup questions. A Windows SmartScreen warning is a
 3. Confirm the Desktop shortcut is removed.
 4. Confirm the auto-start entry is removed.
 5. Confirm the app executable is removed from `%LOCALAPPDATA%\Programs\XenonEdgeHost`.
-6. Reinstall, then use Start Menu > XENEON Edge Host > Uninstall and Remove Local Data.
+6. Reinstall, then use Start Menu > XENEON Edge > Remove XENEON Edge and Local Data.
 7. Confirm `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost` are removed.
 
 The uninstaller should not ask cleanup questions. The normal uninstall removes the app. The cleanup shortcut removes the app plus local data.

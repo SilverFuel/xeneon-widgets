@@ -1,9 +1,11 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$publishedExe = Join-Path $repoRoot "publish\XenonEdgeHost.exe"
 $installedExe = Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost\XenonEdgeHost.exe"
-$dashboardUrl = "http://127.0.0.1:8976/dashboard.html?v=20260519-01"
+$publishedExe = Join-Path $repoRoot "publish\XenonEdgeHost.exe"
+$latestInstaller = Get-ChildItem (Join-Path $repoRoot "app\dist") -Filter "XenonEdgeHost-Setup-*.exe" -ErrorAction SilentlyContinue |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
 
 function Write-Step($message) {
   Write-Host ""
@@ -34,26 +36,36 @@ function Wait-ForDashboard {
 
 Write-Step "XENEON Edge Host Quick Start"
 
-if (Test-Path $publishedExe) {
-  $exePath = $publishedExe
-} elseif (Test-Path $installedExe) {
+if (Test-Path $installedExe) {
   $exePath = $installedExe
+  $label = "installed app"
+} elseif (Test-Path $publishedExe) {
+  $exePath = $publishedExe
+  $label = "developer build"
 } else {
-  Write-Host "XENEON Edge Host was not found." -ForegroundColor Red
-  Write-Host "Run Build XENEON Installer.cmd, or publish it with app\publish.ps1."
+  Write-Host "XENEON Edge is not installed yet." -ForegroundColor Red
+  if ($latestInstaller) {
+    Write-Host ""
+    Write-Host "Run this installer, then launch XENEON Edge from the desktop or Start Menu:"
+    Write-Host "  $($latestInstaller.FullName)" -ForegroundColor Yellow
+  } else {
+    Write-Host ""
+    Write-Host "Build the installer first:"
+    Write-Host "  Build XENEON Installer.cmd" -ForegroundColor Yellow
+  }
   exit 1
 }
 
-Write-Step "Starting native app"
+Write-Step "Opening XENEON Edge"
+Write-Host "Using the ${label}:"
+Write-Host "  $exePath" -ForegroundColor DarkGray
 Start-Process $exePath
 
 if (Wait-ForDashboard -Url "http://127.0.0.1:8976/api/health") {
-  Write-Step "Opening dashboard"
-  Start-Process $dashboardUrl
+  Write-Host ""
+  Write-Host "XENEON Edge is running." -ForegroundColor Green
 } else {
-  Write-Host "The app started, but the local dashboard did not answer yet." -ForegroundColor Yellow
-  Write-Host "Use the tray icon and choose Show EDGE Window."
+  Write-Host ""
+  Write-Host "XENEON Edge started, but the dashboard is still waking up." -ForegroundColor Yellow
+  Write-Host "Use the tray icon and choose Show EDGE Window if it does not appear."
 }
-
-Write-Host "Local dashboard:"
-Write-Host $dashboardUrl -ForegroundColor Green

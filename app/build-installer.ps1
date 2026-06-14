@@ -219,16 +219,16 @@ Installs to:
   %LOCALAPPDATA%\Programs\XenonEdgeHost
 
 Creates:
-  - Start Menu shortcuts
-  - Safe Mode and Repair Start Menu shortcuts
-  - Desktop shortcut
+  - Start Menu > XENEON Edge > XENEON Edge
+  - Start Menu recovery shortcuts with clear names
+  - Desktop shortcut named XENEON Edge
   - current-user auto-start entry
   - Apps & Features uninstall entry
   - Start Menu cleanup shortcut that removes local app data
 
 Uninstall:
   Windows Settings > Apps > Installed apps > XENEON Edge Host
-  Or Start Menu > XENEON Edge Host > Uninstall and Remove Local Data
+  Or Start Menu > XENEON Edge > Remove XENEON Edge and Local Data
   Uninstall runs without Xenon cleanup questions.
 
 SHA256:
