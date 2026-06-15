@@ -1194,6 +1194,7 @@
       && bridgeCapabilities.launchers === true
       && currentWidgetId
       && currentWidgetId !== "setup"
+      && currentWidgetId !== "game-mode"
       && launcherDockEntries.length > 0
     );
   }

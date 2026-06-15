@@ -145,14 +145,14 @@
 .game-mode-idle-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(196px, 1fr);
   gap: 12px;
   min-height: 0;
   overflow: hidden;
 }
 
 .game-mode-idle-grid:has(.game-mode-idle-notices) {
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, auto) minmax(196px, 1fr);
 }
 
 .game-mode-idle-grid:has(.game-mode-idle-notices) .game-mode-idle-launch {
@@ -179,12 +179,12 @@
 }
 
 .game-mode-idle-top .metric-card {
-  min-height: 96px;
-  padding: 13px 14px;
+  min-height: 82px;
+  padding: 11px 12px;
 }
 
 .game-mode-idle-top .metric-value {
-  font-size: clamp(1.5rem, 2.1vw, 2.4rem);
+  font-size: clamp(1.35rem, 1.9vw, 2.05rem);
 }
 
 .game-mode-idle-notices {
@@ -204,21 +204,21 @@
 
 .game-mode-idle-launch .game-mode-steam-panel {
   height: 100%;
-  min-height: 0;
+  min-height: 196px;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
 
 .game-mode-idle-launch .game-mode-steam-dock {
   height: 100%;
-  min-height: 0;
+  min-height: 128px;
   align-items: stretch;
 }
 
 .game-mode-idle-launch .game-mode-steam-tile {
   flex-basis: clamp(168px, 8.4vw, 196px);
   height: 100%;
-  min-height: 0;
+  min-height: 128px;
 }
 
 .game-mode-idle-launch .game-mode-steam-art {
