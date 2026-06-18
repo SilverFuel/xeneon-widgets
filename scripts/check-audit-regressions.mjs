@@ -547,6 +547,17 @@ assert(
 );
 
 assert(
+  /"ms-teams"/.test(gameActivityService)
+    && /"msteams"/.test(gameActivityService)
+    && /IgnoredExecutablePathFragments/.test(gameActivityService)
+    && /ContainsGameKeyword/.test(gameActivityService)
+    && /ContainsKeywordWithBoundaries/.test(gameActivityService)
+    && !/GameKeywordFragments\.Any\(fragment\s*=>\s*combined\.Contains/.test(gameActivityService)
+    && !/GameKeywordFragments\.Any\(fragment\s*=>\s*lowerPath\.Contains/.test(gameActivityService),
+  "Game activity detection must ignore Teams/comms apps and match game keywords with token boundaries"
+);
+
+assert(
   /input\[type="range"\]:focus-visible/.test(readWorkspaceFile("css/widgets.css"))
     && /aria-label="Display brightness"/.test(actionsWidget)
     && /aria-label="Master volume"/.test(audioWidget)
