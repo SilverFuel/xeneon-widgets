@@ -36,6 +36,9 @@ public sealed class GameActivityService
         "gog galaxy",
         "msedge",
         "msbuild",
+        "ms-teams",
+        "msteams",
+        "msteams_autostarter",
         "node",
         "nvidia app",
         "nvcontainer",
@@ -45,10 +48,15 @@ public sealed class GameActivityService
         "pwsh",
         "python",
         "riotclientservices",
+        "skype",
+        "slack",
         "steam",
         "steamwebhelper",
         "systemsettings",
+        "teams",
         "windowsterminal",
+        "webex",
+        "zoom",
         "ubisoftconnect",
         "xboxappservices",
         "xenonedgehost"
@@ -65,6 +73,16 @@ public sealed class GameActivityService
         "setup",
         "unins",
         "update"
+    ];
+
+    private static readonly string[] IgnoredExecutablePathFragments =
+    [
+        @"\microsoft teams\",
+        @"\msteams_",
+        @"\slack\",
+        @"\teams\current\",
+        @"\webex\",
+        @"\zoom\"
     ];
 
     private static readonly string[] GameKeywordFragments =
@@ -752,10 +770,12 @@ public sealed class GameActivityService
         var processName = process.ProcessName ?? "";
         var processBaseName = Path.GetFileNameWithoutExtension(processName);
         var lowerName = processName.ToLowerInvariant();
-        var executablePath = process.ExecutablePath.ToLowerInvariant();
+        var executablePath = process.ExecutablePath ?? "";
+        var lowerPath = executablePath.ToLowerInvariant();
         if (IgnoredProcessNames.Contains(processName)
             || IgnoredProcessNames.Contains(processBaseName)
-            || executablePath.Contains(@"\windows\", StringComparison.OrdinalIgnoreCase))
+            || lowerPath.Contains(@"\windows\", StringComparison.OrdinalIgnoreCase)
+            || IgnoredExecutablePathFragments.Any(fragment => lowerPath.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
         {
             return true;
         }
@@ -772,7 +792,7 @@ public sealed class GameActivityService
         }
 
         var combined = $"{launcher.DisplayName} {launcher.ExecutablePath} {process.ProcessName}".ToLowerInvariant();
-        return GameKeywordFragments.Any(fragment => combined.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+        return ContainsGameKeyword(combined);
     }
 
     private static bool LooksLikeManualGameCandidate(RunningProcessInfo process)
@@ -793,7 +813,7 @@ public sealed class GameActivityService
             return true;
         }
 
-        if (GameKeywordFragments.Any(fragment => lowerPath.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
+        if (ContainsGameKeyword(lowerPath))
         {
             return true;
         }
@@ -1050,33 +1070,83 @@ public sealed class GameActivityService
     private static string InferPlatform(string displayName, string executablePath)
     {
         var combined = $"{displayName} {executablePath}".ToLowerInvariant();
-        if (combined.Contains("steam", StringComparison.OrdinalIgnoreCase))
+        if (ContainsKeywordWithBoundaries(combined, "steam")
+            || ContainsKeywordWithBoundaries(combined, "steamapps"))
         {
             return "Steam";
         }
 
-        if (combined.Contains("epic", StringComparison.OrdinalIgnoreCase))
+        if (ContainsKeywordWithBoundaries(combined, "epic")
+            || ContainsKeywordWithBoundaries(combined, "epic games"))
         {
             return "Epic Games";
         }
 
-        if (combined.Contains("gog", StringComparison.OrdinalIgnoreCase))
+        if (ContainsKeywordWithBoundaries(combined, "gog")
+            || ContainsKeywordWithBoundaries(combined, "gog galaxy")
+            || ContainsKeywordWithBoundaries(combined, "gog games"))
         {
             return "GOG";
         }
 
-        if (combined.Contains("battle.net", StringComparison.OrdinalIgnoreCase)
-            || combined.Contains("blizzard", StringComparison.OrdinalIgnoreCase))
+        if (ContainsKeywordWithBoundaries(combined, "battle.net")
+            || ContainsKeywordWithBoundaries(combined, "blizzard"))
         {
             return "Battle.net";
         }
 
-        if (combined.Contains("xbox", StringComparison.OrdinalIgnoreCase))
+        if (ContainsKeywordWithBoundaries(combined, "xbox")
+            || ContainsKeywordWithBoundaries(combined, "xboxgames"))
         {
             return "Xbox";
         }
 
         return "Pinned";
+    }
+
+    private static bool ContainsGameKeyword(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return GameKeywordFragments.Any(fragment => ContainsKeywordWithBoundaries(value, fragment));
+    }
+
+    private static bool ContainsKeywordWithBoundaries(string value, string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(keyword))
+        {
+            return false;
+        }
+
+        var searchIndex = 0;
+        while (searchIndex < value.Length)
+        {
+            var index = value.IndexOf(keyword, searchIndex, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            var end = index + keyword.Length;
+            var startsCleanly = index == 0 || IsKeywordBoundary(value[index - 1]);
+            var endsCleanly = end >= value.Length || IsKeywordBoundary(value[end]);
+            if (startsCleanly && endsCleanly)
+            {
+                return true;
+            }
+
+            searchIndex = index + 1;
+        }
+
+        return false;
+    }
+
+    private static bool IsKeywordBoundary(char value)
+    {
+        return !char.IsLetterOrDigit(value);
     }
 
     private static bool IsPathInside(string path, string directory)
