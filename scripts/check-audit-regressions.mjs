@@ -549,12 +549,20 @@ assert(
 assert(
   /"ms-teams"/.test(gameActivityService)
     && /"msteams"/.test(gameActivityService)
+    && /LauncherProcessNames/.test(gameActivityService)
+    && /LauncherExecutablePathFragments/.test(gameActivityService)
+    && /"galaxyclient"/.test(gameActivityService)
+    && /"galaxycommunication"/.test(gameActivityService)
+    && /"gog galaxy notifications renderer"/.test(gameActivityService)
+    && /"steamservice"/.test(gameActivityService)
+    && /"epicgameslauncher"/.test(gameActivityService)
+    && /"riotclientservices"/.test(gameActivityService)
     && /IgnoredExecutablePathFragments/.test(gameActivityService)
     && /ContainsGameKeyword/.test(gameActivityService)
     && /ContainsKeywordWithBoundaries/.test(gameActivityService)
     && !/GameKeywordFragments\.Any\(fragment\s*=>\s*combined\.Contains/.test(gameActivityService)
     && !/GameKeywordFragments\.Any\(fragment\s*=>\s*lowerPath\.Contains/.test(gameActivityService),
-  "Game activity detection must ignore Teams/comms apps and match game keywords with token boundaries"
+  "Game activity detection must ignore Teams/comms apps and launcher processes while matching game keywords with token boundaries"
 );
 
 assert(
