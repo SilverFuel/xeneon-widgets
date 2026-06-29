@@ -62,6 +62,57 @@ public sealed class GameActivityService
         "xenonedgehost"
     };
 
+    private static readonly HashSet<string> LauncherProcessNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "amazon games",
+        "amazon games ui",
+        "battle.net",
+        "battle.net helper",
+        "bethesda.net_launcher",
+        "blizzardbrowser",
+        "curseforge",
+        "eabackgroundservice",
+        "eadesktop",
+        "ealauncher",
+        "epicgameslauncher",
+        "epicwebhelper",
+        "galaxyclient",
+        "galaxyclient helper",
+        "galaxycommunication",
+        "gamebar",
+        "gamebarftserver",
+        "gamebarpresencewriter",
+        "gamingservices",
+        "gamingservicesnet",
+        "gog galaxy notifications renderer",
+        "heroic",
+        "itch",
+        "legendary",
+        "minecraftlauncher",
+        "modrinth app",
+        "origin",
+        "originwebhelperservice",
+        "overwolf",
+        "prismlauncher",
+        "riotclientcrashhandler",
+        "riotclientservices",
+        "riotclientux",
+        "riotclientuxrender",
+        "rockstar games launcher",
+        "rockstarservice",
+        "socialclubhelper",
+        "steam",
+        "steamservice",
+        "steamwebhelper",
+        "ubisoftconnect",
+        "ubisoftgamelauncher",
+        "upc",
+        "xboxapp",
+        "xboxappservices",
+        "xboxpcapp",
+        "xboxpcappft"
+    };
+
     private static readonly string[] IgnoredProcessFragments =
     [
         "crashpad",
@@ -83,6 +134,36 @@ public sealed class GameActivityService
         @"\teams\current\",
         @"\webex\",
         @"\zoom\"
+    ];
+
+    private static readonly string[] LauncherExecutablePathFragments =
+    [
+        @"\amazon games\app\",
+        @"\battle.net\",
+        @"\bethesda.net launcher\",
+        @"\curseforge\",
+        @"\ea desktop\",
+        @"\electronic arts\ea desktop\",
+        @"\epic games\launcher\",
+        @"\gog galaxy\galaxyclient",
+        @"\gog galaxy\gog galaxy notifications renderer",
+        @"\gog.com\galaxy\redists\galaxycommunication",
+        @"\heroic\",
+        @"\itch\",
+        @"\minecraft launcher\",
+        @"\modrinth app\",
+        @"\origin\origin",
+        @"\overwolf\",
+        @"\prismlauncher\",
+        @"\riot client\",
+        @"\rockstar games\launcher\",
+        @"\rockstar games\social club\",
+        @"\steam\bin\",
+        @"\steam\steam.exe",
+        @"\ubisoft game launcher\ubisoftconnect",
+        @"\ubisoft game launcher\upc.exe",
+        @"\windowsapps\microsoft.gamingapp_",
+        @"\windowsapps\microsoft.xboxapp_"
     ];
 
     private static readonly string[] GameKeywordFragments =
@@ -774,8 +855,11 @@ public sealed class GameActivityService
         var lowerPath = executablePath.ToLowerInvariant();
         if (IgnoredProcessNames.Contains(processName)
             || IgnoredProcessNames.Contains(processBaseName)
+            || LauncherProcessNames.Contains(processName)
+            || LauncherProcessNames.Contains(processBaseName)
             || lowerPath.Contains(@"\windows\", StringComparison.OrdinalIgnoreCase)
-            || IgnoredExecutablePathFragments.Any(fragment => lowerPath.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
+            || IgnoredExecutablePathFragments.Any(fragment => lowerPath.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+            || LauncherExecutablePathFragments.Any(fragment => lowerPath.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
         {
             return true;
         }
