@@ -32,8 +32,12 @@ assert(
     && /ScheduleDisplayRecovery\("display topology changed"\)/.test(mainWindow)
     && /DisplayRecoveryDelays/.test(mainWindow)
     && /TryRecoverDisplayPlacementAsync/.test(mainWindow)
+    && /ApplyWaitingForEdgeWindow/.test(mainWindow)
+    && /RestoreDisplayWindowToTaskbar/.test(mainWindow)
+    && /_waitingForEdgeDisplay/.test(mainWindow)
+    && /edgeCandidateCount == 0/.test(mainWindow)
     && /ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow),
-  "main window must retry non-persistent EDGE display placement after startup and display topology changes"
+  "main window must retry non-persistent EDGE display placement and use a windowed waiting state when no EDGE candidate exists"
 );
 
 assert(
