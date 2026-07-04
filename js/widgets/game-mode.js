@@ -1079,7 +1079,7 @@
           refresh: Boolean(options.refresh),
           steamRefresh: Boolean(options.steamRefresh),
           activityRefresh: Boolean(options.activityRefresh),
-          performanceSession: options.performanceSession !== false
+          performanceSession: options.performanceSession === true
         }
       }, 8000).then(function (payload) {
         var session = normalizeGameModeSessionPayload(payload);
@@ -1207,9 +1207,9 @@
           muted: !state.audio.muted
         }
       }, 5000).then(function () {
-        refreshGameModeSession({ performanceSession: true });
+        refreshGameModeSession();
       }, function () {
-        refreshGameModeSession({ performanceSession: true });
+        refreshGameModeSession();
       });
     }
 
@@ -1224,9 +1224,9 @@
           muted: state.audio.inputMuted !== true
         }
       }, 5000).then(function () {
-        refreshGameModeSession({ performanceSession: true });
+        refreshGameModeSession();
       }, function () {
-        refreshGameModeSession({ performanceSession: true });
+        refreshGameModeSession();
       });
     }
 
@@ -1245,9 +1245,9 @@
           muted: !session.muted
         }
       }, 5000).then(function () {
-        refreshGameModeSession({ performanceSession: true });
+        refreshGameModeSession();
       }, function () {
-        refreshGameModeSession({ performanceSession: true });
+        refreshGameModeSession();
       });
     }
 
@@ -1260,7 +1260,7 @@
       }, 6000).then(function (payload) {
         state.statusText = text(payload && payload.message, "Game pinned");
         state.statusTone = "good";
-        return refreshGameModeSession({ refresh: true, activityRefresh: true, performanceSession: true });
+        return refreshGameModeSession({ refresh: true, activityRefresh: true });
       }, function (error) {
         state.statusText = error.message || "Pin failed";
         state.statusTone = "danger";
@@ -1366,7 +1366,7 @@
         state.steamStatusText = "Scanning";
         state.steamStatusTone = "warn";
         redraw();
-        refreshGameModeSession({ refresh: true, steamRefresh: true, activityRefresh: true, performanceSession: true });
+        refreshGameModeSession({ refresh: true, steamRefresh: true, activityRefresh: true });
       } else if (action === "game-face-home") {
         if (env && typeof env.returnHomeFromGameFace === "function") {
           env.returnHomeFromGameFace();

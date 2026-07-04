@@ -26,6 +26,7 @@ public sealed class GamePerformanceService : IDisposable
     private DateTimeOffset _lastStartAttemptAt = DateTimeOffset.MinValue;
     private DateTimeOffset _captureStartedAt = DateTimeOffset.MinValue;
     private bool _captureUsesElevatedBootstrap;
+    private bool _captureNeedsAdminRestart;
     private bool _warnedMissingPresentMon;
 
     public GamePerformanceService(HostLogger logger, ConfigStore configStore)
@@ -101,6 +102,17 @@ public sealed class GamePerformanceService : IDisposable
             return;
         }
 
+        if (_captureNeedsAdminRestart && !IsRunningElevated())
+        {
+            _lastCaptureFailureMessage = "FPS capture needs administrator capture access. Click Fix FPS (admin) to restart Xenon with capture access.";
+            return;
+        }
+
+        if (IsRunningElevated())
+        {
+            _captureNeedsAdminRestart = false;
+        }
+
         StopCapture();
         _lastStartAttemptAt = DateTimeOffset.UtcNow;
 
@@ -126,7 +138,7 @@ public sealed class GamePerformanceService : IDisposable
         _captureProcessName = processName ?? "";
         _captureTargetName = captureTargetName;
         _captureStartedAt = DateTimeOffset.UtcNow;
-        _captureUsesElevatedBootstrap = !IsRunningElevated();
+        _captureUsesElevatedBootstrap = false;
         _lastCaptureFailureMessage = "";
 
         try
@@ -473,13 +485,15 @@ public sealed class GamePerformanceService : IDisposable
 
         if (_captureUsesElevatedBootstrap && !IsRunningElevated())
         {
-            _lastCaptureFailureMessage = "Windows did not approve elevated FPS capture. Approve the admin prompt or restart Xenon as administrator.";
+            _captureNeedsAdminRestart = true;
+            _lastCaptureFailureMessage = "Windows did not approve elevated FPS capture. Click Fix FPS (admin) to restart Xenon as administrator.";
             return _lastCaptureFailureMessage;
         }
 
         if (exitCode != 0 && !IsRunningElevated())
         {
-            _lastCaptureFailureMessage = "PresentMon stopped before reporting frames. Start Xenon as administrator to enable main-display FPS capture.";
+            _captureNeedsAdminRestart = true;
+            _lastCaptureFailureMessage = "PresentMon stopped before reporting frames. Click Fix FPS (admin) to enable main-display FPS capture.";
             return _lastCaptureFailureMessage;
         }
 

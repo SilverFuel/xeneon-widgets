@@ -81,6 +81,7 @@ const actionsWidget = readWorkspaceFile("js/widgets/actions.js");
 const integrationsWidget = readWorkspaceFile("js/widgets/integrations.js");
 const gameModeWidget = readWorkspaceFile("js/widgets/game-mode.js");
 const gameFocusPatchBody = gameModeWidget.match(/function\s+patchGameFocusScene\([\s\S]*?\n  function\s+renderGameModeProfilePanel/);
+const unhandledRejectionHandler = dashboardJs.match(/window\.addEventListener\("unhandledrejection"[\s\S]*?\n\s*\}\);/);
 const bridgeExampleConfig = readWorkspaceFile("bridge/config.example.json");
 const appConfig = readWorkspaceFile("app/Models/AppConfig.cs");
 const launcherService = readWorkspaceFile("app/Services/LauncherService.cs");
@@ -487,6 +488,8 @@ assert(
   /NeedsAdmin/.test(gamePerformanceService)
     && /RestartAsAdminEndpoint/.test(gamePerformanceService)
     && /--restart_as_admin/.test(gamePerformanceService)
+    && /_captureNeedsAdminRestart/.test(gamePerformanceService)
+    && /_captureUsesElevatedBootstrap\s*=\s*false/.test(gamePerformanceService)
     && /--process_name/.test(gamePerformanceService)
     && /ResolveCaptureTargetName/.test(gamePerformanceService)
     && /AnalyzeCaptureRows/.test(gamePerformanceService)
@@ -502,6 +505,8 @@ assert(
     && /PreviousInstanceExitWait/.test(programCs)
     && /restart-game-admin/.test(gameModeWidget)
     && /Fix FPS \(admin\)/.test(gameModeWidget)
+    && /performanceSession:\s*options\.performanceSession === true/.test(gameModeWidget)
+    && !/performanceSession:\s*options\.performanceSession !== false/.test(gameModeWidget)
     && /function\s+gameFocusCanFixFps/.test(gameModeWidget)
     && /Telemetry readiness/.test(gameModeWidget),
   "Game Mode telemetry readiness must expose FPS source, elevated PresentMon capture, admin capture state, and an elevated restart action"
@@ -563,6 +568,26 @@ assert(
     && !/GameKeywordFragments\.Any\(fragment\s*=>\s*combined\.Contains/.test(gameActivityService)
     && !/GameKeywordFragments\.Any\(fragment\s*=>\s*lowerPath\.Contains/.test(gameActivityService),
   "Game activity detection must ignore Teams/comms apps and launcher processes while matching game keywords with token boundaries"
+);
+
+assert(
+  /Pinned game/.test(gameActivityService)
+    && /Recent app candidate/.test(gameActivityService)
+    && /confidence:\s*knownGamePath \|\| explicitGamePin \? 78 : 55/.test(gameActivityService)
+    && /confidence:\s*knownGamePath \|\| explicitGamePin \? 68 : 55/.test(gameActivityService)
+    && /IsExplicitGamePin/.test(gameActivityService)
+    && !/foreach\s*\(var blizzardName in new\[\]/.test(gameActivityService),
+  "Game activity keyword-only matches must stay below the active threshold while explicit game pins and known library paths can activate"
+);
+
+assert(
+  /function\s+reportBackgroundDashboardError/.test(dashboardJs)
+    && unhandledRejectionHandler
+    && /reportBackgroundDashboardError/.test(unhandledRejectionHandler[0])
+    && !/reportFatalDashboardError/.test(unhandledRejectionHandler[0])
+    && /scheduleFatalDashboardReload/.test(dashboardJs)
+    && /window\.location\.reload/.test(dashboardJs),
+  "dashboard background promise failures must not replace the whole UI, while fatal panels self-heal"
 );
 
 assert(

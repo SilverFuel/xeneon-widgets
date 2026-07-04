@@ -326,6 +326,11 @@ public sealed class GameActivityService
             var launcherEntries = launcherSnapshot.Entries
                 .Where(entry => IsUsableExecutablePath(entry.ExecutablePath))
                 .ToList();
+            var pinnedGamePaths = config.Launchers
+                .Where(IsExplicitGamePin)
+                .Select(entry => NormalizePath(entry.ExecutablePath))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var steamInstalledGames = steamSnapshot.Games
                 .Where(game => HasExistingInstallPath(game.InstallPath))
                 .ToList();
@@ -351,7 +356,7 @@ public sealed class GameActivityService
 
                 AddSteamProcessCandidate(candidates, steamInstalledGames, process);
                 AddEpicProcessCandidate(candidates, epicGames, process);
-                AddPinnedLauncherCandidate(candidates, launcherEntries, process);
+                AddPinnedLauncherCandidate(candidates, launcherEntries, pinnedGamePaths, process);
                 AddKnownGamePathCandidate(candidates, process);
                 AddFallbackProcessCandidate(candidates, process);
             }
@@ -559,6 +564,7 @@ public sealed class GameActivityService
     private static void AddPinnedLauncherCandidate(
         List<GameActivityPayload> candidates,
         IReadOnlyList<LauncherEntryPayload> launchers,
+        IReadOnlySet<string> pinnedGamePaths,
         RunningProcessInfo process)
     {
         foreach (var launcher in launchers)
@@ -572,7 +578,9 @@ public sealed class GameActivityService
 
             if (string.Equals(processPath, executablePath, StringComparison.OrdinalIgnoreCase))
             {
-                if (!LooksLikeGameLauncherEntry(launcher, process))
+                var knownGamePath = IsKnownGamePathMatch(launcher, process);
+                var explicitGamePin = IsExplicitGamePin(executablePath, pinnedGamePaths);
+                if (!knownGamePath && !explicitGamePin && !LooksLikeGameLauncherEntry(launcher, process))
                 {
                     continue;
                 }
@@ -580,10 +588,12 @@ public sealed class GameActivityService
                 candidates.Add(CreatePayload(
                     name: launcher.DisplayName,
                     platform: InferPlatform(launcher.DisplayName, executablePath),
-                    source: "Pinned launcher",
+                    source: explicitGamePin ? "Pinned game" : knownGamePath ? "Game library" : "Recent app candidate",
                     process,
-                    confidence: 78,
-                    reason: "Matched a running process from the pinned launcher list.",
+                    confidence: knownGamePath || explicitGamePin ? 78 : 55,
+                    reason: knownGamePath || explicitGamePin
+                        ? "Matched a running process from an approved game entry."
+                        : "Matched game-like keywords in a recent app. Pin it if this should trigger Game Mode.",
                     artworkUrl: "",
                     iconUrl: launcher.IconUrl));
                 continue;
@@ -591,16 +601,24 @@ public sealed class GameActivityService
 
             var launcherRoot = ResolveLauncherRoot(executablePath);
             if (!string.IsNullOrWhiteSpace(launcherRoot)
-                && IsPathInside(processPath, launcherRoot)
-                && LooksLikeGameLauncherEntry(launcher, process))
+                && IsPathInside(processPath, launcherRoot))
             {
+                var knownGamePath = IsKnownGamePathMatch(launcher, process);
+                var explicitGamePin = IsExplicitGamePin(executablePath, pinnedGamePaths);
+                if (!knownGamePath && !explicitGamePin && !LooksLikeGameLauncherEntry(launcher, process))
+                {
+                    continue;
+                }
+
                 candidates.Add(CreatePayload(
                     name: launcher.DisplayName,
                     platform: InferPlatform(launcher.DisplayName, executablePath),
-                    source: "Pinned launcher",
+                    source: explicitGamePin ? "Pinned game" : knownGamePath ? "Game library" : "Recent app candidate",
                     process,
-                    confidence: 68,
-                    reason: "Matched a running process near a pinned game executable.",
+                    confidence: knownGamePath || explicitGamePin ? 68 : 55,
+                    reason: knownGamePath || explicitGamePin
+                        ? "Matched a running process near an approved game executable."
+                        : "Matched game-like keywords near a recent app. Pin it if this should trigger Game Mode.",
                     artworkUrl: "",
                     iconUrl: launcher.IconUrl));
             }
@@ -869,14 +887,26 @@ public sealed class GameActivityService
 
     private static bool LooksLikeGameLauncherEntry(LauncherEntryPayload launcher, RunningProcessInfo process)
     {
-        if (TryInferKnownGamePath(process.ExecutablePath, out _)
-            || TryInferKnownGamePath(launcher.ExecutablePath, out _))
-        {
-            return true;
-        }
-
         var combined = $"{launcher.DisplayName} {launcher.ExecutablePath} {process.ProcessName}".ToLowerInvariant();
         return ContainsGameKeyword(combined);
+    }
+
+    private static bool IsKnownGamePathMatch(LauncherEntryPayload launcher, RunningProcessInfo process)
+    {
+        return TryInferKnownGamePath(process.ExecutablePath, out _)
+            || TryInferKnownGamePath(launcher.ExecutablePath, out _);
+    }
+
+    private static bool IsExplicitGamePin(LauncherEntryConfig entry)
+    {
+        return !string.IsNullOrWhiteSpace(entry.Id)
+            && entry.Id.StartsWith("game-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsExplicitGamePin(string executablePath, IReadOnlySet<string> pinnedGamePaths)
+    {
+        return !string.IsNullOrWhiteSpace(executablePath)
+            && pinnedGamePaths.Contains(NormalizePath(executablePath));
     }
 
     private static bool LooksLikeManualGameCandidate(RunningProcessInfo process)
@@ -969,21 +999,6 @@ public sealed class GameActivityService
         {
             inferred = inferred with { Name = "Minecraft" };
             return true;
-        }
-
-        foreach (var blizzardName in new[] { "World of Warcraft", "Overwatch", "Diablo", "Hearthstone", "StarCraft", "Call of Duty" })
-        {
-            var marker = @"\" + blizzardName.ToLowerInvariant() + @"\";
-            if (lower.Contains(marker, StringComparison.OrdinalIgnoreCase))
-            {
-                inferred = new InferredGamePath(
-                    blizzardName,
-                    "Battle.net",
-                    "Battle.net library",
-                    82,
-                    "Matched a running process inside a Battle.net game folder.");
-                return true;
-            }
         }
 
         return false;
