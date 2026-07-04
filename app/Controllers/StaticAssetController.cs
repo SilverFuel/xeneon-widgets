@@ -8,7 +8,6 @@ namespace XenonEdgeHost;
 public sealed class StaticAssetController
 {
     private const string FallbackDashboardAssetRevision = "local";
-    private const string SessionBootstrapPath = "/xenon-session-bootstrap.js";
     private const string SessionHeaderName = "X-Xenon-Session";
     private readonly EmbeddedAssetProvider _assetProvider;
     private readonly string _sessionToken;
@@ -24,12 +23,6 @@ public sealed class StaticAssetController
 
     public async Task<bool> TryHandleAsync(string path, HttpListenerResponse response, CancellationToken cancellationToken)
     {
-        if (string.Equals(path, SessionBootstrapPath, StringComparison.OrdinalIgnoreCase))
-        {
-            await WriteSessionBootstrapAsync(response, cancellationToken);
-            return true;
-        }
-
         if (!_assetProvider.TryGetAsset(path, out var asset))
         {
             return false;
@@ -87,41 +80,31 @@ public sealed class StaticAssetController
         response.Close();
     }
 
-    private async Task WriteSessionBootstrapAsync(HttpListenerResponse response, CancellationToken cancellationToken)
-    {
-        var content = BuildSessionBootstrapScript();
-        response.StatusCode = 200;
-        response.ContentType = "application/javascript; charset=utf-8";
-        response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
-        response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'self'";
-        ApplySecurityHeaders(response, response.ContentType, null);
-        response.ContentLength64 = content.LongLength;
-        await response.OutputStream.WriteAsync(content, cancellationToken);
-        response.Close();
-    }
-
     private byte[] InjectSessionBootstrap(byte[] content, string nonce)
     {
         var html = Encoding.UTF8.GetString(content);
         if (!html.Contains("</head>", StringComparison.OrdinalIgnoreCase)
-            || html.Contains(SessionBootstrapPath, StringComparison.OrdinalIgnoreCase))
+            || html.Contains("window.XenonSessionToken", StringComparison.OrdinalIgnoreCase))
         {
             return content;
         }
 
         var nonceAttribute = WebUtility.HtmlEncode(nonce);
+        var script = BuildSessionBootstrapScript();
         var injection = $$"""
-          <script src="{{SessionBootstrapPath}}" nonce="{{nonceAttribute}}"></script>
+          <script nonce="{{nonceAttribute}}">
+          {{script}}
+          </script>
         """;
 
         var index = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         return Encoding.UTF8.GetBytes(html.Insert(index, injection));
     }
 
-    private byte[] BuildSessionBootstrapScript()
+    private string BuildSessionBootstrapScript()
     {
         var tokenJson = JsonSerializer.Serialize(_sessionToken);
-        var script = $$"""
+        return $$"""
           (() => {
             window.XenonSessionToken = {{tokenJson}};
             const originalFetch = window.fetch;
@@ -145,7 +128,6 @@ public sealed class StaticAssetController
             window.fetch.__xenonSessionWrapped = true;
           })();
         """;
-        return Encoding.UTF8.GetBytes(script);
     }
 
     private static string CreateNonce()

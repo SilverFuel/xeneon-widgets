@@ -5,6 +5,17 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$projectPath = Join-Path $repoRoot "app\XenonEdgeHost.csproj"
+$appVersion = "local"
+try {
+  [xml]$projectXml = Get-Content -Path $projectPath -Raw
+  $versionNode = $projectXml.Project.PropertyGroup | Select-Object -First 1
+  if ($versionNode -and -not [string]::IsNullOrWhiteSpace($versionNode.Version)) {
+    $appVersion = $versionNode.Version
+  }
+} catch {
+  $appVersion = "local"
+}
 
 function Write-Step($message) {
   Write-Host ""
@@ -36,7 +47,7 @@ try {
 
   Write-Step "Free beta upload list"
   Write-Host "GitHub Release title:"
-  Write-Host "  XENEON Edge Host 0.2.0 Free Public Beta"
+  Write-Host "  XENEON Edge Host $appVersion Free Public Beta"
   Write-Host ""
   Write-Host "Mark it as:"
   Write-Host "  Pre-release"

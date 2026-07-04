@@ -21,9 +21,9 @@ const dashboardOnboardingVersion = 1;
 const maxJsonBodyBytes = 256 * 1024;
 const maxIcsBytes = 512 * 1024;
 const sessionHeaderName = "X-Xenon-Session";
-const sessionBootstrapPath = "/xenon-session-bootstrap.js";
 const sessionToken = randomBytes(32).toString("base64url");
 const sensitiveQueryPattern = /((?:api[_-]?key|appid|token|secret|password|pass|sig|signature|auth|key)=)[^&\s"]+/gi;
+const forceLegacyBridge = process.argv.includes("--force");
 let config = loadConfig();
 const statusCache = {
   system: createStatusCache(15000),
@@ -173,6 +173,14 @@ function createRequestId() {
   return randomUUID().replace(/-/g, "").slice(0, 12);
 }
 
+function displayHost(rawUrl) {
+  try {
+    return rawUrl ? new URL(rawUrl).host : "";
+  } catch {
+    return "";
+  }
+}
+
 function sanitizeLogPath(requestUrl) {
   try {
     const parsed = createLocalUrl(requestUrl);
@@ -220,8 +228,8 @@ function hasValidSessionToken(request) {
   return request.headers[String(sessionHeaderName).toLowerCase()] === sessionToken;
 }
 
-function authorizeNoOriginMutation(request) {
-  if (isSafeMethod(request) || request.headers.origin) {
+function authorizeMutationSession(request) {
+  if (isSafeMethod(request)) {
     return true;
   }
   return hasValidSessionToken(request);
@@ -251,11 +259,6 @@ function safeResolveStaticPath(requestUrl) {
 
 function serveStaticFile(requestUrl, response) {
   const pathname = new URL(requestUrl, `http://127.0.0.1:${config.port}`).pathname;
-  if (pathname === sessionBootstrapPath) {
-    sendSessionBootstrap(response);
-    return;
-  }
-
   const filePath = safeResolveStaticPath(requestUrl);
 
   if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
@@ -285,24 +288,13 @@ function serveStaticFile(requestUrl, response) {
   fs.createReadStream(filePath).pipe(response);
 }
 
-function sendSessionBootstrap(response) {
-  const body = buildSessionBootstrapScript();
-  response.writeHead(200, {
-    "Content-Type": "application/javascript; charset=utf-8",
-    "Content-Length": Buffer.byteLength(body),
-    "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'none'; script-src 'self'; connect-src 'self'",
-    ...securityHeaders("application/javascript; charset=utf-8")
-  });
-  response.end(body);
-}
-
 function injectSessionToken(html, nonce) {
-  if (!html.includes("</head>") || html.includes(sessionBootstrapPath)) {
+  if (!html.includes("</head>") || html.includes("window.XenonSessionToken")) {
     return html;
   }
 
-  const injection = `  <script src="${sessionBootstrapPath}" nonce="${escapeHtml(nonce)}"></script>
+  const injection = `  <script nonce="${escapeHtml(nonce)}">
+${buildSessionBootstrapScript()}  </script>
 `;
   return html.replace("</head>", `${injection}</head>`);
 }
@@ -1865,6 +1857,7 @@ function getConfigSnapshot() {
   const weather = config.weather || {};
   const hue = getHueConfigSnapshot();
   const dashboard = normalizeDashboardConfig(config.dashboard);
+  const calendar = config.calendar || {};
 
   return {
     port: config.port,
@@ -1872,6 +1865,11 @@ function getConfigSnapshot() {
       configured: Boolean(weather.apiKey),
       city: weather.city || "",
       units: weather.units || "metric"
+    },
+    calendar: {
+      configured: Boolean(calendar.icsUrl),
+      icsUrlConfigured: Boolean(calendar.icsUrl),
+      icsHost: displayHost(calendar.icsUrl)
     },
     hue: {
       bridgeIp: hue.bridgeIp,
@@ -2019,7 +2017,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (!authorizeNoOriginMutation(request)) {
+    if (!authorizeMutationSession(request)) {
       json(response, 403, { error: "Session token required" });
       return;
     }
@@ -2228,11 +2226,63 @@ process.once("exit", () => {
   stopBackgroundCollectors();
 });
 
-server.listen(config.port, "127.0.0.1", () => {
-  startBackgroundCollectors().catch((error) => {
-    console.warn("Background collectors failed to start", error);
+function isNativeHostHealthPayload(payload) {
+  const capabilities = payload && payload.capabilities ? payload.capabilities : {};
+  return Boolean(payload && payload.ok === true
+    && capabilities.display === true
+    && capabilities.gpuPower === true
+    && capabilities.gameActivity === true
+    && capabilities.quickActions === true
+    && capabilities.clipboard === true);
+}
+
+function readNativeHostHealth(port) {
+  return new Promise((resolve) => {
+    const request = http.get({
+      hostname: "127.0.0.1",
+      port,
+      path: "/api/health",
+      timeout: 1000
+    }, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        if (body.length < 64 * 1024) {
+          body += chunk;
+        }
+      });
+      response.on("end", () => {
+        try {
+          resolve(response.statusCode === 200 && isNativeHostHealthPayload(JSON.parse(body)));
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+
+    request.on("timeout", () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.on("error", () => resolve(false));
   });
-  writeStructuredLog("bridge_listening", {
-    origin: `http://127.0.0.1:${config.port}`
+}
+
+async function startBridgeServer() {
+  if (!forceLegacyBridge && config.port === 8976 && await readNativeHostHealth(config.port)) {
+    console.error("Native XENEON Edge Host is already running on 127.0.0.1:8976. The legacy bridge is for compatibility testing only; pass --force to override.");
+    process.exitCode = 1;
+    return;
+  }
+
+  server.listen(config.port, "127.0.0.1", () => {
+    startBackgroundCollectors().catch((error) => {
+      console.warn("Background collectors failed to start", error);
+    });
+    writeStructuredLog("bridge_listening", {
+      origin: `http://127.0.0.1:${config.port}`
+    });
   });
-});
+}
+
+await startBridgeServer();

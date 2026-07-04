@@ -138,16 +138,12 @@
       name: text(game.name, "Game"),
       platform: text(game.platform, game.appId ? "Steam" : "Game"),
       source: text(game.source, ""),
-      processId: optionalNumber(game.processId),
-      processName: text(game.processName, ""),
-      executablePath: text(game.executablePath, ""),
       hasRuntimeIdentity: Boolean(game.hasRuntimeIdentity),
       canPin: Boolean(game.canPin),
       confidence: optionalNumber(game.confidence),
       reason: text(game.reason, ""),
       state: text(game.state, ""),
       focused: Boolean(game.focused),
-      foregroundProcessName: text(game.foregroundProcessName, ""),
       startedAt: text(game.startedAt, ""),
       sessionStartedAt: text(game.sessionStartedAt, ""),
       sessionDurationMs: optionalNumber(game.sessionDurationMs) || 0,
@@ -171,8 +167,6 @@
       lastEndedAt: text(payload.lastEndedAt, ""),
       message: text(payload.message, payload.active ? "Game running." : "No active game detected."),
       source: text(payload.source, "running processes"),
-      foregroundProcessId: optionalNumber(payload.foregroundProcessId),
-      foregroundProcessName: text(payload.foregroundProcessName, ""),
       foregroundAppActive: Boolean(payload.foregroundAppActive),
       activeGame: normalizeGameActivityGame(payload.activeGame),
       lastGame: normalizeGameActivityGame(payload.lastGame),
@@ -320,7 +314,6 @@
       name: text(game.name, "Steam Game"),
       platform: "Steam",
       source: "Steam library",
-      processName: "",
       confidence: 96,
       reason: "Steam game is active.",
       startedAt: "",
@@ -551,15 +544,12 @@
 
   function gameFocusAudioSessions(audio, game) {
     var data = normalizeAudioPayload(audio || {});
-    var gameProcessId = optionalNumber(game && game.processId);
-    var gameProcessName = text(game && game.processName, "").toLowerCase();
+    var gameName = text(game && game.name, "").toLowerCase();
     return data.sessions.filter(isUsefulAudioSession).sort(function (left, right) {
       var leftName = text(left && left.name, "").toLowerCase();
       var rightName = text(right && right.name, "").toLowerCase();
-      var leftGame = (gameProcessId != null && left.processId === gameProcessId)
-        || (gameProcessName && leftName.indexOf(gameProcessName) !== -1);
-      var rightGame = (gameProcessId != null && right.processId === gameProcessId)
-        || (gameProcessName && rightName.indexOf(gameProcessName) !== -1);
+      var leftGame = gameName && leftName.indexOf(gameName) !== -1;
+      var rightGame = gameName && rightName.indexOf(gameName) !== -1;
       if (leftGame !== rightGame) {
         return leftGame ? -1 : 1;
       }
@@ -569,13 +559,13 @@
 
   function renderGameFocusAudioRows(sessions, game) {
     var visible = sessions.slice(0, 3);
-    var gameProcessId = optionalNumber(game && game.processId);
+    var gameName = text(game && game.name, "").toLowerCase();
     if (!visible.length) {
       return '<div class="game-focus-empty">No active app audio</div>';
     }
 
     return visible.map(function (session) {
-      var isGame = gameProcessId != null && session.processId === gameProcessId;
+      var isGame = gameName && text(session && session.name, "").toLowerCase().indexOf(gameName) !== -1;
       return '' +
         '<div class="game-focus-audio-row' + (isGame ? " is-game" : "") + (session.muted ? " is-muted" : "") + '">' +
           '<div>' +
@@ -1118,6 +1108,8 @@
       var theme = themeForGame(game, env);
       var dashboard = env.bridgeConfig && env.bridgeConfig.dashboard ? env.bridgeConfig.dashboard : {};
       var autoTune = settingValue(env, "gameModeAutoTune", dashboard.gameModeAutoTune === false ? "0" : "1") !== "0";
+      var currentBudget = settingValue(env, "performanceBudget", dashboard.performanceBudget || "balanced");
+      var preGameBudget = settingValue(env, "preGameBudget", "");
       var values = {
         gameModeProfile: theme.profileId,
         gameModeGame: theme.gameName,
@@ -1128,6 +1120,9 @@
       };
 
       if (autoTune) {
+        if (currentBudget && currentBudget !== "game" && !preGameBudget) {
+          values.preGameBudget = currentBudget;
+        }
         values.performanceBudget = "game";
       }
 

@@ -11,7 +11,6 @@ const defaultPort = 8976;
 let assetRevision = "local";
 const maxJsonBodyBytes = 256 * 1024;
 const sessionHeaderName = "X-Xenon-Session";
-const sessionBootstrapPath = "/xenon-session-bootstrap.js";
 const sessionToken = randomBytes(32).toString("base64url");
 const releasesUrl = "https://github.com/SilverFuel/xeneon-widgets/releases";
 const latestReleaseApiUrl = "https://api.github.com/repos/SilverFuel/xeneon-widgets/releases/latest";
@@ -207,6 +206,14 @@ function text(value, fallback) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
+function displayHost(rawUrl) {
+  try {
+    return rawUrl ? new URL(rawUrl).host : "";
+  } catch {
+    return "";
+  }
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -364,7 +371,8 @@ function buildConfigSnapshot() {
     },
     calendar: {
       configured: Boolean(config.calendar.icsUrl),
-      icsUrl: config.calendar.icsUrl
+      icsUrlConfigured: Boolean(config.calendar.icsUrl),
+      icsHost: displayHost(config.calendar.icsUrl)
     },
     launchers: {
       configured: config.launchers.length > 0,
@@ -961,8 +969,8 @@ function isSafeMethod(request) {
   return ["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase());
 }
 
-function authorizeNoOriginMutation(request) {
-  if (isSafeMethod(request) || request.headers.origin) {
+function authorizeMutationSession(request) {
+  if (isSafeMethod(request)) {
     return true;
   }
   return request.headers[String(sessionHeaderName).toLowerCase()] === sessionToken;
@@ -1016,7 +1024,7 @@ async function handleRequest(request, response) {
       return sendJson(response, 403, { ok: false, error: "Origin not allowed." });
     }
 
-    if (!authorizeNoOriginMutation(request)) {
+    if (!authorizeMutationSession(request)) {
       return sendJson(response, 403, { ok: false, error: "Session token required." });
     }
 
@@ -1030,10 +1038,6 @@ async function handleRequest(request, response) {
     const apiHandled = await handleApi(request, response, requestUrl);
     if (apiHandled) {
       return;
-    }
-
-    if (requestUrl.pathname === sessionBootstrapPath) {
-      return sendSessionBootstrap(response);
     }
 
     const filePath = resolveStaticPath(requestUrl);
@@ -1063,24 +1067,13 @@ async function handleRequest(request, response) {
   }
 }
 
-function sendSessionBootstrap(response) {
-  const body = Buffer.from(buildSessionBootstrapScript(), "utf8");
-  response.writeHead(200, {
-    "Content-Type": "application/javascript; charset=utf-8",
-    "Content-Length": body.length,
-    "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'none'; script-src 'self'; connect-src 'self'",
-    ...securityHeaders("application/javascript; charset=utf-8")
-  });
-  response.end(body);
-}
-
 function injectSessionToken(html, nonce) {
-  if (!html.includes("</head>") || html.includes(sessionBootstrapPath)) {
+  if (!html.includes("</head>") || html.includes("window.XenonSessionToken")) {
     return html;
   }
 
-  const injection = `  <script src="${sessionBootstrapPath}" nonce="${escapeHtml(nonce)}"></script>
+  const injection = `  <script nonce="${escapeHtml(nonce)}">
+${buildSessionBootstrapScript()}  </script>
 `;
   return html.replace("</head>", `${injection}</head>`);
 }

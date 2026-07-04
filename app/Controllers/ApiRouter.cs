@@ -348,9 +348,9 @@ public sealed class ApiRouter
         }
     }
 
-    private static object BuildUnsupportedFeaturePayload(string status, string message, object? extra = null)
+    private static object BuildUnsupportedFeaturePayload(string status, string message)
     {
-        var payload = new Dictionary<string, object?>
+        return new Dictionary<string, object?>
         {
             ["supported"] = false,
             ["configured"] = false,
@@ -361,16 +361,6 @@ public sealed class ApiRouter
             ["stale"] = false,
             ["error"] = message
         };
-
-        if (extra is not null)
-        {
-            foreach (var property in extra.GetType().GetProperties())
-            {
-                payload[property.Name[..1].ToLowerInvariant() + property.Name[1..]] = property.GetValue(extra);
-            }
-        }
-
-        return payload;
     }
 
     private static async Task<T> ReadJsonAsync<T>(HttpListenerRequest request, CancellationToken cancellationToken)

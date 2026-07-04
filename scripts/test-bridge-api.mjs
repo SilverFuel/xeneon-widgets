@@ -58,6 +58,17 @@ async function assertResponse(label, response, expectedStatus) {
   }
 }
 
+async function readSessionToken() {
+  const response = await request("/dashboard.html");
+  await assertResponse("dashboard html", response, 200);
+  const html = await response.text();
+  const match = html.match(/window\.XenonSessionToken\s*=\s*"([^"]+)"/);
+  if (!match) {
+    fail("dashboard html did not include an inline Xenon session token");
+  }
+  return match[1];
+}
+
 try {
   serverProcess = spawn(process.execPath, [bridgeScript], {
     cwd: repoRoot,
@@ -99,6 +110,13 @@ try {
     fail("health payload did not report browser bridge display diagnostics as optional");
   }
 
+  const sessionToken = await readSessionToken();
+  const sessionHeaders = {
+    "Content-Type": "application/json",
+    Origin: baseUrl,
+    "X-Xenon-Session": sessionToken
+  };
+
   const rejectedOrigin = await request("/api/health", {
     headers: {
       Origin: "http://example.com"
@@ -108,20 +126,14 @@ try {
 
   const invalidJson = await request("/api/config/dashboard", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Origin: baseUrl
-    },
+    headers: sessionHeaders,
     body: "{"
   });
   await assertResponse("invalid JSON", invalidJson, 400);
 
   const oversizedJson = await request("/api/config/dashboard", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Origin: baseUrl
-    },
+    headers: sessionHeaders,
     body: JSON.stringify({ value: "x".repeat((256 * 1024) + 1) })
   });
   await assertResponse("oversized JSON", oversizedJson, 413);
@@ -140,10 +152,7 @@ try {
 
   const dashboardUpdate = await request("/api/config/dashboard", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Origin: baseUrl
-    },
+    headers: sessionHeaders,
     body: JSON.stringify({
       onboardingCompleted: true,
       onboardingVersion: 1

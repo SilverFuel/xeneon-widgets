@@ -12,6 +12,10 @@ $ErrorActionPreference = "Stop"
 $logRoot = Join-Path $env:LOCALAPPDATA "XenonEdgeHost\InstallerLogs"
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 $logPath = Join-Path $logRoot "install.log"
+$previousLogPath = Join-Path $logRoot "install.prev.log"
+if ((Test-Path -LiteralPath $logPath) -and (Get-Item -LiteralPath $logPath).Length -gt 512KB) {
+  Move-Item -LiteralPath $logPath -Destination $previousLogPath -Force
+}
 Start-Transcript -Path $logPath -Append | Out-Null
 
 function Write-Step($message) {
@@ -103,7 +107,7 @@ function Register-UninstallEntry($installPath, $exePath) {
   $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
   $version = (Get-Item $exePath).VersionInfo.FileVersion
   if (-not $version) {
-    $version = "1.0.0"
+    $version = "0.0.0"
   }
 
   $estimatedSizeKb = 0

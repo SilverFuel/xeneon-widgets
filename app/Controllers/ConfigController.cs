@@ -29,7 +29,8 @@ public sealed class ConfigController
             calendar = new
             {
                 configured = !string.IsNullOrWhiteSpace(config.Calendar.IcsUrl),
-                icsUrl = config.Calendar.IcsUrl
+                icsUrlConfigured = !string.IsNullOrWhiteSpace(config.Calendar.IcsUrl),
+                icsHost = GetDisplayHost(config.Calendar.IcsUrl)
             },
             network = new
             {
@@ -369,5 +370,10 @@ public sealed class ConfigController
         return string.IsNullOrWhiteSpace(requested)
             ? _configStore.Snapshot().Dashboard.ReleaseChannel
             : requested;
+    }
+
+    private static string GetDisplayHost(string? rawUrl)
+    {
+        return Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri) ? uri.Host : "";
     }
 }

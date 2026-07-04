@@ -48,7 +48,7 @@ function New-Shortcut($shortcutPath, $targetPath, $arguments, $workingDirectory,
 function Register-UninstallEntry($installPath, $appExePath) {
   $version = (Get-Item -LiteralPath $appExePath).VersionInfo.FileVersion
   if (-not $version) {
-    $version = "1.0.0"
+    $version = "0.0.0"
   }
 
   $estimatedSizeKb = 0

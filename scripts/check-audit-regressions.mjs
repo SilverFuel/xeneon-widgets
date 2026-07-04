@@ -41,9 +41,16 @@ const assetRevisionPayload = readWorkspaceJson("assets/revision.json");
 const currentAssetRevision = String(assetRevisionPayload.assetRevision || "").trim();
 assert(/^20\d{6}-\d{2}$/.test(currentAssetRevision), "assets/revision.json must define the current dashboard asset revision");
 
+const appCsproj = readWorkspaceFile("app/XenonEdgeHost.csproj");
+const appVersion = appCsproj.match(/<Version>([^<]+)<\/Version>/)?.[1]?.trim() || "";
+assert(appVersion, "app/XenonEdgeHost.csproj must define <Version>");
+
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const installScript = readWorkspaceFile("app/install.ps1");
+const installerScript = readWorkspaceFile("app/installer/Install-XenonEdgeHost.ps1");
+const repairScript = readWorkspaceFile("app/repair.ps1");
+const freeBetaReleaseScript = readWorkspaceFile("scripts/prepare-free-beta-release.ps1");
 const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
 const actionController = readWorkspaceFile("app/Controllers/ActionController.cs");
 const staticAssetController = readWorkspaceFile("app/Controllers/StaticAssetController.cs");
@@ -55,6 +62,7 @@ const telemetryController = readWorkspaceFile("app/Controllers/TelemetryControll
 const programCs = readWorkspaceFile("app/Program.cs");
 const appLaunchOptions = readWorkspaceFile("app/AppLaunchOptions.cs");
 const systemMetricsService = readWorkspaceFile("app/Services/SystemMetricsService.cs");
+const gpuPowerMonitorService = readWorkspaceFile("app/Services/GpuPowerMonitorService.cs");
 const networkMetricsService = readWorkspaceFile("app/Services/NetworkMetricsService.cs");
 const audioService = readWorkspaceFile("app/Services/AudioService.cs");
 const mediaService = readWorkspaceFile("app/Services/MediaService.cs");
@@ -95,10 +103,14 @@ const buildStamp = readWorkspaceFile("build/build-stamp.props");
 
 assert(
   /SessionHeaderName\s*=\s*"X-Xenon-Session"/.test(bridgeManager)
-    && /TryAuthorizeNoOriginMutation/.test(bridgeManager)
-    && /WriteSessionBootstrapAsync/.test(staticAssetController)
-    && /xenon-session-bootstrap\.js/.test(staticAssetController),
-  "native bridge must protect no-origin mutating requests with a locked-down session bootstrap script"
+    && /TryAuthorizeMutationSession/.test(bridgeManager)
+    && !/TryAuthorizeNoOriginMutation/.test(bridgeManager)
+    && /request\.Headers\[SessionHeaderName\]/.test(bridgeManager)
+    && /BuildSessionBootstrapScript/.test(staticAssetController)
+    && /window\.XenonSessionToken/.test(staticAssetController)
+    && !/WriteSessionBootstrapAsync/.test(staticAssetController)
+    && !/xenon-session-bootstrap\.js/.test(staticAssetController),
+  "native bridge must require the session header for mutations and inline the local HTML session bootstrap"
 );
 
 assert(
@@ -133,9 +145,12 @@ assert(
 
 assert(
   /NormalizeRemoteHttpUrl\(.*Calendar ICS URL/.test(configController)
+    && /icsUrlConfigured/.test(configController)
+    && /GetDisplayHost/.test(configController)
+    && !/icsUrl\s*=\s*config\.Calendar\.IcsUrl/.test(configController)
     && /MaxIcsBytes\s*=\s*512\s*\*\s*1024/.test(calendarService)
     && /HttpCompletionOption\.ResponseHeadersRead/.test(calendarService),
-  "calendar ICS fetches must validate remote URL shape and cap response size"
+  "calendar ICS fetches must validate remote URL shape, cap response size, and avoid returning bearer feed URLs from config"
 );
 
 assert(
@@ -147,15 +162,19 @@ assert(
 
 assert(
   /sessionHeaderName\s*=\s*"X-Xenon-Session"/.test(legacyBridge)
-    && /authorizeNoOriginMutation/.test(legacyBridge)
+    && /authorizeMutationSession/.test(legacyBridge)
+    && !/authorizeNoOriginMutation/.test(legacyBridge)
     && /injectSessionToken/.test(legacyBridge)
     && /securityHeaders/.test(legacyBridge)
-    && /xenon-session-bootstrap\.js/.test(legacyBridge)
+    && /window\.XenonSessionToken/.test(legacyBridge)
+    && !/xenon-session-bootstrap\.js/.test(legacyBridge)
     && /sessionHeaderName\s*=\s*"X-Xenon-Session"/.test(electronMain)
-    && /authorizeNoOriginMutation/.test(electronMain)
+    && /authorizeMutationSession/.test(electronMain)
+    && !/authorizeNoOriginMutation/.test(electronMain)
     && /injectSessionToken/.test(electronMain)
     && /securityHeaders/.test(electronMain)
-    && /xenon-session-bootstrap\.js/.test(electronMain),
+    && /window\.XenonSessionToken/.test(electronMain)
+    && !/xenon-session-bootstrap\.js/.test(electronMain),
   "legacy and Electron hosts must match the native no-origin mutation and local HTML security boundary"
 );
 
@@ -331,16 +350,28 @@ assert(
 );
 
 assert(
-  assetRevisionPayload.informationalVersion === `0.2.0+${currentAssetRevision.slice(0, 8)}`,
+  assetRevisionPayload.informationalVersion === `${appVersion}+${currentAssetRevision.slice(0, 8)}`,
   "native assembly informational version must match the current release date"
 );
 
 assert(
   buildStamp.includes(`<XenonAssetRevision>${currentAssetRevision}</XenonAssetRevision>`)
     && buildStamp.includes(`<XenonInformationalVersion>${assetRevisionPayload.informationalVersion}</XenonInformationalVersion>`)
-    && readWorkspaceFile("app/XenonEdgeHost.csproj").includes("$(XenonInformationalVersion)")
-    && assetRevisionPayload.informationalVersion === `0.2.0+${currentAssetRevision.slice(0, 8)}`,
+    && appCsproj.includes("$(XenonInformationalVersion)")
+    && assetRevisionPayload.informationalVersion === `${appVersion}+${currentAssetRevision.slice(0, 8)}`,
   "native informational version and asset revision must share build/build-stamp.props"
+);
+
+assert(
+  /\$version\s*=\s*"0\.0\.0"/.test(installerScript)
+    && /\$version\s*=\s*"0\.0\.0"/.test(repairScript)
+    && !/"1\.0\.0"/.test(installerScript)
+    && !/"1\.0\.0"/.test(repairScript)
+    && /\$appVersion/.test(freeBetaReleaseScript)
+    && /XENEON Edge Host \$appVersion Free Public Beta/.test(freeBetaReleaseScript)
+    && /install\.prev\.log/.test(installerScript)
+    && /512KB/.test(installerScript),
+  "installer and release scripts must single-source versions, use a neutral fallback, and rotate the install transcript"
 );
 
 assert(
@@ -359,6 +390,16 @@ assert(
     && /relative\.startsWith\(".."\)/.test(legacyBridge)
     && /path\.isAbsolute\(relative\)/.test(legacyBridge),
   "legacy bridge static file guard must use path.relative instead of sibling-prefix startsWith"
+);
+
+assert(
+  /forceLegacyBridge\s*=\s*process\.argv\.includes\("--force"\)/.test(legacyBridge)
+    && /isNativeHostHealthPayload/.test(legacyBridge)
+    && /readNativeHostHealth/.test(legacyBridge)
+    && /config\.port === 8976/.test(legacyBridge)
+    && /Native XENEON Edge Host is already running/.test(legacyBridge)
+    && /await startBridgeServer\(\)/.test(legacyBridge),
+  "legacy bridge must refuse to bind over the native host on port 8976 unless explicitly forced"
 );
 
 assert(
@@ -387,6 +428,17 @@ assert(
   /Interlocked\.Exchange\(ref _usageSampling,\s*1\)/.test(systemMetricsService)
     && /Interlocked\.Exchange\(ref _temperatureSampling,\s*1\)/.test(systemMetricsService),
   "native system metrics timers must guard against overlapping samples"
+);
+
+assert(
+  /ActiveRequestWindow\s*=\s*TimeSpan\.FromSeconds\(60\)/.test(gpuPowerMonitorService)
+    && /HwInfoDiscoveryCacheDuration\s*=\s*TimeSpan\.FromMinutes\(5\)/.test(gpuPowerMonitorService)
+    && /_lastSnapshotRequestedAt\s*=\s*DateTimeOffset\.UtcNow/.test(gpuPowerMonitorService)
+    && /ShouldSampleNow/.test(gpuPowerMonitorService)
+    && /ReadHwInfoCsvReviewLines/.test(gpuPowerMonitorService)
+    && /ReadFileChunkLines/.test(gpuPowerMonitorService)
+    && !/File\.ReadLines\(filePath\)/.test(gpuPowerMonitorService),
+  "GPU power sampling must be demand-driven, cache HWiNFO discovery, and avoid full CSV reads"
 );
 
 assert(
@@ -430,6 +482,15 @@ assert(
     && !/var systemLoop = createTimerLoop/.test(gameModeWidget)
     && !/var performanceLoop = createTimerLoop/.test(gameModeWidget),
   "Game Mode must use one budgeted native session snapshot instead of independent UI polling loops"
+);
+
+assert(
+  /CacheDuration\s*=\s*TimeSpan\.FromSeconds\(6\)/.test(gameActivityService)
+    && /WmiProcessScanCooldown\s*=\s*TimeSpan\.FromSeconds\(30\)/.test(gameActivityService)
+    && /_lastWmiProcessScanAt/.test(gameActivityService)
+    && /inaccessibleProcessModules > 0/.test(gameActivityService)
+    && /AddWmiProcesses\(results\)/.test(gameActivityService),
+  "Game activity scans must use a longer cache and throttle WMI fallback to avoid constant process churn"
 );
 
 assert(
@@ -595,13 +656,27 @@ assert(
 );
 
 assert(
+  /function\s+restorePreGamePerformanceBudget/.test(dashboardJs)
+    && /preGameBudget/.test(dashboardJs)
+    && /values\.preGameBudget = currentBudget/.test(gameModeWidget)
+    && /function\s+getNowStripRefreshInterval/.test(dashboardJs)
+    && /function\s+getLauncherDockRefreshInterval/.test(dashboardJs)
+    && /scheduleNowPlayingStripLoop/.test(dashboardJs)
+    && /scheduleLauncherDockLoop/.test(dashboardJs)
+    && /launcherDockRenderKey/.test(dashboardJs)
+    && /currentWidgetId === "game-mode"/.test(dashboardJs),
+  "dashboard must restore pre-game performance budget and make now-strip/launcher dock polling budget-aware"
+);
+
+assert(
   /input\[type="range"\]:focus-visible/.test(readWorkspaceFile("css/widgets.css"))
     && /aria-label="Display brightness"/.test(actionsWidget)
     && /aria-label="Master volume"/.test(audioWidget)
     && /aria-label="Dashboard opacity"/.test(dashboardJs)
     && /aria-label="Brightness for/.test(homelabWidget)
     && /aria-label="Brightness for/.test(integrationsWidget)
-    && /aria-label="Animation intensity"/.test(productWidget),
+    && /aria-label="Animation intensity"/.test(productWidget)
+    && /aria-pressed/.test(dashboardJs),
   "generated range controls must keep accessible names and a visible keyboard focus baseline"
 );
 
@@ -692,6 +767,10 @@ assert(
     && /js\/widgets\/setup\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
     && /runtime\.registerRenderer\("setup",\s*mountSetupWidget\)/.test(setupWidget)
     && /runtime\.registerRenderer\("calendar",\s*mountCalendarWidget\)/.test(setupWidget)
+    && /icsUrlConfigured/.test(setupWidget)
+    && /icsHost/.test(setupWidget)
+    && /Paste a new feed to replace/.test(setupWidget)
+    && !/calendarConfig\.icsUrl\b/.test(setupWidget)
     && !/mountSetupWidget/.test(inlineWidgets)
     && !/mountCalendarWidget/.test(inlineWidgets)
     && !/setup-diagnostics-grid|setup-launcher-suggestions|setup-display-target/.test(readWorkspaceFile("css/widgets.css")),

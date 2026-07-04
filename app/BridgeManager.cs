@@ -397,7 +397,7 @@ public sealed class BridgeManager : IDisposable
                 return;
             }
 
-            if (!TryAuthorizeNoOriginMutation(request))
+            if (!TryAuthorizeMutationSession(request))
             {
                 await WriteJsonAsync(response, 403, new { error = "Session token required." }, cancellationToken);
                 return;
@@ -517,9 +517,9 @@ public sealed class BridgeManager : IDisposable
         return true;
     }
 
-    private bool TryAuthorizeNoOriginMutation(HttpListenerRequest request)
+    private bool TryAuthorizeMutationSession(HttpListenerRequest request)
     {
-        if (HasSafeMethod(request) || !string.IsNullOrWhiteSpace(request.Headers["Origin"]))
+        if (HasSafeMethod(request))
         {
             return true;
         }
@@ -528,7 +528,7 @@ public sealed class BridgeManager : IDisposable
         var authorized = string.Equals(token, _sessionToken, StringComparison.Ordinal);
         if (!authorized)
         {
-            _logger.Warn($"Rejected no-origin {request.HttpMethod} request without a valid session token.");
+            _logger.Warn($"Rejected {request.HttpMethod} request without a valid session token.");
         }
 
         return authorized;

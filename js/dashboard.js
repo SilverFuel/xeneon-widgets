@@ -67,7 +67,8 @@
     },
     calendar: {
       configured: false,
-      icsUrl: ""
+      icsUrlConfigured: false,
+      icsHost: ""
     },
     launchers: {
       configured: false,
@@ -105,6 +106,8 @@
   var nowStripTimerId = 0;
   var launcherDockTimerId = 0;
   var launcherDockEntries = [];
+  var launcherDockSnapshotKey = "";
+  var launcherDockRenderKey = "";
   var launcherDockLaunchingId = "";
   var launcherDockExpanded = false;
   var defaultSettings = {
@@ -901,7 +904,35 @@
     if (budget === "max" || budget === "game") {
       return 4000;
     }
-    return 6000;
+    return 8000;
+  }
+
+  function getNowStripRefreshInterval() {
+    var budget = getPerformanceBudget();
+    if (budget === "battery") {
+      return 15000;
+    }
+    if (budget === "game") {
+      return 12000;
+    }
+    if (budget === "max") {
+      return 5000;
+    }
+    return 8000;
+  }
+
+  function getLauncherDockRefreshInterval() {
+    var budget = getPerformanceBudget();
+    if (budget === "battery") {
+      return 60000;
+    }
+    if (budget === "game") {
+      return 45000;
+    }
+    if (budget === "max") {
+      return 15000;
+    }
+    return 30000;
   }
 
   function activeGameIdFromPayload(payload) {
@@ -1005,6 +1036,18 @@
     openGameFaceForActiveId(activeId);
   }
 
+  function restorePreGamePerformanceBudget() {
+    var previousBudget = normalizeChoice(getSetting("preGameBudget"), "", ["balanced", "battery", "max"]);
+    if (!previousBudget || getPerformanceBudget() !== "game") {
+      return;
+    }
+
+    saveDashboardSettings({
+      performanceBudget: previousBudget,
+      preGameBudget: ""
+    });
+  }
+
   function handleGameActivity(payload) {
     var activeGame;
     var activeId;
@@ -1014,6 +1057,7 @@
     activeId = activeGameIdFromPayload(gameActivity);
 
     if (!activeGame || !activeId) {
+      restorePreGamePerformanceBudget();
       gameFaceLastActiveId = "";
       gameFaceAutoOpenedGameId = "";
       gameFaceSuppressedGameId = "";
@@ -1079,7 +1123,7 @@
   }
 
   function shouldSuppressNowStrip() {
-    return currentWidgetId === "quick-actions" || currentWidgetId === "shortcuts";
+    return currentWidgetId === "quick-actions" || currentWidgetId === "shortcuts" || currentWidgetId === "game-mode";
   }
 
   function setNowStrip(targetWidget, label, title, detail) {
@@ -1169,9 +1213,13 @@
       }
     });
 
+    scheduleNowPlayingStripLoop();
+  }
+
+  function scheduleNowPlayingStripLoop() {
+    window.clearTimeout(nowStripTimerId);
     updateNowPlayingStrip();
-    window.clearInterval(nowStripTimerId);
-    nowStripTimerId = window.setInterval(updateNowPlayingStrip, 5000);
+    nowStripTimerId = window.setTimeout(scheduleNowPlayingStripLoop, getNowStripRefreshInterval());
   }
 
   function normalizeLauncherDockEntries(payload) {
@@ -1240,6 +1288,7 @@
   function renderLauncherDock() {
     var visibleEntries;
     var hasMore;
+    var renderKey;
     if (!launcherDockNode || !shouldShowLauncherDock()) {
       hideLauncherDock();
       return;
@@ -1251,6 +1300,17 @@
 
     visibleEntries = launcherDockEntries.slice(0, launcherDockExpanded ? 24 : 8);
     hasMore = launcherDockEntries.length > 8;
+    renderKey = JSON.stringify({
+      expanded: launcherDockExpanded,
+      launching: launcherDockLaunchingId,
+      entries: visibleEntries
+    });
+    if (renderKey === launcherDockRenderKey) {
+      setLauncherDockVisible(true);
+      return;
+    }
+
+    launcherDockRenderKey = renderKey;
     launcherDockNode.classList.toggle("is-expanded", launcherDockExpanded);
     launcherDockNode.innerHTML = '' +
       '<div class="dashboard-launcher-dock__head">' +
@@ -1284,10 +1344,18 @@
     }
 
     return fetchLaunchers().then(function (payload) {
-      launcherDockEntries = normalizeLauncherDockEntries(payload);
+      var nextEntries = normalizeLauncherDockEntries(payload);
+      var nextKey = JSON.stringify(nextEntries);
+      if (nextKey !== launcherDockSnapshotKey) {
+        launcherDockEntries = nextEntries;
+        launcherDockSnapshotKey = nextKey;
+        launcherDockRenderKey = "";
+      }
       renderLauncherDock();
     }, function () {
       launcherDockEntries = [];
+      launcherDockSnapshotKey = "";
+      launcherDockRenderKey = "";
       hideLauncherDock();
     });
   }
@@ -1335,9 +1403,16 @@
       launchDockApp(target.getAttribute("data-launcher-dock-id") || "");
     });
 
-    refreshLauncherDock();
-    window.clearInterval(launcherDockTimerId);
-    launcherDockTimerId = window.setInterval(refreshLauncherDock, 20000);
+    scheduleLauncherDockLoop();
+  }
+
+  function scheduleLauncherDockLoop() {
+    window.clearTimeout(launcherDockTimerId);
+    refreshLauncherDock().then(function () {
+      launcherDockTimerId = window.setTimeout(scheduleLauncherDockLoop, getLauncherDockRefreshInterval());
+    }, function () {
+      launcherDockTimerId = window.setTimeout(scheduleLauncherDockLoop, getLauncherDockRefreshInterval());
+    });
   }
 
   function readStoredSettings() {
@@ -1868,7 +1943,7 @@
       var activeClass = widget.id === currentWidgetId ? " is-active" : "";
       var state = getWidgetState(widget.id);
       return '' +
-        '<button class="router-picker__button' + activeClass + '" data-widget-id="' + widget.id + '" title="' + escapeHtml(getWidgetCopy(widget)) + '">' +
+        '<button class="router-picker__button' + activeClass + '" data-widget-id="' + widget.id + '" aria-pressed="' + (widget.id === currentWidgetId ? "true" : "false") + '" title="' + escapeHtml(getWidgetCopy(widget)) + '">' +
           '<span class="router-picker__title">' + escapeHtml(getWidgetTitle(widget)) + '</span>' +
           '<span class="router-picker__meta" data-state="' + escapeHtml(state.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(state) + '</span>' +
         '</button>';
@@ -2533,7 +2608,8 @@
     if (!bridgeConfig.calendar) {
       bridgeConfig.calendar = {
         configured: false,
-        icsUrl: ""
+        icsUrlConfigured: false,
+        icsHost: ""
       };
     }
 
