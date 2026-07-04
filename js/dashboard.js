@@ -39,6 +39,7 @@
   var pendingGameFaceTimerId = 0;
   var dashboardInteractionActive = false;
   var dashboardInteractionTimerId = 0;
+  var fatalDashboardReloadTimerId = 0;
   var widgets = [];
   var dashboardSettings = {};
   var storedSettings = {};
@@ -754,6 +755,27 @@
     if (empty) {
       empty.classList.remove("is-hidden");
     }
+
+    scheduleFatalDashboardReload();
+  }
+
+  function scheduleFatalDashboardReload() {
+    if (fatalDashboardReloadTimerId) {
+      return;
+    }
+
+    fatalDashboardReloadTimerId = window.setTimeout(function () {
+      try {
+        window.location.reload();
+      } catch (error) {
+        console.warn("Dashboard self-heal reload failed", error);
+      }
+    }, 60000);
+  }
+
+  function reportBackgroundDashboardError(title, error) {
+    console.warn(title + ": " + formatDashboardError(error), error);
+    showTouchFeedback("Background task failed");
   }
 
   function setQueryParam(name, value) {
@@ -861,10 +883,9 @@
       refreshBridgeState({
         skipFrameReload: true
       }).catch(function (error) {
-        reportFatalDashboardError(
+        reportBackgroundDashboardError(
           "Dashboard refresh failed",
-          error,
-          "A background dashboard refresh crashed."
+          error
         );
       }).then(function () {
         scheduleBridgeRefreshLoop();
@@ -2659,10 +2680,9 @@
   }, true);
 
   window.addEventListener("unhandledrejection", function (event) {
-    reportFatalDashboardError(
+    reportBackgroundDashboardError(
       "Dashboard promise rejected",
-      event ? event.reason : "Unknown promise rejection",
-      "An async dashboard task failed."
+      event ? event.reason : "Unknown promise rejection"
     );
   });
 
