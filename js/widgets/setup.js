@@ -195,6 +195,8 @@
     var onboardingCompleted = Boolean(setup.onboardingCompleted);
     var weatherConfig = config.weather || {};
     var calendarConfig = config.calendar || {};
+    var calendarConfigured = Boolean(calendarConfig.configured || calendarConfig.icsUrlConfigured);
+    var calendarHost = text(calendarConfig.icsHost, "");
     var optionalNeedsAttention = [weatherItem, calendarItem, hueItem].some(function (item) {
       return item && item.state !== "Optional";
     });
@@ -255,9 +257,9 @@
             '</div>' +
             '<form class="inline-form" data-form="calendar">' +
               '<div class="inline-form-grid">' +
-                '<label class="inline-field"><span>ICS feed URL</span><input class="inline-input" type="url" name="icsUrl" value="' + escapeHtml(text(calendarConfig.icsUrl, "")) + '" placeholder="https://calendar.example.com/feed.ics"></label>' +
+                '<label class="inline-field"><span>ICS feed URL</span><input class="inline-input" type="url" name="icsUrl" value="" placeholder="' + escapeHtml(calendarConfigured ? "Paste a new feed to replace " + (calendarHost || "the current feed") : "https://calendar.example.com/feed.ics") + '"></label>' +
               '</div>' +
-              '<div class="router-inline-copy">Paste any reachable ICS feed. Leave it blank and save to remove the current calendar feed.</div>' +
+              '<div class="router-inline-copy">' + escapeHtml(calendarConfigured ? "A calendar feed is configured" + (calendarHost ? " from " + calendarHost : "") + ". Paste a new feed to replace it, or leave it blank and save to remove it." : "Paste any reachable ICS feed. Leave it blank and save to keep Calendar disabled.") + '</div>' +
               '<div class="inline-actions"><button class="inline-button is-primary" type="submit">Save calendar</button></div>' +
             '</form>' +
           '</article>' +
@@ -628,14 +630,16 @@
   function renderCalendarWidget(state, env) {
     var data = state.data;
     var entries = data.entries.slice(0, 6);
-    var configuredUrl = env.bridgeConfig && env.bridgeConfig.calendar ? text(env.bridgeConfig.calendar.icsUrl, "") : "";
+    var calendarConfig = env.bridgeConfig && env.bridgeConfig.calendar ? env.bridgeConfig.calendar : {};
+    var configured = Boolean(calendarConfig.configured || calendarConfig.icsUrlConfigured);
+    var configuredHost = text(calendarConfig.icsHost, "");
     return '' +
       '<div class="inline-widget-shell">' +
         '<div class="inline-toolbar">' +
           '<div>' +
             '<div class="eyebrow">Calendar</div>' +
             '<h3 class="inline-title">Upcoming events</h3>' +
-            '<p class="inline-copy">' + escapeHtml(text(data.message, configuredUrl ? "ICS feed is configured." : "Add an ICS feed in Diagnostics to enable calendar.")) + '</p>' +
+            '<p class="inline-copy">' + escapeHtml(text(data.message, configured ? "ICS feed is configured." : "Add an ICS feed in Diagnostics to enable calendar.")) + '</p>' +
           '</div>' +
           '<div class="inline-actions">' +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
@@ -651,7 +655,7 @@
           '<div class="inline-card-header">' +
             '<div>' +
               '<div class="metric-label">Next up</div>' +
-              '<div class="router-inline-copy">' + escapeHtml(configuredUrl ? configuredUrl : "Configure a reachable ICS feed in Diagnostics.") + '</div>' +
+              '<div class="router-inline-copy">' + escapeHtml(configured ? ("Configured feed" + (configuredHost ? " from " + configuredHost : "")) : "Configure a reachable ICS feed in Diagnostics.") + '</div>' +
             '</div>' +
           '</div>' +
           '<div class="inline-list">' + (entries.length ? entries.map(function (entry) {

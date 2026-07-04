@@ -8,7 +8,8 @@ namespace XenonEdgeHost;
 
 public sealed class GameActivityService
 {
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan WmiProcessScanCooldown = TimeSpan.FromSeconds(30);
     private static readonly HashSet<string> IgnoredProcessNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "agent",
@@ -222,6 +223,7 @@ public sealed class GameActivityService
     private string _lastActiveGameId = "";
     private DateTimeOffset? _sessionStartedAt;
     private DateTimeOffset? _lastEndedAt;
+    private DateTimeOffset _lastWmiProcessScanAt = DateTimeOffset.MinValue;
 
     public GameActivityService(
         SteamService steamService,
@@ -768,9 +770,10 @@ public sealed class GameActivityService
                 StringComparison.OrdinalIgnoreCase);
     }
 
-    private static List<RunningProcessInfo> ReadRunningProcesses()
+    private List<RunningProcessInfo> ReadRunningProcesses()
     {
         var results = new Dictionary<int, RunningProcessInfo>();
+        var inaccessibleProcessModules = 0;
         foreach (var process in Process.GetProcesses())
         {
             try
@@ -798,6 +801,7 @@ public sealed class GameActivityService
             }
             catch
             {
+                inaccessibleProcessModules++;
             }
             finally
             {
@@ -805,7 +809,13 @@ public sealed class GameActivityService
             }
         }
 
-        AddWmiProcesses(results);
+        if (inaccessibleProcessModules > 0
+            && DateTimeOffset.UtcNow - _lastWmiProcessScanAt >= WmiProcessScanCooldown)
+        {
+            _lastWmiProcessScanAt = DateTimeOffset.UtcNow;
+            AddWmiProcesses(results);
+        }
+
         return results.Values.ToList();
     }
 

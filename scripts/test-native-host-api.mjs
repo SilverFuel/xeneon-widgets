@@ -62,8 +62,9 @@ assert(
 
 assert(
   /Content-Security-Policy/.test(staticAssets)
-    && /xenon-session-bootstrap\.js/.test(staticAssets),
-  "native static asset API must emit security headers and bootstrap the session token through a script route"
+    && /window\.XenonSessionToken/.test(staticAssets)
+    && !/xenon-session-bootstrap\.js/.test(staticAssets),
+  "native static asset API must emit security headers and inline the session token into local HTML"
 );
 
 assert(

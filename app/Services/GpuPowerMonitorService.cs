@@ -10,12 +10,18 @@ public sealed class GpuPowerMonitorService : IDisposable
     private static readonly Regex Rtx50SeriesPattern = new(@"\bRTX\s*50\d{2}\b|\bRTX\s*50\s*Series\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex UnitPattern = new(@"\[(?<unit>[^\]]+)\]\s*$|\((?<unit>[^)]+)\)\s*$", RegexOptions.Compiled);
     private static readonly Regex UnsafeIdPattern = new(@"[^a-z0-9]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly TimeSpan ActiveRequestWindow = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan HwInfoDiscoveryCacheDuration = TimeSpan.FromMinutes(5);
+    private const int HwInfoCsvChunkBytes = 64 * 1024;
     private readonly HostLogger _logger;
     private readonly object _sync = new();
     private System.Threading.Timer? _timer;
     private GpuPowerSnapshot _snapshot = new();
     private int _sampling;
     private bool _started;
+    private DateTimeOffset _lastSnapshotRequestedAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastHwInfoDiscoveryAt = DateTimeOffset.MinValue;
+    private List<string> _hwInfoCsvCandidates = [];
 
     public GpuPowerMonitorService(HostLogger logger)
     {
@@ -30,13 +36,13 @@ public sealed class GpuPowerMonitorService : IDisposable
         }
 
         _started = true;
-        Sample();
         _timer = new System.Threading.Timer(_ => Sample(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         _logger.Info("GPU power monitor service started.");
     }
 
     public GpuPowerSnapshot GetSnapshot()
     {
+        _lastSnapshotRequestedAt = DateTimeOffset.UtcNow;
         lock (_sync)
         {
             var snapshot = _snapshot.Clone();
@@ -57,6 +63,11 @@ public sealed class GpuPowerMonitorService : IDisposable
 
     private void Sample()
     {
+        if (!ShouldSampleNow())
+        {
+            return;
+        }
+
         if (Interlocked.Exchange(ref _sampling, 1) == 1)
         {
             return;
@@ -146,6 +157,11 @@ public sealed class GpuPowerMonitorService : IDisposable
         }
     }
 
+    private bool ShouldSampleNow()
+    {
+        return DateTimeOffset.UtcNow - _lastSnapshotRequestedAt <= ActiveRequestWindow;
+    }
+
     private static List<string> TryReadGpuNames()
     {
         try
@@ -214,7 +230,7 @@ public sealed class GpuPowerMonitorService : IDisposable
         return readings;
     }
 
-    private static List<GpuPowerSensorReading> ReadHwInfoCsvSensors()
+    private List<GpuPowerSensorReading> ReadHwInfoCsvSensors()
     {
         var readings = new List<GpuPowerSensorReading>();
 
@@ -233,7 +249,7 @@ public sealed class GpuPowerMonitorService : IDisposable
         return readings;
     }
 
-    private static IEnumerable<string> FindHwInfoCsvCandidates()
+    private IEnumerable<string> FindHwInfoCsvCandidates()
     {
         var explicitFile = Environment.GetEnvironmentVariable("XENON_HWINFO_LOG");
         if (!string.IsNullOrWhiteSpace(explicitFile) && File.Exists(explicitFile))
@@ -241,6 +257,18 @@ public sealed class GpuPowerMonitorService : IDisposable
             yield return explicitFile;
         }
 
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastHwInfoDiscoveryAt < HwInfoDiscoveryCacheDuration && _hwInfoCsvCandidates.Count > 0)
+        {
+            foreach (var file in _hwInfoCsvCandidates.Where(File.Exists))
+            {
+                yield return file;
+            }
+
+            yield break;
+        }
+
+        var discovered = new List<string>();
         var directories = new List<string>();
         var explicitDirectory = Environment.GetEnvironmentVariable("XENON_HWINFO_LOG_DIR");
         if (!string.IsNullOrWhiteSpace(explicitDirectory))
@@ -282,8 +310,18 @@ public sealed class GpuPowerMonitorService : IDisposable
 
             foreach (var file in files)
             {
-                yield return file;
+                discovered.Add(file);
             }
+        }
+
+        _lastHwInfoDiscoveryAt = now;
+        _hwInfoCsvCandidates = discovered
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var file in _hwInfoCsvCandidates.Where(File.Exists))
+        {
+            yield return file;
         }
     }
 
@@ -305,7 +343,7 @@ public sealed class GpuPowerMonitorService : IDisposable
             string? lastLine = null;
             var headerColumnCount = 0;
 
-            foreach (var line in File.ReadLines(filePath))
+            foreach (var line in ReadHwInfoCsvReviewLines(filePath))
             {
                 if (string.IsNullOrWhiteSpace(line))
                 {
@@ -772,6 +810,71 @@ public sealed class GpuPowerMonitorService : IDisposable
         {
             return null;
         }
+    }
+
+    private static List<string> ReadHwInfoCsvReviewLines(string filePath)
+    {
+        var lines = new List<string>();
+        lines.AddRange(ReadFileChunkLines(filePath, fromEnd: false, HwInfoCsvChunkBytes));
+
+        var tailLines = ReadFileChunkLines(filePath, fromEnd: true, HwInfoCsvChunkBytes);
+        if (tailLines.Count > 0)
+        {
+            if (lines.Count > 0)
+            {
+                lines.Add("");
+            }
+
+            lines.AddRange(tailLines);
+        }
+
+        return lines;
+    }
+
+    private static List<string> ReadFileChunkLines(string filePath, bool fromEnd, int maxBytes)
+    {
+        using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        if (stream.Length <= 0)
+        {
+            return [];
+        }
+
+        var bytesToRead = (int)Math.Min(stream.Length, maxBytes);
+        if (fromEnd && stream.Length > bytesToRead)
+        {
+            stream.Seek(-bytesToRead, SeekOrigin.End);
+        }
+
+        var buffer = new byte[bytesToRead];
+        var bytesRead = 0;
+        while (bytesRead < bytesToRead)
+        {
+            var currentRead = stream.Read(buffer, bytesRead, bytesToRead - bytesRead);
+            if (currentRead <= 0)
+            {
+                break;
+            }
+
+            bytesRead += currentRead;
+        }
+
+        if (bytesRead <= 0)
+        {
+            return [];
+        }
+
+        var text = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+        var lines = text
+            .Split(["\r\n", "\n"], StringSplitOptions.None)
+            .Where(line => !fromEnd || !string.IsNullOrWhiteSpace(line))
+            .ToList();
+
+        if (fromEnd && stream.Length > bytesToRead && lines.Count > 0)
+        {
+            lines.RemoveAt(0);
+        }
+
+        return lines;
     }
 
     private static double? ParseNullableNumber(string value)
