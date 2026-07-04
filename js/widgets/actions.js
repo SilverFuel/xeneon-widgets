@@ -11,6 +11,7 @@
   var emptyState = runtime.emptyState;
   var escapeHtml = runtime.escapeHtml;
   var formatAge = runtime.formatAge;
+  var initXnSlider = runtime.initXnSlider;
   var metricCard = runtime.metricCard;
   var optionalNumber = runtime.optionalNumber;
   var requestJson = runtime.requestJson;
@@ -561,6 +562,7 @@
 
     function redraw() {
       container.innerHTML = renderSystemShortcutsWidget(state);
+      initXnSlider(container);
     }
 
     function refresh() {

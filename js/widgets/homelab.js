@@ -17,6 +17,7 @@
   var formatValue = runtime.formatValue;
   var formatWhen = runtime.formatWhen;
   var getUniFiNetworkEndpoint = runtime.getUniFiNetworkEndpoint;
+  var initXnSlider = runtime.initXnSlider;
   var metricCard = runtime.metricCard;
   var optionalNumber = runtime.optionalNumber;
   var requestJson = runtime.requestJson;
@@ -594,6 +595,7 @@
 
     function redraw() {
       container.innerHTML = renderAutomationWidget(state, env);
+      initXnSlider(container);
     }
 
     function refresh() {

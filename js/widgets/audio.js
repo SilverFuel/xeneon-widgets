@@ -14,6 +14,7 @@
   var formatDurationMs = runtime.formatDurationMs;
   var formatMediaAppLabel = runtime.formatMediaAppLabel;
   var formatPercent = runtime.formatPercent;
+  var initXnSlider = runtime.initXnSlider;
   var normalizeMediaPayload = runtime.normalizeMediaPayload;
   var optionalNumber = runtime.optionalNumber;
   var requestJson = runtime.requestJson;
@@ -233,6 +234,7 @@
 
     function redraw() {
       container.innerHTML = renderAudioWidget(state);
+      initXnSlider(container);
     }
 
     function refresh() {

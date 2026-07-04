@@ -2323,12 +2323,16 @@
     var budgetSelect = document.getElementById("dashboard-budget-select");
     var autoTuneToggle = document.getElementById("dashboard-autotune-toggle");
     var autoFaceToggle = document.getElementById("dashboard-autoface-toggle");
+    var initXnSlider = window.InlineWidgets && window.InlineWidgets.runtime && window.InlineWidgets.runtime.initXnSlider;
 
     function updateOpacity(nextValue, persistValue) {
       var normalized = normalizeOpacityPercent(nextValue);
       dashboardSettings.dashboardOpacity = String(normalized);
       slider.value = String(normalized);
       valueNode.textContent = normalized + "%";
+      if (typeof initXnSlider === "function") {
+        initXnSlider(slider);
+      }
       applyDashboardOpacity();
       if (persistValue) {
         persistSettings();
@@ -2336,6 +2340,10 @@
     }
 
     if (slider && valueNode) {
+      if (typeof initXnSlider === "function") {
+        initXnSlider(slider);
+      }
+
       slider.addEventListener("input", function () {
         updateOpacity(slider.value, false);
       });
