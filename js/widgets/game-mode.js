@@ -933,6 +933,11 @@
         '</article>';
     }
 
+    function shouldContinuePerformanceSession() {
+      var status = text(state.performance && state.performance.status, "").toLowerCase();
+      return status === "live" || status === "starting";
+    }
+
     function clearFocusIntroTimer() {
       if (focusIntroTimerId) {
         window.clearTimeout(focusIntroTimerId);
@@ -1255,7 +1260,7 @@
       }, 6000).then(function (payload) {
         state.statusText = text(payload && payload.message, "Game pinned");
         state.statusTone = "good";
-        return refreshGameModeSession({ refresh: true, activityRefresh: true });
+        return refreshGameModeSession({ refresh: true, activityRefresh: true, performanceSession: true });
       }, function (error) {
         state.statusText = error.message || "Pin failed";
         state.statusTone = "danger";
@@ -1391,7 +1396,7 @@
     });
 
     var gameModeLoop = createTimerLoop(function () {
-      return refreshGameModeSession({ performanceSession: true });
+      return refreshGameModeSession({ performanceSession: shouldContinuePerformanceSession() });
     }, 2500, function () {
       return state.interacting;
     });

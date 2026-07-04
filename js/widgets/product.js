@@ -8,6 +8,7 @@
   var buildBridgeUrl = runtime.buildBridgeUrl;
   var escapeHtml = runtime.escapeHtml;
   var findById = runtime.findById;
+  var initXnSlider = runtime.initXnSlider;
   var metricCard = runtime.metricCard;
   var productShell = runtime.productShell;
   var productThemes = runtime.productThemes;
@@ -78,8 +79,9 @@
           '</div>' +
           '<label class="inline-field product-range-field"><span>Motion ' + escapeHtml(intensity) + '%</span><input class="inline-range" type="range" name="animationIntensity" min="0" max="140" aria-label="Animation intensity" value="' + escapeHtml(intensity) + '"></label>' +
           '<label class="inline-field product-range-field"><span>Opacity ' + escapeHtml(opacity) + '%</span><input class="inline-range" type="range" name="dashboardOpacity" min="35" max="100" aria-label="Dashboard opacity" value="' + escapeHtml(opacity) + '"></label>' +
-        '</form>'
+          '</form>'
       );
+      initXnSlider(container);
     }
 
     function saveForm(form) {

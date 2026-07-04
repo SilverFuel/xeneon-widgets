@@ -14,6 +14,7 @@
   var formatDurationMs = runtime.formatDurationMs;
   var formatMediaAppLabel = runtime.formatMediaAppLabel;
   var formatPercent = runtime.formatPercent;
+  var initXnSlider = runtime.initXnSlider;
   var metricCard = runtime.metricCard;
   var normalizeMediaPayload = runtime.normalizeMediaPayload;
   var optionalNumber = runtime.optionalNumber;
@@ -207,6 +208,7 @@
 
     function redraw() {
       container.innerHTML = renderHueWidget(state);
+      initXnSlider(container);
     }
 
     function refresh() {

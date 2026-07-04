@@ -344,6 +344,48 @@
     return Promise.resolve();
   }
 
+  function initXnSlider(node) {
+    var root = node || document;
+    var sliders = [];
+
+    if (root.matches && root.matches('input[type="range"]')) {
+      sliders = [root];
+    } else if (root.querySelectorAll) {
+      sliders = Array.prototype.slice.call(root.querySelectorAll('input[type="range"]'));
+    }
+
+    sliders.forEach(function (slider) {
+      function update() {
+        var min = optionalNumber(slider.min);
+        var max = optionalNumber(slider.max);
+        var value = optionalNumber(slider.value);
+        var percent;
+        var heat;
+
+        min = min == null ? 0 : min;
+        max = max == null ? 100 : max;
+        value = value == null ? min : value;
+        percent = max <= min ? 0 : clamp(((value - min) / (max - min)) * 100, 0, 100);
+        heat = clamp((percent - 75) / 25, 0, 1);
+
+        slider.style.setProperty("--xn-fill", percent.toFixed(2) + "%");
+        slider.style.setProperty("--xn-heat", heat.toFixed(3));
+        slider.classList.toggle("is-hot", percent >= 75);
+      }
+
+      slider.classList.add("xn-slider");
+      update();
+
+      if (!slider.__xnSliderBound) {
+        slider.__xnSliderBound = true;
+        slider.addEventListener("input", update);
+        slider.addEventListener("change", update);
+      }
+    });
+
+    return sliders;
+  }
+
   function statusPill(textValue, tone) {
     return '<div class="widget-status" data-tone="' + escapeHtml(tone || "muted") + '">' + escapeHtml(textValue || "--") + "</div>";
   }
@@ -497,6 +539,7 @@
     formatValue: formatValue,
     formatWhen: formatWhen,
     getUniFiNetworkEndpoint: getUniFiNetworkEndpoint,
+    initXnSlider: initXnSlider,
     metricCard: metricCard,
     normalizeMediaPayload: normalizeMediaPayload,
     nullableNumber: nullableNumber,

@@ -80,6 +80,7 @@ const legacyBridge = readWorkspaceFile("bridge/server.mjs");
 const electronMain = readWorkspaceFile("desktop/electron/src/main.cjs");
 const dashboardJs = readWorkspaceFile("js/dashboard.js");
 const inlineWidgets = readWorkspaceFile("js/inline-widgets.js");
+const widgetsCss = readWorkspaceFile("css/widgets.css");
 const homelabWidget = readWorkspaceFile("js/widgets/homelab.js");
 const systemWidget = readWorkspaceFile("js/widgets/system.js");
 const networkWidget = readWorkspaceFile("js/widgets/network.js");
@@ -585,9 +586,12 @@ assert(
     && /Fix FPS \(admin\)/.test(gameModeWidget)
     && /performanceSession:\s*options\.performanceSession === true/.test(gameModeWidget)
     && !/performanceSession:\s*options\.performanceSession !== false/.test(gameModeWidget)
+    && /function\s+shouldContinuePerformanceSession\(\)/.test(gameModeWidget)
+    && /refreshGameModeSession\(\{\s*performanceSession:\s*shouldContinuePerformanceSession\(\)\s*\}\)/.test(gameModeWidget)
+    && /refreshGameModeSession\(\{\s*refresh:\s*true,\s*activityRefresh:\s*true,\s*performanceSession:\s*true\s*\}\)/.test(gameModeWidget)
     && /function\s+gameFocusCanFixFps/.test(gameModeWidget)
     && /Telemetry readiness/.test(gameModeWidget),
-  "Game Mode telemetry readiness must expose FPS source, elevated PresentMon capture, admin capture state, and an elevated restart action"
+  "Game Mode telemetry readiness must expose FPS source, elevated PresentMon capture, admin capture state, explicit capture starts, and status-gated polling"
 );
 
 assert(
@@ -689,15 +693,27 @@ assert(
 );
 
 assert(
-  /input\[type="range"\]:focus-visible/.test(readWorkspaceFile("css/widgets.css"))
+  /input\[type="range"\]:focus-visible/.test(widgetsCss)
     && /aria-label="Display brightness"/.test(actionsWidget)
     && /aria-label="Master volume"/.test(audioWidget)
     && /aria-label="Dashboard opacity"/.test(dashboardJs)
     && /aria-label="Brightness for/.test(homelabWidget)
     && /aria-label="Brightness for/.test(integrationsWidget)
     && /aria-label="Animation intensity"/.test(productWidget)
-    && /aria-pressed/.test(dashboardJs),
-  "generated range controls must keep accessible names and a visible keyboard focus baseline"
+    && /aria-pressed/.test(dashboardJs)
+    && /function\s+initXnSlider/.test(inlineWidgets)
+    && /initXnSlider:\s*initXnSlider/.test(inlineWidgets)
+    && /--xn-slider-fill-a:\s*#37c9a0/.test(widgetsCss)
+    && /--xn-slider-fill-b:\s*#7ef7d2/.test(widgetsCss)
+    && /xn-slider-shimmer/.test(widgetsCss)
+    && /dashboard-native-page--motion-off\s+\.xn-slider/.test(widgetsCss)
+    && /initXnSlider\(slider\)/.test(dashboardJs)
+    && /initXnSlider\(container\)/.test(actionsWidget)
+    && /initXnSlider\(container\)/.test(audioWidget)
+    && /initXnSlider\(container\)/.test(homelabWidget)
+    && /initXnSlider\(container\)/.test(integrationsWidget)
+    && /initXnSlider\(container\)/.test(productWidget),
+  "generated range controls must keep accessible names, a visible keyboard focus baseline, and the shared Starbound slider treatment"
 );
 
 assert(
