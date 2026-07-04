@@ -26,6 +26,7 @@ public sealed class GamePerformanceService : IDisposable
     private DateTimeOffset _lastStartAttemptAt = DateTimeOffset.MinValue;
     private DateTimeOffset _captureStartedAt = DateTimeOffset.MinValue;
     private bool _captureUsesElevatedBootstrap;
+    private bool _elevationDeclined;
     private bool _captureNeedsAdminRestart;
     private bool _warnedMissingPresentMon;
 
@@ -40,6 +41,7 @@ public sealed class GamePerformanceService : IDisposable
     {
         lock (_sync)
         {
+            ClearElevationDeclinedCore();
             var game = activity.ActiveGame;
             var processId = game?.ProcessId;
             if (game is null || processId is null || processId <= 0)
@@ -83,6 +85,14 @@ public sealed class GamePerformanceService : IDisposable
         lock (_sync)
         {
             StopCapture();
+        }
+    }
+
+    public void ClearElevationDeclined()
+    {
+        lock (_sync)
+        {
+            ClearElevationDeclinedCore();
         }
     }
 
@@ -140,6 +150,7 @@ public sealed class GamePerformanceService : IDisposable
         _captureStartedAt = DateTimeOffset.UtcNow;
         _captureUsesElevatedBootstrap = false;
         _lastCaptureFailureMessage = "";
+        var useElevatedBootstrap = _captureUsesElevatedBootstrap && !_elevationDeclined;
 
         try
         {
@@ -148,7 +159,7 @@ public sealed class GamePerformanceService : IDisposable
                 "--session_name", Quote(CaptureSessionName),
                 "--stop_existing_session"
             };
-            if (_captureUsesElevatedBootstrap)
+            if (useElevatedBootstrap)
             {
                 arguments.Add("--restart_as_admin");
             }
@@ -188,6 +199,7 @@ public sealed class GamePerformanceService : IDisposable
             };
 
             _captureProcess = Process.Start(info);
+            _captureUsesElevatedBootstrap = useElevatedBootstrap;
             _logger.Info(_captureUsesElevatedBootstrap
                 ? $"Requested elevated PresentMon FPS capture for {DescribeCaptureTarget(processId, captureTargetName)}."
                 : $"Started PresentMon FPS capture for {DescribeCaptureTarget(processId, captureTargetName)}.");
@@ -367,6 +379,19 @@ public sealed class GamePerformanceService : IDisposable
         CleanupCaptureFile(capturePath);
     }
 
+    private void ClearElevationDeclinedCore()
+    {
+        if (!_elevationDeclined)
+        {
+            return;
+        }
+
+        _elevationDeclined = false;
+        _captureNeedsAdminRestart = false;
+        _lastStartAttemptAt = DateTimeOffset.MinValue;
+        _lastCaptureFailureMessage = "";
+    }
+
     private void CleanupCaptureFile(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || IsDiagnosticsRetentionEnabled())
@@ -485,6 +510,7 @@ public sealed class GamePerformanceService : IDisposable
 
         if (_captureUsesElevatedBootstrap && !IsRunningElevated())
         {
+            _elevationDeclined = true;
             _captureNeedsAdminRestart = true;
             _lastCaptureFailureMessage = "Windows did not approve elevated FPS capture. Click Fix FPS (admin) to restart Xenon as administrator.";
             return _lastCaptureFailureMessage;

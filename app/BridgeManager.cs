@@ -113,7 +113,8 @@ public sealed class BridgeManager : IDisposable
             _systemActionsService,
             _mediaService,
             _hueService,
-            _clipboardHistoryService);
+            _clipboardHistoryService,
+            _gamePerformanceService);
         _supportController = new SupportController(
             _logger,
             _configStore,
