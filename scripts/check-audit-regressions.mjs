@@ -55,6 +55,7 @@ const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
 const actionController = readWorkspaceFile("app/Controllers/ActionController.cs");
 const staticAssetController = readWorkspaceFile("app/Controllers/StaticAssetController.cs");
 const configController = readWorkspaceFile("app/Controllers/ConfigController.cs");
+const configStore = readWorkspaceFile("app/Infrastructure/ConfigStore.cs");
 const gameController = readWorkspaceFile("app/Controllers/GameController.cs");
 const releaseController = readWorkspaceFile("app/Controllers/ReleaseController.cs");
 const supportController = readWorkspaceFile("app/Controllers/SupportController.cs");
@@ -120,6 +121,16 @@ assert(
     && /Referrer-Policy/.test(staticAssetController)
     && !/meta name="xenon-session-token"/.test(staticAssetController),
   "native static HTML must use CSP/security headers and must not inject the session token into a meta tag"
+);
+
+assert(
+  !/fonts\.googleapis|fonts\.gstatic/.test(readWorkspaceFile("dashboard.html"))
+    && !/fonts\.googleapis|fonts\.gstatic/.test(staticAssetController)
+    && !/fonts\.googleapis|fonts\.gstatic/.test(legacyBridge)
+    && !/fonts\.googleapis|fonts\.gstatic/.test(electronMain)
+    && /style-src 'self' 'unsafe-inline'/.test(staticAssetController)
+    && /font-src 'self' data:/.test(staticAssetController),
+  "local HTML must not depend on Google Fonts and CSP must keep font/style sources local"
 );
 
 const genericNativeCatch = bridgeManager.match(/catch\s*\(Exception\s+error\)\s*\{\s*_logger\.Error\("Failed to process request\."[\s\S]*?WriteJsonAsync\(context\.Response,\s*500[\s\S]*?\n\s*\}/)?.[0] || "";
@@ -381,7 +392,7 @@ assert(
     && /steam:\/\/rungameid/.test(launcherTargetValidator)
     && /AllowedUriSchemes/.test(launcherTargetValidator)
     && /ValidateAndNormalizeTarget\(entry\.ExecutablePath,\s*entry\.Arguments\)/.test(launcherService)
-    && /TryValidateAndNormalizeTarget/.test(readWorkspaceFile("app/Infrastructure/ConfigStore.cs")),
+    && /TryValidateAndNormalizeTarget/.test(configStore),
   "launcher entries must validate targets at save and launch time"
 );
 
@@ -426,8 +437,10 @@ assert(
 
 assert(
   /Interlocked\.Exchange\(ref _usageSampling,\s*1\)/.test(systemMetricsService)
-    && /Interlocked\.Exchange\(ref _temperatureSampling,\s*1\)/.test(systemMetricsService),
-  "native system metrics timers must guard against overlapping samples"
+    && /Interlocked\.Exchange\(ref _temperatureSampling,\s*1\)/.test(systemMetricsService)
+    && /_usageTimer[\s\S]*TimeSpan\.FromSeconds\(3\),\s*TimeSpan\.FromSeconds\(3\)/.test(systemMetricsService)
+    && !/_usageTimer[\s\S]*TimeSpan\.FromSeconds\(2\),\s*TimeSpan\.FromSeconds\(2\)/.test(systemMetricsService),
+  "native system metrics timers must guard against overlapping samples and avoid 2s WMI usage polling"
 );
 
 assert(
@@ -637,12 +650,19 @@ assert(
 
 assert(
   /Pinned game/.test(gameActivityService)
+    && /PinnedGames/.test(appConfig)
+    && /normalized\.PinnedGames/.test(configStore)
+    && /migratedGamePins/.test(configStore)
+    && /current\.PinnedGames/.test(gameActivityService)
+    && /AddPinnedGameCandidate/.test(gameActivityService)
     && /Recent app candidate/.test(gameActivityService)
-    && /confidence:\s*knownGamePath \|\| explicitGamePin \? 78 : 55/.test(gameActivityService)
-    && /confidence:\s*knownGamePath \|\| explicitGamePin \? 68 : 55/.test(gameActivityService)
-    && /IsExplicitGamePin/.test(gameActivityService)
+    && /confidence:\s*knownGamePath \? 78 : 55/.test(gameActivityService)
+    && /confidence:\s*knownGamePath \? 68 : 55/.test(gameActivityService)
+    && /TryInferWindowsAppsGamePath/.test(gameActivityService)
+    && /WindowsApps game package/.test(gameActivityService)
+    && !/IsExplicitGamePin/.test(gameActivityService)
     && !/foreach\s*\(var blizzardName in new\[\]/.test(gameActivityService),
-  "Game activity keyword-only matches must stay below the active threshold while explicit game pins and known library paths can activate"
+  "Game activity keyword-only matches must stay below the active threshold while explicit pinned games, known library paths, and conservative WindowsApps game packages can activate"
 );
 
 assert(
