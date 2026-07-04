@@ -18,6 +18,7 @@ public sealed class ActionController
     private readonly MediaService _mediaService;
     private readonly HueService _hueService;
     private readonly ClipboardHistoryService _clipboardHistoryService;
+    private readonly GamePerformanceService _gamePerformanceService;
 
     public ActionController(
         ConfigStore configStore,
@@ -26,7 +27,8 @@ public sealed class ActionController
         SystemActionsService systemActionsService,
         MediaService mediaService,
         HueService hueService,
-        ClipboardHistoryService clipboardHistoryService)
+        ClipboardHistoryService clipboardHistoryService,
+        GamePerformanceService gamePerformanceService)
     {
         _configStore = configStore;
         _launcherService = launcherService;
@@ -35,6 +37,7 @@ public sealed class ActionController
         _mediaService = mediaService;
         _hueService = hueService;
         _clipboardHistoryService = clipboardHistoryService;
+        _gamePerformanceService = gamePerformanceService;
     }
 
     public ProvisioningSnapshot GetProvisioningSnapshot()
@@ -96,6 +99,7 @@ public sealed class ActionController
 
     public RestartAdminResult RestartHostAsAdministrator()
     {
+        _gamePerformanceService.ClearElevationDeclined();
         return _systemActionsService.RestartHostAsAdministrator();
     }
 
