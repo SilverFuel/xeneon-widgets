@@ -786,6 +786,22 @@ assert(
 );
 
 assert(
+  /quick-actions-shell/.test(actionsWidget)
+    && /inline-action-grid--compact/.test(actionsWidget)
+    && /data-confirmation-required="true"/.test(actionsWidget)
+    && /Tap once to confirm/.test(actionsWidget)
+    && /system-shortcuts-unsupported/.test(actionsWidget)
+    && /Only controls this PC reports as working are tappable/.test(actionsWidget)
+    && /Unsupported controls are reduced to a small note/.test(actionsWidget)
+    && !/metricCard\("Notifications"/.test(actionsWidget)
+    && !/metricCard\("Actions"/.test(actionsWidget)
+    && /quick-actions-shell/.test(readWorkspaceFile("css/widgets/actions.css"))
+    && /system-shortcuts-unsupported/.test(readWorkspaceFile("css/widgets/actions.css"))
+    && /data-confirmation-required="true"/.test(readWorkspaceFile("css/widgets/actions.css")),
+  "Quick Actions and System Shortcuts must use compact working-control panels with clear unavailable and confirmation states"
+);
+
+assert(
   /ClipboardHidePreviews/.test(appConfig)
     && /ClipboardWidgetPaused/.test(appConfig)
     && /ClipboardExcludeFromDiagnostics/.test(appConfig)

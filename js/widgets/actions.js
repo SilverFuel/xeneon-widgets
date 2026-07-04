@@ -48,15 +48,20 @@
   function renderActionButton(item, action, confirmId, disabled) {
     var itemId = text(item && item.id, "");
     var isConfirm = confirmId && confirmId === itemId;
-    var buttonLabel = isConfirm ? "Tap again" : text(item && item.label, "Action");
+    var requiresConfirmation = requiresServerConfirmation(itemId);
+    var itemLabel = text(item && item.label, "Action");
+    var buttonLabel = isConfirm ? "Confirm " + itemLabel : itemLabel;
     var buttonCopy = isConfirm
-      ? "Confirm " + text(item && item.label, "action").toLowerCase()
-      : text(item && item.detail, text(item && item.state, "Ready"));
+      ? "Tap to run. Confirmation expires quickly."
+      : requiresConfirmation
+        ? "Tap once to confirm"
+        : text(item && item.detail, text(item && item.state, "Ready"));
+    var stateLabel = isConfirm ? "Confirm" : requiresConfirmation ? "Confirm" : text(item && item.state, "Ready");
     return '' +
-      '<button class="inline-action-button" type="button" data-action="' + escapeHtml(action) + '" data-id="' + escapeHtml(itemId) + '" data-style="' + escapeHtml(text(item && item.style, "command")) + '"' + (isConfirm ? ' data-state="confirm"' : "") + (((disabled || !item || item.enabled === false) ? " disabled" : "")) + '>' +
+      '<button class="inline-action-button" type="button" data-action="' + escapeHtml(action) + '" data-id="' + escapeHtml(itemId) + '" data-style="' + escapeHtml(text(item && item.style, "command")) + '"' + (requiresConfirmation ? ' data-confirmation-required="true"' : "") + (isConfirm ? ' data-state="confirm"' : "") + (((disabled || !item || item.enabled === false) ? " disabled" : "")) + '>' +
         '<strong>' + escapeHtml(buttonLabel) + '</strong>' +
         '<span class="inline-action-button__detail">' + escapeHtml(buttonCopy) + '</span>' +
-        '<span class="inline-action-button__state">' + escapeHtml(text(item && item.state, "Ready")) + '</span>' +
+        '<span class="inline-action-button__state">' + escapeHtml(stateLabel) + '</span>' +
       '</button>';
   }
 
@@ -371,16 +376,21 @@
 
   function renderQuickActionsWidget(state) {
     var data = state.data;
+    var statusText = state.statusText || (data.stale ? "Stale" : "Ready");
     return '' +
-      '<div class="inline-widget-shell">' +
-        '<div class="inline-grid inline-grid--3">' +
-          metricCard("Theme", data.darkModeEnabled ? "Dark" : "Light", "Windows app + system theme") +
-          metricCard("Actions", String(data.actions.length), "Built-in commands") +
-          metricCard("Status", state.statusText, formatAge(data.sampledAt) || (data.stale ? "Snapshot is stale" : "Fresh snapshot")) +
-        '</div>' +
-        '<article class="list-card inline-card">' +
-          '<div class="inline-card-header"><div><div class="metric-label">Action Pad</div><div class="router-inline-copy">Tap once for quick actions. Recycle Bin asks for confirmation.</div></div></div>' +
-          '<div class="inline-action-grid">' + (data.actions.length ? data.actions.map(function (item) {
+      '<div class="inline-widget-shell quick-actions-shell">' +
+        '<article class="list-card inline-card quick-actions-card">' +
+          '<div class="inline-card-header action-panel-header">' +
+            '<div>' +
+              '<div class="metric-label">Quick actions</div>' +
+              '<div class="router-inline-copy">Only actions this PC reports as available are shown.</div>' +
+            '</div>' +
+            '<div class="action-panel-meta">' +
+              '<span class="launcher-pill">' + escapeHtml(data.darkModeEnabled ? "Dark theme" : "Light theme") + '</span>' +
+              '<span class="launcher-pill">' + escapeHtml(statusText) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="inline-action-grid inline-action-grid--compact">' + (data.actions.length ? data.actions.map(function (item) {
             return renderActionButton(item, "execute", state.confirmActionId, state.busy);
           }).join("") : emptyState("No quick actions", "This PC did not return any quick actions.")) + '</div>' +
         '</article>' +
@@ -512,6 +522,7 @@
   function renderSystemShortcutsWidget(state) {
     var data = state.data;
     var brightnessValue = data.brightness == null ? 0 : Math.round(data.brightness);
+    var statusText = state.statusText || (data.stale ? "Stale" : "Ready");
     var brightnessPanel = data.brightnessSupported
       ? '' +
         '<div class="inline-list-item">' +
@@ -519,19 +530,26 @@
           '<input class="inline-range" type="range" min="0" max="100" step="1" aria-label="Display brightness" value="' + brightnessValue + '" data-action="brightness"' + (state.busy ? " disabled" : "") + '>' +
         '</div>'
       : '' +
-        '<div class="inline-list-item system-shortcuts-note" data-tone="muted">' +
-          '<div class="inline-card-header"><div><div class="inline-list-title">Display brightness</div><div class="inline-list-copy">This monitor does not expose Windows brightness control, so Xenon hides the slider.</div></div><div class="inline-list-meta">Unavailable</div></div>' +
+        '<div class="system-shortcuts-unsupported" data-tone="muted">' +
+          '<strong>Brightness unavailable</strong>' +
+          '<span>This display does not expose Windows brightness control.</span>' +
         '</div>';
     return '' +
       '<div class="inline-widget-shell system-shortcuts-shell">' +
-        '<div class="inline-grid inline-grid--3">' +
-          metricCard("Notifications", data.dndEnabled ? "Muted" : "On", data.dndEnabled ? "Banners are muted" : "Banners are allowed") +
-          metricCard("Power", String(data.powerActions.length), "Sleep / restart / shut down") +
-          metricCard("Status", state.statusText, formatAge(data.sampledAt) || (data.stale ? "Snapshot is stale" : "Fresh snapshot")) +
+        '<div class="action-panel-header system-shortcuts-header">' +
+          '<div>' +
+            '<div class="metric-label">Windows controls</div>' +
+            '<div class="router-inline-copy">Only controls this PC reports as working are tappable.</div>' +
+          '</div>' +
+          '<div class="action-panel-meta">' +
+            '<span class="launcher-pill">' + escapeHtml(data.dndEnabled ? "Banners muted" : "Banners on") + '</span>' +
+            '<span class="launcher-pill">' + escapeHtml(statusText) + '</span>' +
+            '<span class="launcher-pill">' + escapeHtml(formatAge(data.sampledAt) || (data.stale ? "Stale" : "Fresh")) + '</span>' +
+          '</div>' +
         '</div>' +
-        '<div class="system-shortcuts-grid">' +
+        '<div class="system-shortcuts-grid system-shortcuts-grid--lean">' +
           '<article class="list-card inline-card system-shortcuts-card system-shortcuts-card--controls">' +
-            '<div class="inline-card-header"><div><div class="metric-label">Windows Controls</div><div class="router-inline-copy">Only working controls are tappable.</div></div></div>' +
+            '<div class="inline-card-header"><div><div class="metric-label">Display and notifications</div><div class="router-inline-copy">Unsupported controls are reduced to a small note.</div></div></div>' +
             '<div class="inline-list">' +
               (data.toggles.length ? data.toggles.map(function (item) {
                 return renderActionButton(item, "shortcut", "", state.busy);
@@ -540,7 +558,7 @@
             '</div>' +
           '</article>' +
           '<article class="list-card inline-card system-shortcuts-card system-shortcuts-card--power">' +
-            '<div class="inline-card-header"><div><div class="metric-label">Power</div><div class="router-inline-copy">Tap once, then tap again to confirm.</div></div></div>' +
+            '<div class="inline-card-header"><div><div class="metric-label">Power</div><div class="router-inline-copy">Sleep, restart, and shutdown require a second tap.</div></div></div>' +
             '<div class="inline-action-grid system-shortcuts-power-grid">' + (data.powerActions.length ? data.powerActions.map(function (item) {
               return renderActionButton(item, "shortcut", state.confirmActionId, state.busy);
             }).join("") : emptyState("No power actions", "This PC did not return any power actions.")) + '</div>' +
