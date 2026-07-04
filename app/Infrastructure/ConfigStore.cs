@@ -144,7 +144,13 @@ public sealed class ConfigStore
         normalized.Dashboard.ReleaseChannel = NormalizeChoice(normalized.Dashboard.ReleaseChannel, "stable", "stable", "beta", "nightly");
         normalized.Dashboard.LastKnownGoodVersion = normalized.Dashboard.LastKnownGoodVersion?.Trim() ?? "";
         normalized.Dashboard.LastKnownGoodPath = normalized.Dashboard.LastKnownGoodPath?.Trim() ?? "";
-        normalized.Launchers = NormalizeLaunchers(normalized.Launchers);
+        var normalizedLaunchers = NormalizeLaunchers(normalized.Launchers);
+        var migratedGamePins = normalizedLaunchers.Where(IsGamePin).ToList();
+        normalized.Launchers = normalizedLaunchers.Where(entry => !IsGamePin(entry)).ToList();
+        normalized.PinnedGames = NormalizeLaunchers((normalized.PinnedGames ?? []).Concat(migratedGamePins))
+            .GroupBy(entry => NormalizePathKey(entry.ExecutablePath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
         return normalized;
     }
 
@@ -245,6 +251,17 @@ public sealed class ConfigStore
         }
 
         return normalized;
+    }
+
+    private static bool IsGamePin(LauncherEntryConfig entry)
+    {
+        return !string.IsNullOrWhiteSpace(entry.Id)
+            && entry.Id.StartsWith("game-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePathKey(string? path)
+    {
+        return path?.Trim() ?? "";
     }
 
     private void MigratePlainTextSecrets(AppConfig config)

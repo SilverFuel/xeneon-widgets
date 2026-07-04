@@ -37,7 +37,7 @@ public sealed class SystemMetricsService : IDisposable
         _started = true;
         SampleUsage();
         SampleHardwareTemperatures();
-        _usageTimer = new System.Threading.Timer(_ => SampleUsage(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+        _usageTimer = new System.Threading.Timer(_ => SampleUsage(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
         _temperatureTimer = new System.Threading.Timer(_ => SampleHardwareTemperatures(), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
         _logger.Info("Native system metrics service started.");
     }

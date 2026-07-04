@@ -17,6 +17,8 @@ public sealed class AppConfig
     public DashboardConfig Dashboard { get; set; } = new();
 
     public List<LauncherEntryConfig> Launchers { get; set; } = [];
+
+    public List<LauncherEntryConfig> PinnedGames { get; set; } = [];
 }
 
 public sealed class WeatherConfig
