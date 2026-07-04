@@ -22,7 +22,10 @@ public sealed partial class MainWindow : Window
     private const uint SwpFrameChanged = 0x0020;
     private const uint SwpShowWindow = 0x0040;
     private const int SwHide = 0;
+    private const int SwShow = 5;
     private const int SwShowNoActivate = 4;
+    private const int WaitingWindowWidth = 1280;
+    private const int WaitingWindowHeight = 360;
     private static readonly TimeSpan DisplayRecoveryWindow = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan[] DisplayRecoveryDelays =
     [
@@ -32,6 +35,7 @@ public sealed partial class MainWindow : Window
         TimeSpan.FromSeconds(10)
     ];
     private static readonly IntPtr HwndTopmost = new(-1);
+    private static readonly IntPtr HwndNoTopmost = new(-2);
 
     private readonly BridgeManager _bridgeManager;
     private TrayIcon? _trayIcon;
@@ -43,7 +47,9 @@ public sealed partial class MainWindow : Window
     private bool _disposed;
     private bool _webViewInitializationFailed;
     private bool _webViewDiagnosticsAttached;
+    private bool _dashboardLoaded;
     private bool _taskbarStyleApplied;
+    private bool _waitingForEdgeDisplay;
     private int _quitRequested;
     private int _navigationFailures;
     private int _webViewRecoveryScheduled;
@@ -107,6 +113,7 @@ public sealed partial class MainWindow : Window
             throw new InvalidOperationException("No displays were detected.");
         }
 
+        var edgeCandidateCount = displayCandidates.Count(IsEdgeCandidate);
         var targetDisplay = _bridgeManager.SelectDisplayTarget(
             displayCandidates,
             saveSelection: saveSelection && !safeMode,
@@ -122,18 +129,66 @@ public sealed partial class MainWindow : Window
             presenter.IsMinimizable = false;
         }
 
+        if (!safeMode && edgeCandidateCount == 0)
+        {
+            var rescueDisplay = displayCandidates.FirstOrDefault(display => display.IsPrimary) ?? targetDisplay;
+            ApplyWaitingForEdgeWindow(appWindow, windowHandle, rescueDisplay, displayCandidates);
+            return;
+        }
+
         appWindow.MoveAndResize(new RectInt32(
             targetDisplay.Bounds.X,
             targetDisplay.Bounds.Y,
             targetDisplay.Bounds.Width,
             targetDisplay.Bounds.Height));
         EnsureDisplayWindowStaysOffTaskbar(windowHandle);
+        _waitingForEdgeDisplay = false;
 
         _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
         _logger.Info($"{(safeMode ? "Safe Mode: " : "")}Window positioned on {targetDisplay.Label} (score {targetDisplay.Score}).");
-        SetOverlayText(safeMode
-            ? $"Safe Mode: launching on primary display ({targetDisplay.Label})."
-            : $"Launching on {targetDisplay.Label}.");
+        if (!_dashboardLoaded)
+        {
+            SetOverlayText(safeMode
+                ? $"Safe Mode: launching on primary display ({targetDisplay.Label})."
+                : $"Launching on {targetDisplay.Label}.");
+        }
+        else
+        {
+            OverlayPanel.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void ApplyWaitingForEdgeWindow(
+        AppWindow appWindow,
+        IntPtr windowHandle,
+        DisplayTarget rescueDisplay,
+        IReadOnlyList<DisplayTarget> displayCandidates)
+    {
+        appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        if (appWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.SetBorderAndTitleBar(true, true);
+            presenter.IsResizable = true;
+            presenter.IsMaximizable = true;
+            presenter.IsMinimizable = true;
+        }
+
+        RestoreDisplayWindowToTaskbar(windowHandle);
+
+        var availableWidth = Math.Max(320, rescueDisplay.Bounds.Width - 96);
+        var availableHeight = Math.Max(240, rescueDisplay.Bounds.Height - 96);
+        var width = Math.Min(WaitingWindowWidth, availableWidth);
+        var height = Math.Min(WaitingWindowHeight, availableHeight);
+        var x = rescueDisplay.Bounds.X + Math.Max(0, (rescueDisplay.Bounds.Width - width) / 2);
+        var y = rescueDisplay.Bounds.Y + Math.Max(0, (rescueDisplay.Bounds.Height - height) / 2);
+
+        appWindow.MoveAndResize(new RectInt32(x, y, width, height));
+        ShowWindow(windowHandle, SwShow);
+        _waitingForEdgeDisplay = true;
+
+        _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
+        _logger.Warn($"No XENEON EDGE display candidate is available; showing a windowed waiting state on {rescueDisplay.Label}.");
+        SetOverlayText("Waiting for the XENEON EDGE display.\n\nPower on or reconnect the EDGE, or use the tray icon for Settings and Recovery. Xenon will move itself when Windows reports the EDGE display.");
     }
 
     private void HandleDisplaySettingsChanged(object? sender, EventArgs args)
@@ -215,6 +270,11 @@ public sealed partial class MainWindow : Window
     private static string DescribeDisplayCandidate(DisplayTarget display)
     {
         return $"{display.Label}; id={display.StableId}; primary={display.IsPrimary}; preferred={display.IsPreferred}; score={display.Score}; bounds={display.Bounds.X},{display.Bounds.Y},{display.Bounds.Width}x{display.Bounds.Height}; reasons={string.Join(",", display.MatchReasons)}";
+    }
+
+    private static bool IsEdgeCandidate(DisplayTarget display)
+    {
+        return display.ContainsXeneonName || display.MatchesEdgeResolution || display.MatchesEdgeAspect;
     }
 
     private async Task InitializeHostAsync()
@@ -370,6 +430,7 @@ public sealed partial class MainWindow : Window
 
         if (DashboardView.Source is null || DashboardView.Source != _dashboardUri)
         {
+            _dashboardLoaded = false;
             SetOverlayText("Loading dashboard...");
             DashboardView.Source = _dashboardUri;
             return;
@@ -377,6 +438,7 @@ public sealed partial class MainWindow : Window
 
         if (forceReload)
         {
+            _dashboardLoaded = false;
             SetOverlayText("Reloading dashboard...");
             DashboardView.Reload();
         }
@@ -387,7 +449,15 @@ public sealed partial class MainWindow : Window
         if (args.IsSuccess)
         {
             _navigationFailures = 0;
-            OverlayPanel.Visibility = Visibility.Collapsed;
+            _dashboardLoaded = true;
+            if (_waitingForEdgeDisplay)
+            {
+                SetOverlayText("Waiting for the XENEON EDGE display.\n\nPower on or reconnect the EDGE, or use the tray icon for Settings and Recovery. Xenon will move itself when Windows reports the EDGE display.");
+            }
+            else
+            {
+                OverlayPanel.Visibility = Visibility.Collapsed;
+            }
             _logger.Info("Dashboard loaded successfully.");
             return;
         }
@@ -707,11 +777,44 @@ public sealed partial class MainWindow : Window
         _logger.Info("Applied no-activate topmost tool-window style so the EDGE display stays visible, stays off the taskbar, and does not steal audio focus.");
     }
 
+    private void RestoreDisplayWindowToTaskbar(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var currentStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
+        var nextStyle = (currentStyle | WsExAppWindow) & ~WsExToolWindow & ~WsExNoActivate;
+        var styleChanged = nextStyle != currentStyle;
+        if (styleChanged)
+        {
+            SetWindowLongPtr(windowHandle, GwlExStyle, new IntPtr(nextStyle));
+        }
+
+        SetWindowPos(
+            windowHandle,
+            HwndNoTopmost,
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove | SwpNoSize | SwpShowWindow | (styleChanged ? SwpFrameChanged : 0u));
+        _taskbarStyleApplied = false;
+        _logger.Info("Restored normal taskbar-visible window style while waiting for the XENEON EDGE display.");
+    }
+
     private void ShowWindowNoActivate()
     {
         var windowHandle = WindowNative.GetWindowHandle(this);
         if (windowHandle == IntPtr.Zero)
         {
+            return;
+        }
+
+        if (_waitingForEdgeDisplay)
+        {
+            ShowWindow(windowHandle, SwShow);
             return;
         }
 

@@ -395,8 +395,12 @@ assert(
     && /ScheduleDisplayRecovery\("startup display backoff"\)/.test(mainWindow)
     && /ScheduleDisplayRecovery\("display topology changed"\)/.test(mainWindow)
     && /TryRecoverDisplayPlacementAsync/.test(mainWindow)
+    && /ApplyWaitingForEdgeWindow/.test(mainWindow)
+    && /RestoreDisplayWindowToTaskbar/.test(mainWindow)
+    && /_waitingForEdgeDisplay/.test(mainWindow)
+    && /edgeCandidateCount == 0/.test(mainWindow)
     && /\$trigger\.Delay\s*=\s*"PT20S"/.test(installScript),
-  "reboot display recovery must delay startup and retry non-persistent placement after topology changes"
+  "reboot display recovery must delay startup, retry non-persistent placement, and avoid fullscreen takeover when the EDGE display is absent"
 );
 
 assert(
