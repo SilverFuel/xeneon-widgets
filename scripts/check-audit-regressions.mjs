@@ -463,6 +463,9 @@ assert(
     && /TryRecoverDisplayPlacementAsync/.test(mainWindow)
     && /ApplyWaitingForEdgeWindow/.test(mainWindow)
     && /RestoreDisplayWindowToTaskbar/.test(mainWindow)
+    && /AppWindow\.Closing\s*\+=\s*HandleAppWindowClosing/.test(mainWindow)
+    && /args\.Cancel\s*=\s*true/.test(mainWindow)
+    && /ShowWindow\(WindowNative\.GetWindowHandle\(this\),\s*SwHide\)/.test(mainWindow)
     && /_waitingForEdgeDisplay/.test(mainWindow)
     && /edgeCandidateCount == 0/.test(mainWindow)
     && /\$trigger\.Delay\s*=\s*"PT20S"/.test(installScript),
