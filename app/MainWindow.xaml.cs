@@ -74,6 +74,7 @@ public sealed partial class MainWindow : Window
         _bridgeManager.BridgeReady += HandleBridgeReady;
         _bridgeManager.BridgeStopped += HandleBridgeStopped;
 
+        AppWindow.Closing += HandleAppWindowClosing;
         Activated += HandleActivated;
         Closed += HandleClosed;
         DashboardView.NavigationCompleted += HandleNavigationCompleted;
@@ -748,6 +749,18 @@ public sealed partial class MainWindow : Window
         DisposeResources();
     }
 
+    private void HandleAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (System.Threading.Volatile.Read(ref _quitRequested) == 1)
+        {
+            return;
+        }
+
+        args.Cancel = true;
+        _logger.Info("Window close button pressed; hiding the dashboard window and keeping the local bridge running.");
+        ShowWindow(WindowNative.GetWindowHandle(this), SwHide);
+    }
+
     private void SetOverlayText(string message)
     {
         OverlayPanel.Visibility = Visibility.Visible;
@@ -860,6 +873,7 @@ public sealed partial class MainWindow : Window
         _disposed = true;
         DashboardView.NavigationCompleted -= HandleNavigationCompleted;
         SystemEvents.DisplaySettingsChanged -= HandleDisplaySettingsChanged;
+        AppWindow.Closing -= HandleAppWindowClosing;
         if (DashboardView.CoreWebView2 is not null && _webViewDiagnosticsAttached)
         {
             DashboardView.CoreWebView2.WebMessageReceived -= HandleWebMessageReceived;
