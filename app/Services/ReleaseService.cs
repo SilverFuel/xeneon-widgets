@@ -50,6 +50,7 @@ public sealed class ReleaseService
                     || asset.Name.Contains("darwin", StringComparison.OrdinalIgnoreCase)));
             var latestVersion = TextOr(GetString(root, "tag_name"), GetString(root, "name"));
             var trust = BuildReleaseTrust(windowsAsset);
+            var versionComparisonKnown = TryIsVersionNewer(latestVersion, currentVersion, out var updateAvailable);
 
             return new
             {
@@ -59,6 +60,8 @@ public sealed class ReleaseService
                 channel = normalizedChannel,
                 currentVersion,
                 latestVersion,
+                updateAvailable,
+                versionComparisonKnown,
                 htmlUrl = TextOr(GetString(root, "html_url"), ReleasesUrl),
                 installerUrl = windowsAsset?.DownloadUrl ?? "",
                 macUrl = macAsset?.DownloadUrl ?? "",
@@ -93,6 +96,8 @@ public sealed class ReleaseService
             channel,
             currentVersion,
             latestVersion = "",
+            updateAvailable = false,
+            versionComparisonKnown = false,
             htmlUrl = ReleasesUrl,
             installerUrl = "",
             macUrl = "",
@@ -165,6 +170,30 @@ public sealed class ReleaseService
         }
 
         return typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+    }
+
+    private static bool TryIsVersionNewer(string latestVersion, string currentVersion, out bool updateAvailable)
+    {
+        updateAvailable = false;
+        if (!TryParseReleaseVersion(latestVersion, out var latest) || !TryParseReleaseVersion(currentVersion, out var current))
+        {
+            return false;
+        }
+
+        updateAvailable = latest > current;
+        return true;
+    }
+
+    private static bool TryParseReleaseVersion(string value, out Version version)
+    {
+        var normalized = value.Trim().TrimStart('v', 'V');
+        var prereleaseIndex = normalized.IndexOfAny(['-', '+']);
+        if (prereleaseIndex >= 0)
+        {
+            normalized = normalized[..prereleaseIndex];
+        }
+
+        return Version.TryParse(normalized, out version!);
     }
 
     private static List<ReleaseAsset> ReadAssets(JsonElement root)
