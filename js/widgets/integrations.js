@@ -143,6 +143,11 @@
       status: text(payload.status, "setup"),
       bridgeIp: text(payload.bridgeIp, ""),
       bridgeName: text(payload.bridgeName, "Philips Hue"),
+      certificateTrusted: Boolean(payload.certificateTrusted),
+      certificateTrustRequired: Boolean(payload.certificateTrustRequired),
+      certificateThumbprint: text(payload.certificateThumbprint, ""),
+      certificateSubject: text(payload.certificateSubject, ""),
+      certificateMessage: text(payload.certificateMessage, ""),
       source: text(payload.source, "Hue"),
       message: text(payload.message, "Bridge status unavailable."),
       lights: Array.isArray(payload.lights) ? payload.lights : [],
@@ -180,6 +185,11 @@
               '<div class="inline-form-grid">' +
                 '<label class="inline-field"><span>Bridge IP</span><input class="inline-input" type="text" name="bridgeIp" value="' + escapeHtml(data.bridgeIp) + '" placeholder="Local bridge IP"></label>' +
               '</div>' +
+              (data.certificateTrustRequired
+                ? '<div class="router-inline-copy">Certificate review required: ' + escapeHtml(data.certificateMessage || data.certificateSubject || "The bridge certificate is not trusted.") + '<br>Fingerprint: ' + escapeHtml(data.certificateThumbprint || "unavailable") + '</div>' +
+                  '<input type="hidden" name="trustedCertificateThumbprint" value="' + escapeHtml(data.certificateThumbprint) + '">' +
+                  '<label class="inline-field"><span><input type="checkbox" name="trustCertificate" value="1"> I verified this fingerprint and trust this Hue bridge.</span></label>'
+                : '') +
               '<div class="inline-actions"><button class="inline-button is-primary" type="submit">' + (data.linked ? "Relink bridge" : "Link bridge") + '</button></div>' +
             '</form>' +
             '<div class="inline-list">' + (data.groups.length ? data.groups.slice(0, 6).map(function (group) {
@@ -346,11 +356,24 @@
       requestJson(buildBridgeUrl(env, "/api/hue/link"), {
         method: "POST",
         body: {
-          bridgeIp: String(formData.get("bridgeIp") || "")
+          bridgeIp: String(formData.get("bridgeIp") || ""),
+          trustCertificate: String(formData.get("trustCertificate") || "") === "1",
+          trustedCertificateThumbprint: String(formData.get("trustedCertificateThumbprint") || "")
         }
-      }, 8000).then(function () {
+      }, 8000).then(function (payload) {
+        state.data = normalizeHuePayload(payload);
+        if (state.data.certificateTrustRequired) {
+          state.busy = false;
+          state.statusText = "Review certificate";
+          state.statusTone = "warn";
+          redraw();
+          return { certificateReview: true };
+        }
         return setupUpdate(env, "hue");
-      }).then(function () {
+      }).then(function (result) {
+        if (result && result.certificateReview) {
+          return;
+        }
         state.busy = false;
         return refresh();
       }, function (error) {

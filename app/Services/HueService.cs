@@ -1,11 +1,12 @@
 using System.Net.Http.Json;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 
 namespace XenonEdgeHost;
 
 public sealed class HueService
 {
-    private readonly HttpClient _httpClient;
     private readonly HostLogger _logger;
     private readonly ConfigStore _configStore;
     private readonly object _sync = new();
@@ -17,13 +18,6 @@ public sealed class HueService
     {
         _configStore = configStore;
         _logger = logger;
-        _httpClient = new HttpClient(new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        })
-        {
-            Timeout = TimeSpan.FromSeconds(10)
-        };
     }
 
     public async Task<HueSnapshot> GetSnapshotAsync(AppConfig config, CancellationToken cancellationToken)
@@ -60,7 +54,7 @@ public sealed class HueService
         }
     }
 
-    public async Task<HueSnapshot> LinkBridgeAsync(string? bridgeIp, CancellationToken cancellationToken)
+    public async Task<HueSnapshot> LinkBridgeAsync(string? bridgeIp, bool trustCertificate, string? trustedCertificateThumbprint, CancellationToken cancellationToken)
     {
         var normalizedIp = NormalizeBridgeIp(bridgeIp ?? _configStore.Current.Hue.BridgeIp);
         if (string.IsNullOrWhiteSpace(normalizedIp))
@@ -68,49 +62,70 @@ public sealed class HueService
             throw new InvalidOperationException("Hue bridge IP is required.");
         }
 
-        using var payload = await SendRequestAsync(normalizedIp, "/api", HttpMethod.Post, new
+        var existing = GetConfigSnapshot(_configStore.Snapshot());
+        var requestedThumbprint = NormalizeThumbprint(trustedCertificateThumbprint);
+        var certificateState = new HueCertificateTrustState
         {
-            devicetype = "xeneon_widgets#dashboard",
-            generateclientkey = true
-        }, cancellationToken);
-
-        if (payload.RootElement.ValueKind != JsonValueKind.Array || payload.RootElement.GetArrayLength() == 0)
+            TrustedThumbprint = trustCertificate
+                ? requestedThumbprint
+                : existing.BridgeIp.Equals(normalizedIp, StringComparison.OrdinalIgnoreCase) ? existing.CertificateThumbprint : ""
+        };
+        using var client = CreateClient(certificateState);
+        JsonDocument payload;
+        try
         {
-            throw new InvalidOperationException("Hue bridge returned an unexpected response.");
+            payload = await SendRequestAsync(client, normalizedIp, "/api", HttpMethod.Post, new
+            {
+                devicetype = "xeneon_widgets#dashboard",
+                generateclientkey = true
+            }, cancellationToken);
+        }
+        catch (HttpRequestException) when (certificateState.TrustRequired)
+        {
+            return HueSnapshot.CreateTrustRequired(normalizedIp, certificateState);
         }
 
-        var result = payload.RootElement[0];
-        if (!result.TryGetProperty("success", out var success) || !success.TryGetProperty("username", out var usernameNode))
+        using (payload)
         {
-            throw new InvalidOperationException(ExtractHueError(payload.RootElement) ?? "Hue link button has not been pressed yet.");
+            if (payload.RootElement.ValueKind != JsonValueKind.Array || payload.RootElement.GetArrayLength() == 0)
+            {
+                throw new InvalidOperationException("Hue bridge returned an unexpected response.");
+            }
+
+            var result = payload.RootElement[0];
+            if (!result.TryGetProperty("success", out var success) || !success.TryGetProperty("username", out var usernameNode))
+            {
+                throw new InvalidOperationException(ExtractHueError(payload.RootElement) ?? "Hue link button has not been pressed yet.");
+            }
+
+            var appKey = usernameNode.GetString() ?? "";
+            var clientKey = success.TryGetProperty("clientkey", out var clientKeyNode) ? clientKeyNode.GetString() ?? "" : "";
+
+            var config = _configStore.Update(current =>
+            {
+                current.Hue.BridgeIp = normalizedIp;
+                current.Hue.AppKey = appKey;
+                current.Hue.ClientKey = clientKey;
+                current.Hue.CertificateThumbprint = certificateState.RemoteThumbprint;
+                return current;
+            });
+
+            Invalidate();
+            return await GetSnapshotAsync(config, cancellationToken);
         }
-
-        var appKey = usernameNode.GetString() ?? "";
-        var clientKey = success.TryGetProperty("clientkey", out var clientKeyNode) ? clientKeyNode.GetString() ?? "" : "";
-
-        var config = _configStore.Update(current =>
-        {
-            current.Hue.BridgeIp = normalizedIp;
-            current.Hue.AppKey = appKey;
-            current.Hue.ClientKey = clientKey;
-            return current;
-        });
-
-        Invalidate();
-        return await GetSnapshotAsync(config, cancellationToken);
     }
 
     public async Task SetLightStateAsync(AppConfig config, string lightId, object payload, CancellationToken cancellationToken)
     {
         var hue = EnsureLinked(config);
-        await SendRequestAsync(hue.BridgeIp, $"/api/{Uri.EscapeDataString(hue.AppKey)}/lights/{Uri.EscapeDataString(lightId)}/state", HttpMethod.Put, payload, cancellationToken);
+        await SendRequestAsync(hue, $"/api/{Uri.EscapeDataString(hue.AppKey)}/lights/{Uri.EscapeDataString(lightId)}/state", HttpMethod.Put, payload, cancellationToken);
         Invalidate();
     }
 
     public async Task SetGroupStateAsync(AppConfig config, string groupId, object payload, CancellationToken cancellationToken)
     {
         var hue = EnsureLinked(config);
-        await SendRequestAsync(hue.BridgeIp, $"/api/{Uri.EscapeDataString(hue.AppKey)}/groups/{Uri.EscapeDataString(groupId)}/action", HttpMethod.Put, payload, cancellationToken);
+        await SendRequestAsync(hue, $"/api/{Uri.EscapeDataString(hue.AppKey)}/groups/{Uri.EscapeDataString(groupId)}/action", HttpMethod.Put, payload, cancellationToken);
         Invalidate();
     }
 
@@ -130,9 +145,9 @@ public sealed class HueService
 
         try
         {
-            using var configDoc = await SendRequestAsync(hue.BridgeIp, $"/api/{Uri.EscapeDataString(hue.AppKey)}/config", HttpMethod.Get, null, cancellationToken);
-            using var lightsDoc = await SendRequestAsync(hue.BridgeIp, $"/api/{Uri.EscapeDataString(hue.AppKey)}/lights", HttpMethod.Get, null, cancellationToken);
-            using var groupsDoc = await SendRequestAsync(hue.BridgeIp, $"/api/{Uri.EscapeDataString(hue.AppKey)}/groups", HttpMethod.Get, null, cancellationToken);
+            using var configDoc = await SendRequestAsync(hue, $"/api/{Uri.EscapeDataString(hue.AppKey)}/config", HttpMethod.Get, null, cancellationToken);
+            using var lightsDoc = await SendRequestAsync(hue, $"/api/{Uri.EscapeDataString(hue.AppKey)}/lights", HttpMethod.Get, null, cancellationToken);
+            using var groupsDoc = await SendRequestAsync(hue, $"/api/{Uri.EscapeDataString(hue.AppKey)}/groups", HttpMethod.Get, null, cancellationToken);
 
             var sampledAt = DateTimeOffset.UtcNow;
             lock (_sync)
@@ -147,6 +162,8 @@ public sealed class HueService
                     Stale = false,
                     BridgeIp = hue.BridgeIp,
                     BridgeName = configDoc.RootElement.TryGetProperty("name", out var nameNode) ? nameNode.GetString() ?? "Hue Bridge" : "Hue Bridge",
+                    CertificateTrusted = true,
+                    CertificateThumbprint = hue.CertificateThumbprint,
                     Lights = NormalizeLights(lightsDoc.RootElement),
                     Groups = NormalizeGroups(groupsDoc.RootElement),
                     Source = "hue local bridge",
@@ -154,6 +171,15 @@ public sealed class HueService
                 };
                 _cacheKey = $"{hue.BridgeIp}|{hue.AppKey}";
                 _lastRefresh = sampledAt;
+            }
+        }
+        catch (HueCertificateTrustException error)
+        {
+            lock (_sync)
+            {
+                _snapshot = HueSnapshot.CreateTrustRequired(hue.BridgeIp, error.State);
+                _cacheKey = $"{hue.BridgeIp}|{hue.AppKey}";
+                _lastRefresh = DateTimeOffset.UtcNow;
             }
         }
         catch (Exception error)
@@ -188,7 +214,8 @@ public sealed class HueService
         {
             BridgeIp = NormalizeBridgeIp(config.Hue.BridgeIp),
             AppKey = config.Hue.AppKey?.Trim() ?? "",
-            ClientKey = config.Hue.ClientKey?.Trim() ?? ""
+            ClientKey = config.Hue.ClientKey?.Trim() ?? "",
+            CertificateThumbprint = NormalizeThumbprint(config.Hue.CertificateThumbprint)
         };
     }
 
@@ -197,7 +224,51 @@ public sealed class HueService
         return NetworkEndpointGuard.NormalizeLocalHttpsAuthority(input, "Hue bridge");
     }
 
-    private async Task<JsonDocument> SendRequestAsync(string bridgeIp, string path, HttpMethod method, object? body, CancellationToken cancellationToken)
+    private static HttpClient CreateClient(HueCertificateTrustState state)
+    {
+        return new HttpClient(new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (_, certificate, _, errors) => ValidateCertificate(certificate, errors, state)
+        }) { Timeout = TimeSpan.FromSeconds(10) };
+    }
+
+    private static bool ValidateCertificate(X509Certificate2? certificate, SslPolicyErrors errors, HueCertificateTrustState state)
+    {
+        if (certificate is null)
+        {
+            state.TrustRequired = true;
+            state.PolicyError = "The Hue bridge did not present a certificate.";
+            return false;
+        }
+
+        state.RemoteThumbprint = NormalizeThumbprint(certificate.Thumbprint);
+        state.RemoteSubject = certificate.Subject ?? "";
+        if (errors == SslPolicyErrors.None || string.Equals(state.TrustedThumbprint, state.RemoteThumbprint, StringComparison.OrdinalIgnoreCase))
+        {
+            state.Trusted = true;
+            return true;
+        }
+
+        state.TrustRequired = true;
+        state.PolicyError = errors.ToString();
+        return false;
+    }
+
+    private async Task<JsonDocument> SendRequestAsync(HueConfigSnapshot hue, string path, HttpMethod method, object? body, CancellationToken cancellationToken)
+    {
+        var state = new HueCertificateTrustState { TrustedThumbprint = hue.CertificateThumbprint };
+        using var client = CreateClient(state);
+        try
+        {
+            return await SendRequestAsync(client, hue.BridgeIp, path, method, body, cancellationToken);
+        }
+        catch (HttpRequestException error) when (state.TrustRequired)
+        {
+            throw new HueCertificateTrustException(state, error);
+        }
+    }
+
+    private static async Task<JsonDocument> SendRequestAsync(HttpClient client, string bridgeIp, string path, HttpMethod method, object? body, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, $"https://{bridgeIp}{path}");
         request.Headers.Accept.ParseAdd("application/json");
@@ -206,7 +277,7 @@ public sealed class HueService
             request.Content = JsonContent.Create(body);
         }
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var response = await client.SendAsync(request, cancellationToken);
         var raw = await response.Content.ReadAsStringAsync(cancellationToken);
         var document = string.IsNullOrWhiteSpace(raw) ? JsonDocument.Parse("null") : JsonDocument.Parse(raw);
 
@@ -353,7 +424,6 @@ public sealed class HueService
 
     public void Dispose()
     {
-        _httpClient.Dispose();
     }
 
     private sealed class HueConfigSnapshot
@@ -363,7 +433,34 @@ public sealed class HueService
         public string AppKey { get; set; } = "";
 
         public string ClientKey { get; set; } = "";
+
+        public string CertificateThumbprint { get; set; } = "";
     }
+
+    private static string NormalizeThumbprint(string? value)
+    {
+        return (value ?? "").Replace(" ", "", StringComparison.Ordinal).Trim().ToUpperInvariant();
+    }
+
+    private sealed class HueCertificateTrustException : Exception
+    {
+        public HueCertificateTrustException(HueCertificateTrustState state, Exception innerException) : base("Hue bridge certificate requires approval.", innerException)
+        {
+            State = state;
+        }
+
+        public HueCertificateTrustState State { get; }
+    }
+}
+
+public sealed class HueCertificateTrustState
+{
+    public string TrustedThumbprint { get; set; } = "";
+    public string RemoteThumbprint { get; set; } = "";
+    public string RemoteSubject { get; set; } = "";
+    public string PolicyError { get; set; } = "";
+    public bool Trusted { get; set; }
+    public bool TrustRequired { get; set; }
 }
 
 public sealed class HueSnapshot
@@ -383,6 +480,16 @@ public sealed class HueSnapshot
     public string BridgeIp { get; set; } = "";
 
     public string BridgeName { get; set; } = "";
+
+    public bool CertificateTrusted { get; set; }
+
+    public bool CertificateTrustRequired { get; set; }
+
+    public string CertificateThumbprint { get; set; } = "";
+
+    public string CertificateSubject { get; set; } = "";
+
+    public string CertificateMessage { get; set; } = "";
 
     public List<HueLightPayload> Lights { get; set; } = new();
 
@@ -404,6 +511,11 @@ public sealed class HueSnapshot
             Stale = Stale,
             BridgeIp = BridgeIp,
             BridgeName = BridgeName,
+            CertificateTrusted = CertificateTrusted,
+            CertificateTrustRequired = CertificateTrustRequired,
+            CertificateThumbprint = CertificateThumbprint,
+            CertificateSubject = CertificateSubject,
+            CertificateMessage = CertificateMessage,
             Lights = Lights.Select(light => light.Clone()).ToList(),
             Groups = Groups.Select(group => group.Clone()).ToList(),
             Source = Source,
@@ -449,6 +561,23 @@ public sealed class HueSnapshot
             Status = "setup",
             BridgeIp = bridgeIp,
             Message = "Stored Hue credentials are no longer accepted. Press the bridge button and relink."
+        };
+    }
+
+    public static HueSnapshot CreateTrustRequired(string bridgeIp, HueCertificateTrustState state)
+    {
+        return new HueSnapshot
+        {
+            Supported = true,
+            Configured = true,
+            Linked = false,
+            Status = "certificate-review",
+            BridgeIp = bridgeIp,
+            CertificateTrustRequired = true,
+            CertificateThumbprint = state.RemoteThumbprint,
+            CertificateSubject = state.RemoteSubject,
+            CertificateMessage = string.IsNullOrWhiteSpace(state.PolicyError) ? "Review the Hue bridge certificate before linking." : state.PolicyError,
+            Message = "Review the Hue bridge certificate, then explicitly trust it before linking."
         };
     }
 

@@ -435,6 +435,14 @@
 
   var productProfiles = [
     {
+      id: "glance",
+      name: "Glance",
+      copy: "Large, immediate system, network, audio, and Game Mode information for a quick look at the EDGE.",
+      themeId: "edge",
+      pack: "core",
+      layout: ["system", "network", "audio", "game-mode", "quick-actions", "privacy"]
+    },
+    {
       id: "command",
       name: "Command",
       copy: "Balanced daily dashboard with setup, telemetry, sound, style, and packaging close at hand.",
@@ -477,6 +485,12 @@
   ];
 
   var productPacks = [
+    {
+      id: "glance",
+      name: "Glance",
+      copy: "Core telemetry, audio, Game Mode, and only the controls useful at a glance.",
+      layout: ["system", "network", "audio", "game-mode", "quick-actions", "privacy"]
+    },
     {
       id: "core",
       name: "Core Owner",
@@ -546,7 +560,7 @@
       container.innerHTML = productShell(
         "OBS panel",
         "Streaming",
-        "Keep a stream-ready control surface on the EDGE while leaving full OBS automation for the native bridge.",
+        "Keep a stream-ready control surface on the EDGE. This beta only verifies local OBS reachability; it does not issue OBS commands.",
         state.statusText,
         state.statusTone,
         '<form class="inline-form product-control-panel" data-form="streaming">' +
@@ -682,7 +696,7 @@
       container.innerHTML = productShell(
         "Marketplace packs",
         "Widget Packs",
-        "Apply curated dashboard bundles now; later these can become downloadable packs from a store page.",
+        "Apply local curated dashboard bundles. Downloadable packs stay disabled until signed manifests and permission review are available.",
         findById(productPacks, activePack).name,
         "good",
         '<div class="product-profile-grid">' +
@@ -807,15 +821,17 @@
     var state = {
       statusText: "Local-only",
       statusTone: "good",
-      confirmReset: false
+      confirmReset: false,
+      diagnosticEvents: [],
+      diagnosticsBusy: false
     };
 
     function redraw() {
       var settings = typeof env.getSettings === "function" ? env.getSettings() : {};
       container.innerHTML = productShell(
-        "Trust screen",
+        "Trust and portability",
         "Privacy",
-        "Explain the local-first model clearly so customers know what the app touches.",
+        "Review what stays local, then safely export or import dashboard-only preferences without exposing credentials.",
         state.statusText,
         state.statusTone,
         '<div class="inline-grid inline-grid--3">' +
@@ -828,14 +844,72 @@
           '<div><strong>Requires permission</strong><span>Weather keys, calendar feeds, Hue bridge pairing, and optional connectors you enable.</span></div>' +
           '<div><strong>Independent software</strong><span>This app is not an official CORSAIR product and is not endorsed by integration providers unless a written agreement says otherwise.</span></div>' +
         '</div>' +
+        '<article class="list-card inline-card">' +
+          '<div class="inline-card-header"><div><div class="metric-label">Recent diagnostic events</div><div class="router-inline-copy">Sanitized local host events. Clipboard contents, credentials, and local paths stay excluded.</div></div><button class="inline-button" type="button" data-action="refresh-diagnostics"' + (state.diagnosticsBusy ? " disabled" : "") + '>Refresh</button></div>' +
+          '<div class="inline-list">' + (state.diagnosticEvents.length ? state.diagnosticEvents.map(function (entry) {
+            return '<div class="inline-list-item"><div class="inline-list-copy">' + escapeHtml(entry) + '</div></div>';
+          }).join("") : '<div class="inline-empty"><strong>No diagnostics loaded</strong><span>Refresh to read the latest sanitized local events.</span></div>') + '</div>' +
+        '</article>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="export-settings">Copy settings JSON</button>' +
+          '<button class="inline-button" type="button" data-action="import-settings">Import dashboard settings</button>' +
           '<button class="inline-button" type="button" data-action="reset-settings">Reset local settings</button>' +
           '<button class="inline-button" type="button" data-action="reset-all-local-data">' + (state.confirmReset ? "Confirm reset" : "Reset all app data") + '</button>' +
           '<a class="inline-button" href="/support.html" target="_blank" rel="noreferrer">Support</a>' +
         '</div>' +
+        '<label class="inline-field"><span>Import dashboard settings</span><textarea class="inline-input" data-settings-import rows="4" placeholder="Paste a settings JSON export. Integration credentials and local endpoints are never imported."></textarea></label>' +
         '<div class="product-code-preview">' + escapeHtml(JSON.stringify(settings, null, 2).slice(0, 520)) + '</div>'
       );
+    }
+
+    function importDashboardSettings(raw) {
+      var parsed;
+      var imported = {};
+      var allowed = [
+        "profileId", "themeId", "accentColor", "layoutOrder", "marketplacePack", "dashboardOpacity",
+        "themeReadability", "performanceBudget", "gameModeAutoTune", "gameModeAutoFace", "releaseChannel",
+        "updateChannel", "installerEdition"
+      ];
+
+      try {
+        parsed = JSON.parse(raw || "");
+      } catch (error) {
+        throw new Error("Settings JSON is invalid.");
+      }
+
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Settings export must be a JSON object.");
+      }
+
+      allowed.forEach(function (key) {
+        if (Object.prototype.hasOwnProperty.call(parsed, key) && typeof parsed[key] !== "object") {
+          imported[key] = String(parsed[key]);
+        }
+      });
+
+      if (!Object.keys(imported).length) {
+        throw new Error("No supported dashboard settings were found.");
+      }
+
+      saveSettings(env, imported);
+    }
+
+    function refreshDiagnostics() {
+      state.diagnosticsBusy = true;
+      state.statusText = "Loading diagnostics";
+      state.statusTone = "warn";
+      redraw();
+      return requestJson(buildBridgeUrl(env, "/api/support/bundle"), {}, 8000).then(function (payload) {
+        state.diagnosticEvents = Array.isArray(payload.log) ? payload.log.slice(-6).reverse() : [];
+        state.statusText = "Diagnostics refreshed";
+        state.statusTone = "good";
+      }, function (error) {
+        state.statusText = error.message || "Diagnostics unavailable";
+        state.statusTone = "danger";
+      }).finally(function () {
+        state.diagnosticsBusy = false;
+        redraw();
+      });
     }
 
     addListener(cleanups, container, "click", function (event) {
@@ -856,6 +930,18 @@
           state.statusTone = "danger";
           redraw();
         });
+      } else if (target.getAttribute("data-action") === "import-settings") {
+        try {
+          importDashboardSettings(container.querySelector("[data-settings-import]").value);
+          state.statusText = "Dashboard settings imported";
+          state.statusTone = "good";
+        } catch (error) {
+          state.statusText = error.message || "Import failed";
+          state.statusTone = "danger";
+        }
+        redraw();
+      } else if (target.getAttribute("data-action") === "refresh-diagnostics") {
+        refreshDiagnostics();
       } else if (target.getAttribute("data-action") === "reset-settings" && typeof env.resetSettings === "function") {
         env.resetSettings();
         state.statusText = "Settings reset";
@@ -886,6 +972,7 @@
     });
 
     redraw();
+    refreshDiagnostics();
     return {
       refresh: function () {
         redraw();

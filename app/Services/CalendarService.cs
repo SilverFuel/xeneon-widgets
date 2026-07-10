@@ -1,4 +1,8 @@
 using System.Globalization;
+using Ical.Net;
+using Ical.Net.CalendarComponents;
+using Ical.Net.DataTypes;
+using Ical.Net.Evaluation;
 
 namespace XenonEdgeHost;
 
@@ -139,99 +143,43 @@ public sealed class CalendarService
         return System.Text.Encoding.UTF8.GetString(memory.ToArray());
     }
 
-    private static List<CalendarEntry> ParseIcs(string icsText)
+    internal static List<CalendarEntry> ParseIcs(string icsText, DateTimeOffset? now = null)
     {
-        var unfolded = icsText.Replace("\r\n ", "").Replace("\r\n\t", "").Replace("\n ", "").Replace("\n\t", "");
-        var events = new List<RawCalendarEvent>();
-        var blocks = unfolded.Split("BEGIN:VEVENT", StringSplitOptions.None).Skip(1);
-
-        foreach (var block in blocks)
+        var calendar = Ical.Net.Calendar.Load(icsText)
+            ?? throw new InvalidOperationException("Calendar feed could not be parsed.");
+        var cutoff = now ?? DateTimeOffset.Now;
+        var startBoundary = new CalDateTime(cutoff.AddHours(-1).UtcDateTime, true);
+        var options = new EvaluationOptions
         {
-            var eventText = block.Split("END:VEVENT", StringSplitOptions.None)[0];
-            var lines = eventText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            MaxUnmatchedIncrementsLimit = 4096
+        };
 
-            foreach (var line in lines)
-            {
-                var separatorIndex = line.IndexOf(':');
-                if (separatorIndex <= 0)
-                {
-                    continue;
-                }
+        var events = calendar.Events is { } loadedEvents
+            ? loadedEvents.AsEnumerable()
+            : Enumerable.Empty<CalendarEvent>();
 
-                var key = line[..separatorIndex].Split(';')[0];
-                var value = line[(separatorIndex + 1)..].Trim();
-                map[key] = value;
-            }
-
-            if (!map.TryGetValue("DTSTART", out var startText) || !map.TryGetValue("SUMMARY", out var summary))
-            {
-                continue;
-            }
-
-            var start = ParseIcsDate(startText);
-            if (start is null)
-            {
-                continue;
-            }
-
-            events.Add(new RawCalendarEvent
-            {
-                Start = start.Value,
-                Title = summary,
-                Detail = map.TryGetValue("LOCATION", out var location) ? location : ""
-            });
-        }
-
-        var cutoff = DateTimeOffset.Now.AddHours(-1);
         return events
-            .Where(item => item.Start >= cutoff)
+            .Where(calendarEvent => !string.Equals(calendarEvent.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(calendarEvent => calendarEvent.GetOccurrences(startBoundary, options)
+                .Take(24)
+                .Select(occurrence => new
+                {
+                    Event = occurrence.Source as CalendarEvent ?? calendarEvent,
+                    Start = new DateTimeOffset(occurrence.Period.StartTime.AsUtc, TimeSpan.Zero),
+                    HasTime = occurrence.Period.StartTime.HasTime
+                }))
+            .Where(item => item.Start >= cutoff.AddHours(-1))
             .OrderBy(item => item.Start)
             .Take(3)
             .Select(item => new CalendarEntry
             {
-                Time = item.Start.ToLocalTime().ToString("hh:mm tt", CultureInfo.CurrentCulture),
-                Title = item.Title,
-                Detail = string.IsNullOrWhiteSpace(item.Detail) ? "Calendar event" : item.Detail
+                Time = item.HasTime
+                    ? item.Start.ToLocalTime().ToString("hh:mm tt", CultureInfo.CurrentCulture)
+                    : item.Start.ToLocalTime().ToString("ddd, MMM d", CultureInfo.CurrentCulture),
+                Title = string.IsNullOrWhiteSpace(item.Event.Summary) ? "Calendar event" : item.Event.Summary,
+                Detail = string.IsNullOrWhiteSpace(item.Event.Location) ? "Calendar event" : item.Event.Location
             })
             .ToList();
-    }
-
-    private static DateTimeOffset? ParseIcsDate(string rawValue)
-    {
-        if (string.IsNullOrWhiteSpace(rawValue))
-        {
-            return null;
-        }
-
-        if (rawValue.Length == 8 && DateOnly.TryParseExact(rawValue, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly))
-        {
-            return new DateTimeOffset(dateOnly.ToDateTime(TimeOnly.MinValue));
-        }
-
-        if (rawValue.Length == 16 && rawValue.EndsWith("Z", StringComparison.OrdinalIgnoreCase)
-            && DateTimeOffset.TryParseExact(rawValue, "yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var utcTime))
-        {
-            return utcTime;
-        }
-
-        if (rawValue.Length == 15 && DateTime.TryParseExact(rawValue, "yyyyMMdd'T'HHmmss", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var localTime))
-        {
-            return new DateTimeOffset(localTime);
-        }
-
-        return DateTimeOffset.TryParse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed)
-            ? parsed
-            : null;
-    }
-
-    private sealed class RawCalendarEvent
-    {
-        public DateTimeOffset Start { get; set; }
-
-        public string Title { get; set; } = "";
-
-        public string Detail { get; set; } = "";
     }
 }
 

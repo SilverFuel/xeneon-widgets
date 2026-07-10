@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File .\\start-xeneon.ps1",
-    "check": "npm run check:js && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:dependency-pins && npm run check:support-redaction && npm run check:display-recovery && npm run check:unifi-form && npm run check:audit-regressions && npm run check:dashboard-smoke && npm run check:release-gauntlet && npm run check:installer-safety && npm run test:native-host-api && npm run test:bridge-api && npm run check:app",
+    "check": "npm run check:js && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:dependency-pins && npm run check:support-redaction && npm run check:display-recovery && npm run check:unifi-form && npm run check:audit-regressions && npm run check:dashboard-smoke && npm run check:release-gauntlet && npm run check:installer-safety && npm run test:native-host-api && npm run test:bridge-api && npm run test:app && npm run check:app",
     "check:js": "node scripts/check-js.mjs",
     "check:setup-guide": "node scripts/check-setup-guide.mjs",
     "check:bridge-boundaries": "node scripts/check-bridge-boundaries.mjs",
@@ -23,6 +23,7 @@
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
     "test:native-host-api": "node scripts/test-native-host-api.mjs",
     "test:bridge-api": "node scripts/test-bridge-api.mjs",
+    "test:app": "dotnet test app\\XenonEdgeHost.sln --configuration Release --no-restore",
     "audit:deps": "npm audit --audit-level=moderate && npm --prefix desktop/electron audit --audit-level=moderate && dotnet list app\\XenonEdgeHost.sln package --vulnerable --include-transitive",
     "clean": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clean-workspace.ps1",
     "installer": "powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1",

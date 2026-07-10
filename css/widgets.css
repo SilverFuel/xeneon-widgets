@@ -1502,6 +1502,10 @@ input[type="range"]:focus-visible {
   text-align: left;
 }
 
+.dashboard-native-page--now-strip-visible .router-inline-widget {
+  padding-bottom: 82px;
+}
+
 .dashboard-now-strip__label {
   display: inline-flex;
   align-items: center;
@@ -1578,6 +1582,10 @@ input[type="range"]:focus-visible {
 
 .dashboard-native-page--browser .dashboard-now-strip {
   width: min(760px, calc(100vw - 28px));
+}
+
+.dashboard-native-page--browser.dashboard-native-page--now-strip-visible .router-inline-widget {
+  padding-bottom: 82px;
 }
 
 .router-picker__button {
