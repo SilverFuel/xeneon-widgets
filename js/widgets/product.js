@@ -291,6 +291,8 @@
     var cleanups = [];
     var state = {
       latest: "",
+      current: "",
+      updateAvailable: false,
       latestUrl: "https://github.com/SilverFuel/xeneon-widgets/releases",
       downloadUrl: "",
       macUrl: "",
@@ -311,6 +313,7 @@
     function redraw() {
       var dashboard = env.bridgeConfig && env.bridgeConfig.dashboard ? env.bridgeConfig.dashboard : {};
       var channel = settingValue(env, "releaseChannel", settingValue(env, "updateChannel", text(dashboard.releaseChannel, "stable")));
+      var updateNotifications = settingValue(env, "updateNotifications", "0") === "1";
       if (["stable", "beta", "nightly"].indexOf(channel) === -1) {
         channel = "stable";
       }
@@ -322,8 +325,8 @@
         state.statusText,
         state.statusTone,
         '<div class="inline-grid inline-grid--4">' +
-          metricCard("Current build", env.assetRevision || "local", "Dashboard asset revision", null) +
-          metricCard("Latest release", state.latest || "Not checked", state.message, null) +
+          metricCard("Current build", state.current || env.assetRevision || "local", "Installed host version", null) +
+          metricCard("Latest release", state.latest || "Not checked", state.updateAvailable ? "Newer than your installed build" : state.message, null) +
           metricCard("Installer", state.downloadUrl ? "Found" : "Not checked", state.macUrl ? "Windows and Mac assets" : "Windows asset expected", null) +
           metricCard("Trust", state.trustReady ? "Verified" : "Needs proof", "Hash " + state.hashStatus + " / signature " + state.signatureStatus, null) +
           metricCard("Rollback", state.rollback.configured ? "Ready" : "Pending", state.rollback.message, null) +
@@ -334,6 +337,7 @@
             '<option value="beta"' + (channel === "beta" ? " selected" : "") + '>Beta</option>' +
             '<option value="nightly"' + (channel === "nightly" ? " selected" : "") + '>Nightly</option>' +
           '</select></label>' +
+          '<label class="inline-field inline-field--checkbox"><input type="checkbox" name="updateNotifications"' + (updateNotifications ? " checked" : "") + '> <span>Check for updates when the dashboard starts</span></label>' +
         '</form>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="check-release"' + (state.busy ? " disabled" : "") + '>Check releases</button>' +
@@ -357,6 +361,8 @@
       requestJson(buildBridgeUrl(env, "/api/releases/latest", { channel: state.channel }), {}, 10000).then(function (payload) {
         state.busy = false;
         state.latest = text(payload && (payload.latestVersion || payload.tag_name || payload.name), "No release tag");
+        state.current = text(payload && payload.currentVersion, state.current);
+        state.updateAvailable = Boolean(payload && payload.updateAvailable);
         state.latestUrl = text(payload && (payload.htmlUrl || payload.html_url), state.latestUrl);
         state.downloadUrl = text(payload && payload.installerUrl, "");
         state.macUrl = text(payload && payload.macUrl, "");
@@ -364,8 +370,8 @@
         state.signatureStatus = text(payload && payload.signatureStatus, "missing");
         state.trustReady = Boolean(payload && payload.trust && payload.trust.trusted);
         state.message = text(payload && payload.message, "Release feed checked.");
-        state.statusText = payload && payload.status === "live" ? "Release feed ready" : "Check failed";
-        state.statusTone = payload && payload.status === "live" ? "good" : "danger";
+        state.statusText = payload && payload.status === "live" ? (state.updateAvailable ? "Update available" : "Up to date") : "Check failed";
+        state.statusTone = payload && payload.status === "live" ? (state.updateAvailable ? "warn" : "good") : "danger";
         redraw();
       }, function (error) {
         state.busy = false;
@@ -415,6 +421,11 @@
         saveSettings(env, {
           releaseChannel: select.value,
           updateChannel: select.value
+        });
+        redraw();
+      } else if (select && select.name === "updateNotifications") {
+        saveSettings(env, {
+          updateNotifications: select.checked ? "1" : "0"
         });
         redraw();
       }

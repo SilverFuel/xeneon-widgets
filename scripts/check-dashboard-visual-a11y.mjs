@@ -127,6 +127,13 @@ assert(
   "the persistent now-playing strip must stay off the Audio page and reserve content space when visible"
 );
 
+assert(
+  /maybeCheckForAvailableUpdate/.test(dashboardJs)
+    && /updateNotifications/.test(dashboardJs)
+    && /updateAvailable/.test(productWidget),
+  "update availability checks must remain opt-in and visibly report newer releases"
+);
+
 for (const [relativePath, text] of [
   ["js/dashboard.js", dashboardJs],
   ["js/widgets/actions.js", actionWidget],

@@ -103,6 +103,7 @@
   var bridgeSetup = createBootSetupSummary();
   var settingsDrawerOpen = false;
   var touchFeedbackTimerId = 0;
+  var updateAvailabilityChecked = false;
   var nowStripTimerId = 0;
   var launcherDockTimerId = 0;
   var launcherDockEntries = [];
@@ -130,6 +131,7 @@
     themeReadability: "normal",
     releaseChannel: "stable",
     updateChannel: "stable",
+    updateNotifications: "0",
     city: "",
     units: "metric",
     unifiNetworkEndpoint: ""
@@ -857,6 +859,23 @@
 
   function fetchBridgeConfig() {
     return fetchJson(buildUrl(bridgeOrigin, "/api/config"), 5000);
+  }
+
+  function maybeCheckForAvailableUpdate() {
+    var channel;
+    if (updateAvailabilityChecked || getSetting("updateNotifications") !== "1" || bridgeReachable !== true) {
+      return;
+    }
+
+    updateAvailabilityChecked = true;
+    channel = getSetting("updateChannel") || (bridgeConfig.dashboard && bridgeConfig.dashboard.releaseChannel) || "stable";
+    fetchJson(buildUrl(bridgeOrigin, "/api/releases/latest", { channel: channel }), 8500).then(function (payload) {
+      if (payload && payload.status === "live" && payload.updateAvailable) {
+        showTouchFeedback("Update " + text(payload.latestVersion, "available") + " is ready in Updates");
+      }
+    }).catch(function (error) {
+      console.warn("Background update check failed", error);
+    });
   }
 
   function fetchGameActivity() {
@@ -2856,6 +2875,7 @@
       }
 
       checkBridgeAndRender(preferredWidgetId, explicitWidgetParam).then(function () {
+        maybeCheckForAvailableUpdate();
         return refreshGameActivity();
       }).catch(function (error) {
         reportFatalDashboardError(
