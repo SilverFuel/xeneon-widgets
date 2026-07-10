@@ -53,10 +53,12 @@ public sealed class SecretStore
     {
         lock (_sync)
         {
+            var next = new Dictionary<string, string>(_secrets, StringComparer.OrdinalIgnoreCase);
             if (string.IsNullOrWhiteSpace(value))
             {
-                _secrets.Remove(key);
-                Save();
+                next.Remove(key);
+                Save(next);
+                _secrets = next;
                 return;
             }
 
@@ -64,12 +66,14 @@ public sealed class SecretStore
             {
                 var plain = Encoding.UTF8.GetBytes(value.Trim());
                 var cipher = ProtectedData.Protect(plain, Entropy, DataProtectionScope.CurrentUser);
-                _secrets[key] = Convert.ToBase64String(cipher);
-                Save();
+                next[key] = Convert.ToBase64String(cipher);
+                Save(next);
+                _secrets = next;
             }
             catch (Exception error)
             {
                 _logger.Error($"Unable to protect secret '{key}'.", error);
+                throw new InvalidOperationException("Unable to securely save local credentials.", error);
             }
         }
     }
@@ -78,8 +82,9 @@ public sealed class SecretStore
     {
         lock (_sync)
         {
-            _secrets.Clear();
-            Save();
+            var next = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Save(next);
+            _secrets = next;
         }
     }
 
@@ -103,15 +108,16 @@ public sealed class SecretStore
         }
     }
 
-    private void Save()
+    private void Save(IReadOnlyDictionary<string, string> secrets)
     {
         try
         {
-            File.WriteAllText(_secretsPath, JsonSerializer.Serialize(_secrets, SerializerOptions));
+            AtomicFile.WriteAllText(_secretsPath, JsonSerializer.Serialize(secrets, SerializerOptions));
         }
         catch (Exception error)
         {
             _logger.Error("Failed to save protected secrets.", error);
+            throw new InvalidOperationException("Unable to save protected local credentials.", error);
         }
     }
 }

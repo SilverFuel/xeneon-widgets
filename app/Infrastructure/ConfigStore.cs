@@ -43,9 +43,10 @@ public sealed class ConfigStore
     {
         lock (_sync)
         {
-            Current = Normalize(updater(Clone(Current)));
-            Save(Current);
-            return Clone(Current);
+            var next = Normalize(updater(Clone(Current)));
+            Save(next);
+            Current = next;
+            return Clone(next);
         }
     }
 
@@ -55,11 +56,12 @@ public sealed class ConfigStore
         {
             var port = keepPort ? Current.Port : 8976;
             _secretStore.Clear();
-            Current = Normalize(new AppConfig
+            var next = Normalize(new AppConfig
             {
                 Port = port
             });
-            Save(Current);
+            Save(next);
+            Current = next;
             _logger.Info("Local dashboard config and protected secrets were reset.");
             return Clone(Current);
         }
@@ -98,11 +100,12 @@ public sealed class ConfigStore
             SaveProtectedSecrets(config);
             var diskConfig = Clone(config);
             RemoveSecretsFromDiskConfig(diskConfig);
-            File.WriteAllText(_configPath, JsonSerializer.Serialize(diskConfig, SerializerOptions));
+            AtomicFile.WriteAllText(_configPath, JsonSerializer.Serialize(diskConfig, SerializerOptions));
         }
         catch (Exception error)
         {
             _logger.Error("Failed to save config.", error);
+            throw new InvalidOperationException("Unable to save local dashboard settings.", error);
         }
     }
 
@@ -130,6 +133,7 @@ public sealed class ConfigStore
             ? "imperial"
             : "metric";
         normalized.UniFi.Host = NormalizeHost(normalized.UniFi.Host);
+        normalized.Hue.CertificateThumbprint = NormalizeThumbprint(normalized.Hue.CertificateThumbprint);
         normalized.UniFi.Username = normalized.UniFi.Username?.Trim() ?? "";
         normalized.UniFi.Site = NormalizeSite(normalized.UniFi.Site);
         normalized.UniFi.CertificateThumbprint = NormalizeThumbprint(normalized.UniFi.CertificateThumbprint);

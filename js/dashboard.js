@@ -1123,7 +1123,10 @@
   }
 
   function shouldSuppressNowStrip() {
-    return currentWidgetId === "quick-actions" || currentWidgetId === "shortcuts" || currentWidgetId === "game-mode";
+    return currentWidgetId === "audio"
+      || currentWidgetId === "quick-actions"
+      || currentWidgetId === "shortcuts"
+      || currentWidgetId === "game-mode";
   }
 
   function setNowStrip(targetWidget, label, title, detail) {
@@ -1137,6 +1140,7 @@
       '<strong>' + escapeHtml(title || "Ready") + '</strong>' +
       '<small>' + escapeHtml(detail || "") + '</small>';
     nowStripNode.classList.remove("is-hidden");
+    document.body.classList.add("dashboard-native-page--now-strip-visible");
   }
 
   function hideNowStrip() {
@@ -1144,6 +1148,7 @@
       nowStripNode.classList.add("is-hidden");
       nowStripNode.dataset.targetWidget = "";
     }
+    document.body.classList.remove("dashboard-native-page--now-strip-visible");
   }
 
   function findAudioDeviceName(payload) {

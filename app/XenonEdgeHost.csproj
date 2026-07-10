@@ -31,6 +31,7 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -40,6 +41,7 @@
   <ItemGroup>
     <Content Remove="dist\**\*;installer-build\**\*;installer\**\*;*.ps1;*.sln" />
     <None Remove="dist\**\*;installer-build\**\*;installer\**\*;*.ps1;*.sln" />
+    <Compile Remove="tests\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="Exists('FixedRuntime')">

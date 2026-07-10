@@ -54,6 +54,7 @@ public sealed class ConfigController
                 bridgeIp = config.Hue.BridgeIp,
                 configured = !string.IsNullOrWhiteSpace(config.Hue.BridgeIp),
                 linked = !string.IsNullOrWhiteSpace(config.Hue.AppKey),
+                certificateTrusted = !string.IsNullOrWhiteSpace(config.Hue.CertificateThumbprint),
                 secureStorage = "Windows DPAPI"
             },
             unifi = new

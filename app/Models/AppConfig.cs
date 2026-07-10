@@ -42,6 +42,8 @@ public sealed class HueConfig
     public string AppKey { get; set; } = "";
 
     public string ClientKey { get; set; } = "";
+
+    public string CertificateThumbprint { get; set; } = "";
 }
 
 public sealed class UniFiConfig
@@ -196,6 +198,10 @@ public sealed class GameModeSessionRequest
 public sealed class HueLinkRequest
 {
     public string? BridgeIp { get; set; }
+
+    public bool TrustCertificate { get; set; }
+
+    public string? TrustedCertificateThumbprint { get; set; }
 }
 
 public sealed class UniFiLinkRequest

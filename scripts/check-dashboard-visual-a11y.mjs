@@ -120,6 +120,13 @@ assert(
   "dashboard must keep reduced-motion and visible keyboard focus coverage"
 );
 
+assert(
+  /currentWidgetId === "audio"/.test(dashboardJs)
+    && /dashboard-native-page--now-strip-visible/.test(dashboardJs)
+    && /dashboard-native-page--now-strip-visible\s+\.router-inline-widget/.test(sharedCss),
+  "the persistent now-playing strip must stay off the Audio page and reserve content space when visible"
+);
+
 for (const [relativePath, text] of [
   ["js/dashboard.js", dashboardJs],
   ["js/widgets/actions.js", actionWidget],

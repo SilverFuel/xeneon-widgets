@@ -171,7 +171,7 @@ public sealed class ActionController
 
     public Task<HueSnapshot> LinkHueAsync(HueLinkRequest request, CancellationToken cancellationToken)
     {
-        return _hueService.LinkBridgeAsync(request.BridgeIp, cancellationToken);
+        return _hueService.LinkBridgeAsync(request.BridgeIp, request.TrustCertificate, request.TrustedCertificateThumbprint, cancellationToken);
     }
 
     public async Task<ActionRouteResult> TryExecuteHueActionAsync(

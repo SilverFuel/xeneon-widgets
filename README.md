@@ -58,7 +58,7 @@ The dashboard now includes the pieces that make it feel like an installable prod
 
 - automatic first-run provisioning with diagnostics and repair
 - normal setup that hides advanced connector plumbing
-- dashboard profiles for command, gaming, streaming, home-lab, and minimal modes
+- dashboard profiles for glance, command, gaming, streaming, home-lab, and minimal modes
 - Theme Studio with accent, opacity, and animation controls
 - drag-and-drop layout ordering
 - release channel and local-hosted GitHub release checks
@@ -69,7 +69,7 @@ The dashboard now includes the pieces that make it feel like an installable prod
 - local-first privacy and trust screen
 - app data reset from setup/privacy and from the uninstall cleanup shortcut
 
-The update, streaming, and marketplace panels are product-ready foundations. Before charging customers for those specific features, wire them to a signed updater service, authenticated OBS commands, and hosted pack manifests.
+The update, streaming, and marketplace panels are local beta foundations. Before charging customers for those specific features, wire them to a signed updater service, authenticated OBS commands, and signed hosted pack manifests with a permissions model.
 
 ## Install From Source
 
