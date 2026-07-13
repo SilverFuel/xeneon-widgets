@@ -17,7 +17,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        Logger.Info("Xenon Edge Host starting.");
+        Logger.Info("Auxora starting.");
         _mainWindow = new MainWindow();
         _mainWindow.Activate();
     }
@@ -30,10 +30,7 @@ public partial class App : Application
 
     private static HostLogger CreateLogger()
     {
-        var logDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "XenonEdgeHost",
-            "logs");
+        var logDir = Path.Combine(AppPaths.LocalDataDirectory, "logs");
         return new HostLogger(logDir);
     }
 }

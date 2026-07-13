@@ -253,6 +253,23 @@ public sealed class SystemActionsService
         return GetShortcutsSnapshot();
     }
 
+    public void SetDarkModeEnabled(bool enabled)
+    {
+        if (IsDarkModeEnabled() != enabled)
+        {
+            SetDarkMode(enabled);
+        }
+    }
+
+    public void SetDoNotDisturbEnabled(bool enabled)
+    {
+        var currentlyEnabled = !AreNotificationBannersEnabled();
+        if (currentlyEnabled != enabled)
+        {
+            SetNotificationBannersEnabled(!enabled);
+        }
+    }
+
     private static string NormalizeActionId(string? actionId)
     {
         return (actionId ?? "").Trim().ToLowerInvariant();
@@ -334,7 +351,7 @@ public sealed class SystemActionsService
 
         if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
         {
-            throw new InvalidOperationException("Unable to locate the Xenon host executable.");
+            throw new InvalidOperationException("Unable to locate the Auxora host executable.");
         }
 
         var startInfo = new ProcessStartInfo
@@ -361,7 +378,7 @@ public sealed class SystemActionsService
         return new RestartAdminResult
         {
             Ok = true,
-            Message = "Restarting Xenon as administrator."
+            Message = "Restarting Auxora as administrator."
         };
     }
 

@@ -204,7 +204,7 @@
       status: text(payload.status, payload.configured ? "live" : "setup"),
       stale: Boolean(payload.stale),
       sampledAt: text(payload.sampledAt, ""),
-      message: text(payload.message, payload.configured ? "Steam games are ready." : "Install games in Steam and Xenon will find them."),
+      message: text(payload.message, payload.configured ? "Steam games are ready." : "Install games in Steam and Auxora will find them."),
       source: text(payload.source, "Steam library manifests"),
       libraryCount: optionalNumber(payload.libraryCount) || 0,
       activeGame: payload.activeGame ? {
@@ -266,7 +266,7 @@
           '<div>' +
             '<div class="metric-label">Steam games</div>' +
             '<strong>' + escapeHtml(total ? total + " installed" : "No games found") + '</strong>' +
-            '<span>' + escapeHtml(total ? "Tap to launch. Hold a game to apply its look first." : text(steam.message, "Xenon scans your local Steam library.")) + '</span>' +
+            '<span>' + escapeHtml(total ? "Tap to launch. Hold a game to apply its look first." : text(steam.message, "Auxora scans your local Steam library.")) + '</span>' +
           '</div>' +
           '<div class="game-mode-steam-actions">' +
             '<button class="inline-button" type="button" data-action="steam-refresh"' + (launchingId ? " disabled" : "") + '>Rescan</button>' +
@@ -1279,7 +1279,7 @@
         method: "POST",
         body: {}
       }, 5000).then(function (payload) {
-        state.performance.message = text(payload && payload.message, "Restarting Xenon as administrator.");
+        state.performance.message = text(payload && payload.message, "Restarting Auxora as administrator.");
         redraw();
       }, function (error) {
         state.performanceRestarting = false;

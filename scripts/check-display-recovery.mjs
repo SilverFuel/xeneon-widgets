@@ -32,12 +32,13 @@ assert(
     && /ScheduleDisplayRecovery\("display topology changed"\)/.test(mainWindow)
     && /DisplayRecoveryDelays/.test(mainWindow)
     && /TryRecoverDisplayPlacementAsync/.test(mainWindow)
-    && /ApplyWaitingForEdgeWindow/.test(mainWindow)
+    && /ApplyDisplaySelectionWindow/.test(mainWindow)
     && /RestoreDisplayWindowToTaskbar/.test(mainWindow)
     && /_waitingForEdgeDisplay/.test(mainWindow)
-    && /edgeCandidateCount == 0/.test(mainWindow)
+    && /needsDisplaySelection/.test(mainWindow)
+    && /DisplayPreferenceChanged/.test(mainWindow)
     && /ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow),
-  "main window must retry non-persistent EDGE display placement and use a windowed waiting state when no EDGE candidate exists"
+  "main window must recover display placement and use a windowed chooser until one of multiple displays is selected"
 );
 
 assert(
@@ -70,7 +71,7 @@ assert(
 
 assert(
   /SelectDisplayTarget\([\s\S]+IReadOnlyList<DisplayTarget>\?\s+candidates\s*=\s*null,[\s\S]+bool\s+saveSelection\s*=\s*true/.test(bridgeManager)
-    && /if\s*\(!saveSelection\)\s*\{\s*return selected;\s*\}/s.test(bridgeManager),
+    && /if\s*\(!saveSelection\)[\s\S]+return selected;/.test(bridgeManager),
   "display selection must support non-persistent recovery after transient monitor changes"
 );
 

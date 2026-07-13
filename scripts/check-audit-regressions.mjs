@@ -354,7 +354,8 @@ for (const relativePath of [
 }
 
 assert(
-  /Programs\\XenonEdgeHost\\XenonEdgeHost\.exe/.test(readWorkspaceFile("start-xeneon.ps1"))
+  /Programs\\Auxora\\XenonEdgeHost\.exe/.test(readWorkspaceFile("start-xeneon.ps1"))
+    && /legacyInstalledExe/.test(readWorkspaceFile("start-xeneon.ps1"))
     && /publish\\XenonEdgeHost\.exe/.test(readWorkspaceFile("start-xeneon.ps1"))
     && /api\/health/.test(readWorkspaceFile("start-xeneon.ps1"))
     && !/dashboard\.html/.test(readWorkspaceFile("start-xeneon.ps1")),
@@ -461,15 +462,15 @@ assert(
     && /ScheduleDisplayRecovery\("startup display backoff"\)/.test(mainWindow)
     && /ScheduleDisplayRecovery\("display topology changed"\)/.test(mainWindow)
     && /TryRecoverDisplayPlacementAsync/.test(mainWindow)
-    && /ApplyWaitingForEdgeWindow/.test(mainWindow)
+    && /ApplyDisplaySelectionWindow/.test(mainWindow)
     && /RestoreDisplayWindowToTaskbar/.test(mainWindow)
     && /AppWindow\.Closing\s*\+=\s*HandleAppWindowClosing/.test(mainWindow)
     && /args\.Cancel\s*=\s*true/.test(mainWindow)
     && /ShowWindow\(WindowNative\.GetWindowHandle\(this\),\s*SwHide\)/.test(mainWindow)
     && /_waitingForEdgeDisplay/.test(mainWindow)
-    && /edgeCandidateCount == 0/.test(mainWindow)
+    && /needsDisplaySelection/.test(mainWindow)
     && /\$trigger\.Delay\s*=\s*"PT20S"/.test(installScript),
-  "reboot display recovery must delay startup, retry non-persistent placement, and avoid fullscreen takeover when the EDGE display is absent"
+  "reboot display recovery must delay startup, retry non-persistent placement, and use a windowed chooser until one of multiple displays is selected"
 );
 
 assert(

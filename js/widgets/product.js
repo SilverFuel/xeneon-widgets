@@ -155,6 +155,10 @@
 
     function redraw() {
       var rows = widgetRows();
+      var pinned = settingValue(env, "pinnedWidgets", "").split(",").filter(Boolean);
+      var hidden = settingValue(env, "hiddenWidgets", "").split(",").filter(Boolean);
+      var sizes = {};
+      try { sizes = JSON.parse(settingValue(env, "cardSizes", "{}")); } catch (error) { sizes = {}; }
       container.innerHTML = productShell(
         "Drag and drop",
         "Layout Editor",
@@ -170,6 +174,9 @@
                 '<div class="product-layout-row__actions">' +
                   '<button class="inline-button" type="button" data-layout-action="up" data-id="' + escapeHtml(row.id) + '"' + (index === 0 ? " disabled" : "") + '>Up</button>' +
                   '<button class="inline-button" type="button" data-layout-action="down" data-id="' + escapeHtml(row.id) + '"' + (index === rows.length - 1 ? " disabled" : "") + '>Down</button>' +
+                  '<button class="inline-button" type="button" data-layout-action="pin" data-id="' + escapeHtml(row.id) + '">' + (pinned.indexOf(row.id) !== -1 ? "Unpin" : "Pin") + '</button>' +
+                  '<button class="inline-button" type="button" data-layout-action="size" data-id="' + escapeHtml(row.id) + '">Size: ' + escapeHtml(sizes[row.id] || "standard") + '</button>' +
+                  '<button class="inline-button" type="button" data-layout-action="hide" data-id="' + escapeHtml(row.id) + '">' + (hidden.indexOf(row.id) !== -1 ? "Show" : "Hide") + '</button>' +
                 '</div>' +
               '</div>';
           }).join("") +
@@ -214,6 +221,28 @@
       });
       index = ids.indexOf(id);
       if (index === -1) {
+        return;
+      }
+
+      if (action === "pin" || action === "hide") {
+        var key = action === "pin" ? "pinnedWidgets" : "hiddenWidgets";
+        var values = settingValue(env, key, "").split(",").filter(Boolean);
+        values = values.indexOf(id) === -1 ? values.concat([id]) : values.filter(function (value) { return value !== id; });
+        var update = {};
+        update[key] = values.join(",");
+        saveSettings(env, update);
+        redraw();
+        return;
+      }
+
+      if (action === "size") {
+        var cardSizes = {};
+        try { cardSizes = JSON.parse(settingValue(env, "cardSizes", "{}")); } catch (error) { cardSizes = {}; }
+        var choices = ["compact", "standard", "wide"];
+        var current = choices.indexOf(cardSizes[id] || "standard");
+        cardSizes[id] = choices[(current + 1) % choices.length];
+        saveSettings(env, { cardSizes: JSON.stringify(cardSizes) });
+        redraw();
         return;
       }
 
@@ -448,7 +477,7 @@
     {
       id: "glance",
       name: "Glance",
-      copy: "Large, immediate system, network, audio, and Game Mode information for a quick look at the EDGE.",
+      copy: "Large, immediate system, network, audio, and Game Mode information for a quick glance.",
       themeId: "edge",
       pack: "core",
       layout: ["system", "network", "audio", "game-mode", "quick-actions", "privacy"]
@@ -545,6 +574,385 @@
     return Promise.reject(new Error("Clipboard unavailable"));
   }
 
+  function mountAuxoraHomeWidget(widget, container, env) {
+    var cleanups = [];
+    var longPressTimer = 0;
+    var state = {
+      scenes: null,
+      system: null,
+      network: null,
+      calendar: null,
+      chains: null,
+      loading: true,
+      message: "Building your Glance briefing"
+    };
+
+    function value(value, suffix) {
+      var parsed = Number(value);
+      return Number.isFinite(parsed) ? Math.round(parsed) + (suffix || "") : "--";
+    }
+
+    function activeScene() {
+      return state.scenes && state.scenes.activeScene ? state.scenes.activeScene : {};
+    }
+
+    function briefing() {
+      var parts = [];
+      var entries = state.calendar && Array.isArray(state.calendar.entries) ? state.calendar.entries : [];
+      var chains = state.chains && Array.isArray(state.chains.chains) ? state.chains.chains : [];
+      var cpu = Number(state.system && state.system.cpu);
+      var ping = Number(state.network && state.network.ping);
+      if (entries.length) {
+        parts.push(entries.length + (entries.length === 1 ? " upcoming event" : " upcoming events"));
+      }
+      if (Number.isFinite(ping)) {
+        parts.push(ping > 80 ? "network latency needs attention" : "network is responsive");
+      }
+      if (Number.isFinite(cpu)) {
+        parts.push(cpu > 90 ? "CPU load is high" : "PC health looks good");
+      }
+      return parts.length ? parts.join(" · ") : "Auxora is ready for your " + text(activeScene().name, "Work") + " Scene.";
+    }
+
+    function redraw() {
+      var scene = activeScene();
+      var entries = state.calendar && Array.isArray(state.calendar.entries) ? state.calendar.entries : [];
+      container.innerHTML = productShell(
+        "Smart Glance",
+        "Good " + (new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"),
+        briefing(),
+        text(scene.name, state.loading ? "Loading" : "Work"),
+        state.loading ? "warn" : "good",
+        '<div class="auxora-glance-hero"><div><span>Active Scene</span><strong>' + escapeHtml(text(scene.name, "Work")) + '</strong><small>' + escapeHtml(text(state.scenes && state.scenes.lastActivationReason, "Default scene")) + '</small></div><div class="auxora-glance-clock">' + escapeHtml(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })) + '</div></div>' +
+        '<div class="inline-grid inline-grid--4">' +
+          metricCard("CPU", value(state.system && state.system.cpu, "%"), state.system && state.system.cpuTemp != null ? value(state.system.cpuTemp, "°") : "System load") +
+          metricCard("Memory", value(state.system && state.system.ram, "%"), "Memory pressure") +
+          metricCard("Network", state.network && state.network.ping != null ? value(state.network.ping, " ms") : "--", state.network && state.network.name ? state.network.name : "Latency") +
+          metricCard("Next", entries.length ? text(entries[0].title, "Event") : "Clear", entries.length ? text(entries[0].time, text(entries[0].detail, "Upcoming")) : "No upcoming events") +
+        '</div>' +
+        '<div class="inline-actions">' +
+          '<button class="inline-button is-primary" type="button" data-home-open="audio">Audio & media</button>' +
+          '<button class="inline-button" type="button" data-home-open="quick-actions">Quick actions</button>' +
+          '<button class="inline-button" type="button" data-home-open="system">System detail</button>' +
+          '<button class="inline-button" type="button" data-home-open="layout-editor">Edit Home</button>' +
+        '</div>' +
+        '<article class="list-card inline-card"><div class="inline-card-header"><div><div class="metric-label">One-tap chains</div><div class="router-inline-copy">Safe local combinations for the moment you are moving into.</div></div></div><div class="inline-actions">' + chains.map(function (chain) {
+          return '<button class="inline-button" type="button" data-action-chain="' + escapeHtml(chain.id) + '" title="' + escapeHtml(chain.description) + '">' + escapeHtml(chain.name) + '</button>';
+        }).join("") + '</div></article>'
+      );
+    }
+
+    function refresh() {
+      state.loading = true;
+      redraw();
+      return Promise.all([
+        requestJson(buildBridgeUrl(env, "/api/scenes"), {}, 6000),
+        requestJson(buildBridgeUrl(env, "/api/system"), {}, 6000),
+        requestJson(buildBridgeUrl(env, "/api/network"), {}, 6000),
+        requestJson(buildBridgeUrl(env, "/api/calendar"), {}, 6000).catch(function () { return {}; }),
+        requestJson(buildBridgeUrl(env, "/api/action-chains"), {}, 6000).catch(function () { return {}; })
+      ]).then(function (payloads) {
+        state.scenes = payloads[0];
+        state.system = payloads[1];
+        state.network = payloads[2];
+        state.calendar = payloads[3];
+        state.chains = payloads[4];
+        state.loading = false;
+        redraw();
+      }, function (error) {
+        state.loading = false;
+        state.message = error.message || "Glance data is unavailable";
+        redraw();
+      });
+    }
+
+    addListener(cleanups, container, "click", function (event) {
+      var target = event.target && event.target.closest ? event.target.closest("[data-home-open]") : null;
+      var chain = event.target && event.target.closest ? event.target.closest("[data-action-chain]") : null;
+      if (target && typeof env.selectWidget === "function") {
+        env.selectWidget(target.getAttribute("data-home-open"), true);
+      } else if (chain) {
+        requestJson(buildBridgeUrl(env, "/api/action-chains/execute"), {
+          method: "POST", body: { chainId: chain.getAttribute("data-action-chain") }
+        }, 9000).then(function (payload) {
+          state.message = text(payload.message, "Action chain complete");
+          if (payload.scene && payload.scene.activeScene && typeof env.activateScene === "function") {
+            return env.activateScene(payload.scene.activeScene.id, 120);
+          }
+        }).then(refresh, function (error) {
+          state.message = error.message || "Action chain failed";
+          redraw();
+        });
+      }
+    });
+
+    addListener(cleanups, container, "pointerdown", function (event) {
+      if (event.target && event.target.closest && event.target.closest("button,a,input,select,textarea")) {
+        return;
+      }
+      window.clearTimeout(longPressTimer);
+      longPressTimer = window.setTimeout(function () {
+        if (typeof env.selectWidget === "function") {
+          env.selectWidget("layout-editor", true);
+        }
+      }, 700);
+    });
+    ["pointerup", "pointercancel", "pointermove"].forEach(function (type) {
+      addListener(cleanups, container, type, function () { window.clearTimeout(longPressTimer); });
+    });
+
+    redraw();
+    refresh();
+    return {
+      refresh: refresh,
+      destroy: function () {
+        window.clearTimeout(longPressTimer);
+        runCleanups(cleanups);
+        container.innerHTML = "";
+      }
+    };
+  }
+
+  function mountScenesWidget(widget, container, env) {
+    var cleanups = [];
+    var state = { payload: null, displays: [], busy: false, message: "Loading Scenes", tone: "warn" };
+
+    function redraw() {
+      var profiles = state.payload && Array.isArray(state.payload.profiles) ? state.payload.profiles : [];
+      var activeId = text(state.payload && state.payload.activeSceneId, "scene-work");
+      var assignments = state.payload && Array.isArray(state.payload.displayAssignments) ? state.payload.displayAssignments : [];
+      container.innerHTML = productShell(
+        "Adaptive experience",
+        "Scenes",
+        "Change Auxora's layout, energy, controls, and priorities in one tap.",
+        state.message,
+        state.tone,
+        '<div class="product-profile-grid auxora-scene-grid">' + profiles.map(function (scene) {
+          var active = scene.id === activeId;
+          return '<article class="product-card' + (active ? " is-selected" : "") + '">' +
+            '<span class="product-card__topline">' + escapeHtml(scene.icon || "scene") + (scene.isBuiltIn ? " · Built in" : " · Custom") + '</span>' +
+            '<strong>' + escapeHtml(scene.name) + '</strong>' +
+            '<span class="product-card__meta">' + escapeHtml((scene.widgets || []).slice(0, 5).join(" · ")) + '</span>' +
+            '<div class="auxora-scene-stats"><span>' + escapeHtml(scene.density) + '</span><span>' + escapeHtml(String(scene.brightness)) + '% light</span><span>' + escapeHtml(scene.performanceBudget) + '</span></div>' +
+            (state.displays.length ? '<label class="inline-field"><span>Assigned display</span><select class="inline-select" data-scene-display="' + escapeHtml(scene.id) + '"><option value="">Not assigned</option>' + state.displays.map(function (display) {
+              var assignment = assignments.filter(function (item) { return item.displayId === display.id && item.sceneId === scene.id; })[0];
+              return '<option value="' + escapeHtml(display.id) + '"' + (assignment ? " selected" : "") + '>' + escapeHtml(display.label) + '</option>';
+            }).join("") + '</select></label>' : '') +
+            '<div class="inline-actions"><button class="inline-button' + (active ? " is-primary" : "") + '" type="button" data-scene-activate="' + escapeHtml(scene.id) + '"' + (state.busy ? " disabled" : "") + '>' + (active ? "Active" : "Use Scene") + '</button><button class="inline-button" type="button" data-scene-duplicate="' + escapeHtml(scene.id) + '"' + (state.busy ? " disabled" : "") + '>Duplicate</button></div>' +
+          '</article>';
+        }).join("") + '</div>' +
+        '<div class="inline-actions"><button class="inline-button is-primary" type="button" data-scene-resume' + (state.busy ? " disabled" : "") + '>Resume automatic switching</button><span class="inline-copy">Manual override: ' + escapeHtml(text(state.payload && state.payload.manualOverrideUntil, "off")) + '</span></div>'
+      );
+    }
+
+    function refresh() {
+      return Promise.all([
+        requestJson(buildBridgeUrl(env, "/api/scenes"), {}, 6000),
+        requestJson(buildBridgeUrl(env, "/api/display/diagnostics"), {}, 6000).catch(function () { return {}; })
+      ]).then(function (payloads) {
+        state.payload = payloads[0];
+        state.displays = Array.isArray(payloads[1].displays) ? payloads[1].displays : [];
+        state.message = text(payloads[0].message, "Scenes ready");
+        state.tone = "good";
+        redraw();
+      }, function (error) {
+        state.message = error.message || "Scenes unavailable";
+        state.tone = "danger";
+        redraw();
+      });
+    }
+
+    addListener(cleanups, container, "click", function (event) {
+      var activate = event.target && event.target.closest ? event.target.closest("[data-scene-activate]") : null;
+      var duplicate = event.target && event.target.closest ? event.target.closest("[data-scene-duplicate]") : null;
+      var resume = event.target && event.target.closest ? event.target.closest("[data-scene-resume]") : null;
+      var operation;
+      if (activate && typeof env.activateScene === "function") {
+        state.busy = true;
+        operation = env.activateScene(activate.getAttribute("data-scene-activate"), 120);
+      } else if (resume && typeof env.resumeSceneAutomation === "function") {
+        state.busy = true;
+        operation = env.resumeSceneAutomation();
+      } else if (duplicate) {
+        state.busy = true;
+        operation = requestJson(buildBridgeUrl(env, "/api/scenes/duplicate"), {
+          method: "POST", body: { sceneId: duplicate.getAttribute("data-scene-duplicate") }
+        }, 7000);
+      }
+      if (operation) {
+        Promise.resolve(operation).then(function (payload) {
+          state.payload = payload;
+          state.message = text(payload.message, "Scene updated");
+          state.tone = "good";
+        }, function (error) {
+          state.message = error.message || "Scene update failed";
+          state.tone = "danger";
+        }).finally(function () {
+          state.busy = false;
+          redraw();
+        });
+      }
+    });
+
+    addListener(cleanups, container, "change", function (event) {
+      var target = event.target;
+      if (!target || !target.hasAttribute("data-scene-display") || !target.value) {
+        return;
+      }
+      state.busy = true;
+      requestJson(buildBridgeUrl(env, "/api/scenes/displays"), {
+        method: "POST", body: { displayId: target.value, sceneId: target.getAttribute("data-scene-display") }
+      }, 7000).then(function (payload) {
+        state.payload = payload;
+        state.message = "Display assignment saved";
+        state.tone = "good";
+      }, function (error) {
+        state.message = error.message || "Display assignment failed";
+        state.tone = "danger";
+      }).finally(function () { state.busy = false; redraw(); });
+    });
+
+    redraw();
+    refresh();
+    return { refresh: refresh, destroy: function () { runCleanups(cleanups); container.innerHTML = ""; } };
+  }
+
+  function mountDisplayControlsWidget(widget, container, env) {
+    var cleanups = [];
+    var state = { payload: null, busy: false, confirmPowerIndex: -1, message: "Checking monitor controls", tone: "warn" };
+
+    function redraw() {
+      var displays = state.payload && Array.isArray(state.payload.displays) ? state.payload.displays : [];
+      container.innerHTML = productShell(
+        "Monitor control",
+        "Displays",
+        "Control only the capabilities each monitor reports through Windows DDC/CI.",
+        state.message,
+        state.tone,
+        displays.length ? '<div class="inline-list">' + displays.map(function (display) {
+          return '<article class="list-card inline-card"><div class="inline-card-header"><div><div class="metric-label">Display ' + escapeHtml(String(display.index + 1)) + '</div><h3 class="inline-title">' + escapeHtml(display.name) + '</h3></div>' + statusPill(display.brightnessSupported || display.contrastSupported ? "DDC/CI" : "Limited", display.brightnessSupported || display.contrastSupported ? "good" : "warn") + '</div>' +
+            '<div class="inline-form-grid inline-form-grid--2">' +
+              (display.brightnessSupported ? '<label class="inline-field product-range-field"><span>Brightness ' + escapeHtml(String(display.brightness)) + '%</span><input class="inline-range" type="range" min="0" max="100" value="' + escapeHtml(String(display.brightness)) + '" aria-label="Brightness for ' + escapeHtml(display.name) + '" data-monitor-control="brightness" data-monitor-index="' + display.index + '"></label>' : '') +
+              (display.contrastSupported ? '<label class="inline-field product-range-field"><span>Contrast ' + escapeHtml(String(display.contrast)) + '%</span><input class="inline-range" type="range" min="0" max="100" value="' + escapeHtml(String(display.contrast)) + '" aria-label="Contrast for ' + escapeHtml(display.name) + '" data-monitor-control="contrast" data-monitor-index="' + display.index + '"></label>' : '') +
+            '</div>' +
+            '<div class="inline-actions">' +
+              (display.inputSupported ? '<label class="inline-field"><span>Input code</span><input class="inline-input" type="number" min="1" max="31" value="' + escapeHtml(String(display.inputSource)) + '" data-monitor-control="input" data-monitor-index="' + display.index + '"></label>' : '') +
+              (display.powerSupported ? '<button class="inline-button" type="button" data-monitor-power="' + display.index + '">' + (state.confirmPowerIndex === display.index ? "Confirm display off" : "Turn display off") + '</button>' : '') +
+            '</div></article>';
+        }).join("") + '</div>' : '<div class="inline-empty"><strong>No DDC/CI controls found</strong><span>Auxora hides unavailable monitor controls. Enable DDC/CI in the monitor menu if it is supported.</span></div>'
+      );
+      initXnSlider(container);
+    }
+
+    function refresh() {
+      return requestJson(buildBridgeUrl(env, "/api/displays/controls"), {}, 8000).then(function (payload) {
+        state.payload = payload;
+        state.message = text(payload.message, "Monitor controls checked");
+        state.tone = payload.supported ? "good" : "warn";
+        redraw();
+      }, function (error) {
+        state.message = error.message || "Monitor controls unavailable";
+        state.tone = "danger";
+        redraw();
+      });
+    }
+
+    function setControl(index, control, value) {
+      state.busy = true;
+      return requestJson(buildBridgeUrl(env, "/api/displays/controls"), {
+        method: "POST", body: { displayIndex: Number(index), control: control, value: Number(value) }
+      }, 8000).then(function (payload) {
+        state.payload = payload;
+        state.message = control + " updated";
+        state.tone = "good";
+      }, function (error) {
+        state.message = error.message || "Monitor update failed";
+        state.tone = "danger";
+      }).finally(function () {
+        state.busy = false;
+        state.confirmPowerIndex = -1;
+        redraw();
+      });
+    }
+
+    addListener(cleanups, container, "change", function (event) {
+      var target = event.target;
+      if (target && target.hasAttribute("data-monitor-control")) {
+        setControl(target.getAttribute("data-monitor-index"), target.getAttribute("data-monitor-control"), target.value);
+      }
+    });
+    addListener(cleanups, container, "click", function (event) {
+      var target = event.target && event.target.closest ? event.target.closest("[data-monitor-power]") : null;
+      var index;
+      if (!target) {
+        return;
+      }
+      index = Number(target.getAttribute("data-monitor-power"));
+      if (state.confirmPowerIndex !== index) {
+        state.confirmPowerIndex = index;
+        state.message = "Tap again to turn this display off";
+        state.tone = "warn";
+        redraw();
+        return;
+      }
+      setControl(index, "power", 0);
+    });
+
+    redraw();
+    refresh();
+    return { refresh: refresh, destroy: function () { runCleanups(cleanups); container.innerHTML = ""; } };
+  }
+
+  function mountRemoteWidget(widget, container, env) {
+    var cleanups = [];
+    var state = { payload: null, busy: false, message: "Remote is stopped", tone: "muted" };
+
+    function redraw() {
+      var active = Boolean(state.payload && state.payload.active);
+      container.innerHTML = productShell(
+        "Local phone control",
+        "Phone Remote",
+        "Start a token-protected remote for Scenes and safe action chains. It expires automatically after 15 minutes.",
+        state.message,
+        state.tone,
+        '<div class="inline-grid inline-grid--3">' +
+          metricCard("Session", active ? "Active" : "Stopped", active ? "Private LAN" : "Start when needed") +
+          metricCard("Account", "Not required", "Local network only") +
+          metricCard("Expires", active ? new Date(state.payload.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "--", "Automatic shutdown") +
+        '</div>' +
+        (active ? '<div class="auxora-remote-share"><div class="auxora-remote-qr" aria-label="Phone remote QR code">' + (state.payload.qrSvg || "") + '</div><div><strong>Scan with your phone</strong><p class="inline-copy">The phone must be on the same private network. Anyone with this temporary link can control Scenes until it expires.</p><code>' + escapeHtml(state.payload.url) + '</code></div></div>' : '<div class="inline-empty"><strong>Remote is off</strong><span>Auxora does not listen on your LAN until you explicitly start a temporary session.</span></div>') +
+        '<div class="inline-actions"><button class="inline-button is-primary" type="button" data-remote-action="' + (active ? "stop" : "start") + '"' + (state.busy ? " disabled" : "") + '>' + (active ? "Stop remote" : "Start 15-minute remote") + '</button></div>'
+      );
+    }
+
+    function request(path, method) {
+      state.busy = true;
+      redraw();
+      return requestJson(buildBridgeUrl(env, path), { method: method || "GET", body: method === "POST" ? {} : undefined }, 10000).then(function (payload) {
+        state.payload = payload;
+        state.message = text(payload.message, payload.active ? "Remote active" : "Remote stopped");
+        state.tone = payload.active ? "good" : "muted";
+      }, function (error) {
+        state.message = error.message || "Remote unavailable";
+        state.tone = "danger";
+      }).finally(function () {
+        state.busy = false;
+        redraw();
+      });
+    }
+
+    addListener(cleanups, container, "click", function (event) {
+      var target = event.target && event.target.closest ? event.target.closest("[data-remote-action]") : null;
+      if (target) {
+        request(target.getAttribute("data-remote-action") === "start" ? "/api/remote/session" : "/api/remote/session/stop", "POST");
+      }
+    });
+
+    redraw();
+    request("/api/remote/session", "GET");
+    return { refresh: function () { return request("/api/remote/session", "GET"); }, destroy: function () { runCleanups(cleanups); container.innerHTML = ""; } };
+  }
+
   function mountStreamingWidget(widget, container, env) {
     var cleanups = [];
     var obsSocket = null;
@@ -571,7 +979,7 @@
       container.innerHTML = productShell(
         "OBS panel",
         "Streaming",
-        "Keep a stream-ready control surface on the EDGE. This beta only verifies local OBS reachability; it does not issue OBS commands.",
+        "Keep a stream-ready control surface nearby. This beta only verifies local OBS reachability; it does not issue OBS commands.",
         state.statusText,
         state.statusTone,
         '<form class="inline-form product-control-panel" data-form="streaming">' +
@@ -701,6 +1109,7 @@
 
   function mountMarketplaceWidget(widget, container, env) {
     var cleanups = [];
+    var state = { extensions: [], trustedPublisherCount: 0, message: "Checking extension trust", tone: "warn" };
 
     function redraw() {
       var activePack = settingValue(env, "marketplacePack", "core");
@@ -717,7 +1126,10 @@
         '</div>' +
         '<div class="product-checklist">' +
           '<span>Pack manifest</span><span>Screenshots</span><span>Version tags</span><span>Support link</span>' +
-        '</div>'
+        '</div>' +
+        '<article class="list-card inline-card"><div class="inline-card-header"><div><div class="metric-label">Installed extensions</div><div class="router-inline-copy">' + escapeHtml(state.message) + ' · ' + escapeHtml(String(state.trustedPublisherCount)) + ' trusted publishers</div></div>' + statusPill(state.extensions.some(function (extension) { return extension.runnable; }) ? "Verified" : "Locked", state.extensions.some(function (extension) { return extension.runnable; }) ? "good" : "warn") + '</div><div class="inline-list">' + (state.extensions.length ? state.extensions.map(function (extension) {
+          return '<div class="inline-list-item"><div><strong>' + escapeHtml(extension.name) + '</strong><div class="inline-list-copy">' + escapeHtml(extension.message) + '</div><div class="inline-list-meta">' + escapeHtml((extension.permissions || []).join(" · ") || "No permissions") + '</div></div>' + statusPill(extension.runnable ? "Runnable" : "Rejected", extension.runnable ? "good" : "danger") + '</div>';
+        }).join("") : '<div class="inline-empty"><strong>No extensions installed</strong><span>Curated built-in packs remain available. Third-party code stays locked until it passes signature and permission checks.</span></div>') + '</div></article>'
       );
     }
 
@@ -736,11 +1148,25 @@
       redraw();
     });
 
+    function refreshExtensions() {
+      return requestJson(buildBridgeUrl(env, "/api/extensions"), {}, 7000).then(function (payload) {
+        state.extensions = Array.isArray(payload.extensions) ? payload.extensions : [];
+        state.trustedPublisherCount = Number(payload.trustedPublisherCount || 0);
+        state.message = text(payload.message, "Extension trust checked");
+        state.tone = "good";
+        redraw();
+      }, function (error) {
+        state.message = error.message || "Extension trust unavailable";
+        state.tone = "danger";
+        redraw();
+      });
+    }
+
     redraw();
+    refreshExtensions();
     return {
       refresh: function () {
-        redraw();
-        return Promise.resolve();
+        return refreshExtensions();
       },
       destroy: function () {
         runCleanups(cleanups);
@@ -862,13 +1288,13 @@
           }).join("") : '<div class="inline-empty"><strong>No diagnostics loaded</strong><span>Refresh to read the latest sanitized local events.</span></div>') + '</div>' +
         '</article>' +
         '<div class="inline-actions">' +
-          '<button class="inline-button is-primary" type="button" data-action="export-settings">Copy settings JSON</button>' +
-          '<button class="inline-button" type="button" data-action="import-settings">Import dashboard settings</button>' +
+          '<button class="inline-button is-primary" type="button" data-action="export-backup">Copy Auxora backup</button>' +
+          '<button class="inline-button" type="button" data-action="restore-backup">Restore Auxora backup</button>' +
           '<button class="inline-button" type="button" data-action="reset-settings">Reset local settings</button>' +
           '<button class="inline-button" type="button" data-action="reset-all-local-data">' + (state.confirmReset ? "Confirm reset" : "Reset all app data") + '</button>' +
           '<a class="inline-button" href="/support.html" target="_blank" rel="noreferrer">Support</a>' +
         '</div>' +
-        '<label class="inline-field"><span>Import dashboard settings</span><textarea class="inline-input" data-settings-import rows="4" placeholder="Paste a settings JSON export. Integration credentials and local endpoints are never imported."></textarea></label>' +
+        '<label class="inline-field"><span>Restore presentation and Scenes</span><textarea class="inline-input" data-settings-import rows="4" placeholder="Paste an Auxora backup. Credentials, endpoints, launcher paths, display IDs, and logs are never included."></textarea></label>' +
         '<div class="product-code-preview">' + escapeHtml(JSON.stringify(settings, null, 2).slice(0, 520)) + '</div>'
       );
     }
@@ -877,7 +1303,7 @@
       var parsed;
       var imported = {};
       var allowed = [
-        "profileId", "themeId", "accentColor", "layoutOrder", "marketplacePack", "dashboardOpacity",
+        "profileId", "themeId", "accentColor", "layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes", "marketplacePack", "dashboardOpacity",
         "themeReadability", "performanceBudget", "gameModeAutoTune", "gameModeAutoFace", "releaseChannel",
         "updateChannel", "installerEdition"
       ];
@@ -930,10 +1356,11 @@
         return;
       }
 
-      if (target.getAttribute("data-action") === "export-settings") {
-        settings = typeof env.getSettings === "function" ? env.getSettings() : {};
-        copyTextToClipboard(JSON.stringify(settings, null, 2)).then(function () {
-          state.statusText = "Settings copied";
+      if (target.getAttribute("data-action") === "export-backup") {
+        requestJson(buildBridgeUrl(env, "/api/config/backup"), {}, 7000).then(function (backup) {
+          return copyTextToClipboard(JSON.stringify(backup, null, 2));
+        }).then(function () {
+          state.statusText = "Auxora backup copied";
           state.statusTone = "good";
           redraw();
         }, function (error) {
@@ -941,16 +1368,25 @@
           state.statusTone = "danger";
           redraw();
         });
-      } else if (target.getAttribute("data-action") === "import-settings") {
+      } else if (target.getAttribute("data-action") === "restore-backup") {
         try {
-          importDashboardSettings(container.querySelector("[data-settings-import]").value);
-          state.statusText = "Dashboard settings imported";
-          state.statusTone = "good";
+          settings = JSON.parse(container.querySelector("[data-settings-import]").value || "");
         } catch (error) {
-          state.statusText = error.message || "Import failed";
+          state.statusText = "Backup JSON is invalid";
           state.statusTone = "danger";
+          redraw();
+          return;
         }
-        redraw();
+        requestJson(buildBridgeUrl(env, "/api/config/backup"), { method: "POST", body: settings }, 9000).then(function () {
+          state.statusText = "Auxora backup restored";
+          state.statusTone = "good";
+          if (typeof env.handleSetupUpdate === "function") {
+            return env.handleSetupUpdate("local-settings");
+          }
+        }, function (error) {
+          state.statusText = error.message || "Restore failed";
+          state.statusTone = "danger";
+        }).finally(redraw);
       } else if (target.getAttribute("data-action") === "refresh-diagnostics") {
         refreshDiagnostics();
       } else if (target.getAttribute("data-action") === "reset-settings" && typeof env.resetSettings === "function") {
@@ -997,6 +1433,10 @@
   }
 
 
+  runtime.registerRenderer("home", mountAuxoraHomeWidget);
+  runtime.registerRenderer("scenes", mountScenesWidget);
+  runtime.registerRenderer("display-controls", mountDisplayControlsWidget);
+  runtime.registerRenderer("remote", mountRemoteWidget);
   runtime.registerRenderer("theme-studio", mountThemeStudioWidget);
   runtime.registerRenderer("layout-editor", mountLayoutEditorWidget);
   runtime.registerRenderer("updates", mountUpdatesWidget);

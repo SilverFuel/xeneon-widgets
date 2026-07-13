@@ -53,6 +53,9 @@ const audioWidget = readWorkspaceFile("js/widgets/audio.js");
 const homelabWidgetJs = readWorkspaceFile("js/widgets/homelab.js");
 const integrationWidget = readWorkspaceFile("js/widgets/integrations.js");
 const productWidget = readWorkspaceFile("js/widgets/product.js");
+const sceneService = readWorkspaceFile("app/Services/SceneService.cs");
+const extensionService = readWorkspaceFile("app/Services/ExtensionManifestService.cs");
+const remoteService = readWorkspaceFile("app/Services/RemoteSessionService.cs");
 
 const expectedCssAssets = [
   "css/theme.css",
@@ -110,6 +113,33 @@ assert(
     && /@media\s*\(max-width:\s*1280px\)/.test(sharedCss)
     && /@media\s*\(max-width:\s*900px\)/.test(sharedCss),
   "dashboard visual smoke must protect the 2560x720 shell plus 1800/1280/900 responsive breakpoints"
+);
+
+assert(
+  ["home", "scenes", "library", "settings"].every(destination => dashboardHtml.includes(`data-destination="${destination}"`))
+    && /dashboard-native-page--layout-compact/.test(dashboardJs)
+    && /dashboard-native-page--layout-portrait/.test(dashboardJs)
+    && /dashboard-native-page--layout-ultrawide/.test(dashboardJs)
+    && /dashboard-native-page--adaptive[\s\S]*dashboard-router-stage/.test(sharedCss),
+  "Auxora must keep exactly four primary destinations and adaptive compact, portrait, standard, and ultrawide layout behavior"
+);
+
+assert(
+  /registerRenderer\("home"/.test(productWidget)
+    && /registerRenderer\("scenes"/.test(productWidget)
+    && /Manual selection/.test(sceneService)
+    && /Automatic \{match\.Rule\.Type\} rule/.test(sceneService)
+    && /case "\/api\/scenes\/activate"/.test(apiRouter),
+  "Home and Scenes must stay wired to native manual and automatic Scene behavior"
+);
+
+assert(
+  /RSA\.Create/.test(extensionService)
+    && /RSASignaturePadding\.Pss/.test(extensionService)
+    && /AllowedPermissions/.test(extensionService)
+    && /AddMinutes\(15\)/.test(remoteService)
+    && /FixedTimeEquals/.test(remoteService),
+  "extension signatures and temporary token-protected phone sessions must retain their trust boundaries"
 );
 
 assert(

@@ -13,7 +13,7 @@ function Write-Step($message) {
   Write-Host "== $message ==" -ForegroundColor Cyan
 }
 
-Write-Step "XENEON Edge Host - Publish"
+Write-Step "Auxora - Publish"
 
 try {
   $null = Get-Command dotnet -ErrorAction Stop

@@ -45,7 +45,7 @@ function Get-RootScheduledTask($taskName) {
   return Get-ScheduledTask -TaskName $taskName -TaskPath "\" -ErrorAction SilentlyContinue
 }
 
-Write-Step "XENEON Edge Host - Uninstall Auto-Start"
+Write-Step "Auxora - Uninstall Auto-Start"
 
 if ($appRoot) {
   Write-Info "App root: $appRoot"

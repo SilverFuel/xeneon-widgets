@@ -20,6 +20,11 @@ public sealed class ApiRouter
     private readonly SupportController _supportController;
     private readonly GameController _gameController;
     private readonly ReleaseController _releaseController;
+    private readonly SceneController _sceneController;
+    private readonly ActionChainController _actionChainController;
+    private readonly MonitorControlController _monitorControlController;
+    private readonly ExtensionController _extensionController;
+    private readonly RemoteSessionController _remoteSessionController;
     private readonly WeatherService _weatherService;
     private readonly CalendarService _calendarService;
 
@@ -32,6 +37,11 @@ public sealed class ApiRouter
         SupportController supportController,
         GameController gameController,
         ReleaseController releaseController,
+        SceneController sceneController,
+        ActionChainController actionChainController,
+        MonitorControlController monitorControlController,
+        ExtensionController extensionController,
+        RemoteSessionController remoteSessionController,
         WeatherService weatherService,
         CalendarService calendarService)
     {
@@ -43,6 +53,11 @@ public sealed class ApiRouter
         _supportController = supportController;
         _gameController = gameController;
         _releaseController = releaseController;
+        _sceneController = sceneController;
+        _actionChainController = actionChainController;
+        _monitorControlController = monitorControlController;
+        _extensionController = extensionController;
+        _remoteSessionController = remoteSessionController;
         _weatherService = weatherService;
         _calendarService = calendarService;
     }
@@ -90,6 +105,12 @@ public sealed class ApiRouter
             case "/api/config/reset" when request.HttpMethod == "POST":
                 await HandleConfigResetAsync(response, cancellationToken);
                 return;
+            case "/api/config/backup" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _configController.BuildPortableBackup(), cancellationToken);
+                return;
+            case "/api/config/backup" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _configController.RestorePortableBackup(await ReadJsonAsync<PortableBackupRequest>(request, cancellationToken)), cancellationToken);
+                return;
             case "/api/support/bundle" when request.HttpMethod == "GET":
                 response.AddHeader("Content-Disposition", "attachment; filename=\"xenon-support-bundle.json\"");
                 await WriteJsonAsync(response, 200, await _supportController.BuildSupportBundleAsync(dashboardUri, cancellationToken), cancellationToken);
@@ -99,6 +120,54 @@ public sealed class ApiRouter
                 return;
             case "/api/releases/rollback" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _releaseController.BuildRollbackPayload(), cancellationToken);
+                return;
+            case "/api/scenes" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _sceneController.Get(), cancellationToken);
+                return;
+            case "/api/scenes" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _sceneController.Save(await ReadJsonAsync<SceneSaveRequest>(request, cancellationToken)), cancellationToken);
+                return;
+            case "/api/scenes/activate" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _sceneController.Activate(await ReadJsonAsync<SceneActivationRequest>(request, cancellationToken)), cancellationToken);
+                return;
+            case "/api/scenes/resume" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _sceneController.Resume(), cancellationToken);
+                return;
+            case "/api/scenes/duplicate" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _sceneController.Duplicate(await ReadJsonAsync<SceneDuplicateRequest>(request, cancellationToken)), cancellationToken);
+                return;
+            case "/api/scenes/delete" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _sceneController.Delete(await ReadJsonAsync<SceneDeleteRequest>(request, cancellationToken)), cancellationToken);
+                return;
+            case "/api/scenes/evaluate" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _sceneController.Evaluate(await ReadJsonAsync<SceneEvaluationRequest>(request, cancellationToken)), cancellationToken);
+                return;
+            case "/api/scenes/displays" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _sceneController.AssignDisplay(await ReadJsonAsync<DisplaySceneAssignmentRequest>(request, cancellationToken)), cancellationToken);
+                return;
+            case "/api/action-chains" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _actionChainController.Get(), cancellationToken);
+                return;
+            case "/api/action-chains/execute" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _actionChainController.Execute(await ReadJsonAsync<ActionChainExecuteRequest>(request, cancellationToken)), cancellationToken);
+                return;
+            case "/api/displays/controls" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _monitorControlController.Get(), cancellationToken);
+                return;
+            case "/api/displays/controls" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _monitorControlController.Set(await ReadJsonAsync<MonitorControlRequest>(request, cancellationToken)), cancellationToken);
+                return;
+            case "/api/extensions" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _extensionController.Get(), cancellationToken);
+                return;
+            case "/api/remote/session" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _remoteSessionController.Get(), cancellationToken);
+                return;
+            case "/api/remote/session" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _remoteSessionController.Start(), cancellationToken);
+                return;
+            case "/api/remote/session/stop" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _remoteSessionController.Stop(), cancellationToken);
                 return;
             case "/api/config/weather" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _configController.UpdateWeather(await ReadJsonAsync<WeatherConfigRequest>(request, cancellationToken)), cancellationToken);

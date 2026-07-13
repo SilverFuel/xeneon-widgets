@@ -24,6 +24,12 @@ public sealed class BridgeManager : IDisposable
     private readonly ActionController _actionController;
     private readonly SupportController _supportController;
     private readonly ReleaseController _releaseController;
+    private readonly SceneController _sceneController;
+    private readonly ActionChainController _actionChainController;
+    private readonly MonitorControlController _monitorControlController;
+    private readonly ExtensionController _extensionController;
+    private readonly RemoteSessionController _remoteSessionController;
+    private readonly RemoteSessionService _remoteSessionService;
     private readonly ApiRouter _apiRouter;
     private readonly string _dashboardAssetRevision;
     private readonly SystemMetricsService _systemMetrics;
@@ -35,6 +41,7 @@ public sealed class BridgeManager : IDisposable
     private readonly HueService _hueService;
     private readonly UniFiService _uniFiService;
     private readonly ReleaseService _releaseService;
+    private readonly SceneService _sceneService;
     private readonly MediaService _mediaService;
     private readonly LauncherService _launcherService;
     private readonly SteamService _steamService;
@@ -72,6 +79,7 @@ public sealed class BridgeManager : IDisposable
         _hueService = new HueService(_configStore, _logger);
         _uniFiService = new UniFiService(_configStore, _logger);
         _releaseService = new ReleaseService(_weatherHttpClient);
+        _sceneService = new SceneService(_configStore);
         _mediaService = new MediaService(_logger, _configStore);
         _launcherService = new LauncherService(_logger);
         _steamService = new SteamService(_logger);
@@ -89,8 +97,15 @@ public sealed class BridgeManager : IDisposable
         _gameController = new GameController(_steamService, _gameActivityService, _gamePerformanceService, _gameModeSessionService);
         _provisioningService = new ProvisioningService(_configStore, _steamService, _logger);
         _systemActionsService = new SystemActionsService(_logger);
+        var actionChainService = new ActionChainService(_sceneService, _systemActionsService);
+        _actionChainController = new ActionChainController(actionChainService);
+        _monitorControlController = new MonitorControlController(new MonitorControlService(_logger));
+        _extensionController = new ExtensionController(new ExtensionManifestService(_logger));
+        _remoteSessionService = new RemoteSessionService(_sceneService, actionChainService, _logger, _configStore.Current.Port);
+        _remoteSessionController = new RemoteSessionController(_remoteSessionService);
         _clipboardHistoryService = new ClipboardHistoryService(_logger);
         _configController = new ConfigController(_configStore, _provisioningService);
+        _configController.DisplayPreferenceChanged += () => DisplayPreferenceChanged?.Invoke();
         _telemetryController = new TelemetryController(
             _configStore,
             _configController,
@@ -126,6 +141,7 @@ public sealed class BridgeManager : IDisposable
             _releaseService,
             _configController,
             _supportController);
+        _sceneController = new SceneController(_sceneService);
         _apiRouter = new ApiRouter(
             _configStore,
             _staticAssets,
@@ -135,6 +151,11 @@ public sealed class BridgeManager : IDisposable
             _supportController,
             _gameController,
             _releaseController,
+            _sceneController,
+            _actionChainController,
+            _monitorControlController,
+            _extensionController,
+            _remoteSessionController,
             _weatherService,
             _calendarService);
 
@@ -156,6 +177,8 @@ public sealed class BridgeManager : IDisposable
     public event Action? BridgeReady;
 
     public event Action<string>? BridgeStopped;
+
+    public event Action? DisplayPreferenceChanged;
 
     public List<DisplayTarget> ListDisplayCandidates(bool ignoreSavedPreference = false)
     {
@@ -183,6 +206,7 @@ public sealed class BridgeManager : IDisposable
             : displayCandidates[0];
         if (!saveSelection)
         {
+            _sceneService.ActivateAssignedDisplayScene(selected.StableId);
             return selected;
         }
 
@@ -195,6 +219,8 @@ public sealed class BridgeManager : IDisposable
             current.Dashboard.LastKnownGoodPath = Environment.ProcessPath ?? "";
             return current;
         });
+
+        _sceneService.ActivateAssignedDisplayScene(selected.StableId);
 
         return selected;
     }
@@ -254,6 +280,7 @@ public sealed class BridgeManager : IDisposable
             _uniFiService.Dispose();
             _launcherService.Dispose();
             _gamePerformanceService.Dispose();
+            _remoteSessionService.Dispose();
             _weatherHttpClient.Dispose();
         }
     }

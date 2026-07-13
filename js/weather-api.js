@@ -73,7 +73,7 @@
 
     return {
       configured: false,
-      message: "Open Xenon setup to add weather.",
+      message: "Open Auxora setup to add weather.",
       city: city,
       units: units,
       temperature: null,

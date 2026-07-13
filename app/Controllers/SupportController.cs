@@ -48,7 +48,7 @@ public sealed class SupportController
             generatedAt = DateTimeOffset.UtcNow,
             app = new
             {
-                name = "XENEON Edge Host",
+                name = "Auxora",
                 version = typeof(SupportController).Assembly.GetName().Version?.ToString() ?? "unknown",
                 dashboardAssetRevision = _dashboardAssetRevision,
                 dashboardUrl = dashboardUri.ToString()
@@ -134,7 +134,7 @@ public sealed class SupportController
             LastKnownGoodPath = configured ? path : "",
             Message = configured
                 ? "A last-known-good install path is available for rollback."
-                : "Rollback will be available after Xenon records a healthy installed build."
+                : "Rollback will be available after Auxora records a healthy installed build."
         };
     }
 

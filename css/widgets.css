@@ -756,9 +756,78 @@ a.is-touch-pressing,
   animation: none;
 }
 
+.dashboard-native-page[data-scene="scene-gaming"] .dashboard-ambient-layer {
+  filter: saturate(1.35) contrast(1.08);
+}
+
+.dashboard-native-page[data-scene="scene-media"] .dashboard-ambient-layer {
+  filter: saturate(1.45) hue-rotate(-18deg);
+}
+
+.dashboard-native-page[data-scene="scene-night"] .dashboard-ambient-layer {
+  filter: saturate(0.72) sepia(0.18);
+  opacity: 0.42;
+}
+
+.dashboard-native-page[data-scene="scene-night"] .dashboard-ambient-canvas {
+  display: none;
+}
+
+.dashboard-native-page[data-density="compact"] .metric-card,
+.dashboard-native-page[data-density="compact"] .inline-card {
+  padding: 10px;
+}
+
+.dashboard-native-page[data-density="spacious"] .metric-card,
+.dashboard-native-page[data-density="spacious"] .inline-card {
+  padding: 18px;
+}
+
 .dashboard-stage,
 .dashboard-router-stage {
   z-index: 3;
+}
+
+.dashboard-native-page--adaptive .dashboard-router-stage {
+  position: relative;
+  inset: auto;
+  width: 100vw;
+  height: 100vh;
+  transform: none;
+  grid-template-columns: clamp(250px, 18vw, 364px) minmax(0, 1fr);
+}
+
+.dashboard-native-page--layout-portrait .dashboard-router-stage,
+.dashboard-native-page--layout-compact .dashboard-router-stage {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.dashboard-native-page--layout-portrait .router-rail,
+.dashboard-native-page--layout-compact .router-rail {
+  padding: 8px;
+  border-radius: 14px;
+  overflow: visible;
+}
+
+.dashboard-native-page--layout-portrait .router-rail__lower,
+.dashboard-native-page--layout-compact .router-rail__lower {
+  display: none;
+}
+
+.dashboard-native-page--layout-portrait .auxora-shell-head,
+.dashboard-native-page--layout-compact .auxora-shell-head {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.dashboard-native-page--layout-portrait .router-status-stack,
+.dashboard-native-page--layout-compact .router-status-stack {
+  display: none;
+}
+
+.dashboard-native-page--layout-ultrawide .router-viewer__header {
+  min-height: 62px;
 }
 
 .dashboard-stage.native-dashboard {
@@ -1015,6 +1084,140 @@ a.is-touch-pressing,
 
 .router-rail {
   grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.auxora-shell-head {
+  display: grid;
+  gap: 10px;
+}
+
+.auxora-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.auxora-brand__mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  color: #031014;
+  background: linear-gradient(135deg, var(--dashboard-accent), var(--dashboard-secondary));
+  box-shadow: 0 0 28px var(--dashboard-accent-glow);
+  font-weight: 900;
+}
+
+.auxora-brand span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.auxora-brand strong {
+  font-size: 1.08rem;
+  letter-spacing: 0.03em;
+}
+
+.auxora-brand small {
+  color: var(--color-text-dim);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.auxora-primary-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.auxora-primary-nav button,
+.auxora-quick-drawer button,
+.auxora-quick-toggle {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.auxora-primary-nav button[aria-pressed="true"] {
+  border-color: var(--dashboard-accent);
+  background: linear-gradient(135deg, var(--dashboard-accent-glow), rgba(255, 255, 255, 0.04));
+}
+
+.auxora-quick-toggle {
+  position: fixed;
+  z-index: 20;
+  right: 18px;
+  bottom: 16px;
+  min-width: 132px;
+  border-color: rgba(0, 224, 255, 0.34);
+  background: rgba(7, 18, 24, 0.94);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+}
+
+.auxora-quick-drawer {
+  position: fixed;
+  z-index: 30;
+  right: 16px;
+  bottom: 16px;
+  width: min(720px, calc(100vw - 32px));
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(0, 224, 255, 0.28);
+  border-radius: 20px;
+  background: rgba(5, 13, 18, 0.97);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.56);
+  backdrop-filter: blur(18px);
+}
+
+.auxora-quick-drawer.is-hidden {
+  display: none;
+}
+
+.auxora-quick-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auxora-quick-scenes,
+.auxora-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.auxora-quick-actions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.auxora-quick-scenes button.is-active {
+  border-color: var(--dashboard-accent);
+  color: var(--dashboard-accent);
+}
+
+@media (max-width: 720px), (orientation: portrait) {
+  .auxora-brand small {
+    display: none;
+  }
+
+  .auxora-primary-nav button {
+    min-height: 48px;
+    padding-inline: 6px;
+  }
+
+  .auxora-quick-scenes,
+  .auxora-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .router-viewer {
@@ -1605,6 +1808,20 @@ input[type="range"]:focus-visible {
   cursor: pointer;
   overflow: hidden;
   transition: transform 120ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.router-picker__category {
+  display: grid;
+  gap: 7px;
+}
+
+.router-picker__category > span {
+  padding: 8px 4px 2px;
+  color: var(--color-text-dim);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .router-picker__button::before {
@@ -3267,4 +3484,41 @@ input[type="range"]:focus-visible {
   .xn-slider::-moz-range-track {
     animation: none;
   }
+}
+
+/* Final adaptive overrides win over legacy browser-preview scrolling rules. */
+body.dashboard-native-page--adaptive {
+  overflow: hidden;
+}
+
+.dashboard-native-page--adaptive .dashboard-stage-shell {
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dashboard-native-page--adaptive .dashboard-router-stage,
+.dashboard-native-page--adaptive.dashboard-native-page--browser .dashboard-router-stage {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dashboard-native-page--adaptive .router-rail,
+.dashboard-native-page--adaptive .router-viewer,
+.dashboard-native-page--adaptive.dashboard-native-page--browser .router-rail,
+.dashboard-native-page--adaptive.dashboard-native-page--browser .router-viewer,
+.dashboard-native-page--adaptive.dashboard-native-page--browser .router-viewer__frame-shell {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dashboard-native-page--adaptive .router-inline-widget,
+.dashboard-native-page--adaptive.dashboard-native-page--browser .router-inline-widget {
+  min-height: 0;
+  overflow: auto;
 }

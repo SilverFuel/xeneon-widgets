@@ -1,8 +1,8 @@
-# XENEON Edge Host
+# Auxora
 
 ## Free Public Beta
 
-XENEON Edge Host 0.2.0 is being released as a free public beta first. Do not charge for this build yet. Use GitHub Releases as the download page, mark the release as a pre-release/beta, and keep the limitations visible:
+Auxora is the adaptive successor to XENEON Edge Host. The current build remains a free public beta while the new brand is checked and the installer is signed. Do not charge for this build yet.
 
 - the Windows installer is unsigned unless you add code signing
 - Windows may show a SmartScreen warning on first install
@@ -10,30 +10,32 @@ XENEON Edge Host 0.2.0 is being released as a free public beta first. Do not cha
 - support is handled through GitHub Issues and GitHub Security Advisories for now
 - this is independent software, not an official CORSAIR product
 
-XENEON Edge Host is a native Windows dashboard for the CORSAIR XENEON EDGE. It serves a 2560x720 local control surface with system telemetry, network stats, audio routing, media controls, weather, calendar, Hue lights, a recent-app dock, clipboard history, and optional home-lab panels.
+Auxora is a native Windows companion dashboard for landscape, ultrawide, and portrait touch displays. It combines adaptive Scenes, system telemetry, network stats, audio routing, media controls, weather, calendar, lighting, recent apps, and optional home-lab panels.
 
 The primary product is the native Windows host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only. A macOS beta host lives in `desktop/electron` because the Windows app uses WinUI 3 and WebView2, which do not run on macOS.
 
-XENEON Edge Host is an independent product. It is not an official CORSAIR app unless a separate written agreement says otherwise.
+Auxora is independent software. It is not an official product of CORSAIR or any integration provider unless a separate written agreement says otherwise.
+
+The first Auxora upgrade preserves existing XENEON settings and Windows-protected secrets. The legacy internal executable name remains temporarily for rollback compatibility while public shortcuts, storage, UI, and installer assets transition to Auxora.
 
 ## Install And Uninstall Without Setup Questions
 
 For beta users, use the Windows setup EXE from GitHub Releases instead of the source code ZIP:
 
-1. Download `XenonEdgeHost-Setup-<version>-<date>.exe`.
+1. Download `Auxora-Setup-<version>-<date>.exe`.
 2. Run it.
-3. Xenon installs for the current Windows user, creates one clear `XENEON Edge` Start Menu/Desktop shortcut, registers auto-start, and launches itself.
+3. Auxora installs for the current Windows user, creates one clear Auxora Start Menu/Desktop shortcut, registers auto-start, and launches itself.
 
 After install, the normal app to click is:
 
-- Desktop > `XENEON Edge`
-- Start Menu > `XENEON Edge` > `XENEON Edge`
+- Desktop > `Auxora`
+- Start Menu > `Auxora` > `Auxora`
 
-Use `XENEON Edge Recovery (Safe Mode)` only when the dashboard is stuck on the wrong display or you need to repair a broken startup. Do not launch files from `publish`, `app\bin`, `bridge`, or `desktop\electron` for normal use.
+Use `Auxora Recovery (Safe Mode)` only when the dashboard is stuck on the wrong display or you need to repair a broken startup. Do not launch files from `publish`, `app\bin`, `bridge`, or `desktop\electron` for normal use.
 
-The installer is meant to be hands-free. It does not ask the user to choose folders, services, setup steps, or uninstall behavior. The free beta may still show a Windows SmartScreen warning until the installer is signed, but Xenon itself does not add extra setup questions.
+The installer is meant to be hands-free. It does not ask the user to choose folders, services, setup steps, or uninstall behavior. The free beta may still show a Windows SmartScreen warning until the installer is signed, but Auxora itself does not add extra setup questions.
 
-On first launch, Xenon scans the PC and prepares the normal dashboard automatically:
+On first launch, Auxora scans the PC and prepares the normal dashboard automatically:
 
 - starts the local dashboard service
 - detects system, GPU, network, audio, media, Steam, local UniFi consoles, and clipboard capabilities where Windows exposes them
@@ -44,21 +46,29 @@ Only permission-based extras still need user input: Weather needs an API key, Ca
 
 Uninstall is also meant to be hands-free:
 
-- Windows Settings > Apps > Installed apps > XENEON Edge Host removes the app, shortcuts, auto-start, and uninstall entry.
-- Start Menu > XENEON Edge > Uninstall XENEON Edge does the same thing.
-- Start Menu > XENEON Edge > Remove XENEON Edge and Local Data also removes `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost`.
-- Start Menu > XENEON Edge > XENEON Edge Recovery (Safe Mode) disables auto-start, ignores saved display placement, and opens on the primary monitor.
-- Start Menu > XENEON Edge > Repair XENEON Edge restores shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
+- Windows Settings > Apps > Installed apps > Auxora removes the app, shortcuts, auto-start, and uninstall entry.
+- Start Menu > Auxora > Uninstall Auxora does the same thing.
+- Start Menu > Auxora > Remove Auxora and Local Data also removes `%APPDATA%\Auxora`, `%LOCALAPPDATA%\Auxora`, and legacy XENEON data left for rollback.
+- Start Menu > Auxora > Auxora Recovery (Safe Mode) disables auto-start, ignores saved display placement, and opens on the primary monitor.
+- Start Menu > Auxora > Repair Auxora restores shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
 
 Plain-language install/uninstall notes live in [docs/release/WINDOWS-INSTALL-UNINSTALL.md](docs/release/WINDOWS-INSTALL-UNINSTALL.md).
 
 ## Product Layer
 
-The dashboard now includes the pieces that make it feel like an installable product:
+Auxora now includes:
 
 - automatic first-run provisioning with diagnostics and repair
 - normal setup that hides advanced connector plumbing
-- dashboard profiles for glance, command, gaming, streaming, home-lab, and minimal modes
+- adaptive Work, Gaming, Media, Night, and Home Scenes with manual and automatic switching
+- Home, Scenes, Library, and Settings navigation
+- responsive compact, standard, ultrawide, and portrait layouts
+- Smart Glance briefing and meaningful local alerts
+- temporary token-protected local phone remote
+- DDC/CI monitor controls when supported
+- safe one-tap action chains and per-display Scene assignments
+- signed extension inspection with declared permissions
+- credential-free Scene and presentation backup/restore
 - Theme Studio with accent, opacity, and animation controls
 - drag-and-drop layout ordering
 - release channel and local-hosted GitHub release checks
@@ -69,20 +79,20 @@ The dashboard now includes the pieces that make it feel like an installable prod
 - local-first privacy and trust screen
 - app data reset from setup/privacy and from the uninstall cleanup shortcut
 
-The update, streaming, and marketplace panels are local beta foundations. Before charging customers for those specific features, wire them to a signed updater service, authenticated OBS commands, and signed hosted pack manifests with a permissions model.
+The update and streaming panels remain beta foundations. Signed extension verification is implemented, but no third-party publisher is trusted by default. Before charging customers, sign the Windows release, complete authenticated OBS commands, and test the installer on clean hardware.
 
 ## Install From Source
 
 1. Open PowerShell in `app`.
 2. Run `powershell -File publish.ps1`.
-3. Launch `..\Open XENEON Edge.cmd`.
+3. Launch `..\Open XENEON Edge.cmd` (legacy source-tree launcher name).
 4. Optional: run `powershell -File install.ps1` from the `app` folder to register auto-start at login.
 
 For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, auto-start registration, Apps & Features registration, and packaged uninstall flow without asking setup questions.
 
 The native host:
 
-- runs full-screen on the XENEON EDGE
+- runs full-screen on the selected Windows display
 - serves the dashboard locally on `http://127.0.0.1:8976/`
 - owns system, network, UniFi detection, audio, calendar, media, weather, and Hue APIs directly
 - stores Weather and Hue keys with Windows per-user protection instead of plain dashboard config
@@ -165,14 +175,14 @@ Uninstall paths:
 - Windows Settings > Apps > Installed apps > XENEON Edge Host
 - Start Menu > XENEON Edge > Uninstall XENEON Edge
 - Start Menu > XENEON Edge > Remove XENEON Edge and Local Data
-- `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Remove-XenonEdgeHost.ps1" -Quiet -RemoveLocalData`
+- `powershell -File "$env:LOCALAPPDATA\Programs\Auxora\Remove-XenonEdgeHost.ps1" -Quiet -RemoveLocalData`
 
 Recovery paths:
 
 - Start Menu > XENEON Edge > XENEON Edge Recovery (Safe Mode)
 - Start Menu > XENEON Edge > Repair XENEON Edge
-- `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\Launch-XenonSafeMode.ps1" -Quiet`
-- `powershell -File "$env:LOCALAPPDATA\Programs\XenonEdgeHost\repair.ps1" -Quiet`
+- `powershell -File "$env:LOCALAPPDATA\Programs\Auxora\Launch-XenonSafeMode.ps1" -Quiet`
+- `powershell -File "$env:LOCALAPPDATA\Programs\Auxora\repair.ps1" -Quiet`
 
 Before selling a paid/stable version, treat these as release blockers:
 

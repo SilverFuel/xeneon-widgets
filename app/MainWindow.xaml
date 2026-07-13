@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
-    Title="Xenon Edge Host">
+    Title="Auxora">
     <Grid Background="#0B0F14">
         <controls:WebView2
             x:Name="DashboardView"
@@ -23,7 +23,7 @@
             CornerRadius="18">
             <StackPanel Spacing="10">
                 <TextBlock
-                    Text="Xenon Edge Host"
+                    Text="Auxora"
                     FontSize="28"
                     FontWeight="SemiBold" />
                 <TextBlock

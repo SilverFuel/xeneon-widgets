@@ -16,17 +16,23 @@ public sealed class ConfigStore
     private readonly SecretStore _secretStore;
 
     public ConfigStore(HostLogger logger)
+        : this(logger, null)
+    {
+    }
+
+    internal ConfigStore(HostLogger logger, string? configDirectoryOverride)
     {
         _logger = logger;
-        var configDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "XenonEdgeHost");
+        var configDirectory = string.IsNullOrWhiteSpace(configDirectoryOverride)
+            ? AppPaths.RoamingDataDirectory
+            : configDirectoryOverride;
         Directory.CreateDirectory(configDirectory);
 
         _secretStore = new SecretStore(configDirectory, logger);
         _configPath = Path.Combine(configDirectory, "config.json");
         Current = Load();
         Save(Current);
+        _logger.Info($"Auxora settings are stored in {configDirectory}. Legacy XENEON data remains available for rollback.");
     }
 
     public AppConfig Current { get; private set; }
@@ -127,6 +133,7 @@ public sealed class ConfigStore
         normalized.UniFi ??= new UniFiConfig();
         normalized.Network ??= new NetworkConfig();
         normalized.Dashboard ??= new DashboardConfig();
+        normalized.Scenes = SceneDefaults.Normalize(normalized.Scenes);
         normalized.Launchers ??= [];
         normalized.Weather.City = normalized.Weather.City?.Trim() ?? "";
         normalized.Weather.Units = string.Equals(normalized.Weather.Units, "imperial", StringComparison.OrdinalIgnoreCase)

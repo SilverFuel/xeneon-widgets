@@ -7,11 +7,11 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>XenonEdgeHost</RootNamespace>
     <AssemblyName>XenonEdgeHost</AssemblyName>
-    <Product>XENEON Edge Host</Product>
+    <Product>Auxora</Product>
     <Company>SilverFuel</Company>
     <Authors>SilverFuel</Authors>
-    <Version>0.2.0</Version>
-    <FileVersion>0.2.0.0</FileVersion>
+    <Version>0.3.0</Version>
+    <FileVersion>0.3.0.0</FileVersion>
     <InformationalVersion>$(XenonInformationalVersion)</InformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -32,6 +32,7 @@
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
     <PackageReference Include="Ical.Net" Version="5.2.3" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -61,5 +62,9 @@
     <EmbeddedResource Include="..\js\**\*" Link="WebAssets\js\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/js/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\widgets\**\*" Link="WebAssets\widgets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/widgets/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\assets\**\*" Link="WebAssets\assets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/assets/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="..\assets\trusted-extension-publishers.json" Link="assets\trusted-extension-publishers.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 </Project>

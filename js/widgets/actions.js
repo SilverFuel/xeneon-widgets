@@ -153,7 +153,7 @@
                   '</span>' +
                 '</button>' +
               '</article>';
-          }).join("") : emptyState("No recent apps yet", "Open apps on this PC and Xenon will keep the last 24 here.")) + '</div>' +
+          }).join("") : emptyState("No recent apps yet", "Open apps on this PC and Auxora will keep the last 24 here.")) + '</div>' +
         '</article>' +
       '</div>';
   }

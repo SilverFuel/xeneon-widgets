@@ -39,7 +39,7 @@
     var items = setup && setup.items ? setup.items : {};
     return [
       items.bridge || { label: "Local bridge", state: "Needs Setup", nextStep: "Waiting for bridge." },
-      items.display || { label: "XENEON EDGE display", state: "Needs Setup", nextStep: "Waiting for display diagnostics." },
+      items.display || { label: "Auxora display", state: "Needs Setup", nextStep: "Waiting for display diagnostics." },
       items.provisioning || { label: "Auto provisioning", state: "Checking", nextStep: "Waiting for startup scan." },
       items.system || { label: "System Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." },
       items.network || { label: "Network Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." },
@@ -121,13 +121,13 @@
         '<div class="inline-card-header">' +
           '<div>' +
             '<div class="metric-label">Display targeting</div>' +
-            '<div class="router-inline-copy">' + escapeHtml(text(display && display.message, selected ? "EDGE target selected." : "No display target selected yet.")) + '</div>' +
+            '<div class="router-inline-copy">' + escapeHtml(text(display && display.message, selected ? "Touch display selected." : "No display target selected yet.")) + '</div>' +
           '</div>' +
-          statusPill(edgeCount ? edgeCount + " EDGE" : "Check display", edgeCount ? "good" : "warn") +
+          statusPill(edgeCount ? edgeCount + " found" : "Check display", edgeCount ? "good" : "warn") +
         '</div>' +
         '<div class="setup-display-target">' +
-          '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected display") : "No selected EDGE display") + '</strong>' +
-          '<span>' + escapeHtml(selected ? describeDisplay(selected) : "Open repair after connecting the XENEON EDGE.") + '</span>' +
+          '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected display") : "No selected touch display") + '</strong>' +
+          '<span>' + escapeHtml(selected ? describeDisplay(selected) : "Connect a touch display, then refresh diagnostics.") + '</span>' +
         '</div>' +
         '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
           var reasons = Array.isArray(entry.reasons) ? entry.reasons.slice(0, 2).join(" / ") : "";
@@ -190,7 +190,7 @@
     var weatherItem = optionalItems.weather || { label: "Weather", state: "Optional", nextStep: "Add an OpenWeather key if you want weather." };
     var calendarItem = optionalItems.calendar || { label: "Calendar", state: "Optional", nextStep: "Add an ICS feed if you want the Calendar widget." };
     var hueItem = optionalItems.hue || { label: "Philips Hue", state: "Optional", nextStep: "Link Hue only if you want lighting controls." };
-    var uniFiItem = optionalItems.unifi || { label: "UniFi Network", state: "Optional", nextStep: "Xenon checks for UniFi automatically." };
+    var uniFiItem = optionalItems.unifi || { label: "UniFi Network", state: "Optional", nextStep: "Auxora checks for UniFi automatically." };
     var essentialsReady = Boolean(setup.essentialsReady);
     var onboardingCompleted = Boolean(setup.onboardingCompleted);
     var weatherConfig = config.weather || {};

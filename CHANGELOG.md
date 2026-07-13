@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Began the Auxora transition with adaptive touch layouts for compact, standard, ultrawide, and portrait displays.
+- Replaced the widget-first shell with Home, Scenes, Library, and Settings navigation.
+- Added persisted Work, Gaming, Media, Night, and Home Scenes with manual overrides, automation rules, and per-display assignments.
+- Added Smart Glance, quick controls, safe one-tap action chains, DDC/CI monitor controls, and a temporary local phone remote.
+- Added signed extension inspection, permission allowlisting, and credential-free Scene backup and restore.
+- Added rollback-safe migration from existing XENEON settings, protected secrets, installation, and shortcuts.
+
 - Improved first-run setup and diagnostics so readiness states are clearer and optional panels stay out of the way until needed.
 - Improved dashboard recovery when Windows display changes or the embedded browser needs to reload.
 - Stopped automatic monitor-change recovery from repositioning the dashboard while Windows display settings are being changed.

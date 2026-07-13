@@ -137,7 +137,7 @@ public sealed class TelemetryController
         var displayDiagnostics = _configController.GetDisplayDiagnostics(config);
         var displayItem = CreateSetupItem(
             "display",
-            "XENEON EDGE display",
+            "Auxora display",
             displayDiagnostics.EdgeCandidateCount > 0 ? "Ready" : "Needs Setup",
             true,
             displayDiagnostics.Message);
@@ -149,7 +149,7 @@ public sealed class TelemetryController
             "Auto provisioning",
             string.Equals(provisioning.Status, "live", StringComparison.OrdinalIgnoreCase) ? "Ready" : "Checking",
             true,
-            TextOr(provisioning.Message, "Xenon scans this PC and prepares safe defaults automatically."));
+            TextOr(provisioning.Message, "Auxora scans this PC and prepares safe defaults automatically."));
         var gpuPowerItem = CreateSetupItem(
             "gpu-power",
             "GPU Power Monitor",
@@ -162,7 +162,7 @@ public sealed class TelemetryController
             "Recent apps",
             launchers.Configured ? "Ready" : "Optional",
             false,
-            TextOr(launchers.Message, "Xenon scans Start Menu shortcuts and Steam games automatically."));
+            TextOr(launchers.Message, "Auxora scans Start Menu shortcuts and Steam games automatically."));
         var quickActionsItem = CreateSetupItem(
             "quick-actions",
             "Quick Actions",
@@ -219,7 +219,7 @@ public sealed class TelemetryController
                 : uniFi.Detected
                     ? CreateSetupItem("unifi", "UniFi Network", "Detected", false, $"Found UniFi locally at {uniFi.GatewayIp}. Connect from the Network page for clients and APs.")
                     : string.Equals(uniFi.Status, "checking", StringComparison.OrdinalIgnoreCase)
-                        ? CreateSetupItem("unifi", "UniFi Network", "Checking", false, "Xenon is checking for a local UniFi console in the background.")
+                        ? CreateSetupItem("unifi", "UniFi Network", "Checking", false, "Auxora is checking for a local UniFi console in the background.")
                         : CreateSetupItem("unifi", "UniFi Network", "Optional", false, "Network Monitor works now. Link UniFi locally when you want gateway detail.");
 
         return new
