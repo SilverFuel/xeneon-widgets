@@ -344,11 +344,11 @@ public sealed class UniFiService : IDisposable
             Message = detected
                 ? "UniFi console detected. Connect with local UniFi credentials for clients and APs."
                 : checking
-                    ? "Xenon is checking your local network for UniFi in the background."
+                    ? "Auxora is checking your local network for UniFi in the background."
                     : "No UniFi console is linked.",
             Gateway = detected ? discovery.Name : "UniFi Network",
             GatewayCopy = detected ? $"Detected locally at {discovery.Url}." : "Connect a local UniFi console when you want gateway detail.",
-            Source = "Xenon UniFi detector",
+            Source = "Auxora UniFi detector",
             Provider = detected ? discovery.Provider : "UniFi",
             GatewayIp = discovery.Host,
             Wan = new UniFiWanPayload
@@ -1253,7 +1253,7 @@ public sealed class UniFiNetworkPayload
 
     public string GatewayCopy { get; set; } = "";
 
-    public string Source { get; set; } = "Xenon UniFi detector";
+    public string Source { get; set; } = "Auxora UniFi detector";
 
     public string Provider { get; set; } = "UniFi";
 

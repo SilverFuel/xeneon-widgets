@@ -162,7 +162,7 @@ public sealed class TrayIcon : IDisposable
         try
         {
             AppendMenu(menu, MenuFlags.String, CommandOpenSettings, "Open Settings");
-            AppendMenu(menu, MenuFlags.String, CommandShowDisplay, "Show EDGE Window");
+            AppendMenu(menu, MenuFlags.String, CommandShowDisplay, "Show Auxora Display");
             AppendMenu(menu, MenuFlags.String, CommandRestartServer, "Restart Server");
             AppendMenu(menu, MenuFlags.String, CommandResetDashboard, "Reset Dashboard State");
             AppendMenu(menu, MenuFlags.String, CommandOpenLogs, "Open Logs");
@@ -201,7 +201,7 @@ public sealed class TrayIcon : IDisposable
             uFlags = NotifyIconFlags.Message | NotifyIconFlags.Icon | NotifyIconFlags.Tip,
             uCallbackMessage = CallbackMessage,
             hIcon = _iconHandle,
-            szTip = "Xenon Edge Host",
+            szTip = "Auxora",
             Version = NotifyIconVersion4
         };
     }

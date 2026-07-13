@@ -20,7 +20,7 @@ if (Test-Path (Join-Path $scriptRoot "XenonEdgeHost.exe")) {
 
 if (-not $appRoot) {
   if (-not $Quiet) {
-    Write-Host "Xenon Edge Host executable could not be found next to install.ps1 or in ..\\publish." -ForegroundColor Red
+    Write-Host "Auxora executable could not be found next to install.ps1 or in ..\\publish." -ForegroundColor Red
   }
   exit 1
 }
@@ -116,7 +116,7 @@ function Enable-XenonStartupTask($taskName) {
   }
 }
 
-Write-Step "XENEON Edge Host - Install Auto-Start"
+Write-Step "Auxora - Install Auto-Start"
 
 Write-Info "App root: $appRoot"
 
@@ -248,8 +248,8 @@ if (Test-WindowsAppRuntimeInstalled) {
 if (-not $Quiet) {
   Write-Host ""
   Write-Host "Auto-start installed." -ForegroundColor Green
-  Write-Host "XENEON Edge will launch after login."
+  Write-Host "Auxora will launch after login."
   Write-Host ""
   Write-Host "To start it now:"
-  Write-Host "  Start Menu > XENEON Edge > XENEON Edge" -ForegroundColor Yellow
+  Write-Host "  Start Menu > Auxora > Auxora" -ForegroundColor Yellow
 }

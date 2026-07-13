@@ -25,7 +25,7 @@ try {
 }
 $buildStamp = Get-Date -Format "yyyyMMdd-HHmm"
 $safeVersion = $appVersion -replace '[^0-9A-Za-z._-]', '-'
-$defaultOutputPath = Join-Path $distDir "XenonEdgeHost-Setup-$safeVersion-$buildStamp.exe"
+$defaultOutputPath = Join-Path $distDir "Auxora-Setup-$safeVersion-$buildStamp.exe"
 $outputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) {
   $defaultOutputPath
 } else {
@@ -120,7 +120,7 @@ function New-IExpressSed($sourceDir, $targetPath, $sedPath) {
     "InstallPrompt=",
     "DisplayLicense=",
     "FinishMessage=",
-    "FriendlyName=XENEON Edge Host Setup",
+    "FriendlyName=Auxora Setup",
     "AppLaunched=$launchCommand",
     "QuietCommand=$launchCommand"
   ) + $strings + @(
@@ -207,29 +207,29 @@ $hash = Get-Sha256Hash $outputPath
 Set-Content -Path $hashPath -Value "$hash  $(Split-Path -Leaf $outputPath)" -Encoding ASCII
 
 @"
-XENEON Edge Host Installer
+Auxora Installer
 
 Run:
   $(Split-Path -Leaf $outputPath)
 
 Install behavior:
-  Run the EXE. Xenon installs for the current Windows user without setup questions.
+  Run the EXE. Auxora installs for the current Windows user without setup questions.
 
 Installs to:
-  %LOCALAPPDATA%\Programs\XenonEdgeHost
+  %LOCALAPPDATA%\Programs\Auxora
 
 Creates:
-  - Start Menu > XENEON Edge > XENEON Edge
+  - Start Menu > Auxora > Auxora
   - Start Menu recovery shortcuts with clear names
-  - Desktop shortcut named XENEON Edge
+  - Desktop shortcut named Auxora
   - current-user auto-start entry
   - Apps & Features uninstall entry
   - Start Menu cleanup shortcut that removes local app data
 
 Uninstall:
-  Windows Settings > Apps > Installed apps > XENEON Edge Host
-  Or Start Menu > XENEON Edge > Remove XENEON Edge and Local Data
-  Uninstall runs without Xenon cleanup questions.
+  Windows Settings > Apps > Installed apps > Auxora
+  Or Start Menu > Auxora > Remove Auxora and Local Data
+  Uninstall runs without additional cleanup questions.
 
 SHA256:
   $hash

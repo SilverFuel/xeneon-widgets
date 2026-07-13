@@ -132,7 +132,7 @@
       alerts.push("GPU power alert");
     }
     if (displayDiagnostics && displayDiagnostics.edgeCandidateCount === 0) {
-      warnings.push("EDGE display fallback");
+      warnings.push("Display selection needed");
     }
 
     if (alerts.length) {
@@ -193,7 +193,7 @@
     var primaryDisplay = primaryDisplayFromSystem(data || {});
     var selected = selectedDisplayFromDiagnostics(displayDiagnostics);
     var edgeReady = displayDiagnostics && displayDiagnostics.edgeCandidateCount > 0;
-    var selectedLabel = text(displayDiagnostics && displayDiagnostics.selectedDisplayName, selected ? selected.label : "No EDGE target");
+    var selectedLabel = text(displayDiagnostics && displayDiagnostics.selectedDisplayName, selected ? selected.label : "No Auxora display");
     var primaryLabel = text(primaryDisplay.name || primaryDisplay.deviceName, "Primary display");
     var selectedHz = selected && selected.refreshRate != null ? formatHz(selected.refreshRate) : formatHz(displayRefreshRate(primaryDisplay));
     var selectedSize = selected && selected.boundsWidth && selected.boundsHeight
@@ -203,7 +203,7 @@
     return '' +
       '<article class="system-panel system-display-panel">' +
         '<div class="system-panel-head">' +
-          '<div><div class="metric-label">Display Health</div><strong>' + escapeHtml(edgeReady ? "EDGE target ready" : "Fallback display") + '</strong></div>' +
+          '<div><div class="metric-label">Display Health</div><strong>' + escapeHtml(edgeReady ? "Auxora display ready" : "Choose display") + '</strong></div>' +
           statusPill(edgeReady ? "Ready" : "Check", edgeReady ? "good" : "warn") +
         '</div>' +
         '<div class="system-display-grid">' +

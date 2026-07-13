@@ -208,8 +208,8 @@ public sealed class ProvisioningService
             Source = "native startup scan",
             Message = updatedConfig.Dashboard.AutoProvisioningEnabled
                 ? shouldScanLaunchers
-                    ? "Xenon scanned this PC and prepared the dashboard automatically."
-                    : "Xenon confirmed the existing setup and skipped unnecessary launcher scanning."
+                    ? "Auxora scanned this PC and prepared the dashboard automatically."
+                    : "Auxora confirmed the existing setup and skipped unnecessary launcher scanning."
                 : "Automatic setup is disabled.",
             AutoCompleted = updatedConfig.Dashboard.OnboardingCompleted,
             LauncherCount = updatedConfig.Launchers.Count,
@@ -421,7 +421,7 @@ public sealed class ProvisioningService
                 Label = "Philips Hue",
                 Message = string.IsNullOrWhiteSpace(config.Hue.BridgeIp)
                     ? "Needs a Hue bridge IP and physical link approval before local lighting can be enabled."
-                    : "Needs the Hue bridge link button before Xenon can store local Hue credentials."
+                    : "Needs the Hue bridge link button before Auxora can store local Hue credentials."
             });
         }
 
@@ -682,7 +682,7 @@ public sealed class ProvisioningSnapshot
 
     public string Source { get; set; } = "native startup scan";
 
-    public string Message { get; set; } = "Xenon is preparing this PC automatically.";
+    public string Message { get; set; } = "Auxora is preparing this PC automatically.";
 
     public bool AutoCompleted { get; set; }
 
@@ -727,7 +727,7 @@ public sealed class ProvisioningSnapshot
             Configured = true,
             Status = "pending",
             Source = "native startup scan",
-            Message = "Xenon is preparing this PC automatically."
+            Message = "Auxora is preparing this PC automatically."
         };
     }
 }

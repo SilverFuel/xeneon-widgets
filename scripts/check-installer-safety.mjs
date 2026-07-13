@@ -66,9 +66,9 @@ assert(
 assert(
   /Launch-XenonSafeMode\.ps1/.test(installHost)
     && /repair\.ps1/.test(installHost)
-    && /XENEON Edge\.lnk/.test(installHost)
-    && /XENEON Edge Recovery \(Safe Mode\)\.lnk/.test(installHost)
-    && /Repair XENEON Edge\.lnk/.test(installHost),
+    && /Auxora\.lnk/.test(installHost)
+    && /Auxora Recovery \(Safe Mode\)\.lnk/.test(installHost)
+    && /Repair Auxora\.lnk/.test(installHost),
   "installer must install one obvious app shortcut plus clearly labeled recovery and repair shortcuts"
 );
 
@@ -82,9 +82,9 @@ assert(
 
 assert(
   /Register-UninstallEntry/.test(repairInstall)
-    && /XENEON Edge\.lnk/.test(repairInstall)
-    && /XENEON Edge Recovery \(Safe Mode\)\.lnk/.test(repairInstall)
-    && /Repair XENEON Edge\.lnk/.test(repairInstall)
+    && /Auxora\.lnk/.test(repairInstall)
+    && /Auxora Recovery \(Safe Mode\)\.lnk/.test(repairInstall)
+    && /Repair Auxora\.lnk/.test(repairInstall)
     && /legacyShortcutRoots/.test(repairInstall)
     && /& \$installScript -Quiet/.test(repairInstall)
     && !/ResetLocalData/.test(repairInstall)

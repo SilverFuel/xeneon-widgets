@@ -12,8 +12,8 @@ public sealed class ReleaseServiceTests
     {
         const string release = """
             {
-              "tag_name": "v0.2.1-beta.1",
-              "html_url": "https://example.test/releases/v0.2.1-beta.1",
+              "tag_name": "v0.3.1-beta.1",
+              "html_url": "https://example.test/releases/v0.3.1-beta.1",
               "assets": []
             }
             """;

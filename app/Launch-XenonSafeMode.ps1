@@ -53,9 +53,9 @@ if (-not (Test-Path -LiteralPath $exePath)) {
 Stop-RunningHost
 
 if (Test-Path -LiteralPath $uninstallAutoStartScript) {
-  Write-Info "Disabling Xenon auto-start before Safe Mode launch."
+  Write-Info "Disabling Auxora auto-start before Safe Mode launch."
   & $uninstallAutoStartScript -Quiet
 }
 
-Write-Info "Launching Xenon Safe Mode on the primary display."
+Write-Info "Launching Auxora Safe Mode on the primary display."
 Start-Process -FilePath $exePath -ArgumentList "--safe-mode" -WorkingDirectory $scriptRoot

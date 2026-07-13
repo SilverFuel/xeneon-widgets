@@ -73,7 +73,7 @@ public sealed class LauncherService : IDisposable
             Stale = false,
             Message = entries.Count > 0
                 ? $"Showing {entries.Count} recent app{(entries.Count == 1 ? "" : "s")} from this PC."
-                : "Open apps on this PC and Xenon will build the recent app launcher automatically.",
+                : "Open apps on this PC and Auxora will build the recent app launcher automatically.",
             Source = "Windows app activity",
             Entries = entries.Select(MapEntry).ToList()
         };
@@ -112,7 +112,7 @@ public sealed class LauncherService : IDisposable
         }
 
         StartLauncherEntry(entry);
-        PromoteRecentEntry(ToRecentEntry(entry, "Launched from XENEON", DateTimeOffset.UtcNow), persist: true);
+        PromoteRecentEntry(ToRecentEntry(entry, "Launched from Auxora", DateTimeOffset.UtcNow), persist: true);
         return new LauncherLaunchResult
         {
             Ok = true,

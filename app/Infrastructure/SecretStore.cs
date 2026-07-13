@@ -12,6 +12,7 @@ public sealed class SecretStore
         WriteIndented = true
     };
 
+    // Keep the legacy entropy so existing DPAPI-protected integration secrets survive the Auxora migration.
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("XenonEdgeHost.SecretStore.v1");
 
     private readonly string _secretsPath;

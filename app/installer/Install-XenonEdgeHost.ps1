@@ -1,6 +1,6 @@
 param(
   [string]$SourceRoot = $PSScriptRoot,
-  [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost"),
+  [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "Programs\Auxora"),
   [switch]$SkipLaunch,
   [switch]$NoAutoStart,
   [switch]$NoDesktopShortcut,
@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$logRoot = Join-Path $env:LOCALAPPDATA "XenonEdgeHost\InstallerLogs"
+$logRoot = Join-Path $env:LOCALAPPDATA "Auxora\InstallerLogs"
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 $logPath = Join-Path $logRoot "install.log"
 $previousLogPath = Join-Path $logRoot "install.prev.log"
@@ -104,7 +104,7 @@ function Stop-RunningHost {
 }
 
 function Register-UninstallEntry($installPath, $exePath) {
-  $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
+  $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Auxora"
   $version = (Get-Item $exePath).VersionInfo.FileVersion
   if (-not $version) {
     $version = "0.0.0"
@@ -120,7 +120,7 @@ function Register-UninstallEntry($installPath, $exePath) {
 
   $uninstallCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$installPath\Remove-XenonEdgeHost.ps1`" -Quiet"
   New-Item -Path $uninstallKey -Force | Out-Null
-  New-ItemProperty -Path $uninstallKey -Name "DisplayName" -Value "XENEON Edge Host" -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $uninstallKey -Name "DisplayName" -Value "Auxora" -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "DisplayVersion" -Value $version -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "Publisher" -Value "SilverFuel" -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "InstallLocation" -Value $installPath -PropertyType String -Force | Out-Null
@@ -160,7 +160,7 @@ function Remove-DirectoryIfPresent($path, $rootPath, $label) {
   }
 }
 
-Write-Step "XENEON Edge Host - Install"
+Write-Step "Auxora - Install"
 
 $payloadZip = Join-Path $SourceRoot "payload.zip"
 $supportInstall = Join-Path $SourceRoot "install.ps1"
@@ -191,9 +191,15 @@ Write-Step "Stopping running processes"
 Stop-RunningHost
 Stop-LegacyBridgeIfPresent
 
-$extractRoot = Join-Path $env:TEMP ("XenonEdgeHost-Payload-" + [guid]::NewGuid().ToString("N"))
-$stagedInstallRoot = Join-Path $installParent ("XenonEdgeHost.installing-" + [guid]::NewGuid().ToString("N"))
-$backupInstallRoot = Join-Path $installParent ("XenonEdgeHost.backup-" + [guid]::NewGuid().ToString("N"))
+$legacyInstallRoot = Assert-SafeInstallPath (Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost")
+if (-not (Test-Path -LiteralPath $InstallRoot) -and (Test-Path -LiteralPath $legacyInstallRoot -PathType Container)) {
+  Move-Item -LiteralPath $legacyInstallRoot -Destination $InstallRoot -Force
+  Write-Info "Migrated the previous XENEON installation into the Auxora upgrade transaction."
+}
+
+$extractRoot = Join-Path $env:TEMP ("Auxora-Payload-" + [guid]::NewGuid().ToString("N"))
+$stagedInstallRoot = Join-Path $installParent ("Auxora.installing-" + [guid]::NewGuid().ToString("N"))
+$backupInstallRoot = Join-Path $installParent ("Auxora.backup-" + [guid]::NewGuid().ToString("N"))
 $installMoved = $false
 $installationCompleted = $false
 try {
@@ -236,8 +242,9 @@ try {
   }
 
   Write-Step "Creating simple launch shortcuts"
-  $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"
+  $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Auxora"
   $legacyShortcutRoots = @(
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"),
     (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"),
     (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host")
   )
@@ -249,35 +256,35 @@ try {
   New-Item -ItemType Directory -Path $shortcutRoot -Force | Out-Null
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "XENEON Edge.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "Auxora.lnk") `
     -targetPath $exePath `
     -arguments "" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "XENEON Edge Recovery (Safe Mode).lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "Auxora Recovery (Safe Mode).lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Launch-XenonSafeMode.ps1`" -Quiet" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "Repair XENEON Edge.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "Repair Auxora.lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\repair.ps1`" -Quiet" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "Uninstall XENEON Edge.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "Uninstall Auxora.lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`" -Quiet" `
     -workingDirectory $InstallRoot `
     -iconLocation $exePath
 
   New-Shortcut `
-    -shortcutPath (Join-Path $shortcutRoot "Remove XENEON Edge and Local Data.lnk") `
+    -shortcutPath (Join-Path $shortcutRoot "Remove Auxora and Local Data.lnk") `
     -targetPath "powershell.exe" `
     -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\Remove-XenonEdgeHost.ps1`" -Quiet -RemoveLocalData" `
     -workingDirectory $InstallRoot `
@@ -285,6 +292,7 @@ try {
 
   if (-not $NoDesktopShortcut) {
     $legacyDesktopShortcuts = @(
+      (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"),
       (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"),
       (Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk")
     )
@@ -294,7 +302,7 @@ try {
       }
     }
     New-Shortcut `
-      -shortcutPath (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk") `
+      -shortcutPath (Join-Path ([Environment]::GetFolderPath("Desktop")) "Auxora.lnk") `
       -targetPath $exePath `
       -arguments "" `
       -workingDirectory $InstallRoot `
@@ -303,6 +311,7 @@ try {
 
   Write-Step "Registering app"
   Register-UninstallEntry -installPath $InstallRoot -exePath $exePath
+  Remove-Item -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost" -Recurse -Force -ErrorAction SilentlyContinue
 
   if (-not $NoAutoStart) {
     Write-Step "Configuring auto-start"

@@ -32,23 +32,25 @@ public static class DisplayManager
     {
         var displays = ListDisplays(preferredDisplayId);
         var selected = displays.FirstOrDefault();
-        var edgeCandidates = displays.Count(display => display.MatchesEdgeResolution || display.MatchesEdgeAspect || display.ContainsXeneonName);
+        var preferredAvailable = displays.Any(display => display.IsPreferred);
 
         return new DisplayDiagnosticsSnapshot
         {
             Supported = true,
-            Status = displays.Count == 0 ? "missing" : edgeCandidates > 0 ? "ready" : "fallback",
+            Status = displays.Count == 0 ? "missing" : preferredAvailable || displays.Count == 1 ? "ready" : "selection-required",
             SampledAt = DateTimeOffset.UtcNow,
             PreferredDisplayId = preferredDisplayId?.Trim() ?? "",
             SelectedDisplayId = selected?.StableId ?? "",
             SelectedDisplayName = selected?.Label ?? "",
-            EdgeCandidateCount = edgeCandidates,
+            EdgeCandidateCount = displays.Count,
             Message = displays.Count == 0
                 ? "Windows did not expose any active displays."
-                : edgeCandidates > 0
-                    ? "Xenon found an EDGE-shaped display candidate and will prefer it."
-                    : "Windows currently exposes only fallback display candidates. Check Windows display settings if the EDGE is powered on.",
-            RepairActions = BuildDisplayRepairActions(displays, edgeCandidates),
+                : preferredAvailable
+                    ? "Auxora found your saved touch-display preference."
+                    : displays.Count == 1
+                        ? "One active display is available."
+                        : "Choose which Windows display should host Auxora.",
+            RepairActions = BuildDisplayRepairActions(displays, preferredAvailable),
             Displays = displays.Select(DisplayDiagnosticsItem.FromTarget).ToList()
         };
     }
@@ -180,44 +182,33 @@ public static class DisplayManager
             && (Math.Min(bounds.Height, modeHeight) <= 900 || Math.Min(bounds.Width, modeWidth) <= 900);
         var isPrimary = (monitorInfo.dwFlags & MonitorInfoPrimaryFlag) != 0;
 
-        var score = 0;
+        var score = isPrimary ? 1000 : 2000;
         var reasons = new List<string>();
         if (containsXeneon)
         {
-            score += 90000;
-            reasons.Add("name contains XENEON/EDGE");
+            reasons.Add("recognized display name");
         }
 
         if (matchesEdgeResolution)
         {
-            score += 80000;
-            reasons.Add("matches 2560x720 EDGE resolution");
+            reasons.Add("compact ultrawide resolution");
         }
         else if (compactEdgePanel)
         {
-            score += 60000;
-            reasons.Add("matches compact ultrawide panel shape");
+            reasons.Add("compact ultrawide shape");
         }
         else if (matchesEdgeAspect)
         {
-            score += 15000;
-            reasons.Add("matches EDGE aspect ratio");
+            reasons.Add("ultrawide shape");
         }
-
-        score += Math.Max(0, 4000 - Math.Abs(modeWidth - 2560));
-        score += Math.Max(0, 2000 - (Math.Abs(modeHeight - 720) * 2));
-        score += Math.Max(0, 2000 - Math.Abs(bounds.Width - 2560));
-        score += Math.Max(0, 1000 - (Math.Abs(bounds.Height - 720) * 2));
 
         if (isPrimary)
         {
-            score -= 5000;
-            reasons.Add("primary display penalty");
+            reasons.Add("primary display");
         }
         else
         {
-            score += 5000;
-            reasons.Add("non-primary display bonus");
+            reasons.Add("secondary display");
         }
 
         displayTarget = new DisplayTarget(
@@ -270,32 +261,32 @@ public static class DisplayManager
         return new MonitorDeviceDetails(deviceName, "", 0);
     }
 
-    private static List<string> BuildDisplayRepairActions(IReadOnlyCollection<DisplayTarget> displays, int edgeCandidates)
+    private static List<string> BuildDisplayRepairActions(IReadOnlyCollection<DisplayTarget> displays, bool preferredAvailable)
     {
         if (displays.Count == 0)
         {
             return
             [
-                "Confirm the XENEON EDGE is powered on and connected.",
+                "Confirm the touch display is powered on and connected.",
                 "Open Windows Display settings and choose Extend these displays.",
-                "Restart XENEON Edge Host after Windows exposes the display."
+                "Restart Auxora after Windows exposes the display."
             ];
         }
 
-        if (edgeCandidates == 0)
+        if (!preferredAvailable && displays.Count > 1)
         {
             return
             [
-                "Windows is not exposing a 2560x720 or XENEON-named display right now.",
-                "Open Windows Display settings and detect/extend the XENEON EDGE.",
-                "Use Diagnostics to re-check displays after Windows sees it."
+                "Choose the touch display you want Auxora to use.",
+                "Confirm its orientation and Windows scaling before pinning it.",
+                "Use Diagnostics to change the preferred display later."
             ];
         }
 
         return
         [
-            "Xenon will prefer the highest-scoring EDGE candidate automatically.",
-            "Pin the current display from Diagnostics if Windows reorders monitors."
+            "Auxora will use the saved display preference.",
+            "Use Diagnostics to change the preferred display if Windows reorders monitors."
         ];
     }
 

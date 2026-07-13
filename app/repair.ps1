@@ -10,17 +10,19 @@ $installScript = Join-Path $scriptRoot "install.ps1"
 $removeScript = Join-Path $scriptRoot "Remove-XenonEdgeHost.ps1"
 $safeModeScript = Join-Path $scriptRoot "Launch-XenonSafeMode.ps1"
 $repairScript = Join-Path $scriptRoot "repair.ps1"
-$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"
+$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Auxora"
 $legacyShortcutRoots = @(
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"),
   (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"),
   (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host")
 )
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Auxora.lnk"
 $legacyDesktopShortcuts = @(
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"),
   (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"),
   (Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk")
 )
-$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
+$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Auxora"
 
 function Write-Step($message) {
   if (-not $Quiet) {
@@ -61,7 +63,7 @@ function Register-UninstallEntry($installPath, $appExePath) {
 
   $uninstallCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$removeScript`" -Quiet"
   New-Item -Path $uninstallKey -Force | Out-Null
-  New-ItemProperty -Path $uninstallKey -Name "DisplayName" -Value "XENEON Edge Host" -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $uninstallKey -Name "DisplayName" -Value "Auxora" -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "DisplayVersion" -Value $version -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "Publisher" -Value "SilverFuel" -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $uninstallKey -Name "InstallLocation" -Value $installPath -PropertyType String -Force | Out-Null
@@ -96,35 +98,35 @@ foreach ($legacyDesktopShortcut in $legacyDesktopShortcuts) {
 New-Item -ItemType Directory -Path $shortcutRoot -Force | Out-Null
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "XENEON Edge.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "Auxora.lnk") `
   -targetPath $exePath `
   -arguments "" `
   -workingDirectory $scriptRoot `
   -iconLocation $exePath
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "XENEON Edge Recovery (Safe Mode).lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "Auxora Recovery (Safe Mode).lnk") `
   -targetPath "powershell.exe" `
   -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$safeModeScript`" -Quiet" `
   -workingDirectory $scriptRoot `
   -iconLocation $exePath
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "Repair XENEON Edge.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "Repair Auxora.lnk") `
   -targetPath "powershell.exe" `
   -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$repairScript`" -Quiet" `
   -workingDirectory $scriptRoot `
   -iconLocation $exePath
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "Uninstall XENEON Edge.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "Uninstall Auxora.lnk") `
   -targetPath "powershell.exe" `
   -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$removeScript`" -Quiet" `
   -workingDirectory $scriptRoot `
   -iconLocation $exePath
 
 New-Shortcut `
-  -shortcutPath (Join-Path $shortcutRoot "Remove XENEON Edge and Local Data.lnk") `
+  -shortcutPath (Join-Path $shortcutRoot "Remove Auxora and Local Data.lnk") `
   -targetPath "powershell.exe" `
   -arguments "-NoProfile -ExecutionPolicy Bypass -File `"$removeScript`" -Quiet -RemoveLocalData" `
   -workingDirectory $scriptRoot `

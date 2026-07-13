@@ -114,7 +114,7 @@ public sealed class GamePerformanceService : IDisposable
 
         if (_captureNeedsAdminRestart && !IsRunningElevated())
         {
-            _lastCaptureFailureMessage = "FPS capture needs administrator capture access. Click Fix FPS (admin) to restart Xenon with capture access.";
+            _lastCaptureFailureMessage = "FPS capture needs administrator capture access. Click Fix FPS (admin) to restart Auxora with capture access.";
             return;
         }
 
@@ -512,7 +512,7 @@ public sealed class GamePerformanceService : IDisposable
         {
             _elevationDeclined = true;
             _captureNeedsAdminRestart = true;
-            _lastCaptureFailureMessage = "Windows did not approve elevated FPS capture. Click Fix FPS (admin) to restart Xenon as administrator.";
+            _lastCaptureFailureMessage = "Windows did not approve elevated FPS capture. Click Fix FPS (admin) to restart Auxora as administrator.";
             return _lastCaptureFailureMessage;
         }
 

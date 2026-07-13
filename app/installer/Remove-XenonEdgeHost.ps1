@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$logRoot = Join-Path $env:LOCALAPPDATA "XenonEdgeHost\InstallerLogs"
+$logRoot = Join-Path $env:LOCALAPPDATA "Auxora\InstallerLogs"
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 $logPath = Join-Path $logRoot "uninstall.log"
 Start-Transcript -Path $logPath -Append | Out-Null
@@ -90,25 +90,28 @@ function Stop-RunningHost {
   }
 }
 
-Write-Step "XENEON Edge Host - Remove"
+Write-Step "Auxora - Remove"
 Assert-SafeInstallPath $InstallRoot
 
-$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"
+$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Auxora"
 $legacyShortcutRoots = @(
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"),
   (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"),
   (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host")
 )
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Auxora.lnk"
 $legacyDesktopShortcuts = @(
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"),
   (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"),
   (Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk")
 )
-$publicDesktopShortcut = Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "XENEON Edge.lnk"
+$publicDesktopShortcut = Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "Auxora.lnk"
 $legacyPublicDesktopShortcuts = @(
+  (Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "XENEON Edge.lnk"),
   (Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "XENEON Edge Host.lnk"),
   (Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "Xenon Edge Host.lnk")
 )
-$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
+$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Auxora"
 $cleanupTargets = @([System.IO.Path]::GetFullPath($InstallRoot))
 
 function Remove-StartupFallback {
@@ -142,6 +145,8 @@ function Remove-StartupFallback {
 if ($RemoveLocalData) {
   $cleanupTargets += Resolve-SafeLocalDataPath (Join-Path $env:APPDATA "XenonEdgeHost") $env:APPDATA
   $cleanupTargets += Resolve-SafeLocalDataPath (Join-Path $env:LOCALAPPDATA "XenonEdgeHost") $env:LOCALAPPDATA
+  $cleanupTargets += Resolve-SafeLocalDataPath (Join-Path $env:APPDATA "Auxora") $env:APPDATA
+  $cleanupTargets += Resolve-SafeLocalDataPath (Join-Path $env:LOCALAPPDATA "Auxora") $env:LOCALAPPDATA
 }
 
 Write-Step "Stopping running app"

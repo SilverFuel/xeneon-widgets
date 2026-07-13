@@ -16,6 +16,8 @@ public sealed class AppConfig
 
     public DashboardConfig Dashboard { get; set; } = new();
 
+    public SceneCollectionConfig Scenes { get; set; } = SceneDefaults.Create();
+
     public List<LauncherEntryConfig> Launchers { get; set; } = [];
 
     public List<LauncherEntryConfig> PinnedGames { get; set; } = [];
@@ -113,6 +115,89 @@ public sealed class DashboardConfig
     public bool MediaMetadataVisible { get; set; }
 
     public bool AudioSessionLabelsVisible { get; set; }
+}
+
+public sealed class SceneCollectionConfig
+{
+    public string ActiveSceneId { get; set; } = "scene-work";
+
+    public string DefaultSceneId { get; set; } = "scene-work";
+
+    public bool AutomationEnabled { get; set; } = true;
+
+    public string ManualOverrideUntil { get; set; } = "";
+
+    public string LastActivationReason { get; set; } = "Default scene";
+
+    public List<SceneProfile> Profiles { get; set; } = [];
+
+    public List<DisplaySceneAssignment> DisplayAssignments { get; set; } = [];
+}
+
+public sealed class DisplaySceneAssignment
+{
+    public string DisplayId { get; set; } = "";
+
+    public string SceneId { get; set; } = "scene-work";
+}
+
+public sealed class SceneProfile
+{
+    public string Id { get; set; } = "";
+
+    public string Name { get; set; } = "";
+
+    public string Icon { get; set; } = "spark";
+
+    public string ThemeId { get; set; } = "edge";
+
+    public string AccentColor { get; set; } = "";
+
+    public string Density { get; set; } = "comfortable";
+
+    public int Brightness { get; set; } = 70;
+
+    public int AnimationIntensity { get; set; } = 25;
+
+    public string PerformanceBudget { get; set; } = "balanced";
+
+    public bool IsBuiltIn { get; set; }
+
+    public List<string> Widgets { get; set; } = [];
+
+    public List<string> QuickActions { get; set; } = [];
+
+    public DisplayLayoutProfile Layout { get; set; } = new();
+
+    public List<SceneRule> Rules { get; set; } = [];
+}
+
+public sealed class DisplayLayoutProfile
+{
+    public string NavigationPlacement { get; set; } = "auto";
+
+    public int MaxColumns { get; set; } = 4;
+
+    public int MinimumCardWidth { get; set; } = 280;
+
+    public string Orientation { get; set; } = "adaptive";
+}
+
+public sealed class SceneRule
+{
+    public string Id { get; set; } = "";
+
+    public string Type { get; set; } = "application";
+
+    public string Value { get; set; } = "";
+
+    public string StartTime { get; set; } = "";
+
+    public string EndTime { get; set; } = "";
+
+    public int Priority { get; set; } = 50;
+
+    public bool Enabled { get; set; } = true;
 }
 
 public sealed class LauncherEntryConfig
@@ -291,9 +376,84 @@ public sealed class DisplayPreferenceRequest
     public string? DisplayId { get; set; }
 }
 
+public sealed class SceneActivationRequest
+{
+    public string? SceneId { get; set; }
+
+    public int? ManualOverrideMinutes { get; set; }
+}
+
+public sealed class SceneSaveRequest
+{
+    public SceneProfile? Scene { get; set; }
+}
+
+public sealed class SceneDuplicateRequest
+{
+    public string? SceneId { get; set; }
+
+    public string? Name { get; set; }
+}
+
+public sealed class SceneDeleteRequest
+{
+    public string? SceneId { get; set; }
+}
+
+public sealed class DisplaySceneAssignmentRequest
+{
+    public string? DisplayId { get; set; }
+
+    public string? SceneId { get; set; }
+}
+
+public sealed class SceneEvaluationRequest
+{
+    public string? ForegroundProcess { get; set; }
+
+    public string? ActiveGame { get; set; }
+
+    public bool MediaPlaying { get; set; }
+
+    public string? SampledAt { get; set; }
+}
+
+public sealed class PortableBackupRequest
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public PortableDashboardConfig? Dashboard { get; set; }
+
+    public SceneCollectionConfig? Scenes { get; set; }
+}
+
+public sealed class PortableDashboardConfig
+{
+    public string? PerformanceBudget { get; set; }
+
+    public bool? GameModeAutoTune { get; set; }
+
+    public string? ThemeReadability { get; set; }
+
+    public string? ReleaseChannel { get; set; }
+
+    public bool? MediaMetadataVisible { get; set; }
+
+    public bool? AudioSessionLabelsVisible { get; set; }
+}
+
 public sealed class BrightnessRequest
 {
     public int Brightness { get; set; }
+}
+
+public sealed class MonitorControlRequest
+{
+    public int DisplayIndex { get; set; }
+
+    public string? Control { get; set; }
+
+    public int Value { get; set; }
 }
 
 public sealed class ActionConfirmationRequest
@@ -301,6 +461,11 @@ public sealed class ActionConfirmationRequest
     public string? ActionId { get; set; }
 
     public string? Token { get; set; }
+}
+
+public sealed class ActionChainExecuteRequest
+{
+    public string? ChainId { get; set; }
 }
 
 public sealed class ClipboardCopyRequest

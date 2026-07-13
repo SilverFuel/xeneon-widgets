@@ -5,6 +5,8 @@ public sealed class ConfigController
     private readonly ConfigStore _configStore;
     private readonly ProvisioningService _provisioningService;
 
+    public event Action? DisplayPreferenceChanged;
+
     public ConfigController(ConfigStore configStore, ProvisioningService provisioningService)
     {
         _configStore = configStore;
@@ -98,6 +100,15 @@ public sealed class ConfigController
                 gameTelemetryDiagnosticsRetention = config.Dashboard.GameTelemetryDiagnosticsRetention,
                 mediaMetadataVisible = config.Dashboard.MediaMetadataVisible,
                 audioSessionLabelsVisible = config.Dashboard.AudioSessionLabelsVisible
+            },
+            scenes = new
+            {
+                activeSceneId = config.Scenes.ActiveSceneId,
+                defaultSceneId = config.Scenes.DefaultSceneId,
+                automationEnabled = config.Scenes.AutomationEnabled,
+                manualOverrideUntil = config.Scenes.ManualOverrideUntil,
+                lastActivationReason = config.Scenes.LastActivationReason,
+                profiles = config.Scenes.Profiles
             }
         };
     }
@@ -358,12 +369,60 @@ public sealed class ConfigController
             return current;
         });
 
+        DisplayPreferenceChanged?.Invoke();
+
         return GetDisplayDiagnostics();
     }
 
     public void ResetLocalData()
     {
         _configStore.ResetLocalData();
+    }
+
+    public object BuildPortableBackup()
+    {
+        var config = _configStore.Snapshot();
+        return new
+        {
+            product = "Auxora",
+            schemaVersion = 1,
+            exportedAt = DateTimeOffset.UtcNow,
+            dashboard = new PortableDashboardConfig
+            {
+                PerformanceBudget = config.Dashboard.PerformanceBudget,
+                GameModeAutoTune = config.Dashboard.GameModeAutoTune,
+                ThemeReadability = config.Dashboard.ThemeReadability,
+                ReleaseChannel = config.Dashboard.ReleaseChannel,
+                MediaMetadataVisible = config.Dashboard.MediaMetadataVisible,
+                AudioSessionLabelsVisible = config.Dashboard.AudioSessionLabelsVisible
+            },
+            scenes = config.Scenes,
+            excluded = new[] { "credentials", "integration endpoints", "launcher paths", "display identifiers", "logs" }
+        };
+    }
+
+    public object RestorePortableBackup(PortableBackupRequest backup)
+    {
+        if (backup.SchemaVersion != 1 || backup.Scenes is null)
+        {
+            throw new InvalidOperationException("Unsupported or incomplete Auxora backup.");
+        }
+
+        _configStore.Update(config =>
+        {
+            config.Scenes = SceneDefaults.Normalize(backup.Scenes);
+            if (backup.Dashboard is not null)
+            {
+                config.Dashboard.PerformanceBudget = backup.Dashboard.PerformanceBudget ?? config.Dashboard.PerformanceBudget;
+                config.Dashboard.GameModeAutoTune = backup.Dashboard.GameModeAutoTune ?? config.Dashboard.GameModeAutoTune;
+                config.Dashboard.ThemeReadability = backup.Dashboard.ThemeReadability ?? config.Dashboard.ThemeReadability;
+                config.Dashboard.ReleaseChannel = backup.Dashboard.ReleaseChannel ?? config.Dashboard.ReleaseChannel;
+                config.Dashboard.MediaMetadataVisible = backup.Dashboard.MediaMetadataVisible ?? config.Dashboard.MediaMetadataVisible;
+                config.Dashboard.AudioSessionLabelsVisible = backup.Dashboard.AudioSessionLabelsVisible ?? config.Dashboard.AudioSessionLabelsVisible;
+            }
+            return config;
+        });
+        return BuildPortableBackup();
     }
 
     public string GetReleaseChannel(string? requested)

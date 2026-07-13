@@ -73,6 +73,7 @@ public sealed partial class MainWindow : Window
         _bridgeManager.StatusChanged += HandleBridgeStatusChanged;
         _bridgeManager.BridgeReady += HandleBridgeReady;
         _bridgeManager.BridgeStopped += HandleBridgeStopped;
+        _bridgeManager.DisplayPreferenceChanged += HandleDisplayPreferenceChanged;
 
         AppWindow.Closing += HandleAppWindowClosing;
         Activated += HandleActivated;
@@ -114,7 +115,7 @@ public sealed partial class MainWindow : Window
             throw new InvalidOperationException("No displays were detected.");
         }
 
-        var edgeCandidateCount = displayCandidates.Count(IsEdgeCandidate);
+        var needsDisplaySelection = !safeMode && displayCandidates.Count > 1 && displayCandidates.All(display => !display.IsPreferred);
         var targetDisplay = _bridgeManager.SelectDisplayTarget(
             displayCandidates,
             saveSelection: saveSelection && !safeMode,
@@ -130,10 +131,10 @@ public sealed partial class MainWindow : Window
             presenter.IsMinimizable = false;
         }
 
-        if (!safeMode && edgeCandidateCount == 0)
+        if (needsDisplaySelection)
         {
             var rescueDisplay = displayCandidates.FirstOrDefault(display => display.IsPrimary) ?? targetDisplay;
-            ApplyWaitingForEdgeWindow(appWindow, windowHandle, rescueDisplay, displayCandidates);
+            ApplyDisplaySelectionWindow(appWindow, windowHandle, rescueDisplay, displayCandidates);
             return;
         }
 
@@ -159,7 +160,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ApplyWaitingForEdgeWindow(
+    private void ApplyDisplaySelectionWindow(
         AppWindow appWindow,
         IntPtr windowHandle,
         DisplayTarget rescueDisplay,
@@ -188,14 +189,24 @@ public sealed partial class MainWindow : Window
         _waitingForEdgeDisplay = true;
 
         _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
-        _logger.Warn($"No XENEON EDGE display candidate is available; showing a windowed waiting state on {rescueDisplay.Label}.");
-        SetOverlayText("Waiting for the XENEON EDGE display.\n\nPower on or reconnect the EDGE, or use the tray icon for Settings and Recovery. Xenon will move itself when Windows reports the EDGE display.");
+        _logger.Info($"Auxora needs a preferred display; showing display selection on {rescueDisplay.Label}.");
+        SetOverlayText("Choose an Auxora display.\n\nOpen Settings and select the touch display you want to use. Auxora will remember it for future launches.");
     }
 
     private void HandleDisplaySettingsChanged(object? sender, EventArgs args)
     {
-        _logger.Info("Display topology changed; scheduling EDGE window recovery.");
+        _logger.Info("Display topology changed; scheduling Auxora window recovery.");
         ScheduleDisplayRecovery("display topology changed");
+    }
+
+    private void HandleDisplayPreferenceChanged()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ConfigureWindow(saveSelection: false);
+            ShowWindowNoActivate();
+            _logger.Info("Auxora moved to the newly selected display.");
+        });
     }
 
     private void ScheduleDisplayRecovery(string reason)
@@ -271,11 +282,6 @@ public sealed partial class MainWindow : Window
     private static string DescribeDisplayCandidate(DisplayTarget display)
     {
         return $"{display.Label}; id={display.StableId}; primary={display.IsPrimary}; preferred={display.IsPreferred}; score={display.Score}; bounds={display.Bounds.X},{display.Bounds.Y},{display.Bounds.Width}x{display.Bounds.Height}; reasons={string.Join(",", display.MatchReasons)}";
-    }
-
-    private static bool IsEdgeCandidate(DisplayTarget display)
-    {
-        return display.ContainsXeneonName || display.MatchesEdgeResolution || display.MatchesEdgeAspect;
     }
 
     private async Task InitializeHostAsync()
@@ -453,7 +459,7 @@ public sealed partial class MainWindow : Window
             _dashboardLoaded = true;
             if (_waitingForEdgeDisplay)
             {
-                SetOverlayText("Waiting for the XENEON EDGE display.\n\nPower on or reconnect the EDGE, or use the tray icon for Settings and Recovery. Xenon will move itself when Windows reports the EDGE display.");
+                SetOverlayText("Choose an Auxora display.\n\nOpen Settings and select the touch display you want to use. Auxora will remember it for future launches.");
             }
             else
             {
@@ -787,7 +793,7 @@ public sealed partial class MainWindow : Window
         KeepDisplayWindowOnTop(windowHandle, includeFrameChanged: styleChanged);
         ShowWindow(windowHandle, SwShowNoActivate);
         _taskbarStyleApplied = true;
-        _logger.Info("Applied no-activate topmost tool-window style so the EDGE display stays visible, stays off the taskbar, and does not steal audio focus.");
+        _logger.Info("Applied no-activate topmost tool-window style so the Auxora display stays visible, stays off the taskbar, and does not steal audio focus.");
     }
 
     private void RestoreDisplayWindowToTaskbar(IntPtr windowHandle)
@@ -814,7 +820,7 @@ public sealed partial class MainWindow : Window
             0,
             SwpNoMove | SwpNoSize | SwpShowWindow | (styleChanged ? SwpFrameChanged : 0u));
         _taskbarStyleApplied = false;
-        _logger.Info("Restored normal taskbar-visible window style while waiting for the XENEON EDGE display.");
+        _logger.Info("Restored normal taskbar-visible window style while selecting an Auxora display.");
     }
 
     private void ShowWindowNoActivate()
@@ -873,6 +879,7 @@ public sealed partial class MainWindow : Window
         _disposed = true;
         DashboardView.NavigationCompleted -= HandleNavigationCompleted;
         SystemEvents.DisplaySettingsChanged -= HandleDisplaySettingsChanged;
+        _bridgeManager.DisplayPreferenceChanged -= HandleDisplayPreferenceChanged;
         AppWindow.Closing -= HandleAppWindowClosing;
         if (DashboardView.CoreWebView2 is not null && _webViewDiagnosticsAttached)
         {

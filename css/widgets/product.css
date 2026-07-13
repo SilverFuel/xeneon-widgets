@@ -33,6 +33,98 @@
   position: relative;
 }
 
+.auxora-glance-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 116px;
+  padding: 18px 20px;
+  border: 1px solid var(--dashboard-accent-glow);
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--dashboard-accent-glow), rgba(255, 255, 255, 0.025));
+}
+
+.auxora-glance-hero > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.auxora-glance-hero span,
+.auxora-glance-hero small,
+.auxora-scene-stats {
+  color: var(--color-text-dim);
+}
+
+.auxora-glance-hero strong {
+  font-size: clamp(1.5rem, 3vw, 2.8rem);
+}
+
+.auxora-glance-clock {
+  font-size: clamp(2rem, 5vw, 4.8rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.auxora-scene-grid .product-card {
+  min-height: 200px;
+}
+
+.auxora-scene-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.72rem;
+}
+
+.auxora-scene-stats span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.auxora-remote-share {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid var(--dashboard-accent-glow);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.auxora-remote-qr {
+  padding: 10px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.auxora-remote-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.auxora-remote-share code {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--dashboard-accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px), (orientation: portrait) {
+  .auxora-remote-share {
+    grid-template-columns: 1fr;
+  }
+
+  .auxora-remote-qr {
+    max-width: 220px;
+  }
+}
+
 .product-shell::before {
   content: "";
   position: absolute;

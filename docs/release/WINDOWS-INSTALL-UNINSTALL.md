@@ -6,35 +6,35 @@ This app should not make normal users answer setup questions.
 
 Download the Windows setup EXE from GitHub Releases and run it.
 
-Xenon installs itself for the current Windows user. It does not need admin rights for the normal install path, and it does not ask the user to pick folders or configure services.
+Auxora installs itself for the current Windows user. It does not need admin rights for the normal install path, and it does not ask the user to pick folders or configure services.
 
 The installer handles this automatically:
 
-- copies the app to `%LOCALAPPDATA%\Programs\XenonEdgeHost`
-- creates `XENEON Edge` in the Start Menu
-- creates a `XENEON Edge` Desktop shortcut
+- migrates a legacy install when present, then copies the app to `%LOCALAPPDATA%\Programs\Auxora`
+- creates `Auxora` in the Start Menu
+- creates an `Auxora` Desktop shortcut
 - registers the app to start when the user logs in
-- adds `XENEON Edge Host` to Windows Settings > Apps
+- adds `Auxora` to Windows Settings > Apps
 - launches the app
 
 The Start Menu folder also includes clearly labeled recovery shortcuts:
 
-- `XENEON Edge Recovery (Safe Mode)` stops any running Xenon process, disables auto-start, ignores saved display placement, and opens on the primary monitor.
-- `Repair XENEON Edge` restores Start Menu/Desktop shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
+- `Auxora Recovery (Safe Mode)` stops any running host process, disables auto-start, ignores saved display placement, and opens on the primary monitor.
+- `Repair Auxora` restores Start Menu/Desktop shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
 
-The free beta installer may show a Windows SmartScreen warning until the app is signed. That warning is from Windows. After the user chooses to run the beta installer, Xenon should not ask more setup questions.
+The free beta installer may show a Windows SmartScreen warning until the app is signed. That warning is from Windows. After the user chooses to run the beta installer, Auxora should not ask more setup questions.
 
 ## Uninstall
 
 Use either normal Windows path:
 
-- Windows Settings > Apps > Installed apps > XENEON Edge Host
-- Start Menu > XENEON Edge > Uninstall XENEON Edge
+- Windows Settings > Apps > Installed apps > Auxora
+- Start Menu > Auxora > Uninstall Auxora
 
 Uninstall is hands-free. It removes:
 
 - the running app process
-- the app files in `%LOCALAPPDATA%\Programs\XenonEdgeHost`
+- the app files in `%LOCALAPPDATA%\Programs\Auxora`
 - Start Menu shortcuts
 - Desktop shortcuts
 - the auto-start entry
@@ -45,11 +45,13 @@ Uninstall is hands-free. It removes:
 Use:
 
 ```text
-Start Menu > XENEON Edge > Remove XENEON Edge and Local Data
+Start Menu > Auxora > Remove Auxora and Local Data
 ```
 
-That removes the app and also removes local Xenon data from:
+That removes the app and also removes local Auxora and retained legacy data from:
 
+- `%APPDATA%\Auxora`
+- `%LOCALAPPDATA%\Auxora`
 - `%APPDATA%\XenonEdgeHost`
 - `%LOCALAPPDATA%\XenonEdgeHost`
 
@@ -60,10 +62,10 @@ Use this when the user wants a clean reset or is done with the app completely.
 - No folder picker during normal install.
 - No manual service setup.
 - No copied command lines for normal users.
-- No uninstall confirmation prompts from Xenon scripts.
+- No uninstall confirmation prompts from Auxora scripts.
 - No leftover Start Menu or Desktop shortcuts after uninstall.
 - No half-installed app if reinstalling fails during file copy.
 - No Safe Mode launch that reuses a stale saved display target.
-- No repair flow that removes `%APPDATA%\XenonEdgeHost` or `%LOCALAPPDATA%\XenonEdgeHost`.
+- No repair flow that removes Auxora or legacy local data.
 
 If any of those happen, the installer flow is broken and should be fixed before publishing.
