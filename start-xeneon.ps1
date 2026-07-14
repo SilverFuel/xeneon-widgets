@@ -55,7 +55,7 @@ if (Test-Path $installedExe) {
   } else {
     Write-Host ""
     Write-Host "Build the installer first:"
-    Write-Host "  Build XENEON Installer.cmd" -ForegroundColor Yellow
+    Write-Host "  Build Auxora Installer.cmd" -ForegroundColor Yellow
   }
   exit 1
 }

@@ -5,13 +5,20 @@ param(
   [switch]$RemoveLocalData,
   [switch]$RequireSignedInstaller,
   [switch]$AllowUnsignedBeta,
-  [switch]$AllowGitHubSupportPath
+  [switch]$AllowGitHubSupportPath,
+  [string]$CommercialEvidencePath = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 if ($RequireSignedInstaller -and $AllowUnsignedBeta) {
   throw "Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta."
+}
+if ($RequireSignedInstaller -and [string]::IsNullOrWhiteSpace($CommercialEvidencePath)) {
+  throw "Signed commercial releases require -CommercialEvidencePath with completed launch evidence."
+}
+if (-not [string]::IsNullOrWhiteSpace($CommercialEvidencePath) -and -not $RequireSignedInstaller) {
+  throw "Commercial evidence can only be used with -RequireSignedInstaller."
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -93,6 +100,19 @@ try {
     $readyArgs += "-RequireSignedInstaller"
   }
   Invoke-CheckedCommand "powershell" (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\assert-release-ready.ps1") + $readyArgs) "Release readiness gate failed."
+
+  if ($RequireSignedInstaller) {
+    [xml]$project = Get-Content (Join-Path $repoRoot "app\XenonEdgeHost.csproj")
+    $version = [string]$project.Project.PropertyGroup.Version
+    Write-Step "Checking commercial launch evidence"
+    Invoke-CheckedCommand "powershell" @(
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\assert-commercial-launch-evidence.ps1",
+      "-EvidencePath", $CommercialEvidencePath,
+      "-ExpectedVersion", $version,
+      "-InstallerPath", $resolvedInstaller,
+      "-SupportPagePath", (Join-Path $repoRoot "support.html")
+    ) "Commercial launch evidence failed."
+  }
 
   if ($RunInstallSmoke) {
     Write-Step "Running Windows install smoke test"

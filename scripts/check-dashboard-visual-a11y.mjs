@@ -72,6 +72,7 @@ const expectedCssAssets = [
 ];
 const expectedJsAssets = [
   "js/widget-core.js",
+  "js/layout-profile.js",
   "js/inline-widgets.js",
   "js/widgets/homelab.js",
   "js/widgets/system.js",

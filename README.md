@@ -2,9 +2,9 @@
 
 ## Free Public Beta
 
-Auxora is the adaptive successor to XENEON Edge Host. The current build remains a free public beta while the new brand is checked and the installer is signed. Do not charge for this build yet.
+Auxora is the adaptive successor to XENEON Edge Host. Version 0.3.x remains a free public beta: name clearance, a signed Windows 0.3.x release, and clean-machine certification are still pending. Do not charge for this build yet.
 
-- the Windows installer is unsigned unless you add code signing
+- no signed Windows 0.3.x installer has been produced yet
 - Windows may show a SmartScreen warning on first install
 - the macOS host is still a beta scaffold and should not be advertised as a finished Mac product
 - support is handled through GitHub Issues and GitHub Security Advisories for now
@@ -85,7 +85,7 @@ The update and streaming panels remain beta foundations. Signed extension verifi
 
 1. Open PowerShell in `app`.
 2. Run `powershell -File publish.ps1`.
-3. Launch `..\Open XENEON Edge.cmd` (legacy source-tree launcher name).
+3. Launch `..\Open Auxora.cmd`.
 4. Optional: run `powershell -File install.ps1` from the `app` folder to register auto-start at login.
 
 For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, auto-start registration, Apps & Features registration, and packaged uninstall flow without asking setup questions.
@@ -153,7 +153,7 @@ Per-pin readings appear only when the GPU and the sensor tool expose them. Other
 The easiest packaging path is:
 
 ```text
-Build XENEON Installer.cmd
+Build Auxora Installer.cmd
 ```
 
 Or from a terminal:
@@ -164,23 +164,23 @@ powershell -File app\build-installer.ps1
 
 That creates:
 
-- `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe`
-- `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe.sha256`
+- `app\dist\Auxora-Setup-<version>-<date>.exe`
+- `app\dist\Auxora-Setup-<version>-<date>.exe.sha256`
 - `app\dist\README-install.txt`
 
-The installer installs per-user to `%LOCALAPPDATA%\Programs\XenonEdgeHost`, creates Start Menu and Desktop shortcuts, registers auto-start, launches the app, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed. The normal installer and uninstaller paths are hands-free.
+The installer installs per-user to `%LOCALAPPDATA%\Programs\Auxora`, creates Start Menu and Desktop shortcuts, registers auto-start, launches the app, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed. The normal installer and uninstaller paths are hands-free.
 
 Uninstall paths:
 
-- Windows Settings > Apps > Installed apps > XENEON Edge Host
-- Start Menu > XENEON Edge > Uninstall XENEON Edge
-- Start Menu > XENEON Edge > Remove XENEON Edge and Local Data
+- Windows Settings > Apps > Installed apps > Auxora
+- Start Menu > Auxora > Uninstall Auxora
+- Start Menu > Auxora > Remove Auxora and Local Data
 - `powershell -File "$env:LOCALAPPDATA\Programs\Auxora\Remove-XenonEdgeHost.ps1" -Quiet -RemoveLocalData`
 
 Recovery paths:
 
-- Start Menu > XENEON Edge > XENEON Edge Recovery (Safe Mode)
-- Start Menu > XENEON Edge > Repair XENEON Edge
+- Start Menu > Auxora > Auxora Recovery (Safe Mode)
+- Start Menu > Auxora > Repair Auxora
 - `powershell -File "$env:LOCALAPPDATA\Programs\Auxora\Launch-XenonSafeMode.ps1" -Quiet`
 - `powershell -File "$env:LOCALAPPDATA\Programs\Auxora\repair.ps1" -Quiet`
 

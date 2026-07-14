@@ -11,6 +11,7 @@ const program = readWorkspaceFile("app/Program.cs");
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
 const smokeTest = readWorkspaceFile("scripts/test-windows-install.ps1");
+const artifactVerifier = readWorkspaceFile("scripts/Test-ReleaseArtifact.ps1");
 const releaseWorkflow = readWorkspaceFile(".github/workflows/release.yml");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 
@@ -132,8 +133,18 @@ assert(
     && /Assert-StartupRemoved/.test(smokeTest)
     && /Launch-XenonSafeMode\.ps1/.test(smokeTest)
     && /repair\.ps1/.test(smokeTest)
-    && /Uninstaller exited with code/.test(smokeTest),
-  "install smoke test must validate startup, rescue shortcuts, and must not delete local data outside the uninstall flow"
+    && /Uninstaller exited with code/.test(smokeTest)
+    && /\$installRoot\s*=\s*Join-Path \$env:LOCALAPPDATA "Programs\\Auxora"/.test(smokeTest)
+    && /\$shortcutRoot\s*=\s*Join-Path \$env:APPDATA "Microsoft\\Windows\\Start Menu\\Programs\\Auxora"/.test(smokeTest),
+  "install smoke test must validate current Auxora paths, startup, rescue shortcuts, and keep data deletion inside uninstall"
+);
+
+assert(
+  /Auxora-Setup-\$ExpectedVersion-/.test(artifactVerifier)
+    && /Installer SHA256 sidecar does not match/.test(artifactVerifier)
+    && /Installer signature is not valid/.test(artifactVerifier)
+    && /Published app executable signature is not valid/.test(artifactVerifier),
+  "release artifact verification must bind version, hash, installer signature, and app signature"
 );
 
 assert(

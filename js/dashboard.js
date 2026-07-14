@@ -282,18 +282,16 @@
   }
 
   function setScale() {
-    var width = Math.max(window.innerWidth, 1);
-    var height = Math.max(window.innerHeight, 1);
-    var aspect = width / height;
-    var browserLayout = !perfMode && width < 1100;
+    var profile = window.AuxoraLayout.classifyViewport(window.innerWidth, window.innerHeight);
+    var browserLayout = !perfMode && profile.browser;
 
     if (document.body) {
       document.body.classList.toggle("dashboard-native-page--browser", browserLayout);
       document.body.classList.toggle("dashboard-native-page--adaptive", !perfMode);
-      document.body.classList.toggle("dashboard-native-page--layout-compact", width < 900 || height < 480);
-      document.body.classList.toggle("dashboard-native-page--layout-portrait", aspect < 1);
-      document.body.classList.toggle("dashboard-native-page--layout-ultrawide", aspect >= 2.8);
-      document.body.dataset.layoutClass = aspect < 1 ? "portrait" : aspect >= 2.8 ? "ultrawide" : width < 900 ? "compact" : "standard";
+      document.body.classList.toggle("dashboard-native-page--layout-compact", profile.compact);
+      document.body.classList.toggle("dashboard-native-page--layout-portrait", profile.portrait);
+      document.body.classList.toggle("dashboard-native-page--layout-ultrawide", profile.ultrawide);
+      document.body.dataset.layoutClass = profile.layoutClass;
     }
 
     if (!perfMode) {

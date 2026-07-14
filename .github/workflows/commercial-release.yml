@@ -1,0 +1,120 @@
+name: Commercial Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Signed release tag or commit to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  windows-commercial:
+    name: Signed Windows commercial candidate
+    runs-on: windows-latest
+    environment: production
+
+    steps:
+      - name: Check out requested release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require a commit from main
+        shell: pwsh
+        run: |
+          git fetch origin main --no-tags
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch origin/main." }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw "The requested release must resolve to a commit already present on main." }
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix desktop/electron ci
+
+      - name: Audit and validate
+        run: |
+          npm run audit:deps
+          npm run check
+
+      - name: Require signing and commercial evidence secrets
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_BASE64)) { throw "WINDOWS_SIGNING_PFX_BASE64 is not configured." }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_PASSWORD)) { throw "WINDOWS_SIGNING_PFX_PASSWORD is not configured." }
+          if (-not (Test-Path commercial-launch-evidence.json)) { throw "commercial-launch-evidence.json is not committed for this release." }
+
+      - name: Build and sign Windows candidate
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP "auxora-signing.pfx"
+          $pfxBytes = $null
+          $passwordText = $null
+          $password = $null
+          try {
+            $pfxBytes = [Convert]::FromBase64String($env:SIGNING_PFX_BASE64)
+            $passwordText = $env:SIGNING_PFX_PASSWORD
+            Remove-Item Env:SIGNING_PFX_BASE64, Env:SIGNING_PFX_PASSWORD -ErrorAction SilentlyContinue
+            [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+            $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
+            $passwordText = $null
+
+            & ./app/publish.ps1
+            & ./scripts/sign-windows.ps1 -Path publish/XenonEdgeHost.exe -CertificatePath $pfxPath -CertificatePassword $password
+            & ./app/build-installer.ps1 -SkipPublish
+            $installer = Get-ChildItem app/dist/Auxora-Setup-*.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if (-not $installer) { throw "Auxora installer was not produced." }
+            & ./scripts/sign-windows.ps1 -Path $installer.FullName -CertificatePath $pfxPath -CertificatePassword $password
+
+            $evidence = Get-Content commercial-launch-evidence.json -Raw | ConvertFrom-Json
+            $evidence.releaseArtifact.completed = $true
+            $evidence.releaseArtifact.installerSha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
+            $evidence | ConvertTo-Json -Depth 8 | Set-Content verified-commercial-evidence.json -Encoding UTF8
+          } finally {
+            Remove-Item Env:SIGNING_PFX_BASE64, Env:SIGNING_PFX_PASSWORD -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
+            $password = $null
+            $passwordText = $null
+            if ($pfxBytes) { [Array]::Clear($pfxBytes, 0, $pfxBytes.Length) }
+            $pfxBytes = $null
+          }
+
+      - name: Run signed commercial gate
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem app/dist/Auxora-Setup-*.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $installer) { throw "No signed Auxora installer found in app/dist." }
+          & ./scripts/run-release-gauntlet.ps1 -InstallerPath $installer.FullName -RequireSignedInstaller -CommercialEvidencePath verified-commercial-evidence.json
+
+      - name: Upload signed candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: auxora-signed-windows-candidate
+          if-no-files-found: error
+          path: |
+            app/dist/Auxora-Setup-*.exe
+            app/dist/Auxora-Setup-*.sha256
+            app/dist/README-install.txt
+            verified-commercial-evidence.json

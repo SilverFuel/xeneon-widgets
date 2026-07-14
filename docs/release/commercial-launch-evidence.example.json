@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "product": "Auxora",
+  "version": "0.3.0",
+  "nameClearance": {
+    "completed": false,
+    "reference": ""
+  },
+  "legalReview": {
+    "completed": false,
+    "reference": ""
+  },
+  "support": {
+    "completed": false,
+    "supportEmail": "",
+    "securityEmail": ""
+  },
+  "cleanMachineCertification": {
+    "completed": false,
+    "reportReference": ""
+  },
+  "displayCertification": {
+    "completed": false,
+    "reportReference": ""
+  },
+  "rollbackRelease": {
+    "completed": false,
+    "releaseReference": ""
+  },
+  "paidPilot": {
+    "completed": false,
+    "participantCount": 0,
+    "reportReference": ""
+  },
+  "releaseArtifact": {
+    "completed": false,
+    "installerSha256": ""
+  },
+  "confirmedAt": ""
+}

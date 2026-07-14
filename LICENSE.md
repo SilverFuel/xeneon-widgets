@@ -1,10 +1,10 @@
-# XENEON Edge Host Free Public Beta License
+# Auxora Free Public Beta License
 
 Copyright (c) 2026 SilverFuel.
 
 All rights reserved.
 
-XENEON Edge Host 0.2.x is provided as a free public beta by SilverFuel.
+Auxora 0.3.x is provided as a free public beta by SilverFuel.
 
 You may download and use official beta builds published by SilverFuel for personal evaluation and everyday use. You may share links to the official GitHub repository or official GitHub Releases page.
 
@@ -16,4 +16,4 @@ These restrictions apply only to SilverFuel's original Auxora code and assets. T
 
 This software is provided "as is" without warranties of any kind. SilverFuel is not liable for damages, data loss, business interruption, hardware issues, or service interruptions arising from use of the software.
 
-XENEON Edge Host is an independent product. It is not endorsed by, sponsored by, or affiliated with CORSAIR, Ubiquiti, Philips Hue, OpenWeather, Microsoft, Apple, or any other named integration provider unless a separate written agreement says otherwise.
+Auxora is an independent product. It is not endorsed by, sponsored by, or affiliated with CORSAIR, Ubiquiti, Philips Hue, OpenWeather, Microsoft, Apple, or any other named integration provider unless a separate written agreement says otherwise.
