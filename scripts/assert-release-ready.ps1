@@ -1,6 +1,7 @@
 param(
   [string]$InstallerPath = "",
   [switch]$RequireSignedInstaller,
+  [string[]]$AllowedSignerThumbprint = @(),
   [switch]$AllowGitHubSupportPath,
   [switch]$AllowDirty,
   [switch]$RunBuildChecks
@@ -44,7 +45,7 @@ function Assert-File($relativePath) {
 Push-Location $repoRoot
 try {
   Write-Host ""
-  Write-Host "XENEON Edge Host release readiness" -ForegroundColor Cyan
+  Write-Host "Auxora release readiness" -ForegroundColor Cyan
 
   if (-not $AllowDirty) {
     $status = git status --porcelain
@@ -93,6 +94,7 @@ try {
 
   $allReleaseText = Get-ChildItem $repoRoot -Recurse -File |
     Where-Object { $_.FullName -notmatch "\\\.git\\|\\node_modules\\|\\app\\bin\\|\\app\\obj\\|\\desktop\\electron\\dist\\" } |
+    Where-Object { $_.Name -notmatch "^test-" -and $_.Name -notmatch "\.example\." } |
     Where-Object { $_.Extension -in ".md", ".html", ".json", ".cs", ".js", ".ps1", ".cjs" } |
     ForEach-Object { Get-Content $_.FullName -Raw }
   if (($allReleaseText -join "`n") -match "support@example\.com|security@example\.com") {
@@ -117,9 +119,9 @@ try {
   }
 
   $dashboardText = Read-Text "js\dashboard.js"
-  $inlineText = Read-Text "js\inline-widgets.js"
+  $setupWidgetText = Read-Text "js\widgets\setup.js"
   $setupGuideText = Read-Text "widgets\setup-guide.html"
-  if ($dashboardText -match "showAdvanced" -and $inlineText -match "env\.showAdvanced" -and $inlineText -match "Hidden from normal setup" -and $setupGuideText -match "showAdvanced" -and $setupGuideText -notmatch "Copy advanced URL") {
+  if ($dashboardText -match "showAdvanced" -and $setupWidgetText -match "env\.showAdvanced" -and $setupWidgetText -match "Hidden from normal setup" -and $setupGuideText -match "showAdvanced" -and $setupGuideText -notmatch "Copy advanced URL") {
     Add-Pass "Advanced setup stays out of normal onboarding"
   } else {
     Add-Failure "Advanced setup is not clearly separated from normal onboarding."
@@ -143,29 +145,22 @@ try {
   if ($InstallerPath) {
     $resolvedInstaller = Resolve-Path -LiteralPath $InstallerPath
     Add-Pass "Installer found: $($resolvedInstaller.Path)"
-
-    try {
-      $signature = Get-AuthenticodeSignature -LiteralPath $resolvedInstaller.Path -ErrorAction Stop
-      if ($signature.Status -eq "Valid") {
-        Add-Pass "Installer signature is valid"
-      } elseif ($RequireSignedInstaller) {
-        Add-Failure "Installer signature is not valid: $($signature.Status)"
-      } else {
-        Add-Warning "Installer is not signed: $($signature.Status)"
-      }
-    } catch {
-      if ($RequireSignedInstaller) {
-        Add-Failure "Installer signature could not be checked: $($_.Exception.Message)"
-      } else {
-        Add-Warning "Installer signature check is unavailable on this machine: $($_.Exception.Message)"
+    $artifactArgs = @(
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $repoRoot "scripts\Test-ReleaseArtifact.ps1"),
+      "-InstallerPath", $resolvedInstaller.Path,
+      "-ExpectedVersion", $version
+    )
+    if ($RequireSignedInstaller) {
+      $artifactArgs += @("-RequireSignature", "-PublishedAppPath", (Join-Path $repoRoot "publish\XenonEdgeHost.exe"))
+      if ($AllowedSignerThumbprint.Count -gt 0) {
+        $artifactArgs += @("-AllowedSignerThumbprint") + $AllowedSignerThumbprint
       }
     }
-
-    $hashPath = "$($resolvedInstaller.Path).sha256"
-    if (Test-Path -LiteralPath $hashPath) {
-      Add-Pass "Installer SHA256 file exists"
+    & powershell.exe @artifactArgs
+    if ($LASTEXITCODE -eq 0) {
+      Add-Pass "Installer version, hash, and required signatures are verified"
     } else {
-      Add-Failure "Installer SHA256 file is missing."
+      Add-Failure "Release artifact verification failed."
     }
   } elseif ($RequireSignedInstaller) {
     Add-Failure "Pass -InstallerPath when -RequireSignedInstaller is used."

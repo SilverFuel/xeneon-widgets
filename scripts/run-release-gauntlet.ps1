@@ -5,13 +5,38 @@ param(
   [switch]$RemoveLocalData,
   [switch]$RequireSignedInstaller,
   [switch]$AllowUnsignedBeta,
-  [switch]$AllowGitHubSupportPath
+  [switch]$AllowGitHubSupportPath,
+  [string]$CommercialEvidencePath = ""
 )
 
 $ErrorActionPreference = "Stop"
+if ($PSVersionTable.PSEdition -eq "Desktop") {
+  Import-Module (Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1") -Force
+}
 
 if ($RequireSignedInstaller -and $AllowUnsignedBeta) {
   throw "Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta."
+}
+if ($RequireSignedInstaller -and [string]::IsNullOrWhiteSpace($CommercialEvidencePath)) {
+  throw "Signed commercial releases require -CommercialEvidencePath with completed launch evidence."
+}
+if (-not [string]::IsNullOrWhiteSpace($CommercialEvidencePath) -and -not $RequireSignedInstaller) {
+  throw "Commercial evidence can only be used with -RequireSignedInstaller."
+}
+
+$allowedSignerThumbprints = @()
+$resolvedCommercialEvidencePath = ""
+if ($RequireSignedInstaller) {
+  try {
+    $resolvedCommercialEvidencePath = (Resolve-Path -LiteralPath $CommercialEvidencePath -ErrorAction Stop).Path
+    $commercialEvidence = Get-Content -LiteralPath $resolvedCommercialEvidencePath -Raw | ConvertFrom-Json
+    $allowedSignerThumbprints = @($commercialEvidence.releaseArtifact.allowedSignerThumbprints)
+  } catch {
+    throw "Commercial evidence could not be read before signature verification: $($_.Exception.Message)"
+  }
+  if ($allowedSignerThumbprints.Count -eq 0) {
+    throw "Commercial evidence must provide at least one approved Auxora signer thumbprint."
+  }
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -66,6 +91,13 @@ try {
   try {
     $signature = Get-AuthenticodeSignature -LiteralPath $resolvedInstaller -ErrorAction Stop
     if ($signature.Status -eq "Valid") {
+      if ($RequireSignedInstaller) {
+        $actualThumbprint = ([string]$signature.SignerCertificate.Thumbprint -replace '\s', '').ToUpperInvariant()
+        $approved = @($allowedSignerThumbprints | ForEach-Object { ([string]$_ -replace '\s', '').ToUpperInvariant() })
+        if ($actualThumbprint -notin $approved) {
+          throw "Installer signer is not in the approved Auxora signer list: $actualThumbprint"
+        }
+      }
       Write-Host "OK: Installer signature is valid"
     } elseif ($RequireSignedInstaller) {
       throw "Installer signature is required but is $($signature.Status)."
@@ -91,8 +123,22 @@ try {
   }
   if ($RequireSignedInstaller) {
     $readyArgs += "-RequireSignedInstaller"
+    $readyArgs += @("-AllowedSignerThumbprint") + $allowedSignerThumbprints
   }
   Invoke-CheckedCommand "powershell" (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\assert-release-ready.ps1") + $readyArgs) "Release readiness gate failed."
+
+  if ($RequireSignedInstaller) {
+    [xml]$project = Get-Content (Join-Path $repoRoot "app\XenonEdgeHost.csproj")
+    $version = [string]$project.Project.PropertyGroup.Version
+    Write-Step "Checking commercial launch evidence"
+    Invoke-CheckedCommand "powershell" @(
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\assert-commercial-launch-evidence.ps1",
+      "-EvidencePath", $resolvedCommercialEvidencePath,
+      "-ExpectedVersion", $version,
+      "-InstallerPath", $resolvedInstaller,
+      "-SupportPagePath", (Join-Path $repoRoot "support.html")
+    ) "Commercial launch evidence failed."
+  }
 
   if ($RunInstallSmoke) {
     Write-Step "Running Windows install smoke test"

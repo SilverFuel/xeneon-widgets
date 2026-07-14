@@ -4,7 +4,8 @@
 
 | Version | Status |
 | --- | --- |
-| 0.2.x | Free public beta support |
+| 0.3.x | Free public beta support |
+| 0.2.x | Security fixes only during migration |
 | 0.1.x | Unsupported preview |
 
 ## Reporting A Vulnerability

@@ -47,7 +47,7 @@ try {
 
   Write-Step "Free beta upload list"
   Write-Host "GitHub Release title:"
-  Write-Host "  XENEON Edge Host $appVersion Free Public Beta"
+  Write-Host "  Auxora $appVersion Free Public Beta"
   Write-Host ""
   Write-Host "Mark it as:"
   Write-Host "  Pre-release"

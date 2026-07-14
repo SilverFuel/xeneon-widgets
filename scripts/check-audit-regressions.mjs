@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { normalize, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 
 const files = new Map();
 
@@ -34,6 +35,19 @@ function readWorkspaceJson(relativePath) {
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+function readEvaluatedMsbuildItems(itemName) {
+  try {
+    const output = execFileSync(
+      "dotnet",
+      ["msbuild", "app/XenonEdgeHost.csproj", `-getItem:${itemName}`],
+      { cwd: process.cwd(), encoding: "utf8", windowsHide: true }
+    );
+    return JSON.parse(output).Items?.[itemName] || [];
+  } catch (error) {
+    throw new Error(`Unable to evaluate ${itemName} items from app/XenonEdgeHost.csproj: ${error.message}`);
   }
 }
 
@@ -75,6 +89,12 @@ const hueService = readWorkspaceFile("app/Services/HueService.cs");
 const uniFiService = readWorkspaceFile("app/Services/UniFiService.cs");
 const calendarService = readWorkspaceFile("app/Services/CalendarService.cs");
 const weatherService = readWorkspaceFile("app/Services/WeatherService.cs");
+const httpReadResilience = readWorkspaceFile("app/Infrastructure/HttpReadResilience.cs");
+const monitorControlService = readWorkspaceFile("app/Services/MonitorControlService.cs");
+const nativeMethods = readWorkspaceFile("app/NativeMethods.txt");
+const thirdPartyNotices = readWorkspaceFile("THIRD-PARTY-NOTICES.md");
+const packageReferences = readEvaluatedMsbuildItems("PackageReference");
+const contentItems = readEvaluatedMsbuildItems("Content");
 const endpointGuard = readWorkspaceFile("app/Infrastructure/NetworkEndpointGuard.cs");
 const legacyBridge = readWorkspaceFile("bridge/server.mjs");
 const electronMain = readWorkspaceFile("desktop/electron/src/main.cjs");
@@ -156,12 +176,55 @@ assert(
 );
 
 assert(
+  /<PackageReference\s+Include="Microsoft\.Windows\.CsWin32"/.test(appCsproj)
+    && /^GetPhysicalMonitorsFromHMONITOR$/m.test(nativeMethods)
+    && /^GetVCPFeatureAndVCPFeatureReply$/m.test(nativeMethods)
+    && /^GetCapabilitiesStringLength$/m.test(nativeMethods)
+    && /^CapabilitiesRequestAndCapabilitiesReply$/m.test(nativeMethods)
+    && /class\s+SafePhysicalMonitorHandle\s*:\s*SafeHandleZeroOrMinusOneIsInvalid[\s\S]*?override\s+bool\s+ReleaseHandle\s*\(\s*\)\s*\{\s*return\s+PInvoke\.DestroyPhysicalMonitor\s*\(\s*\(HANDLE\)handle\s*\)\s*;\s*\}/.test(monitorControlService)
+    && /MaxPhysicalMonitorsPerLogicalDisplay/.test(monitorControlService)
+    && /ParseVcpCapabilities/.test(monitorControlService)
+    && /ScalePercentage\(request\.Value,\s*reading\.Maximum\)/.test(monitorControlService)
+    && !/\[\s*DllImport(?:Attribute)?\s*\(/.test(monitorControlService),
+  "monitor controls must use generated CsWin32 bindings and owned physical-monitor handles"
+);
+
+const noticesPath = normalize(resolve(process.cwd(), "THIRD-PARTY-NOTICES.md"));
+const noticesContentItem = contentItems.find(item => {
+  const fullPath = item.FullPath ? normalize(resolve(item.FullPath)) : "";
+  const identityPath = item.Identity ? normalize(resolve(process.cwd(), "app", item.Identity)) : "";
+  return fullPath === noticesPath || identityPath === noticesPath;
+});
+
+assert(
+  packageReferences.some(item => item.Identity === "LibreHardwareMonitorLib" && item.Version === "0.9.6"),
+  "LibreHardwareMonitorLib must remain pinned to version 0.9.6"
+);
+assert(Boolean(noticesContentItem), "publish content must source the repository THIRD-PARTY-NOTICES.md file");
+assert(noticesContentItem?.Link === "THIRD-PARTY-NOTICES.md", "third-party notices must publish at the distribution root");
+assert(
+  noticesContentItem?.CopyToPublishDirectory === "PreserveNewest",
+  "third-party notices must be copied into every publish output"
+);
+assert(/Mozilla Public License 2\.0/.test(thirdPartyNotices), "third-party notices must retain the MPL-2.0 notice");
+assert(/DiskInfoToolkit 1\.1\.2/.test(thirdPartyNotices), "third-party notices must list DiskInfoToolkit 1.1.2");
+assert(/HidSharp 2\.6\.4/.test(thirdPartyNotices), "third-party notices must list HidSharp 2.6.4");
+assert(/RAMSPDToolkit-NDD 1\.4\.2/.test(thirdPartyNotices), "third-party notices must list RAMSPDToolkit-NDD 1.4.2");
+assert(/System\.IO\.Ports 10\.0\.3/.test(thirdPartyNotices), "third-party notices must list System.IO.Ports 10.0.3");
+assert(/System\.Management 10\.0\.2/.test(thirdPartyNotices), "third-party notices must list System.Management 10.0.2");
+assert(
+  /System\.Threading\.AccessControl 10\.0\.3/.test(thirdPartyNotices),
+  "third-party notices must list System.Threading.AccessControl 10.0.3"
+);
+
+assert(
   /NormalizeRemoteHttpUrl\(.*Calendar ICS URL/.test(configController)
     && /icsUrlConfigured/.test(configController)
     && /GetDisplayHost/.test(configController)
     && !/icsUrl\s*=\s*config\.Calendar\.IcsUrl/.test(configController)
     && /MaxIcsBytes\s*=\s*512\s*\*\s*1024/.test(calendarService)
-    && /HttpCompletionOption\.ResponseHeadersRead/.test(calendarService),
+    && /HttpReadResilience\.SendAsync/.test(calendarService)
+    && /HttpCompletionOption\.ResponseHeadersRead/.test(httpReadResilience),
   "calendar ICS fetches must validate remote URL shape, cap response size, and avoid returning bearer feed URLs from config"
 );
 
@@ -381,7 +444,7 @@ assert(
     && !/"1\.0\.0"/.test(installerScript)
     && !/"1\.0\.0"/.test(repairScript)
     && /\$appVersion/.test(freeBetaReleaseScript)
-    && /XENEON Edge Host \$appVersion Free Public Beta/.test(freeBetaReleaseScript)
+    && /Auxora \$appVersion Free Public Beta/.test(freeBetaReleaseScript)
     && /install\.prev\.log/.test(installerScript)
     && /512KB/.test(installerScript),
   "installer and release scripts must single-source versions, use a neutral fallback, and rotate the install transcript"
