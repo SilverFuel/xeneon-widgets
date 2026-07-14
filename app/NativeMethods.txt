@@ -4,3 +4,5 @@ GetPhysicalMonitorsFromHMONITOR
 DestroyPhysicalMonitor
 GetVCPFeatureAndVCPFeatureReply
 SetVCPFeature
+GetCapabilitiesStringLength
+CapabilitiesRequestAndCapabilitiesReply

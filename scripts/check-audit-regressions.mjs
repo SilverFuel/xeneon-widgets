@@ -162,8 +162,12 @@ assert(
   /<PackageReference\s+Include="Microsoft\.Windows\.CsWin32"/.test(appCsproj)
     && /^GetPhysicalMonitorsFromHMONITOR$/m.test(nativeMethods)
     && /^GetVCPFeatureAndVCPFeatureReply$/m.test(nativeMethods)
-    && /class\s+SafePhysicalMonitorHandle\s*:\s*SafeHandleZeroOrMinusOneIsInvalid/.test(monitorControlService)
-    && /\bPInvoke\.DestroyPhysicalMonitor\s*\(/.test(monitorControlService)
+    && /^GetCapabilitiesStringLength$/m.test(nativeMethods)
+    && /^CapabilitiesRequestAndCapabilitiesReply$/m.test(nativeMethods)
+    && /class\s+SafePhysicalMonitorHandle\s*:\s*SafeHandleZeroOrMinusOneIsInvalid[\s\S]*?override\s+bool\s+ReleaseHandle\s*\(\s*\)\s*\{\s*return\s+PInvoke\.DestroyPhysicalMonitor\s*\(\s*\(HANDLE\)handle\s*\)\s*;\s*\}/.test(monitorControlService)
+    && /MaxPhysicalMonitorsPerLogicalDisplay/.test(monitorControlService)
+    && /ParseVcpCapabilities/.test(monitorControlService)
+    && /ScalePercentage\(request\.Value,\s*reading\.Maximum\)/.test(monitorControlService)
     && !/\[\s*DllImport(?:Attribute)?\s*\(/.test(monitorControlService),
   "monitor controls must use generated CsWin32 bindings and owned physical-monitor handles"
 );
