@@ -64,8 +64,8 @@ try {
   throw new Error(`commercial launch evidence gate fixtures failed:\n${output}`);
 }
 assert(/Auxora \$TAG_NAME Free Public Beta/.test(workflow), "GitHub beta releases must use the Auxora public name");
-assert(/build-installer\.ps1/.test(buildLauncher) && !/ExecutionPolicy\s+Bypass/i.test(buildLauncher), "Auxora build launcher must honor the configured PowerShell policy");
-assert(/start-xeneon\.ps1/.test(openLauncher) && !/ExecutionPolicy\s+Bypass/i.test(openLauncher), "Auxora app launcher must honor the configured PowerShell policy");
+assert(/build-installer\.ps1/.test(buildLauncher) && /ExecutionPolicy\s+Bypass/i.test(buildLauncher), "Auxora build launcher must work under restrictive default PowerShell policies");
+assert(/start-xeneon\.ps1/.test(openLauncher) && /ExecutionPolicy\s+Bypass/i.test(openLauncher), "Auxora app launcher must work under restrictive default PowerShell policies");
 assert(/Blocking evidence/.test(read("docs/release/COMMERCIAL-LAUNCH.md")), "commercial launch gate must define blocking evidence");
 assert(/participant ID/.test(read("docs/release/PAID-PILOT.md")) && /at least 10 participants/i.test(read("docs/release/PAID-PILOT.md")), "paid pilot plan must define privacy-safe evidence and a minimum cohort");
 assert(/175%/.test(read("docs/release/DISPLAY-CERTIFICATION.md")), "display certification matrix must include 175% scaling");
@@ -74,7 +74,9 @@ assert(
     && evidenceTemplate.product === "Auxora"
     && evidenceTemplate.nameClearance?.completed === false
     && evidenceTemplate.legalReview?.completed === false
-    && evidenceTemplate.paidPilot?.participantCount === 0,
+    && evidenceTemplate.paidPilot?.participantCount === 0
+    && Array.isArray(evidenceTemplate.releaseArtifact?.allowedSignerThumbprints)
+    && evidenceTemplate.releaseArtifact.allowedSignerThumbprints.length === 0,
   "commercial evidence template must be structured and incomplete by default"
 );
 assert(

@@ -34,7 +34,8 @@
   },
   "releaseArtifact": {
     "completed": false,
-    "installerSha256": ""
+    "installerSha256": "",
+    "allowedSignerThumbprints": []
   },
   "confirmedAt": ""
 }

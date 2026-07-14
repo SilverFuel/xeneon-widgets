@@ -83,6 +83,24 @@ if (-not [int]::TryParse([string]$evidence.paidPilot.participantCount, [ref]$par
   $failures.Add("Paid pilot must include at least 10 participants.") | Out-Null
 }
 
+$rawAllowedSignerThumbprints = $evidence.releaseArtifact.allowedSignerThumbprints
+if (-not ($rawAllowedSignerThumbprints -is [System.Array])) {
+  $failures.Add("releaseArtifact.allowedSignerThumbprints must be a JSON array.") | Out-Null
+  $allowedSignerThumbprints = @()
+} else {
+  $allowedSignerThumbprints = @($rawAllowedSignerThumbprints)
+}
+if ($rawAllowedSignerThumbprints -is [System.Array] -and $allowedSignerThumbprints.Count -eq 0) {
+  $failures.Add("Release artifact evidence must list at least one approved Auxora signer thumbprint.") | Out-Null
+} else {
+  foreach ($thumbprint in $allowedSignerThumbprints) {
+    if (([string]$thumbprint -replace '\s', '') -notmatch '^[0-9A-Fa-f]{40}$') {
+      $failures.Add("Approved signer thumbprints must contain exactly 40 hexadecimal characters.") | Out-Null
+      break
+    }
+  }
+}
+
 $confirmedAt = [DateTimeOffset]::MinValue
 if (-not [DateTimeOffset]::TryParse([string]$evidence.confirmedAt, [ref]$confirmedAt)) {
   $failures.Add("confirmedAt must be a valid timestamp.") | Out-Null

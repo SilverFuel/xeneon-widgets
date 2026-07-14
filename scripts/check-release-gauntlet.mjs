@@ -31,7 +31,8 @@ assert(
   /\$RequireSignedInstaller\s+-and\s+\$AllowUnsignedBeta/.test(gauntlet)
     && /Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta/.test(gauntlet)
     && /Signed commercial releases require -CommercialEvidencePath/.test(gauntlet)
-    && /assert-commercial-launch-evidence\.ps1/.test(gauntlet),
+    && /assert-commercial-launch-evidence\.ps1/.test(gauntlet)
+    && /AllowedSignerThumbprint/.test(gauntlet),
   "release gauntlet must reject conflicting signing modes and require structured evidence for commercial releases"
 );
 

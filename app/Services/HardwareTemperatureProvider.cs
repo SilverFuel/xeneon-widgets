@@ -6,6 +6,7 @@ internal sealed class HardwareTemperatureProvider : IDisposable
 {
     private readonly HostLogger _logger;
     private readonly Func<Computer> _computerFactory;
+    private readonly Action<Computer> _computerUpdater;
     private readonly object _sync = new();
     private Computer? _computer;
     private bool _unavailable;
@@ -17,9 +18,15 @@ internal sealed class HardwareTemperatureProvider : IDisposable
     }
 
     internal HardwareTemperatureProvider(HostLogger logger, Func<Computer> computerFactory)
+        : this(logger, computerFactory, computer => computer.Accept(UpdateVisitor.Instance))
+    {
+    }
+
+    internal HardwareTemperatureProvider(HostLogger logger, Func<Computer> computerFactory, Action<Computer> computerUpdater)
     {
         _logger = logger;
         _computerFactory = computerFactory;
+        _computerUpdater = computerUpdater;
     }
 
     public HardwareTemperatureSnapshot Read()
@@ -34,11 +41,23 @@ internal sealed class HardwareTemperatureProvider : IDisposable
             try
             {
                 EnsureOpen();
-                _computer!.Accept(UpdateVisitor.Instance);
+            }
+            catch (Exception error)
+            {
+                _unavailable = true;
+                CloseComputer();
+                _logger.Warn($"Embedded hardware temperature provider is unavailable ({error.GetType().Name}).");
+                return HardwareTemperatureSnapshot.Empty;
+            }
+
+            try
+            {
+                var computer = _computer!;
+                _computerUpdater(computer);
 
                 var cpu = new List<TemperatureCandidate>();
                 var gpu = new List<TemperatureCandidate>();
-                foreach (var hardware in EnumerateHardware(_computer.Hardware))
+                foreach (var hardware in EnumerateHardware(computer.Hardware))
                 {
                     var target = hardware.HardwareType switch
                     {
@@ -67,9 +86,8 @@ internal sealed class HardwareTemperatureProvider : IDisposable
             }
             catch (Exception error)
             {
-                _unavailable = true;
                 CloseComputer();
-                _logger.Warn($"Embedded hardware temperature provider is unavailable ({error.GetType().Name}).");
+                _logger.Warn($"Embedded hardware temperature read failed and will retry ({error.GetType().Name}).");
                 return HardwareTemperatureSnapshot.Empty;
             }
         }

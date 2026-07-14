@@ -35,6 +35,40 @@ public sealed class HardwareTemperatureProviderTests
     }
 
     [Test]
+    public void Read_RetriesAfterTransientSamplingFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"auxora-hardware-provider-{Guid.NewGuid():N}");
+        var updates = 0;
+
+        try
+        {
+            using var logger = new HostLogger(root);
+            using var provider = new HardwareTemperatureProvider(
+                logger,
+                () => new LibreHardwareMonitor.Hardware.Computer(),
+                _ =>
+                {
+                    updates++;
+                    if (updates == 1)
+                    {
+                        throw new InvalidOperationException("transient sensor reset");
+                    }
+                });
+
+            var first = provider.Read();
+            var second = provider.Read();
+
+            Assert.That(first, Is.EqualTo(HardwareTemperatureSnapshot.Empty));
+            Assert.That(second.Source, Is.EqualTo("LibreHardwareMonitor embedded"));
+            Assert.That(updates, Is.EqualTo(2));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Test]
     public void SelectPreferredTemperature_PrefersPackageSensorOverHotterCore()
     {
         var candidates = new[]

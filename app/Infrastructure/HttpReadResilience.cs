@@ -102,6 +102,11 @@ internal static class HttpReadResilience
         var replacement = new ByteArrayContent(buffer.ToArray());
         foreach (var header in original.Headers)
         {
+            if (header.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             replacement.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }
 
