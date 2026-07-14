@@ -6,8 +6,8 @@ Use GitHub Releases as the public download shelf.
 
 For the first free public beta, upload:
 
-- `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe`
-- `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe.sha256`
+- `app\dist\Auxora-Setup-<version>-<date>.exe`
+- `app\dist\Auxora-Setup-<version>-<date>.exe.sha256`
 - release notes from `docs\release\FREE-BETA-RELEASE-NOTES.md`
 - plain install/uninstall notes from `docs\release\WINDOWS-INSTALL-UNINSTALL.md`
 
@@ -17,8 +17,8 @@ Mark the release as a pre-release. Do not attach a Mac package unless it was bui
 
 Upload:
 
-- `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe`
-- `app\dist\XenonEdgeHost-Setup-<version>-<date>.exe.sha256`
+- `app\dist\Auxora-Setup-<version>-<date>.exe`
+- `app\dist\Auxora-Setup-<version>-<date>.exe.sha256`
 - `desktop/electron/dist\*.dmg`
 - `desktop/electron/dist\*.zip`
 - release notes copied from `CHANGELOG.md`
@@ -30,13 +30,13 @@ The `Release Artifacts` GitHub Actions workflow builds Windows and macOS artifac
 Use tags like:
 
 ```text
-v0.2.0
+v0.3.0-beta.1
 ```
 
 Use release titles like:
 
 ```text
-XENEON Edge Host 0.2.0 Free Public Beta
+Auxora 0.3.0 Free Public Beta
 ```
 
 ## Before Upload

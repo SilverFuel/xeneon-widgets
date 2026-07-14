@@ -1,13 +1,13 @@
-# XENEON Edge Host 0.2.0 Free Public Beta
+# Auxora 0.3.0 Free Public Beta
 
-This is the first free public beta for XENEON Edge Host.
+Auxora 0.3.0 is the adaptive Windows touch-display beta that succeeds XENEON Edge Host.
 
 ## Downloads
 
 Use the Windows installer asset and matching SHA256 checksum:
 
-- `XenonEdgeHost-Setup-0.2.0-<date>.exe`
-- `XenonEdgeHost-Setup-0.2.0-<date>.exe.sha256`
+- `Auxora-Setup-0.3.0-<date>.exe`
+- `Auxora-Setup-0.3.0-<date>.exe.sha256`
 
 ## Important Notes
 
@@ -21,7 +21,7 @@ Use the Windows installer asset and matching SHA256 checksum:
 
 ## What Is Included
 
-- Native Windows host for the XENEON EDGE display.
+- Native Windows host for landscape, ultrawide, and portrait touch displays.
 - Local dashboard served at `http://127.0.0.1:8976/`.
 - System telemetry, network status, audio, media, weather, calendar, Hue, launcher, and home-lab panels.
 - First-run setup and diagnostics.

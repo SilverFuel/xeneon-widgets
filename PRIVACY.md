@@ -1,6 +1,6 @@
 # Privacy
 
-XENEON Edge Host is designed as a local-first dashboard.
+Auxora is designed as a local-first dashboard.
 
 ## What Stays Local
 
@@ -28,14 +28,16 @@ The app does not currently include analytics, crash upload telemetry, or remote 
 Windows data is stored under:
 
 ```text
-%APPDATA%\XenonEdgeHost
-%LOCALAPPDATA%\XenonEdgeHost
+%APPDATA%\Auxora
+%LOCALAPPDATA%\Auxora
 ```
 
 macOS beta data is stored under the app's standard Electron user-data folder.
 
+Legacy `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost` folders may remain temporarily after migration so an older build can be restored. The Remove Auxora and Local Data shortcut deletes both current and legacy data.
+
 ## Data Removal
 
-Use Reset all app data from the in-app Privacy or Setup panel to remove local dashboard settings and protected integration secrets for the current user. The Windows Start Menu also includes an Uninstall and Remove Local Data cleanup shortcut.
+Use Reset all app data from the in-app Privacy or Setup panel to remove local dashboard settings and protected integration secrets for the current user. The Windows Start Menu also includes a Remove Auxora and Local Data cleanup shortcut.
 
 Uninstalling removes the installed app. Local settings can remain so the dashboard keeps user preferences across upgrades, so reset local app data first if the machine is being sold, returned, or handed to another person.

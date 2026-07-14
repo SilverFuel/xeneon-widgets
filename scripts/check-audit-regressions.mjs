@@ -444,7 +444,7 @@ assert(
     && !/"1\.0\.0"/.test(installerScript)
     && !/"1\.0\.0"/.test(repairScript)
     && /\$appVersion/.test(freeBetaReleaseScript)
-    && /XENEON Edge Host \$appVersion Free Public Beta/.test(freeBetaReleaseScript)
+    && /Auxora \$appVersion Free Public Beta/.test(freeBetaReleaseScript)
     && /install\.prev\.log/.test(installerScript)
     && /512KB/.test(installerScript),
   "installer and release scripts must single-source versions, use a neutral fallback, and rotate the install transcript"

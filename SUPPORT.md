@@ -21,10 +21,10 @@ When helping a customer, ask for:
 Windows logs and settings are usually under:
 
 ```text
-%LOCALAPPDATA%\XenonEdgeHost
-%APPDATA%\XenonEdgeHost
+%LOCALAPPDATA%\Auxora
+%APPDATA%\Auxora
 ```
 
-Customers can remove local dashboard settings and protected integration secrets from the in-app Privacy or Setup panel with Reset all app data. They can also use Start Menu > XENEON Edge Host > Uninstall and Remove Local Data when removing the app.
+Customers can remove local dashboard settings and protected integration secrets from the in-app Privacy or Setup panel with Reset all app data. They can also use Start Menu > Auxora > Remove Auxora and Local Data when removing the app.
 
 Do not ask customers to send API keys, Hue tokens, calendar feed secrets, or other private credentials.

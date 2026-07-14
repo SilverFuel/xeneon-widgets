@@ -1,8 +1,8 @@
 {
-  "name": "xenon-edge-host-desktop",
-  "version": "0.2.0",
+  "name": "auxora-desktop",
+  "version": "0.3.0",
   "private": true,
-  "description": "Cross-platform desktop host for the XENEON Edge Host dashboard.",
+  "description": "Cross-platform beta host for the Auxora adaptive dashboard.",
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "dev.silverfuel.xenon-edge-host",
-    "productName": "XENEON Edge Host",
+    "productName": "Auxora",
     "directories": {
       "output": "dist"
     },

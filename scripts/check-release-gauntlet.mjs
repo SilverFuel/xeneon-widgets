@@ -29,8 +29,10 @@ function assert(condition, message) {
 
 assert(
   /\$RequireSignedInstaller\s+-and\s+\$AllowUnsignedBeta/.test(gauntlet)
-    && /Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta/.test(gauntlet),
-  "release gauntlet must reject mutually exclusive installer-signing switches"
+    && /Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta/.test(gauntlet)
+    && /Signed commercial releases require -CommercialEvidencePath/.test(gauntlet)
+    && /assert-commercial-launch-evidence\.ps1/.test(gauntlet),
+  "release gauntlet must reject conflicting signing modes and require structured evidence for commercial releases"
 );
 
 assert(
