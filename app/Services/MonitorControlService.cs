@@ -1,4 +1,8 @@
-using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+using Windows.Win32;
+using Windows.Win32.Devices.Display;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Gdi;
 
 namespace XenonEdgeHost;
 
@@ -47,7 +51,7 @@ public sealed class MonitorControlService
                 _ => throw new InvalidOperationException("Unknown monitor control.")
             };
 
-            if (!SetVCPFeature(target.Handle, code, value))
+            if (PInvoke.SetVCPFeature(target.Handle, code, value) == 0)
             {
                 throw new InvalidOperationException($"This monitor did not accept the {control} command.");
             }
@@ -82,14 +86,14 @@ public sealed class MonitorControlService
         };
     }
 
-    private static VcpReading ReadVcp(IntPtr handle, byte code)
+    private static VcpReading ReadVcp(SafePhysicalMonitorHandle handle, byte code)
     {
-        return GetVCPFeatureAndVCPFeatureReply(handle, code, IntPtr.Zero, out var current, out var maximum)
+        return PInvoke.GetVCPFeatureAndVCPFeatureReply(handle, code, out _, out var current, out var maximum) != 0
             ? new VcpReading(true, current, maximum, maximum > 0 ? (int)Math.Round((double)current / maximum * 100) : (int)current)
             : new VcpReading(false, 0, 0, null);
     }
 
-    private static List<T> WithPhysicalMonitors<T>(Func<PhysicalMonitorHandle, int, T> reader)
+    private List<T> WithPhysicalMonitors<T>(Func<PhysicalMonitorHandle, int, T> reader)
     {
         var handles = EnumeratePhysicalMonitors();
         try
@@ -102,22 +106,33 @@ public sealed class MonitorControlService
         }
     }
 
-    private static List<PhysicalMonitorHandle> EnumeratePhysicalMonitors()
+    private unsafe List<PhysicalMonitorHandle> EnumeratePhysicalMonitors()
     {
         var handles = new List<PhysicalMonitorHandle>();
-        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (monitor, _, _, _) =>
+        PInvoke.EnumDisplayMonitors(default, (RECT?)null, (monitor, _, _, _) =>
         {
-            if (!GetNumberOfPhysicalMonitorsFromHMONITOR(monitor, out var count) || count == 0)
+            try
             {
-                return true;
+                if (!PInvoke.GetNumberOfPhysicalMonitorsFromHMONITOR(monitor, out var count) || count == 0)
+                {
+                    return true;
+                }
+
+                var native = new PHYSICAL_MONITOR[count];
+                if (PInvoke.GetPhysicalMonitorsFromHMONITOR(monitor, native))
+                {
+                    handles.AddRange(native.Select(item => new PhysicalMonitorHandle(
+                        new SafePhysicalMonitorHandle((IntPtr)item.hPhysicalMonitor),
+                        item.szPhysicalMonitorDescription.AsSpan().TrimEnd('\0').ToString())));
+                }
             }
-            var native = new PhysicalMonitor[count];
-            if (GetPhysicalMonitorsFromHMONITOR(monitor, count, native))
+            catch (Exception error)
             {
-                handles.AddRange(native.Select(item => new PhysicalMonitorHandle(item.Handle, item.Description ?? "")));
+                _logger.Warn($"DDC/CI monitor enumeration skipped a display: {error.Message}");
             }
+
             return true;
-        }, IntPtr.Zero);
+        }, default);
         return handles;
     }
 
@@ -125,46 +140,25 @@ public sealed class MonitorControlService
     {
         foreach (var monitor in monitors)
         {
-            DestroyPhysicalMonitor(monitor.Handle);
+            monitor.Handle.Dispose();
         }
     }
 
-    private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc, IntPtr rect, IntPtr data);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc callback, IntPtr data);
-
-    [DllImport("dxva2.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(IntPtr monitor, out uint count);
-
-    [DllImport("dxva2.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetPhysicalMonitorsFromHMONITOR(IntPtr monitor, uint count, [Out] PhysicalMonitor[] monitors);
-
-    [DllImport("dxva2.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyPhysicalMonitor(IntPtr monitor);
-
-    [DllImport("dxva2.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetVCPFeatureAndVCPFeatureReply(IntPtr monitor, byte code, IntPtr type, out uint current, out uint maximum);
-
-    [DllImport("dxva2.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetVCPFeature(IntPtr monitor, byte code, uint value);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct PhysicalMonitor
+    private sealed class SafePhysicalMonitorHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
-        public IntPtr Handle;
+        public SafePhysicalMonitorHandle(IntPtr handle)
+            : base(ownsHandle: true)
+        {
+            SetHandle(handle);
+        }
 
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string? Description;
+        protected override bool ReleaseHandle()
+        {
+            return PInvoke.DestroyPhysicalMonitor((HANDLE)handle);
+        }
     }
 
-    private sealed record PhysicalMonitorHandle(IntPtr Handle, string Description);
+    private sealed record PhysicalMonitorHandle(SafePhysicalMonitorHandle Handle, string Description);
 
     private sealed record VcpReading(bool Supported, uint Current, uint Maximum, int? Percent);
 }
