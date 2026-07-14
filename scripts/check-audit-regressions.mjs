@@ -211,6 +211,7 @@ assert(/DiskInfoToolkit 1\.1\.2/.test(thirdPartyNotices), "third-party notices m
 assert(/HidSharp 2\.6\.4/.test(thirdPartyNotices), "third-party notices must list HidSharp 2.6.4");
 assert(/RAMSPDToolkit-NDD 1\.4\.2/.test(thirdPartyNotices), "third-party notices must list RAMSPDToolkit-NDD 1.4.2");
 assert(/System\.IO\.Ports 10\.0\.3/.test(thirdPartyNotices), "third-party notices must list System.IO.Ports 10.0.3");
+assert(/System\.Management 10\.0\.2/.test(thirdPartyNotices), "third-party notices must list System.Management 10.0.2");
 assert(
   /System\.Threading\.AccessControl 10\.0\.3/.test(thirdPartyNotices),
   "third-party notices must list System.Threading.AccessControl 10.0.3"
