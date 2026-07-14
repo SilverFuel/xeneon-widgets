@@ -75,6 +75,7 @@ const hueService = readWorkspaceFile("app/Services/HueService.cs");
 const uniFiService = readWorkspaceFile("app/Services/UniFiService.cs");
 const calendarService = readWorkspaceFile("app/Services/CalendarService.cs");
 const weatherService = readWorkspaceFile("app/Services/WeatherService.cs");
+const httpReadResilience = readWorkspaceFile("app/Infrastructure/HttpReadResilience.cs");
 const endpointGuard = readWorkspaceFile("app/Infrastructure/NetworkEndpointGuard.cs");
 const legacyBridge = readWorkspaceFile("bridge/server.mjs");
 const electronMain = readWorkspaceFile("desktop/electron/src/main.cjs");
@@ -161,7 +162,8 @@ assert(
     && /GetDisplayHost/.test(configController)
     && !/icsUrl\s*=\s*config\.Calendar\.IcsUrl/.test(configController)
     && /MaxIcsBytes\s*=\s*512\s*\*\s*1024/.test(calendarService)
-    && /HttpCompletionOption\.ResponseHeadersRead/.test(calendarService),
+    && /HttpReadResilience\.SendAsync/.test(calendarService)
+    && /HttpCompletionOption\.ResponseHeadersRead/.test(httpReadResilience),
   "calendar ICS fetches must validate remote URL shape, cap response size, and avoid returning bearer feed URLs from config"
 );
 

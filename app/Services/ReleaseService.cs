@@ -5,6 +5,7 @@ namespace XenonEdgeHost;
 
 public sealed class ReleaseService
 {
+    private const int MaxReleaseResponseBytes = 2 * 1024 * 1024;
     private const string LatestReleaseApiUrl = "https://api.github.com/repos/SilverFuel/xeneon-widgets/releases/latest";
     private const string ReleasesUrl = "https://github.com/SilverFuel/xeneon-widgets/releases";
 
@@ -22,11 +23,17 @@ public sealed class ReleaseService
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, GetReleaseApiUrl(normalizedChannel));
-            request.Headers.UserAgent.ParseAdd($"XenonEdgeHost/{currentVersion}");
-            request.Headers.Accept.ParseAdd("application/vnd.github+json");
-
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await HttpReadResilience.SendAsync(
+                _httpClient,
+                () =>
+                {
+                    var request = new HttpRequestMessage(HttpMethod.Get, GetReleaseApiUrl(normalizedChannel));
+                    request.Headers.UserAgent.ParseAdd($"XenonEdgeHost/{currentVersion}");
+                    request.Headers.Accept.ParseAdd("application/vnd.github+json");
+                    return request;
+                },
+                MaxReleaseResponseBytes,
+                cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return BuildUnavailable(currentVersion, normalizedChannel, $"GitHub returned HTTP {(int)response.StatusCode}.");

@@ -76,7 +76,11 @@ public sealed class CalendarService
         try
         {
             var normalizedUrl = NetworkEndpointGuard.NormalizeRemoteHttpUrl(icsUrl, "Calendar ICS URL");
-            using var response = await _httpClient.GetAsync(normalizedUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await HttpReadResilience.SendAsync(
+                _httpClient,
+                () => new HttpRequestMessage(HttpMethod.Get, normalizedUrl),
+                MaxIcsBytes,
+                cancellationToken);
             if (response.Content.Headers.ContentLength is > MaxIcsBytes)
             {
                 throw new InvalidOperationException("Calendar feed is larger than the supported 512 KiB limit.");
