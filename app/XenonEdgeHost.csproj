@@ -31,9 +31,10 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
     <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.298" PrivateAssets="all" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
-    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="10.0.2" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
     <PackageReference Include="Ical.Net" Version="5.2.3" />
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
     <PackageReference Include="Polly.Core" Version="8.7.0" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
@@ -56,6 +57,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <EmbeddedResource Include="..\dashboard.html" Link="WebAssets\dashboard.html" LogicalName="WebAssets/dashboard.html" />
     <EmbeddedResource Include="..\hosted-dashboard.html" Link="WebAssets\hosted-dashboard.html" LogicalName="WebAssets/hosted-dashboard.html" />
     <EmbeddedResource Include="..\index.html" Link="WebAssets\index.html" LogicalName="WebAssets/index.html" />

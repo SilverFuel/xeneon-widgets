@@ -12,6 +12,8 @@ You may not sell, sublicense, repackage, re-upload, redistribute, host, rent, le
 
 You may not remove product attribution, license notices, or third-party notices.
 
+These restrictions apply only to SilverFuel's original Auxora code and assets. They do not reduce or replace the rights granted for third-party components under the licenses identified in `THIRD-PARTY-NOTICES.md`.
+
 This software is provided "as is" without warranties of any kind. SilverFuel is not liable for damages, data loss, business interruption, hardware issues, or service interruptions arising from use of the software.
 
 XENEON Edge Host is an independent product. It is not endorsed by, sponsored by, or affiliated with CORSAIR, Ubiquiti, Philips Hue, OpenWeather, Microsoft, Apple, or any other named integration provider unless a separate written agreement says otherwise.

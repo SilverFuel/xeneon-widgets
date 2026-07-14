@@ -136,7 +136,7 @@ http://127.0.0.1:8976/api/gpu-power
 
 Built-in sources:
 
-- LibreHardwareMonitor or OpenHardwareMonitor WMI sensors
+- embedded LibreHardwareMonitor CPU/GPU temperature sensors, with LibreHardwareMonitor or OpenHardwareMonitor WMI fallback
 - HWiNFO sensor CSV logs when available
 
 For HWiNFO CSV logs, either place a recent HWiNFO/sensor CSV in Documents, Desktop, Downloads, `Documents\HWiNFO`, or `Documents\HWiNFO64`, or set one of these environment variables before launching Xenon:
