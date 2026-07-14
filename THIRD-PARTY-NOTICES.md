@@ -50,6 +50,13 @@ LibreHardwareMonitorLib 0.9.6 brings the following libraries into the Windows di
 - License: MIT License
 - License text: https://licenses.nuget.org/MIT
 
+### System.Management 10.0.2
+
+- Project: https://github.com/dotnet/runtime
+- Package: https://www.nuget.org/packages/System.Management/10.0.2
+- License: MIT License
+- License text: https://licenses.nuget.org/MIT
+
 ### System.Threading.AccessControl 10.0.3
 
 - Project: https://github.com/dotnet/runtime
