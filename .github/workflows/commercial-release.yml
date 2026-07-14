@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Check out requested release
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
@@ -42,12 +42,12 @@ jobs:
           "sha=$($releaseSha.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 8.0.x
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
 
@@ -80,7 +80,7 @@ jobs:
           if (-not (Test-Path publish/XenonEdgeHost.exe -PathType Leaf)) { throw "Published application executable is missing." }
 
       - name: Upload unsigned app payload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: auxora-unsigned-app
           if-no-files-found: error
@@ -94,7 +94,7 @@ jobs:
 
     steps:
       - name: Download unsigned app payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: auxora-unsigned-app
           path: publish
@@ -152,7 +152,7 @@ jobs:
           }
 
       - name: Upload signed app payload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: auxora-signed-app
           if-no-files-found: error
@@ -165,13 +165,13 @@ jobs:
 
     steps:
       - name: Check out resolved release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ needs.build-app.outputs.release-sha }}
           persist-credentials: false
 
       - name: Download signed app payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: auxora-signed-app
           path: publish
@@ -190,7 +190,7 @@ jobs:
           Copy-Item -LiteralPath app/dist/README-install.txt -Destination unsigned-candidate
 
       - name: Upload unsigned installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: auxora-unsigned-installer
           if-no-files-found: error
@@ -204,7 +204,7 @@ jobs:
 
     steps:
       - name: Download unsigned installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: auxora-unsigned-installer
           path: candidate
@@ -266,7 +266,7 @@ jobs:
           Set-Content -LiteralPath "$target.sha256" -Value "$hash  $([IO.Path]::GetFileName($target))" -Encoding ASCII
 
       - name: Upload signed installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: auxora-signed-installer
           if-no-files-found: error
@@ -279,18 +279,18 @@ jobs:
 
     steps:
       - name: Check out resolved release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ needs.build-app.outputs.release-sha }}
           persist-credentials: false
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 8.0.x
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
 
@@ -304,13 +304,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "npm ci (desktop/electron) failed with exit code $LASTEXITCODE." }
 
       - name: Download signed app payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: auxora-signed-app
           path: publish
 
       - name: Download signed installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: auxora-signed-installer
           path: app/dist
@@ -338,7 +338,7 @@ jobs:
           Copy-Item -LiteralPath verified-commercial-evidence.json -Destination release-candidate
 
       - name: Upload verified signed candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: auxora-signed-windows-candidate
           if-no-files-found: error
