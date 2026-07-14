@@ -1,6 +1,7 @@
 param(
   [string]$InstallerPath = "",
   [switch]$RequireSignedInstaller,
+  [string[]]$AllowedSignerThumbprint = @(),
   [switch]$AllowGitHubSupportPath,
   [switch]$AllowDirty,
   [switch]$RunBuildChecks
@@ -145,12 +146,15 @@ try {
     $resolvedInstaller = Resolve-Path -LiteralPath $InstallerPath
     Add-Pass "Installer found: $($resolvedInstaller.Path)"
     $artifactArgs = @(
-      "-NoProfile", "-File", (Join-Path $repoRoot "scripts\Test-ReleaseArtifact.ps1"),
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $repoRoot "scripts\Test-ReleaseArtifact.ps1"),
       "-InstallerPath", $resolvedInstaller.Path,
       "-ExpectedVersion", $version
     )
     if ($RequireSignedInstaller) {
       $artifactArgs += @("-RequireSignature", "-PublishedAppPath", (Join-Path $repoRoot "publish\XenonEdgeHost.exe"))
+      if ($AllowedSignerThumbprint.Count -gt 0) {
+        $artifactArgs += @("-AllowedSignerThumbprint") + $AllowedSignerThumbprint
+      }
     }
     & powershell.exe @artifactArgs
     if ($LASTEXITCODE -eq 0) {

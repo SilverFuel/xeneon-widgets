@@ -86,7 +86,7 @@ try {
     if (-not (Test-Path -LiteralPath $resolved.Path -PathType Leaf)) {
       throw "Signing target is not a file: $item"
     }
-    $args = @(
+    $signArguments = @(
       "sign",
       "/fd", "SHA256",
       "/tr", $TimestampUrl,
@@ -94,12 +94,12 @@ try {
       "/sha1", $effectiveThumbprint
     )
     if ($CertificateStore -eq "LocalMachine") {
-      $args += "/sm"
+      $signArguments += "/sm"
     }
-    $args += $resolved.Path
+    $signArguments += $resolved.Path
 
     Write-Host "Signing $($resolved.Path)"
-    & $signTool @args
+    & $signTool @signArguments
     if ($LASTEXITCODE -ne 0) {
       throw "signtool sign failed for $($resolved.Path)"
     }
@@ -118,10 +118,18 @@ try {
   }
 } finally {
   $CertificatePassword = $null
+  $cleanupFailures = New-Object System.Collections.Generic.List[string]
   foreach ($certificateThumbprint in $temporaryCertificateThumbprints) {
     $temporaryCertificatePath = Join-Path $certificateStorePath $certificateThumbprint
     if (Test-Path -LiteralPath $temporaryCertificatePath) {
-      Remove-Item -LiteralPath $temporaryCertificatePath -DeleteKey -Force -ErrorAction Stop
+      try {
+        Remove-Item -LiteralPath $temporaryCertificatePath -DeleteKey -Force -ErrorAction Stop
+      } catch {
+        $cleanupFailures.Add("$certificateThumbprint ($($_.Exception.Message))") | Out-Null
+      }
     }
+  }
+  if ($cleanupFailures.Count -gt 0) {
+    throw "Failed to remove one or more temporary signing certificates: $($cleanupFailures -join '; ')"
   }
 }

@@ -17,7 +17,7 @@ Auxora must remain a free beta until every blocking item below has verifiable ev
 
 ## Required commands
 
-Copy `docs/release/commercial-launch-evidence.example.json` to `commercial-launch-evidence.json` at the repository root, replace every placeholder with completed, non-sensitive evidence, and commit that release-specific file with the candidate. The protected commercial workflow and local gate both require this exact root path. Set `confirmedAt` when the complete evidence set is rechecked; the gate rejects evidence confirmations older than 30 days.
+Copy `docs/release/commercial-launch-evidence.example.json` to `commercial-launch-evidence.json` at the repository root, replace every placeholder with completed, non-sensitive evidence, and commit that release-specific file with the candidate. Add every currently approved Auxora code-signing certificate SHA-1 thumbprint to `releaseArtifact.allowedSignerThumbprints`; retaining both old and new identities during a planned rotation provides an explicit overlap window. The protected commercial workflow and local gate both require this exact root path. Set `confirmedAt` when the complete evidence set is rechecked; the gate rejects evidence confirmations older than 30 days.
 
 Before running either command below, replace both `<version>` and `<timestamp>` in `-InstallerPath` with the exact values from the candidate installer filename.
 

@@ -2,9 +2,9 @@
 
 ## Free Public Beta
 
-Auxora is the adaptive successor to XENEON Edge Host. Version 0.3.x remains a free public beta: name clearance, a signed Windows 0.3.x release, and clean-machine certification are still pending. Do not charge for this build yet.
+Auxora is the adaptive successor to XENEON Edge Host. Version 0.3.x remains a free public beta. The free-beta Windows installer is unsigned; signed commercial candidates require the gated workflow and completed certification evidence. Do not charge for this build yet.
 
-- no signed Windows 0.3.x installer has been produced yet
+- the published free-beta Windows installer is unsigned
 - Windows may show a SmartScreen warning on first install
 - the macOS host is still a beta scaffold and should not be advertised as a finished Mac product
 - support is handled through GitHub Issues and GitHub Security Advisories for now

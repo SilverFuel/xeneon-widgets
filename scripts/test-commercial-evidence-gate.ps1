@@ -59,6 +59,7 @@ try {
   $complete.rollbackRelease.completed = $true; $complete.rollbackRelease.releaseReference = "fixture-rollback"
   $complete.paidPilot.completed = $true; $complete.paidPilot.participantCount = 10; $complete.paidPilot.reportReference = "fixture-pilot"
   $complete.releaseArtifact.completed = $true; $complete.releaseArtifact.installerSha256 = $installerHash
+  $complete.releaseArtifact.allowedSignerThumbprints = @("A" * 40)
   $complete.confirmedAt = [DateTimeOffset]::UtcNow.ToString("O")
   $completePath = Join-Path $resolvedFixture "complete.json"
   $complete | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $completePath -Encoding UTF8
@@ -68,6 +69,35 @@ try {
     throw "Complete matching commercial evidence did not pass. Output: $($completeResult.Output)"
   }
   Write-Host "OK: complete evidence accepted"
+
+  $complete.releaseArtifact.allowedSignerThumbprints = @()
+  $emptySignerPath = Join-Path $resolvedFixture "empty-signer.json"
+  $complete | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $emptySignerPath -Encoding UTF8
+  $emptySignerResult = Invoke-Gate $emptySignerPath $installerPath $supportPath
+  if ($emptySignerResult.ExitCode -eq 0) {
+    throw "Empty approved signer array unexpectedly passed. Output: $($emptySignerResult.Output)"
+  }
+  Write-Host "OK: empty approved signer array rejected"
+
+  $complete.releaseArtifact.allowedSignerThumbprints = @("BAD")
+  $badSignerPath = Join-Path $resolvedFixture "bad-signer.json"
+  $complete | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $badSignerPath -Encoding UTF8
+  $badSignerResult = Invoke-Gate $badSignerPath $installerPath $supportPath
+  if ($badSignerResult.ExitCode -eq 0) {
+    throw "Invalid approved signer evidence unexpectedly passed. Output: $($badSignerResult.Output)"
+  }
+  Write-Host "OK: invalid approved signer rejected"
+
+  $complete.releaseArtifact.allowedSignerThumbprints = "A" * 40
+  $scalarSignerPath = Join-Path $resolvedFixture "scalar-signer.json"
+  $complete | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scalarSignerPath -Encoding UTF8
+  $scalarSignerResult = Invoke-Gate $scalarSignerPath $installerPath $supportPath
+  if ($scalarSignerResult.ExitCode -eq 0) {
+    throw "Scalar approved signer value unexpectedly passed. Output: $($scalarSignerResult.Output)"
+  }
+  Write-Host "OK: scalar approved signer value rejected"
+
+  $complete.releaseArtifact.allowedSignerThumbprints = @("A" * 40)
 
   $complete.releaseArtifact.installerSha256 = "0" * 64
   $badHashPath = Join-Path $resolvedFixture "bad-hash.json"

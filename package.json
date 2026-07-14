@@ -20,7 +20,7 @@
     "check:dashboard-smoke": "node scripts/check-dashboard-visual-a11y.mjs",
     "check:adaptive-layouts": "node scripts/check-adaptive-layout-matrix.mjs",
     "check:commercial-readiness": "node scripts/check-commercial-readiness.mjs",
-    "test:release-artifact": "pwsh -NoProfile -File .\\scripts\\test-release-artifact-verifier.ps1",
+    "test:release-artifact": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\test-release-artifact-verifier.ps1",
     "check:release-gauntlet": "node scripts/check-release-gauntlet.mjs",
     "check:installer-safety": "node scripts/check-installer-safety.mjs",
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",

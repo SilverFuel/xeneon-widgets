@@ -4,7 +4,7 @@ setlocal
 cd /d "%~dp0"
 
 echo Building Auxora installer...
-powershell.exe -NoProfile -File "%~dp0app\build-installer.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\build-installer.ps1"
 set EXITCODE=%ERRORLEVEL%
 
 if %EXITCODE% EQU 0 (

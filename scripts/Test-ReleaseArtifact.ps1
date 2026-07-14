@@ -7,16 +7,45 @@ param(
 
   [switch]$RequireSignature,
 
-  [string]$PublishedAppPath = ""
+  [string]$PublishedAppPath = "",
+
+  [string[]]$AllowedSignerThumbprint = @()
 )
 
 $ErrorActionPreference = "Stop"
+if ($PSVersionTable.PSEdition -eq "Desktop") {
+  Import-Module (Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1") -Force
+}
 $failures = New-Object System.Collections.Generic.List[string]
 . (Join-Path $PSScriptRoot "lib\Hashing.ps1")
 
 function Add-ArtifactFailure($message) {
   $script:failures.Add($message) | Out-Null
   Write-Error $message -ErrorAction Continue
+}
+
+$approvedSignerThumbprints = New-Object System.Collections.Generic.List[string]
+foreach ($thumbprint in $AllowedSignerThumbprint) {
+  $normalizedThumbprint = ([string]$thumbprint -replace '\s', '').ToUpperInvariant()
+  if ($normalizedThumbprint -notmatch '^[0-9A-F]{40}$') {
+    Add-ArtifactFailure "Approved signer thumbprints must contain exactly 40 hexadecimal characters."
+  } elseif (-not $approvedSignerThumbprints.Contains($normalizedThumbprint)) {
+    $approvedSignerThumbprints.Add($normalizedThumbprint) | Out-Null
+  }
+}
+if ($RequireSignature -and $approvedSignerThumbprints.Count -eq 0) {
+  Add-ArtifactFailure "At least one approved Auxora signer thumbprint is required for signed releases."
+}
+
+function Assert-ApprovedSigner($signature, $artifactLabel) {
+  if ($signature.Status -ne "Valid") {
+    return
+  }
+
+  $actualThumbprint = ([string]$signature.SignerCertificate.Thumbprint -replace '\s', '').ToUpperInvariant()
+  if (-not $script:approvedSignerThumbprints.Contains($actualThumbprint)) {
+    Add-ArtifactFailure "$artifactLabel signer is not in the approved Auxora signer list: $actualThumbprint"
+  }
 }
 
 try {
@@ -49,6 +78,8 @@ if (-not (Test-Path -LiteralPath $hashPath -PathType Leaf)) {
 $installerSignature = Get-AuthenticodeSignature -LiteralPath $resolvedInstaller
 if ($RequireSignature -and $installerSignature.Status -ne "Valid") {
   Add-ArtifactFailure "Installer signature is not valid: $($installerSignature.Status)"
+} elseif ($RequireSignature) {
+  Assert-ApprovedSigner $installerSignature "Installer"
 } elseif (-not $RequireSignature -and $installerSignature.Status -ne "Valid") {
   Write-Warning "Installer is unsigned ($($installerSignature.Status)); this is acceptable only for a clearly labeled free beta."
 }
@@ -60,6 +91,8 @@ if ($RequireSignature) {
     $appSignature = Get-AuthenticodeSignature -LiteralPath $PublishedAppPath
     if ($appSignature.Status -ne "Valid") {
       Add-ArtifactFailure "Published app executable signature is not valid: $($appSignature.Status)"
+    } else {
+      Assert-ApprovedSigner $appSignature "Published app executable"
     }
   }
 }

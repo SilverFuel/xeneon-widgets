@@ -1,4 +1,7 @@
 $ErrorActionPreference = "Stop"
+if ($PSVersionTable.PSEdition -eq "Desktop") {
+  Import-Module (Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1") -Force
+}
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $verifier = Join-Path $PSScriptRoot "Test-ReleaseArtifact.ps1"
@@ -21,13 +24,13 @@ function Write-Fixture($name, $content, [switch]$MismatchHash) {
   return $path
 }
 
-function Invoke-ExpectedResult($label, $path, [bool]$shouldPass, [switch]$RequireSignature, [string]$PublishedAppPath = "") {
+function Invoke-ExpectedResult($label, $path, [bool]$shouldPass, [switch]$RequireSignature, [string]$PublishedAppPath = "", [string[]]$AllowedSignerThumbprint = @()) {
   $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $verifier, "-InstallerPath", $path, "-ExpectedVersion", "0.3.0")
   if ($RequireSignature) {
     if ([string]::IsNullOrWhiteSpace($PublishedAppPath)) {
       $PublishedAppPath = $path
     }
-    $arguments += @("-RequireSignature", "-PublishedAppPath", $PublishedAppPath)
+    $arguments += @("-RequireSignature", "-PublishedAppPath", $PublishedAppPath, "-AllowedSignerThumbprint") + $AllowedSignerThumbprint
   }
   $previousErrorActionPreference = $ErrorActionPreference
   try {
@@ -53,6 +56,7 @@ try {
   if ((Get-AuthenticodeSignature -LiteralPath $signedSystemExecutable).Status -ne "Valid") {
     throw "A valid Windows-signed system executable is required for the positive signature fixture."
   }
+  $signedThumbprint = (Get-AuthenticodeSignature -LiteralPath $signedSystemExecutable).SignerCertificate.Thumbprint
   $signedInstaller = Join-Path $resolvedFixture "Auxora-Setup-0.3.0-signed.exe"
   $signedApp = Join-Path $resolvedFixture "Auxora-signed-app.exe"
   Copy-Item -LiteralPath $signedSystemExecutable -Destination $signedInstaller
@@ -64,8 +68,9 @@ try {
   Invoke-ExpectedResult "directory installer path" $resolvedFixture $false
   Invoke-ExpectedResult "stale-version artifact" $stale $false
   Invoke-ExpectedResult "hash-mismatched artifact" $mismatch $false
-  Invoke-ExpectedResult "unsigned commercial artifact" $current $false -RequireSignature
-  Invoke-ExpectedResult "signed commercial artifact" $signedInstaller $true -RequireSignature -PublishedAppPath $signedApp
+  Invoke-ExpectedResult "unsigned commercial artifact" $current $false -RequireSignature -AllowedSignerThumbprint $signedThumbprint
+  Invoke-ExpectedResult "signed commercial artifact" $signedInstaller $true -RequireSignature -PublishedAppPath $signedApp -AllowedSignerThumbprint $signedThumbprint
+  Invoke-ExpectedResult "unapproved valid signer" $signedInstaller $false -RequireSignature -PublishedAppPath $signedApp -AllowedSignerThumbprint ("0" * 40)
 } finally {
   if (Test-Path -LiteralPath $resolvedFixture) {
     Remove-Item -LiteralPath $resolvedFixture -Recurse -Force

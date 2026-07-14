@@ -143,6 +143,7 @@ assert(
   /Auxora-Setup-\$ExpectedVersion-/.test(artifactVerifier)
     && /Installer SHA256 sidecar does not match/.test(artifactVerifier)
     && /Installer signature is not valid/.test(artifactVerifier)
+    && /approved Auxora signer list/.test(artifactVerifier)
     && /Published app executable signature is not valid/.test(artifactVerifier),
   "release artifact verification must bind version, hash, installer signature, and app signature"
 );
