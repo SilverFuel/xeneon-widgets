@@ -76,6 +76,8 @@ const uniFiService = readWorkspaceFile("app/Services/UniFiService.cs");
 const calendarService = readWorkspaceFile("app/Services/CalendarService.cs");
 const weatherService = readWorkspaceFile("app/Services/WeatherService.cs");
 const httpReadResilience = readWorkspaceFile("app/Infrastructure/HttpReadResilience.cs");
+const monitorControlService = readWorkspaceFile("app/Services/MonitorControlService.cs");
+const nativeMethods = readWorkspaceFile("app/NativeMethods.txt");
 const endpointGuard = readWorkspaceFile("app/Infrastructure/NetworkEndpointGuard.cs");
 const legacyBridge = readWorkspaceFile("bridge/server.mjs");
 const electronMain = readWorkspaceFile("desktop/electron/src/main.cjs");
@@ -154,6 +156,16 @@ assert(
     && /NormalizeLocalHttpsAuthority\(input,\s*"UniFi console"\)/.test(uniFiService)
     && /IsLocalOrPrivateHost/.test(endpointGuard),
   "Hue and UniFi inputs must be constrained to local/private endpoints"
+);
+
+assert(
+  /<PackageReference\s+Include="Microsoft\.Windows\.CsWin32"/.test(appCsproj)
+    && /^GetPhysicalMonitorsFromHMONITOR$/m.test(nativeMethods)
+    && /^GetVCPFeatureAndVCPFeatureReply$/m.test(nativeMethods)
+    && /class\s+SafePhysicalMonitorHandle\s*:\s*SafeHandleZeroOrMinusOneIsInvalid/.test(monitorControlService)
+    && /\bPInvoke\.DestroyPhysicalMonitor\s*\(/.test(monitorControlService)
+    && !/\[\s*DllImport(?:Attribute)?\s*\(/.test(monitorControlService),
+  "monitor controls must use generated CsWin32 bindings and owned physical-monitor handles"
 );
 
 assert(
