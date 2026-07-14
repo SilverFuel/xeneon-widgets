@@ -8,6 +8,7 @@ namespace XenonEdgeHost;
 public sealed class SystemMetricsService : IDisposable
 {
     private readonly HostLogger _logger;
+    private readonly HardwareTemperatureProvider _hardwareTemperatureProvider;
     private readonly object _sync = new();
     private System.Threading.Timer? _usageTimer;
     private System.Threading.Timer? _temperatureTimer;
@@ -25,6 +26,7 @@ public sealed class SystemMetricsService : IDisposable
     public SystemMetricsService(HostLogger logger)
     {
         _logger = logger;
+        _hardwareTemperatureProvider = new HardwareTemperatureProvider(logger);
     }
 
     public void Start()
@@ -36,9 +38,8 @@ public sealed class SystemMetricsService : IDisposable
 
         _started = true;
         SampleUsage();
-        SampleHardwareTemperatures();
         _usageTimer = new System.Threading.Timer(_ => SampleUsage(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
-        _temperatureTimer = new System.Threading.Timer(_ => SampleHardwareTemperatures(), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+        _temperatureTimer = new System.Threading.Timer(_ => SampleHardwareTemperatures(), null, TimeSpan.Zero, TimeSpan.FromSeconds(15));
         _logger.Info("Native system metrics service started.");
     }
 
@@ -69,6 +70,7 @@ public sealed class SystemMetricsService : IDisposable
     {
         _usageTimer?.Dispose();
         _temperatureTimer?.Dispose();
+        _hardwareTemperatureProvider.Dispose();
     }
 
     private void SampleUsage()
@@ -238,13 +240,30 @@ public sealed class SystemMetricsService : IDisposable
 
         try
         {
-            var cpuTemp = TryReadHardwareTemperature("CPU Package", "Core Average", "Tctl", "Tdie", "cpu");
-            var gpuTemp = TryReadHardwareTemperature("GPU Core", "GPU Temperature", "GPU Hot Spot", "gpu");
+            var embedded = _hardwareTemperatureProvider.Read();
+            var wmiCpu = embedded.Cpu.HasValue
+                ? null
+                : TryReadHardwareTemperature("CPU Package", "Core Average", "Tctl", "Tdie", "cpu");
+            var wmiGpu = embedded.Gpu.HasValue
+                ? null
+                : TryReadHardwareTemperature("GPU Core", "GPU Temperature", "GPU Hot Spot", "gpu");
+            var cpuTemp = embedded.Cpu ?? wmiCpu;
+            var gpuTemp = embedded.Gpu ?? wmiGpu;
+            var embeddedUsed = embedded.Cpu.HasValue || embedded.Gpu.HasValue;
+            var wmiUsed = wmiCpu.HasValue || wmiGpu.HasValue;
+            var source = embeddedUsed && wmiUsed
+                ? $"{embedded.Source} + WMI fallback"
+                : embeddedUsed
+                    ? embedded.Source
+                    : wmiUsed
+                        ? "hardware monitor WMI"
+                        : "unavailable";
 
             lock (_sync)
             {
                 _snapshot.CpuTemp = cpuTemp;
-                _snapshot.GpuTemp = gpuTemp ?? _snapshot.GpuTemp;
+                _snapshot.GpuTemp = gpuTemp;
+                _snapshot.TemperatureSource = source;
                 _snapshot.Message = BuildTelemetryMessage(_snapshot);
             }
         }
@@ -367,7 +386,7 @@ public sealed class SystemMetricsService : IDisposable
         }
         else
         {
-            parts.Add("Hardware temperatures require LibreHardwareMonitor or OpenHardwareMonitor.");
+            parts.Add("Hardware temperatures are unavailable on this PC.");
         }
 
         return string.Join(" ", parts);
@@ -440,6 +459,8 @@ public sealed class SystemSnapshot
 
     public double? GpuTemp { get; set; }
 
+    public string TemperatureSource { get; set; } = "unavailable";
+
     public string Source { get; set; } = "native host";
 
     public DisplaySnapshot? PrimaryDisplay { get; set; }
@@ -460,6 +481,7 @@ public sealed class SystemSnapshot
             Ram = Ram,
             CpuTemp = CpuTemp,
             GpuTemp = GpuTemp,
+            TemperatureSource = TemperatureSource,
             Source = Source,
             PrimaryDisplay = PrimaryDisplay?.Clone(),
             TopProcesses = TopProcesses.Select(process => process.Clone()).ToList()

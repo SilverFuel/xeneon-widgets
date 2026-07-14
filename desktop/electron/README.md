@@ -1,4 +1,4 @@
-# XENEON Edge Host Desktop
+# Auxora Desktop Beta
 
 This is the macOS beta host. It wraps the shared dashboard in Electron and serves local dashboard files from `127.0.0.1`.
 

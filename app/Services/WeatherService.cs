@@ -4,6 +4,7 @@ namespace XenonEdgeHost;
 
 public sealed class WeatherService
 {
+    private const int MaxWeatherResponseBytes = 1024 * 1024;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
     private readonly HttpClient _httpClient;
     private readonly object _cacheSync = new();
@@ -53,20 +54,34 @@ public sealed class WeatherService
         var currentUrl = $"https://api.openweathermap.org/data/2.5/weather?q={Uri.EscapeDataString(city)}&units={Uri.EscapeDataString(units)}&appid={Uri.EscapeDataString(apiKey)}";
         var forecastUrl = $"https://api.openweathermap.org/data/2.5/forecast?q={Uri.EscapeDataString(city)}&units={Uri.EscapeDataString(units)}&appid={Uri.EscapeDataString(apiKey)}";
 
-        using var currentResponse = await _httpClient.GetAsync(currentUrl, cancellationToken);
-        using var forecastResponse = await _httpClient.GetAsync(forecastUrl, cancellationToken);
-        var currentContent = await currentResponse.Content.ReadAsStringAsync(cancellationToken);
-        var forecastContent = await forecastResponse.Content.ReadAsStringAsync(cancellationToken);
-
+        using var currentResponse = await HttpReadResilience.SendAsync(
+            _httpClient,
+            () => new HttpRequestMessage(HttpMethod.Get, currentUrl),
+            MaxWeatherResponseBytes,
+            cancellationToken);
         if (!currentResponse.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(ReadErrorMessage(currentContent, "Weather request failed"));
+            var errorContent = HttpReadResilience.IsTransientStatus(currentResponse.StatusCode)
+                ? ""
+                : await currentResponse.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException(ReadErrorMessage(errorContent, "Weather request failed"));
         }
 
+        var currentContent = await currentResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var forecastResponse = await HttpReadResilience.SendAsync(
+            _httpClient,
+            () => new HttpRequestMessage(HttpMethod.Get, forecastUrl),
+            MaxWeatherResponseBytes,
+            cancellationToken);
         if (!forecastResponse.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(ReadErrorMessage(forecastContent, "Forecast request failed"));
+            var errorContent = HttpReadResilience.IsTransientStatus(forecastResponse.StatusCode)
+                ? ""
+                : await forecastResponse.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException(ReadErrorMessage(errorContent, "Forecast request failed"));
         }
+
+        var forecastContent = await forecastResponse.Content.ReadAsStringAsync(cancellationToken);
 
         using var current = ParseUpstreamJson(currentContent, "Weather");
         using var forecast = ParseUpstreamJson(forecastContent, "Forecast");

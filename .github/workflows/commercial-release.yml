@@ -1,0 +1,345 @@
+name: Commercial Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Signed release tag or commit to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-app:
+    name: Build unsigned app without signing secrets
+    runs-on: windows-latest
+    outputs:
+      release-sha: ${{ steps.release-commit.outputs.sha }}
+
+    steps:
+      - name: Check out requested release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve and require a commit from main
+        id: release-commit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git fetch origin main --no-tags
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch origin/main." }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw "The requested release must resolve to a commit already present on main." }
+          $releaseSha = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $releaseSha -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "Failed to resolve an immutable release commit SHA."
+          }
+          "sha=$($releaseSha.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE." }
+          npm --prefix desktop/electron ci
+          if ($LASTEXITCODE -ne 0) { throw "npm ci (desktop/electron) failed with exit code $LASTEXITCODE." }
+
+      - name: Audit and validate
+        run: |
+          npm run audit:deps
+          npm run check
+
+      - name: Require commercial evidence
+        shell: pwsh
+        run: |
+          if (-not (Test-Path commercial-launch-evidence.json -PathType Leaf)) {
+            throw "commercial-launch-evidence.json is not committed for this release."
+          }
+
+      - name: Publish unsigned application
+        shell: pwsh
+        run: |
+          & ./app/publish.ps1
+          if ($LASTEXITCODE -ne 0) { throw "app/publish.ps1 failed with exit code $LASTEXITCODE." }
+          if (-not (Test-Path publish/XenonEdgeHost.exe -PathType Leaf)) { throw "Published application executable is missing." }
+
+      - name: Upload unsigned app payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: auxora-unsigned-app
+          if-no-files-found: error
+          path: publish
+
+  sign-app:
+    name: Sign app on isolated runner
+    needs: build-app
+    runs-on: windows-latest
+    environment: production
+
+    steps:
+      - name: Download unsigned app payload
+        uses: actions/download-artifact@v4
+        with:
+          name: auxora-unsigned-app
+          path: publish
+
+      - name: Sign published application
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $target = (Resolve-Path publish/XenonEdgeHost.exe).Path
+          $pfxPath = Join-Path $env:RUNNER_TEMP "auxora-signing.pfx"
+          $pfxBytes = $null
+          $passwordText = $null
+          $password = $null
+          $temporaryThumbprints = @()
+          try {
+            if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_BASE64)) { throw "WINDOWS_SIGNING_PFX_BASE64 is not configured." }
+            if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_PASSWORD)) { throw "WINDOWS_SIGNING_PFX_PASSWORD is not configured." }
+            $pfxBytes = [Convert]::FromBase64String($env:SIGNING_PFX_BASE64)
+            $passwordText = $env:SIGNING_PFX_PASSWORD
+            Remove-Item Env:SIGNING_PFX_BASE64, Env:SIGNING_PFX_PASSWORD -ErrorAction SilentlyContinue
+            [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+            $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
+            $passwordText = $null
+
+            $pfxData = Get-PfxData -FilePath $pfxPath -Password $password
+            $temporaryThumbprints = @(@($pfxData.EndEntityCertificates) + @($pfxData.OtherCertificates) | Where-Object { $_ } | Select-Object -ExpandProperty Thumbprint -Unique)
+            foreach ($thumbprint in $temporaryThumbprints) {
+              if (Test-Path -LiteralPath "Cert:\CurrentUser\My\$thumbprint") { throw "Refusing to overwrite an existing signing certificate." }
+            }
+            $imported = @(Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password)
+            $signingCertificates = @($imported | Where-Object HasPrivateKey)
+            if ($signingCertificates.Count -ne 1) { throw "The PFX must contain exactly one certificate with a private key." }
+            $result = Set-AuthenticodeSignature -FilePath $target -Certificate $signingCertificates[0] -HashAlgorithm SHA256 -TimestampServer "http://timestamp.digicert.com"
+            if ($result.Status -ne "Valid") { throw "Application signing failed: $($result.Status)" }
+          } finally {
+            Remove-Item Env:SIGNING_PFX_BASE64, Env:SIGNING_PFX_PASSWORD -ErrorAction SilentlyContinue
+            $cleanupFailures = New-Object System.Collections.Generic.List[string]
+            foreach ($thumbprint in $temporaryThumbprints) {
+              $certificatePath = "Cert:\CurrentUser\My\$thumbprint"
+              if (Test-Path -LiteralPath $certificatePath) {
+                try { Remove-Item -LiteralPath $certificatePath -DeleteKey -Force -ErrorAction Stop }
+                catch { $cleanupFailures.Add("certificate $thumbprint ($($_.Exception.Message))") | Out-Null }
+              }
+            }
+            try { Remove-Item -LiteralPath $pfxPath -Force -ErrorAction Stop }
+            catch { if (Test-Path -LiteralPath $pfxPath) { $cleanupFailures.Add("PFX file ($($_.Exception.Message))") | Out-Null } }
+            $password = $null
+            $passwordText = $null
+            if ($pfxBytes) { [Array]::Clear($pfxBytes, 0, $pfxBytes.Length) }
+            $pfxBytes = $null
+            if ($cleanupFailures.Count -gt 0) { throw "Signing credential cleanup failed: $($cleanupFailures -join '; ')" }
+          }
+
+      - name: Upload signed app payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: auxora-signed-app
+          if-no-files-found: error
+          path: publish
+
+  package-installer:
+    name: Package installer without signing secrets
+    needs: [build-app, sign-app]
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out resolved release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build-app.outputs.release-sha }}
+          persist-credentials: false
+
+      - name: Download signed app payload
+        uses: actions/download-artifact@v4
+        with:
+          name: auxora-signed-app
+          path: publish
+
+      - name: Package installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ./app/build-installer.ps1 -SkipPublish
+          if ($LASTEXITCODE -ne 0) { throw "app/build-installer.ps1 failed with exit code $LASTEXITCODE." }
+          $installers = @(Get-ChildItem app/dist/Auxora-Setup-*.exe -File)
+          if ($installers.Count -ne 1) { throw "Expected exactly one Auxora installer; found $($installers.Count)." }
+          Remove-Item -LiteralPath unsigned-candidate -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory unsigned-candidate -Force | Out-Null
+          Copy-Item -LiteralPath $installers[0].FullName -Destination unsigned-candidate
+          Copy-Item -LiteralPath app/dist/README-install.txt -Destination unsigned-candidate
+
+      - name: Upload unsigned installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: auxora-unsigned-installer
+          if-no-files-found: error
+          path: unsigned-candidate
+
+  sign-installer:
+    name: Sign installer on isolated runner
+    needs: package-installer
+    runs-on: windows-latest
+    environment: production
+
+    steps:
+      - name: Download unsigned installer
+        uses: actions/download-artifact@v4
+        with:
+          name: auxora-unsigned-installer
+          path: candidate
+
+      - name: Sign installer and create checksum
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installers = @(Get-ChildItem candidate/Auxora-Setup-*.exe -File)
+          if ($installers.Count -ne 1) { throw "Expected exactly one installer to sign; found $($installers.Count)." }
+          $target = $installers[0].FullName
+          $pfxPath = Join-Path $env:RUNNER_TEMP "auxora-signing.pfx"
+          $pfxBytes = $null
+          $passwordText = $null
+          $password = $null
+          $temporaryThumbprints = @()
+          try {
+            if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_BASE64)) { throw "WINDOWS_SIGNING_PFX_BASE64 is not configured." }
+            if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_PASSWORD)) { throw "WINDOWS_SIGNING_PFX_PASSWORD is not configured." }
+            $pfxBytes = [Convert]::FromBase64String($env:SIGNING_PFX_BASE64)
+            $passwordText = $env:SIGNING_PFX_PASSWORD
+            Remove-Item Env:SIGNING_PFX_BASE64, Env:SIGNING_PFX_PASSWORD -ErrorAction SilentlyContinue
+            [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+            $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
+            $passwordText = $null
+
+            $pfxData = Get-PfxData -FilePath $pfxPath -Password $password
+            $temporaryThumbprints = @(@($pfxData.EndEntityCertificates) + @($pfxData.OtherCertificates) | Where-Object { $_ } | Select-Object -ExpandProperty Thumbprint -Unique)
+            foreach ($thumbprint in $temporaryThumbprints) {
+              if (Test-Path -LiteralPath "Cert:\CurrentUser\My\$thumbprint") { throw "Refusing to overwrite an existing signing certificate." }
+            }
+            $imported = @(Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password)
+            $signingCertificates = @($imported | Where-Object HasPrivateKey)
+            if ($signingCertificates.Count -ne 1) { throw "The PFX must contain exactly one certificate with a private key." }
+            $result = Set-AuthenticodeSignature -FilePath $target -Certificate $signingCertificates[0] -HashAlgorithm SHA256 -TimestampServer "http://timestamp.digicert.com"
+            if ($result.Status -ne "Valid") { throw "Installer signing failed: $($result.Status)" }
+          } finally {
+            Remove-Item Env:SIGNING_PFX_BASE64, Env:SIGNING_PFX_PASSWORD -ErrorAction SilentlyContinue
+            $cleanupFailures = New-Object System.Collections.Generic.List[string]
+            foreach ($thumbprint in $temporaryThumbprints) {
+              $certificatePath = "Cert:\CurrentUser\My\$thumbprint"
+              if (Test-Path -LiteralPath $certificatePath) {
+                try { Remove-Item -LiteralPath $certificatePath -DeleteKey -Force -ErrorAction Stop }
+                catch { $cleanupFailures.Add("certificate $thumbprint ($($_.Exception.Message))") | Out-Null }
+              }
+            }
+            try { Remove-Item -LiteralPath $pfxPath -Force -ErrorAction Stop }
+            catch { if (Test-Path -LiteralPath $pfxPath) { $cleanupFailures.Add("PFX file ($($_.Exception.Message))") | Out-Null } }
+            $password = $null
+            $passwordText = $null
+            if ($pfxBytes) { [Array]::Clear($pfxBytes, 0, $pfxBytes.Length) }
+            $pfxBytes = $null
+            if ($cleanupFailures.Count -gt 0) { throw "Signing credential cleanup failed: $($cleanupFailures -join '; ')" }
+          }
+          $hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+          Set-Content -LiteralPath "$target.sha256" -Value "$hash  $([IO.Path]::GetFileName($target))" -Encoding ASCII
+
+      - name: Upload signed installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: auxora-signed-installer
+          if-no-files-found: error
+          path: candidate
+
+  verify-commercial:
+    name: Verify exact signed commercial candidate
+    needs: [build-app, sign-app, sign-installer]
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out resolved release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build-app.outputs.release-sha }}
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE." }
+          npm --prefix desktop/electron ci
+          if ($LASTEXITCODE -ne 0) { throw "npm ci (desktop/electron) failed with exit code $LASTEXITCODE." }
+
+      - name: Download signed app payload
+        uses: actions/download-artifact@v4
+        with:
+          name: auxora-signed-app
+          path: publish
+
+      - name: Download signed installer
+        uses: actions/download-artifact@v4
+        with:
+          name: auxora-signed-installer
+          path: app/dist
+
+      - name: Run signed commercial gate and stage exact output
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installers = @(Get-ChildItem app/dist/Auxora-Setup-*.exe -File)
+          if ($installers.Count -ne 1) { throw "Expected exactly one signed Auxora installer; found $($installers.Count)." }
+          $installer = $installers[0]
+          $evidence = Get-Content commercial-launch-evidence.json -Raw | ConvertFrom-Json
+          $evidence.releaseArtifact.completed = $true
+          $evidence.releaseArtifact.installerSha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
+          $evidence | ConvertTo-Json -Depth 8 | Set-Content verified-commercial-evidence.json -Encoding UTF8
+
+          & ./scripts/run-release-gauntlet.ps1 -InstallerPath $installer.FullName -RequireSignedInstaller -CommercialEvidencePath verified-commercial-evidence.json
+          if ($LASTEXITCODE -ne 0) { throw "Commercial release gauntlet failed with exit code $LASTEXITCODE." }
+
+          Remove-Item -LiteralPath release-candidate -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory release-candidate -Force | Out-Null
+          Copy-Item -LiteralPath $installer.FullName -Destination release-candidate
+          Copy-Item -LiteralPath "$($installer.FullName).sha256" -Destination release-candidate
+          Copy-Item -LiteralPath app/dist/README-install.txt -Destination release-candidate
+          Copy-Item -LiteralPath verified-commercial-evidence.json -Destination release-candidate
+
+      - name: Upload verified signed candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: auxora-signed-windows-candidate
+          if-no-files-found: error
+          path: release-candidate

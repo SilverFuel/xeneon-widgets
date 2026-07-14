@@ -152,7 +152,7 @@ try {
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "Starts Xenon Edge Host at logon for the CORSAIR XENEON EDGE display." `
+    -Description "Starts Auxora at logon on the user's selected Windows display." `
     -Force | Out-Null
 
   Enable-XenonStartupTask $taskName

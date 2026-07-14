@@ -3,7 +3,7 @@ setlocal
 
 cd /d "%~dp0"
 
-echo Building Auxora installer through the legacy launcher name...
+echo Building Auxora installer...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\build-installer.ps1"
 set EXITCODE=%ERRORLEVEL%
 

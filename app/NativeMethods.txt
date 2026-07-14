@@ -1,0 +1,8 @@
+EnumDisplayMonitors
+GetNumberOfPhysicalMonitorsFromHMONITOR
+GetPhysicalMonitorsFromHMONITOR
+DestroyPhysicalMonitor
+GetVCPFeatureAndVCPFeatureReply
+SetVCPFeature
+GetCapabilitiesStringLength
+CapabilitiesRequestAndCapabilitiesReply
