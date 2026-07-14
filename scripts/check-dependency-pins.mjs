@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const packageFiles = [
@@ -39,4 +39,20 @@ for (const file of packageFiles) {
   }
 }
 
-console.log("checked dependency version pins");
+const workflowDirectory = resolve(process.cwd(), ".github", "workflows");
+for (const fileName of readdirSync(workflowDirectory)) {
+  if (!fileName.endsWith(".yml") && !fileName.endsWith(".yaml")) {
+    continue;
+  }
+
+  const relativePath = `.github/workflows/${fileName}`;
+  const workflow = readWorkspaceFile(relativePath);
+  for (const line of workflow.split(/\r?\n/)) {
+    const action = line.match(/^\s*uses:\s+([^\s#]+)(?:\s+#.*)?$/)?.[1];
+    if (action && !/@[0-9a-f]{40}$/i.test(action)) {
+      throw new Error(`${relativePath} uses a mutable action reference: ${action}`);
+    }
+  }
+}
+
+console.log("checked dependency and workflow action version pins");
