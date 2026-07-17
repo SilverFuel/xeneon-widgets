@@ -126,6 +126,9 @@ try {
   if ($AllowGitHubSupportPath) {
     $readyArgs += "-AllowGitHubSupportPath"
   }
+  if ($AllowUnsignedBeta) {
+    $readyArgs += "-AllowBetaVersion"
+  }
   if ($RequireSignedInstaller) {
     $readyArgs += "-RequireSignedInstaller"
     $readyArgs += @("-AllowedSignerThumbprint") + $allowedSignerThumbprints

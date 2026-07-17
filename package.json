@@ -23,7 +23,7 @@
     "check:commercial-readiness": "node scripts/check-commercial-readiness.mjs",
     "test:release-artifact": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\test-release-artifact-verifier.ps1",
     "test:release-manifest": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\test-release-manifest.ps1",
-    "test:release-version": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\Test-ReleaseVersion.ps1",
+    "test:release-version": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\Test-ReleaseVersion.ps1 && powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\test-release-version-mode.ps1",
     "check:release-gauntlet": "node scripts/check-release-gauntlet.mjs",
     "check:installer-safety": "node scripts/check-installer-safety.mjs",
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",

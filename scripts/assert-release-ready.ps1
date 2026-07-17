@@ -3,6 +3,7 @@ param(
   [switch]$RequireSignedInstaller,
   [string[]]$AllowedSignerThumbprint = @(),
   [switch]$AllowGitHubSupportPath,
+  [switch]$AllowBetaVersion,
   [switch]$AllowDirty,
   [switch]$RunBuildChecks
 )
@@ -12,6 +13,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $failures = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
+. (Join-Path $PSScriptRoot "lib\ReleaseVersionMode.ps1")
 
 function Add-Failure($message) {
   $script:failures.Add($message) | Out-Null
@@ -70,10 +72,11 @@ try {
   $csprojPath = Assert-File "app\XenonEdgeHost.csproj"
   [xml]$csproj = Get-Content $csprojPath
   $version = [string]$csproj.Project.PropertyGroup.Version
-  if ($version -and $version -notmatch "preview|alpha|beta") {
-    Add-Pass "App version is release-style: $version"
-  } else {
-    Add-Failure "App version is missing or still marked preview."
+  try {
+    $versionMode = Assert-ReleaseVersionMode -Version $version -AllowBetaVersion:$AllowBetaVersion -RequireSignedInstaller:$RequireSignedInstaller
+    Add-Pass "App version is valid for $versionMode release mode: $version"
+  } catch {
+    Add-Failure $_.Exception.Message
   }
 
   $supportText = Read-Text "support.html"
