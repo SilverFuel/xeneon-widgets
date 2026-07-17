@@ -579,8 +579,8 @@
           hasLiveData: hasLiveData,
           hasChartData: hasChartData,
           gateway: data.gateway || getParam("gateway", "UniFi Network"),
-          gatewayCopy: data.gatewayCopy || getParam("copy", endpoint ? "Xenon is checking for UniFi locally." : "Xenon has a built-in UniFi detector."),
-          source: data.source || (endpoint ? "Xenon UniFi detector" : "Needs setup"),
+          gatewayCopy: data.gatewayCopy || getParam("copy", endpoint ? "Auxora is checking for UniFi locally." : "Auxora has a built-in UniFi detector."),
+          source: data.source || (endpoint ? "Auxora UniFi detector" : "Needs setup"),
           provider: data.provider || data.internetName || wan.name || "WAN",
           gatewayIp: data.gatewayIp || wan.gatewayIp || "",
           wanIp: data.wanIp || wan.ip || "",
@@ -663,7 +663,7 @@
           svg.push('<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + height + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"></line>');
         }
         if (!data.hasChartData) {
-          svg.push('<text x="' + (width / 2) + '" y="' + (height / 2) + '" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="18">Xenon will add richer UniFi charts after credentials are connected.</text>');
+          svg.push('<text x="' + (width / 2) + '" y="' + (height / 2) + '" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="18">Auxora will add richer UniFi charts after credentials are connected.</text>');
           document.getElementById("chart-svg").innerHTML = svg.join("");
           document.getElementById("chart-labels").innerHTML = "";
           document.getElementById("legend-values").innerHTML = [
@@ -751,7 +751,7 @@
         document.getElementById("site-badge").setAttribute("data-tone", overallTone);
         document.getElementById("chart-title").textContent = data.provider + " trend";
         document.getElementById("toolbar-copy").textContent = data.hasLiveData ? data.gateway + " / " + data.clients.total + " clients / " + data.aps.length + " APs" : "Waiting for controller data";
-        document.getElementById("chart-note").textContent = data.hasLiveData ? "Latency " + formatMs(data.latencyMs) + " / Loss " + formatPercent(data.packetLoss) + " / Connections " + (data.connections == null ? "--" : Math.round(data.connections)) : "Xenon has a built-in UniFi detector.";
+        document.getElementById("chart-note").textContent = data.hasLiveData ? "Latency " + formatMs(data.latencyMs) + " / Loss " + formatPercent(data.packetLoss) + " / Connections " + (data.connections == null ? "--" : Math.round(data.connections)) : "Auxora has a built-in UniFi detector.";
         document.getElementById("ap-summary").textContent = data.aps.length ? onlineAps + "/" + data.aps.length + " APs healthy" : "No AP data";
         document.getElementById("ap-summary").setAttribute("data-tone", overallTone);
         document.getElementById("client-total").textContent = data.clients.total ? data.clients.total + " total" : "No client data";

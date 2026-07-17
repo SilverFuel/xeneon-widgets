@@ -51,6 +51,27 @@
   align-items: center;
 }
 
+.setup-display-row__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.setup-display-row__actions .inline-button {
+  min-width: 132px;
+}
+
+@media (max-width: 900px) {
+  .setup-display-row {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-display-row__actions {
+    justify-content: space-between;
+  }
+}
+
 .setup-launcher-suggestion {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

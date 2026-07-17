@@ -1,6 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using System.Diagnostics;
@@ -24,8 +25,8 @@ public sealed partial class MainWindow : Window
     private const int SwHide = 0;
     private const int SwShow = 5;
     private const int SwShowNoActivate = 4;
-    private const int WaitingWindowWidth = 1280;
-    private const int WaitingWindowHeight = 360;
+    private const int WaitingWindowWidth = 1120;
+    private const int WaitingWindowHeight = 720;
     private static readonly TimeSpan DisplayRecoveryWindow = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan[] DisplayRecoveryDelays =
     [
@@ -145,6 +146,8 @@ public sealed partial class MainWindow : Window
             targetDisplay.Bounds.Height));
         EnsureDisplayWindowStaysOffTaskbar(windowHandle);
         _waitingForEdgeDisplay = false;
+        DisplayPickerPanel.Visibility = Visibility.Collapsed;
+        DashboardView.Visibility = Visibility.Visible;
 
         _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
         _logger.Info($"{(safeMode ? "Safe Mode: " : "")}Window positioned on {targetDisplay.Label} (score {targetDisplay.Score}).");
@@ -177,8 +180,8 @@ public sealed partial class MainWindow : Window
 
         RestoreDisplayWindowToTaskbar(windowHandle);
 
-        var availableWidth = Math.Max(320, rescueDisplay.Bounds.Width - 96);
-        var availableHeight = Math.Max(240, rescueDisplay.Bounds.Height - 96);
+        var availableWidth = Math.Max(320, rescueDisplay.Bounds.Width - 64);
+        var availableHeight = Math.Max(240, rescueDisplay.Bounds.Height - 32);
         var width = Math.Min(WaitingWindowWidth, availableWidth);
         var height = Math.Min(WaitingWindowHeight, availableHeight);
         var x = rescueDisplay.Bounds.X + Math.Max(0, (rescueDisplay.Bounds.Width - width) / 2);
@@ -190,7 +193,128 @@ public sealed partial class MainWindow : Window
 
         _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
         _logger.Info($"Auxora needs a preferred display; showing display selection on {rescueDisplay.Label}.");
-        SetOverlayText("Choose an Auxora display.\n\nOpen Settings and select the touch display you want to use. Auxora will remember it for future launches.");
+        ShowDisplayPicker(displayCandidates);
+    }
+
+    private void ShowDisplayPicker(IReadOnlyList<DisplayTarget> displayCandidates)
+    {
+        DisplayPickerList.Children.Clear();
+        for (var index = 0; index < displayCandidates.Count; index++)
+        {
+            var display = displayCandidates[index];
+            var displayName = string.IsNullOrWhiteSpace(display.FriendlyName)
+                ? display.IsPrimary ? "Primary display" : $"Display {index + 1}"
+                : display.FriendlyName;
+            var refreshRate = display.RefreshRate is double rate ? $" • {rate:0.#} Hz" : "";
+            var primaryLabel = display.IsPrimary ? " • Primary" : "";
+
+            var content = new StackPanel { Spacing = 5 };
+            content.Children.Add(new TextBlock
+            {
+                Text = displayName,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 245, 248, 250)),
+                FontSize = 19,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{display.Bounds.Width} × {display.Bounds.Height}{refreshRate}{primaryLabel}",
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 184, 199, 209)),
+                FontSize = 14,
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"Windows position {display.Bounds.X}, {display.Bounds.Y} — tap to use this display",
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 116, 221, 255)),
+                FontSize = 13,
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+
+            var button = new Button
+            {
+                Tag = display.StableId,
+                Content = content,
+                Padding = new Thickness(18, 14, 18, 14),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                MinHeight = 88,
+                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 25, 39, 49)),
+                BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(102, 0, 217, 255)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(14)
+            };
+            button.Click += HandleDisplayChoice;
+            DisplayPickerList.Children.Add(button);
+        }
+
+        DisplayPickerStatus.Text = displayCandidates.Count == 0
+            ? "No active displays were found. Check the cable, then refresh."
+            : "Choose one display to continue. You can change it later in Settings → Diagnostics.";
+        DisplayPickerStatus.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(
+            255,
+            displayCandidates.Count == 0 ? (byte)255 : (byte)145,
+            displayCandidates.Count == 0 ? (byte)165 : (byte)168,
+            displayCandidates.Count == 0 ? (byte)120 : (byte)183));
+        OverlayPanel.Visibility = Visibility.Collapsed;
+        DashboardView.Visibility = Visibility.Collapsed;
+        DisplayPickerPanel.Visibility = Visibility.Visible;
+    }
+
+    private void HandleDisplayChoice(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string displayId } || string.IsNullOrWhiteSpace(displayId))
+        {
+            return;
+        }
+
+        foreach (var child in DisplayPickerList.Children.OfType<Button>())
+        {
+            child.IsEnabled = false;
+        }
+
+        DisplayPickerStatus.Text = "Moving Auxora and saving your choice...";
+        try
+        {
+            _bridgeManager.SetDisplayPreference(displayId);
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Native display selection failed", error);
+            DisplayPickerStatus.Text = "That display is no longer available. Refresh the list and try again.";
+            DisplayPickerStatus.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 165, 120));
+            foreach (var child in DisplayPickerList.Children.OfType<Button>())
+            {
+                child.IsEnabled = true;
+            }
+        }
+    }
+
+    private void HandleRefreshDisplays(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            ShowDisplayPicker(_bridgeManager.ListDisplayCandidates(ignoreSavedPreference: true));
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Display picker refresh failed", error);
+            DisplayPickerStatus.Text = "Windows could not refresh the display list. Check the connection and try again.";
+        }
+    }
+
+    private void HandleOpenWindowsDisplaySettings(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("ms-settings:display") { UseShellExecute = true });
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Opening Windows display settings failed", error);
+            DisplayPickerStatus.Text = "Windows display settings could not be opened. Use Settings → System → Display.";
+        }
     }
 
     private void HandleDisplaySettingsChanged(object? sender, EventArgs args)
@@ -459,7 +583,7 @@ public sealed partial class MainWindow : Window
             _dashboardLoaded = true;
             if (_waitingForEdgeDisplay)
             {
-                SetOverlayText("Choose an Auxora display.\n\nOpen Settings and select the touch display you want to use. Auxora will remember it for future launches.");
+                ShowDisplayPicker(_bridgeManager.ListDisplayCandidates(ignoreSavedPreference: true));
             }
             else
             {

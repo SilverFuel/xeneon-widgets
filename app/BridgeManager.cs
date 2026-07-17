@@ -225,6 +225,11 @@ public sealed class BridgeManager : IDisposable
         return selected;
     }
 
+    public void SetDisplayPreference(string displayId)
+    {
+        _configController.SetDisplayPreference(new DisplayPreferenceRequest { DisplayId = displayId });
+    }
+
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         await _lifecycleLock.WaitAsync(cancellationToken);

@@ -92,7 +92,11 @@
     var selectedId = text(displayDiagnostics && displayDiagnostics.selectedDisplayId, "");
     return displays.filter(function (display) {
       return display.preferred || (selectedId && (display.id === selectedId || display.deviceName === selectedId || display.deviceId === selectedId));
-    })[0] || displays[0] || null;
+    })[0] || null;
+  }
+
+  function displayTargetReady(displayDiagnostics) {
+    return text(displayDiagnostics && displayDiagnostics.status, "").toLowerCase() === "ready";
   }
 
   function buildSystemHealth(data, gpuPower, displayDiagnostics) {
@@ -131,7 +135,7 @@
     if (gpuPower && gpuPower.alerts && gpuPower.alerts.length) {
       alerts.push("GPU power alert");
     }
-    if (displayDiagnostics && displayDiagnostics.edgeCandidateCount === 0) {
+    if (displayDiagnostics && !displayTargetReady(displayDiagnostics)) {
       warnings.push("Display selection needed");
     }
 
@@ -192,7 +196,7 @@
   function renderSystemDisplayPanel(data, displayDiagnostics) {
     var primaryDisplay = primaryDisplayFromSystem(data || {});
     var selected = selectedDisplayFromDiagnostics(displayDiagnostics);
-    var edgeReady = displayDiagnostics && displayDiagnostics.edgeCandidateCount > 0;
+    var edgeReady = displayTargetReady(displayDiagnostics);
     var selectedLabel = text(displayDiagnostics && displayDiagnostics.selectedDisplayName, selected ? selected.label : "No Auxora display");
     var primaryLabel = text(primaryDisplay.name || primaryDisplay.deviceName, "Primary display");
     var selectedHz = selected && selected.refreshRate != null ? formatHz(selected.refreshRate) : formatHz(displayRefreshRate(primaryDisplay));
@@ -258,7 +262,7 @@
             renderSystemStatCard("CPU", formatPercent(data.cpu), data.cpuTemp != null ? formatTemp(data.cpuTemp) : topProcessText, data.cpu, systemMetricTone(data.cpu, 78, 92), history.cpu) +
             renderSystemStatCard("GPU", formatPercent(data.gpu), data.gpuTemp != null ? formatTemp(data.gpuTemp) : "GPU load", data.gpu, systemMetricTone(data.gpu, 82, 92), history.gpu) +
             renderSystemStatCard("RAM", formatPercent(data.ram), "Memory pressure", data.ram, systemMetricTone(data.ram, 78, 90), history.ram) +
-            renderSystemStatCard("Display", formatHz(displayHz), selectedDisplayLabel, displayHz == null ? null : Math.min(displayHz, 240) / 240 * 100, displayDiagnostics && displayDiagnostics.edgeCandidateCount === 0 ? "warn" : "good", []) +
+            renderSystemStatCard("Display", formatHz(displayHz), selectedDisplayLabel, displayHz == null ? null : Math.min(displayHz, 240) / 240 * 100, displayTargetReady(displayDiagnostics) ? "good" : "warn", []) +
           '</section>' +
           '<section class="system-detail-grid">' +
             '<article class="system-panel system-process-panel">' +

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XENEON Setup Guide</title>
+  <title>Auxora Setup Guide</title>
   <style>
     :root {
       color-scheme: dark;
@@ -402,7 +402,7 @@
       <div>
         <p class="eyebrow">Diagnostics</p>
         <h1>Auto setup & diagnostics</h1>
-        <p class="subtitle">Xenon scans this PC, prepares safe defaults, and only asks for permissions it cannot infer.</p>
+        <p class="subtitle">Auxora scans this PC, prepares safe defaults, and only asks for permissions it cannot infer.</p>
       </div>
       <div id="guide-status" class="status tone-warn">Loading</div>
     </header>
@@ -460,7 +460,7 @@
     </section>
   </main>
 
-  <script src="../js/widget-core.js?v=20260712-01"></script>
+  <script src="../js/widget-core.js?v=20260714-03"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
@@ -793,8 +793,8 @@
         finishButton.textContent = "Finish manually";
         finishButton.disabled = !setup.essentialsReady;
         finishCopy.textContent = setup.essentialsReady
-          ? "Xenon normally completes this automatically. Use this only if diagnostics says auto setup is still pending."
-          : "Xenon is still checking the local app service, System Monitor, and Network Monitor.";
+          ? "Auxora normally completes this automatically. Use this only if diagnostics says auto setup is still pending."
+          : "Auxora is still checking the local app service, System Monitor, and Network Monitor.";
       }
 
       async function refreshGuide() {
