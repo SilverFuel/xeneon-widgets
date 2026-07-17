@@ -53,6 +53,7 @@ public sealed class BridgeManager : IDisposable
     private readonly SystemActionsService _systemActionsService;
     private readonly ClipboardHistoryService _clipboardHistoryService;
     private readonly HttpClient _weatherHttpClient;
+    private readonly HttpClient _calendarHttpClient;
     private readonly HashSet<string> _allowedOrigins;
     private readonly string _sessionToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
     private HttpListener? _listener;
@@ -75,7 +76,16 @@ public sealed class BridgeManager : IDisposable
             Timeout = TimeSpan.FromSeconds(10)
         };
         _weatherService = new WeatherService(_weatherHttpClient);
-        _calendarService = new CalendarService(_weatherHttpClient, _logger);
+        _calendarHttpClient = new HttpClient(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseProxy = false,
+            ConnectCallback = NetworkEndpointGuard.ConnectPublicHttpsAsync
+        })
+        {
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+        _calendarService = new CalendarService(_calendarHttpClient, _logger);
         _hueService = new HueService(_configStore, _logger);
         _uniFiService = new UniFiService(_configStore, _logger);
         _releaseService = new ReleaseService(_weatherHttpClient);
@@ -286,6 +296,7 @@ public sealed class BridgeManager : IDisposable
             _launcherService.Dispose();
             _gamePerformanceService.Dispose();
             _remoteSessionService.Dispose();
+            _calendarHttpClient.Dispose();
             _weatherHttpClient.Dispose();
         }
     }
