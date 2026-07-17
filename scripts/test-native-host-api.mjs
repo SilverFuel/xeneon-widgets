@@ -1,84 +1,110 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
-function readWorkspaceFile(relativePath) {
-  const filePath = resolve(process.cwd(), relativePath);
-  if (!existsSync(filePath)) {
-    throw new Error(`${relativePath} does not exist`);
-  }
-
-  return readFileSync(filePath, "utf8");
-}
+const hostUrl = "http://127.0.0.1:8976";
+const executable = resolve(
+  process.cwd(),
+  "app/bin/Release/net8.0-windows10.0.19041.0/win-x64/XenonEdgeHost.exe"
+);
 
 function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
+  if (!condition) throw new Error(message);
+}
+
+async function fetchWithTimeout(path, options = {}, timeoutMs = 3000) {
+  return fetch(`${hostUrl}${path}`, {
+    ...options,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+}
+
+async function hostAlreadyRunning() {
+  try {
+    const response = await fetchWithTimeout("/api/health", {}, 1000);
+    return response.ok;
+  } catch {
+    return false;
   }
 }
 
-const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
-const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
-const actionController = readWorkspaceFile("app/Controllers/ActionController.cs");
-const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
-const configController = readWorkspaceFile("app/Controllers/ConfigController.cs");
-const staticAssets = readWorkspaceFile("app/Controllers/StaticAssetController.cs");
-const embeddedAssetProvider = readWorkspaceFile("app/Infrastructure/EmbeddedAssetProvider.cs");
-
-for (const route of [
-  "/api/health",
-  "/api/config",
-  "/api/config/dashboard",
-  "/api/action-confirmations",
-  "/api/quick-actions",
-  "/api/system-shortcuts",
-  "/api/audio/input-mute",
-  "/api/clipboard",
-  "/api/support/bundle",
-  "/api/releases/latest",
-  "/api/game/session"
-]) {
-  assert(apiRouter.includes(route), `native ApiRouter must expose ${route}`);
+async function waitForHost(child, timeoutMs = 45000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(`native host exited before becoming healthy (exit code ${child.exitCode})`);
+    }
+    try {
+      const response = await fetchWithTimeout("/api/health");
+      if (response.ok) return response;
+    } catch {
+      // The listener is expected to be unavailable during startup.
+    }
+    await new Promise(resolvePromise => setTimeout(resolvePromise, 500));
+  }
+  throw new Error("native host did not expose /api/health within 45 seconds");
 }
 
-assert(
-  /_apiRouter\.HandleAsync\(request,\s*response,\s*DashboardUri,\s*cancellationToken\)/.test(bridgeManager)
-    && !/bridge\/server\.mjs/.test(apiRouter),
-  "native API contract test must target the C# host route surface, not the legacy Node bridge"
-);
+async function stopChild(child) {
+  if (child.exitCode !== null) return;
+  child.kill();
+  await Promise.race([
+    new Promise(resolvePromise => child.once("exit", resolvePromise)),
+    new Promise(resolvePromise => setTimeout(resolvePromise, 5000))
+  ]);
+  if (child.exitCode === null) child.kill("SIGKILL");
+}
 
-assert(
-  /IssueActionConfirmation/.test(actionController)
-    && /ExecuteQuickAction/.test(actionController)
-    && /ExecuteSystemShortcut/.test(actionController),
-  "native action controller must expose confirmation-gated action execution"
-);
+assert(process.platform === "win32", "launched native host test requires Windows");
+assert(existsSync(executable), `Release host executable is missing: ${executable}; run npm run check:app first`);
+assert(!(await hostAlreadyRunning()), "port 8976 is already serving a host; refusing to validate an unrelated process");
 
-assert(
-  /ClipboardPrivacyOptions\.FromDashboard/.test(actionController)
-    && /ClipboardPrivacyOptions\.FromDashboard/.test(telemetryController)
-    && /clipboardHidePreviews/.test(configController),
-  "native clipboard API must honor privacy settings across action, telemetry, and config controllers"
-);
+const profileRoot = mkdtempSync(join(tmpdir(), "auxora-native-host-test-"));
+const roaming = join(profileRoot, "Roaming");
+const local = join(profileRoot, "Local");
+mkdirSync(roaming, { recursive: true });
+mkdirSync(local, { recursive: true });
 
-assert(
-  /Content-Security-Policy/.test(staticAssets)
-    && /window\.XenonSessionToken/.test(staticAssets)
-    && !/xenon-session-bootstrap\.js/.test(staticAssets),
-  "native static asset API must emit security headers and inline the session token into local HTML"
-);
+const child = spawn(executable, ["--safe-mode"], {
+  cwd: resolve(process.cwd(), "app"),
+  env: {
+    ...process.env,
+    APPDATA: roaming,
+    LOCALAPPDATA: local,
+    TEMP: profileRoot,
+    TMP: profileRoot
+  },
+  stdio: "ignore",
+  windowsHide: true
+});
 
-assert(
-  /case "\/api\/game\/session" when request\.HttpMethod == "POST"/.test(apiRouter)
-    && /GetSessionAsync/.test(readWorkspaceFile("app/Controllers/GameController.cs"))
-    && /GameModeSessionService/.test(bridgeManager),
-  "native Game Mode contract must expose the composed POST session endpoint through the C# host"
-);
+try {
+  const healthResponse = await waitForHost(child);
+  const health = await healthResponse.json();
+  assert(health && typeof health === "object", "live /api/health must return JSON");
 
-assert(
-  /NormalizeResourceName/.test(embeddedAssetProvider)
-    && /Replace\('\\\\',\s*'\/'\)/.test(embeddedAssetProvider)
-    && /normalizedResourceName\.EndsWith\(\$"WebAssets\/\{normalizedPath\}"/.test(embeddedAssetProvider),
-  "native embedded asset provider must serve split widget files from nested resource paths"
-);
+  const configResponse = await fetchWithTimeout("/api/config");
+  assert(configResponse.ok, `live /api/config returned HTTP ${configResponse.status}`);
+  const config = await configResponse.json();
+  assert(config && typeof config.port === "number", "live /api/config must return the configured port");
 
-console.log("checked native host API contract routes");
+  const dashboardResponse = await fetchWithTimeout("/dashboard.html");
+  assert(dashboardResponse.ok, `live dashboard returned HTTP ${dashboardResponse.status}`);
+  assert((await dashboardResponse.text()).includes("Auxora"), "live dashboard must serve embedded Auxora HTML");
+
+  const rejectedOrigin = await fetchWithTimeout("/api/health", { headers: { Origin: "https://example.test" } });
+  assert(rejectedOrigin.status === 403, `foreign Origin must be rejected; received HTTP ${rejectedOrigin.status}`);
+
+  const rejectedMutation = await fetchWithTimeout("/api/config/dashboard", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  });
+  assert(rejectedMutation.status === 403, `mutation without session token must be rejected; received HTTP ${rejectedMutation.status}`);
+
+  console.log("launched native host and verified live health, config, embedded dashboard, origin, and mutation boundaries");
+} finally {
+  await stopChild(child);
+  rmSync(profileRoot, { recursive: true, force: true });
+}

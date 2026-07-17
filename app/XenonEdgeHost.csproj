@@ -10,7 +10,7 @@
     <Product>Auxora</Product>
     <Company>SilverFuel</Company>
     <Authors>SilverFuel</Authors>
-    <Version>0.3.0</Version>
+    <Version>0.3.0-beta.1</Version>
     <FileVersion>0.3.0.0</FileVersion>
     <InformationalVersion>$(XenonInformationalVersion)</InformationalVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

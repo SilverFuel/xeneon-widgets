@@ -1,12 +1,12 @@
 # Clean Install Test
 
-Run this before every public Windows release. Use a fresh Windows user profile or a fresh Windows VM.
+Run this before every public Windows release in a disposable Windows VM. Record the exact manifest tag, commit SHA, installer filename, and SHA-256 in the lifecycle receipt.
 
 ## Install
 
 1. Download the signed installer from GitHub Releases.
 2. Run the installer from a normal user account.
-3. Confirm the app installs to `%LOCALAPPDATA%\Programs\XenonEdgeHost`.
+3. Confirm the app installs to `%LOCALAPPDATA%\Programs\Auxora`.
 4. Confirm Start Menu > Auxora > Auxora appears.
 5. Confirm the Desktop shortcut is named `Auxora` if enabled.
 6. Confirm Windows Settings > Apps includes `Auxora`.
@@ -55,10 +55,12 @@ The installer should not ask setup questions. A Windows SmartScreen warning is a
 2. Confirm the Start Menu shortcut is removed.
 3. Confirm the Desktop shortcut is removed.
 4. Confirm the auto-start entry is removed.
-5. Confirm the app executable is removed from `%LOCALAPPDATA%\Programs\XenonEdgeHost`.
+5. Confirm the app executable is removed from `%LOCALAPPDATA%\Programs\Auxora`.
 6. Reinstall, then use Start Menu > Auxora > Remove Auxora and Local Data.
-7. Confirm `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost` are removed.
+7. Confirm `%APPDATA%\Auxora`, `%LOCALAPPDATA%\Auxora`, and legacy `%APPDATA%\XenonEdgeHost` / `%LOCALAPPDATA%\XenonEdgeHost` data are removed.
 
 The uninstaller should not ask cleanup questions. The normal uninstall removes the app. The cleanup shortcut removes the app plus local data.
 
 Do not publish a public release if any item above fails.
+
+After the full cycle succeeds, create a schema-1 lifecycle receipt bound to the manifest. Every required check must be `true`, including upgrade from the previous beta, process restart, and auto-start after an actual Windows reboot. Verify it with `scripts\Test-BetaLifecycleReceipt.ps1` against the downloaded candidate artifact directory.

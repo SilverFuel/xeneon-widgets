@@ -5,6 +5,8 @@ const gauntlet = readWorkspaceFile("scripts/run-release-gauntlet.ps1");
 const releaseService = readWorkspaceFile("app/Services/ReleaseService.cs");
 const releaseWorkflow = readWorkspaceFile(".github/workflows/release.yml");
 const productWidget = readWorkspaceFile("js/widgets/product.js");
+const releaseManifest = readWorkspaceFile("scripts/Test-ReleaseManifest.ps1");
+const lifecycleReceipt = readWorkspaceFile("scripts/Test-BetaLifecycleReceipt.ps1");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 
 function readWorkspaceFile(relativePath) {
@@ -32,8 +34,10 @@ assert(
     && /Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta/.test(gauntlet)
     && /Signed commercial releases require -CommercialEvidencePath/.test(gauntlet)
     && /assert-commercial-launch-evidence\.ps1/.test(gauntlet)
-    && /AllowedSignerThumbprint/.test(gauntlet),
-  "release gauntlet must reject conflicting signing modes and require structured evidence for commercial releases"
+    && /AllowedSignerThumbprint/.test(gauntlet)
+    && /Test-ReleaseManifest\.ps1/.test(gauntlet)
+    && /Test-BetaLifecycleReceipt\.ps1/.test(gauntlet),
+  "release gauntlet must reject conflicting signing modes and support exact manifest and lifecycle evidence"
 );
 
 assert(
@@ -45,12 +49,19 @@ assert(
   /HashStatus/.test(releaseService)
     && /SignatureStatus/.test(releaseService)
     && /BuildReleaseTrust/.test(releaseService)
-    && /Verify Windows signing policy/.test(releaseWorkflow)
-    && /Public stable releases require a valid Authenticode signature/.test(releaseWorkflow)
-    && /signature-status\.txt/.test(releaseWorkflow)
+    && /verificationStatus/.test(releaseService)
+    && /trusted = false/.test(releaseService)
+    && /Build immutable Windows candidate/.test(releaseWorkflow)
+    && /Publish receipt-bound Windows beta/.test(releaseWorkflow)
+    && /Release .* already exists.*Published bytes are immutable/.test(releaseWorkflow)
+    && /New-ReleaseManifest\.ps1/.test(releaseWorkflow)
+    && /Test-BetaLifecycleReceipt\.ps1/.test(releaseWorkflow)
+    && !/macos-latest|macOS package|release edit|-X DELETE/.test(releaseWorkflow)
+    && /exactly five unique public assets/.test(releaseManifest)
+    && /installerSha256/.test(lifecycleReceipt)
     && /hashStatus/.test(productWidget)
     && /signatureStatus/.test(productWidget),
-  "release flow must expose hash/signature status and enforce signing on public stable releases"
+  "release flow must expose available trust evidence without claiming verification and publish only immutable receipt-bound Windows assets"
 );
 
 console.log("checked release gauntlet argument validation");
