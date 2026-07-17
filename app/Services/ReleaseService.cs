@@ -10,16 +10,23 @@ public sealed class ReleaseService
     private const string ReleasesUrl = "https://github.com/SilverFuel/xeneon-widgets/releases";
 
     private readonly HttpClient _httpClient;
+    private readonly string? _currentVersionOverride;
 
     public ReleaseService(HttpClient httpClient)
+        : this(httpClient, null)
+    {
+    }
+
+    internal ReleaseService(HttpClient httpClient, string? currentVersionOverride)
     {
         _httpClient = httpClient;
+        _currentVersionOverride = currentVersionOverride;
     }
 
     public async Task<object> GetLatestReleaseAsync(string? channel, CancellationToken cancellationToken)
     {
-        var currentVersion = GetCurrentVersion();
-        var normalizedChannel = NormalizeChannel(channel);
+        var currentVersion = _currentVersionOverride ?? GetCurrentVersion();
+        var normalizedChannel = NormalizeChannel(channel, currentVersion);
 
         try
         {
@@ -124,9 +131,22 @@ public sealed class ReleaseService
         };
     }
 
-    private static string NormalizeChannel(string? channel)
+    private static string NormalizeChannel(string? channel, string currentVersion)
     {
         var value = channel?.Trim().ToLowerInvariant() ?? "";
+        if (TryParseReleaseVersion(currentVersion, out var current) && current.IsPrerelease)
+        {
+            if (current.PrereleaseIdentifiers.Any(identifier => identifier.Contains("nightly", StringComparison.OrdinalIgnoreCase)))
+            {
+                return "nightly";
+            }
+
+            if (value != "nightly")
+            {
+                return "beta";
+            }
+        }
+
         return value is "beta" or "nightly" ? value : "stable";
     }
 
@@ -141,31 +161,51 @@ public sealed class ReleaseService
     {
         if (root.ValueKind != JsonValueKind.Array)
         {
-            return root;
+            return ReleaseMatchesChannel(root, channel) ? root : default;
         }
 
+        JsonElement selected = default;
+        SemanticVersion? selectedVersion = null;
         foreach (var release in root.EnumerateArray())
         {
-            var tag = GetString(release, "tag_name");
-            var name = GetString(release, "name");
-            var prerelease = release.TryGetProperty("prerelease", out var prereleaseElement)
-                && prereleaseElement.ValueKind == JsonValueKind.True;
-            var combined = $"{tag} {name}";
-            var isNightly = combined.Contains("nightly", StringComparison.OrdinalIgnoreCase);
-            var isBeta = prerelease || combined.Contains("beta", StringComparison.OrdinalIgnoreCase);
-
-            if (channel == "nightly" && isNightly)
+            if (!ReleaseMatchesChannel(release, channel))
             {
-                return release;
+                continue;
             }
 
-            if (channel == "beta" && isBeta && !isNightly)
+            var versionText = TextOr(GetString(release, "tag_name"), GetString(release, "name"));
+            if (!TryParseReleaseVersion(versionText, out var version))
             {
-                return release;
+                continue;
+            }
+
+            if (selectedVersion is null || version.CompareTo(selectedVersion.Value) > 0)
+            {
+                selected = release;
+                selectedVersion = version;
             }
         }
 
-        return root.EnumerateArray().FirstOrDefault();
+        return selected;
+    }
+
+    private static bool ReleaseMatchesChannel(JsonElement release, string channel)
+    {
+        var tag = GetString(release, "tag_name");
+        var name = GetString(release, "name");
+        var combined = $"{tag} {name}";
+        var isNightly = combined.Contains("nightly", StringComparison.OrdinalIgnoreCase);
+        var prereleaseFlag = release.TryGetProperty("prerelease", out var prereleaseElement)
+            && prereleaseElement.ValueKind == JsonValueKind.True;
+        var hasPrereleaseVersion = TryParseReleaseVersion(TextOr(tag, name), out var version) && version.IsPrerelease;
+        var isPrerelease = prereleaseFlag || hasPrereleaseVersion;
+
+        return channel switch
+        {
+            "nightly" => isPrerelease && isNightly,
+            "beta" => isPrerelease && !isNightly,
+            _ => !isPrerelease
+        };
     }
 
     private static string GetCurrentVersion()
@@ -191,16 +231,45 @@ public sealed class ReleaseService
         return true;
     }
 
-    private static bool TryParseReleaseVersion(string value, out Version version)
+    internal static bool TryParseReleaseVersion(string value, out SemanticVersion version)
     {
+        version = default;
         var normalized = value.Trim().TrimStart('v', 'V');
-        var prereleaseIndex = normalized.IndexOfAny(['-', '+']);
-        if (prereleaseIndex >= 0)
+        var buildIndex = normalized.IndexOf('+');
+        if (buildIndex >= 0)
         {
-            normalized = normalized[..prereleaseIndex];
+            normalized = normalized[..buildIndex];
         }
 
-        return Version.TryParse(normalized, out version!);
+        var prerelease = Array.Empty<string>();
+        var prereleaseIndex = normalized.IndexOf('-');
+        if (prereleaseIndex >= 0)
+        {
+            prerelease = normalized[(prereleaseIndex + 1)..].Split('.', StringSplitOptions.RemoveEmptyEntries);
+            normalized = normalized[..prereleaseIndex];
+            if (prerelease.Length == 0)
+            {
+                return false;
+            }
+        }
+
+        var core = normalized.Split('.');
+        if (core.Length != 3
+            || !int.TryParse(core[0], out var major)
+            || !int.TryParse(core[1], out var minor)
+            || !int.TryParse(core[2], out var patch)
+            || major < 0 || minor < 0 || patch < 0)
+        {
+            return false;
+        }
+
+        if (prerelease.Any(identifier => !identifier.All(character => char.IsAsciiLetterOrDigit(character) || character == '-')))
+        {
+            return false;
+        }
+
+        version = new SemanticVersion(major, minor, patch, prerelease);
+        return true;
     }
 
     private static List<ReleaseAsset> ReadAssets(JsonElement root)
@@ -264,8 +333,8 @@ public sealed class ReleaseService
             installer = installer is null ? "missing" : installer.Name,
             hashStatus = installer?.HashStatus ?? "missing",
             signatureStatus = installer?.SignatureStatus ?? "missing",
-            trusted = string.Equals(installer?.HashStatus, "available", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(installer?.SignatureStatus, "available", StringComparison.OrdinalIgnoreCase)
+            verificationStatus = installer is null ? "missing" : "not-verified",
+            trusted = false
         };
     }
 
@@ -332,3 +401,51 @@ public sealed record ReleaseAsset(
     string SignatureUrl,
     string HashStatus,
     string SignatureStatus);
+
+internal readonly record struct SemanticVersion(
+    int Major,
+    int Minor,
+    int Patch,
+    IReadOnlyList<string> PrereleaseIdentifiers) : IComparable<SemanticVersion>
+{
+    public bool IsPrerelease => PrereleaseIdentifiers.Count > 0;
+
+    public int CompareTo(SemanticVersion other)
+    {
+        var coreComparison = Major.CompareTo(other.Major);
+        if (coreComparison == 0) coreComparison = Minor.CompareTo(other.Minor);
+        if (coreComparison == 0) coreComparison = Patch.CompareTo(other.Patch);
+        if (coreComparison != 0) return coreComparison;
+
+        if (!IsPrerelease && !other.IsPrerelease) return 0;
+        if (!IsPrerelease) return 1;
+        if (!other.IsPrerelease) return -1;
+
+        var identifierCount = Math.Max(PrereleaseIdentifiers.Count, other.PrereleaseIdentifiers.Count);
+        for (var index = 0; index < identifierCount; index++)
+        {
+            if (index >= PrereleaseIdentifiers.Count) return -1;
+            if (index >= other.PrereleaseIdentifiers.Count) return 1;
+
+            var left = PrereleaseIdentifiers[index];
+            var right = other.PrereleaseIdentifiers[index];
+            var leftNumeric = int.TryParse(left, out var leftNumber);
+            var rightNumeric = int.TryParse(right, out var rightNumber);
+            if (leftNumeric && rightNumeric)
+            {
+                var numericComparison = leftNumber.CompareTo(rightNumber);
+                if (numericComparison != 0) return numericComparison;
+                continue;
+            }
+
+            if (leftNumeric != rightNumeric) return leftNumeric ? -1 : 1;
+            var textComparison = string.Compare(left, right, StringComparison.Ordinal);
+            if (textComparison != 0) return textComparison;
+        }
+
+        return 0;
+    }
+
+    public static bool operator >(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) > 0;
+    public static bool operator <(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) < 0;
+}

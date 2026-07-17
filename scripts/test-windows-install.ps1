@@ -4,6 +4,9 @@ param(
   [switch]$RunUninstall,
   [switch]$RemoveLocalData,
   [switch]$QuietInstall,
+  [string]$PreviousInstallerPath = "",
+  [switch]$RunLaunchHealth,
+  [switch]$RunRepair,
   [int]$InstallTimeoutSeconds = 180
 )
 
@@ -25,6 +28,8 @@ $cleanupUninstallShortcut = Join-Path $shortcutRoot "Remove Auxora and Local Dat
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Auxora"
 $userDataRoot = Join-Path $env:APPDATA "Auxora"
 $localDataRoot = Join-Path $env:LOCALAPPDATA "Auxora"
+$legacyUserDataRoot = Join-Path $env:APPDATA "XenonEdgeHost"
+$legacyLocalDataRoot = Join-Path $env:LOCALAPPDATA "XenonEdgeHost"
 $taskName = "XenonEdgeHost"
 $runValueName = "XenonEdgeHost"
 $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
@@ -99,32 +104,66 @@ function Assert-StartupRemoved {
   Write-Host "OK: startup integration removed"
 }
 
-if ($RunInstall) {
-  if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
-    throw "Pass -InstallerPath when using -RunInstall."
-  }
-
-  $resolvedInstaller = (Resolve-Path -LiteralPath $InstallerPath).Path
-  Write-Step "Running installer"
+function Invoke-Installer($path, $label) {
+  $resolvedPath = (Resolve-Path -LiteralPath $path).Path
+  Write-Step $label
   $installerArgs = @()
-  if ($QuietInstall) {
-    $installerArgs += "/Q"
-  }
-  if ($installerArgs.Count -gt 0) {
-    $installerProcess = Start-Process -FilePath $resolvedInstaller -ArgumentList $installerArgs -PassThru
+  if ($QuietInstall) { $installerArgs += "/Q" }
+  $installerProcess = if ($installerArgs.Count -gt 0) {
+    Start-Process -FilePath $resolvedPath -ArgumentList $installerArgs -PassThru
   } else {
-    $installerProcess = Start-Process -FilePath $resolvedInstaller -PassThru
+    Start-Process -FilePath $resolvedPath -PassThru
   }
   if (-not $installerProcess.WaitForExit($InstallTimeoutSeconds * 1000)) {
     $installMarkersPresent = (Test-Path -LiteralPath $exePath) -and (Test-Path -LiteralPath $uninstallKey)
     Stop-Process -Id $installerProcess.Id -Force -ErrorAction SilentlyContinue
     if (-not $installMarkersPresent) {
-      throw "Installer did not exit within $InstallTimeoutSeconds seconds, and install markers were not present."
+      throw "$label did not exit within $InstallTimeoutSeconds seconds, and install markers were not present."
     }
-    Write-Warning "Installer wrapper did not exit within $InstallTimeoutSeconds seconds, but install markers are present; continuing validation."
+    Write-Warning "$label wrapper did not exit within $InstallTimeoutSeconds seconds, but install markers are present; continuing validation."
   } elseif ($installerProcess.ExitCode -ne 0) {
-    throw "Installer exited with code $($installerProcess.ExitCode)."
+    throw "$label exited with code $($installerProcess.ExitCode)."
   }
+}
+
+function Stop-InstalledHost {
+  Get-Process -Name "XenonEdgeHost" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction Stop
+  Start-Sleep -Seconds 1
+}
+
+function Assert-LiveHealth($label) {
+  $deadline = (Get-Date).AddSeconds(45)
+  do {
+    try {
+      $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8976/api/health" -TimeoutSec 3
+      if ($response.StatusCode -eq 200) {
+        Write-Host "OK: $label"
+        return
+      }
+    } catch {
+    }
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $deadline)
+  throw "$label did not return HTTP 200 within 45 seconds."
+}
+
+function Assert-LaunchAndRestartHealth {
+  Stop-InstalledHost
+  $first = Start-Process -FilePath $exePath -ArgumentList "--safe-mode" -PassThru
+  try { Assert-LiveHealth "installed host launch /api/health" } finally { Stop-InstalledHost }
+  $second = Start-Process -FilePath $exePath -ArgumentList "--safe-mode" -PassThru
+  try { Assert-LiveHealth "installed host process restart /api/health" } finally { Stop-InstalledHost }
+}
+
+if ($RunInstall) {
+  if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
+    throw "Pass -InstallerPath when using -RunInstall."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($PreviousInstallerPath)) {
+    Invoke-Installer $PreviousInstallerPath "Installing previous beta for upgrade test"
+  }
+  Invoke-Installer $InstallerPath "Installing exact candidate"
 }
 
 Write-Step "Checking installed app"
@@ -159,10 +198,31 @@ if ([string]::IsNullOrWhiteSpace($uninstallEntry.InstallLocation) -or -not (Test
 Write-Host "OK: install location registered"
 Assert-StartupInstalled
 
+if ($RunLaunchHealth) {
+  Write-Step "Checking live installed host"
+  Assert-LaunchAndRestartHealth
+}
+
+if ($RunRepair) {
+  Write-Step "Running installed repair"
+  $repairScript = Join-Path $installRoot "repair.ps1"
+  Assert-Present $repairScript "Installed repair script"
+  $repairProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $repairScript, "-Quiet") -Wait -WindowStyle Hidden -PassThru
+  if ($repairProcess.ExitCode -ne 0) { throw "Repair exited with code $($repairProcess.ExitCode)." }
+  Assert-StartupInstalled
+  Write-Host "OK: installed repair completed"
+}
+
 if ($RunUninstall) {
   Write-Step "Running uninstaller"
   $removeScript = Join-Path $installRoot "Remove-XenonEdgeHost.ps1"
   Assert-Present $removeScript "Uninstaller script"
+  if ($RemoveLocalData) {
+    foreach ($dataRoot in @($userDataRoot, $localDataRoot, $legacyUserDataRoot, $legacyLocalDataRoot)) {
+      New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
+      Set-Content -LiteralPath (Join-Path $dataRoot "beta-remove-all-data.marker") -Value "remove me" -Encoding ASCII
+    }
+  }
   $removeArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $removeScript, "-Quiet")
   if ($RemoveLocalData) {
     $removeArgs += "-RemoveLocalData"
@@ -183,6 +243,8 @@ if ($RunUninstall) {
     Write-Step "Checking local data cleanup"
     Assert-Absent $userDataRoot "Roaming local data"
     Assert-Absent $localDataRoot "Local app data"
+    Assert-Absent $legacyUserDataRoot "Legacy roaming local data"
+    Assert-Absent $legacyLocalDataRoot "Legacy local app data"
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "auxora-desktop",
-  "version": "0.3.0",
+  "version": "0.3.0-beta.1",
   "private": true,
   "description": "Cross-platform beta host for the Auxora adaptive dashboard.",
   "main": "src/main.cjs",

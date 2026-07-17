@@ -1,20 +1,20 @@
-# Auxora 0.3.0 Free Public Beta
+# Auxora 0.3.0-beta.1 Free Public Beta
 
-Auxora 0.3.0 is the adaptive Windows touch-display beta that succeeds XENEON Edge Host.
+Auxora 0.3.0-beta.1 is the adaptive Windows touch-display beta that succeeds XENEON Edge Host.
 
 ## Downloads
 
 Use the Windows installer asset and matching SHA256 checksum:
 
-- `Auxora-Setup-0.3.0-<date>.exe`
-- `Auxora-Setup-0.3.0-<date>.exe.sha256`
+- `Auxora-Setup-0.3.0-beta.1-<date>.exe`
+- `Auxora-Setup-0.3.0-beta.1-<date>.exe.sha256`
 
 ## Important Notes
 
 - This is free beta software. Do not pay for this build.
 - This is independent software and is not an official CORSAIR product.
 - The Windows installer is unsigned unless a signed asset is uploaded. Windows may show a SmartScreen warning.
-- The Mac host is still beta-only and should not be treated as a finished Mac product.
+- This public beta is Windows-only. The unfinished Mac scaffold is not published.
 - Support is handled through GitHub Issues.
 - Private security reports should use GitHub Security Advisories.
 - Install and uninstall are meant to be hands-free after the Windows SmartScreen warning, if Windows shows one.

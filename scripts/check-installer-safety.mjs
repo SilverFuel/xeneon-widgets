@@ -133,6 +133,10 @@ assert(
     && /Assert-StartupRemoved/.test(smokeTest)
     && /Launch-XenonSafeMode\.ps1/.test(smokeTest)
     && /repair\.ps1/.test(smokeTest)
+    && /PreviousInstallerPath/.test(smokeTest)
+    && /Assert-LaunchAndRestartHealth/.test(smokeTest)
+    && /api\/health/.test(smokeTest)
+    && /Running installed repair/.test(smokeTest)
     && /Uninstaller exited with code/.test(smokeTest)
     && /\$installRoot\s*=\s*Join-Path \$env:LOCALAPPDATA "Programs\\Auxora"/.test(smokeTest)
     && /\$shortcutRoot\s*=\s*Join-Path \$env:APPDATA "Microsoft\\Windows\\Start Menu\\Programs\\Auxora"/.test(smokeTest),
@@ -150,8 +154,10 @@ assert(
 
 assert(
   /Install npm dependencies[\s\S]+npm ci/.test(releaseWorkflow)
-    && /Install Electron host dependencies[\s\S]+npm --prefix desktop\/electron ci/.test(releaseWorkflow),
-  "release workflow must use lockfile-backed npm ci installs"
+    && /Build immutable Windows candidate/.test(releaseWorkflow)
+    && /Publish receipt-bound Windows beta/.test(releaseWorkflow)
+    && !/npm --prefix desktop\/electron ci|macos-latest/.test(releaseWorkflow),
+  "beta release workflow must use lockfile-backed npm installs and remain Windows-only"
 );
 
 assert(

@@ -927,12 +927,16 @@ assert(
   /HashStatus/.test(releaseService)
     && /SignatureStatus/.test(releaseService)
     && /BuildReleaseTrust/.test(releaseService)
-    && /Verify Windows signing policy/.test(releaseWorkflow)
-    && /Public stable releases require a valid Authenticode signature/.test(releaseWorkflow)
-    && /signature-status\.txt/.test(releaseWorkflow)
+    && /verificationStatus/.test(releaseService)
+    && /trusted = false/.test(releaseService)
+    && /Build immutable Windows candidate/.test(releaseWorkflow)
+    && /Publish receipt-bound Windows beta/.test(releaseWorkflow)
+    && /Test-ReleaseManifest\.ps1/.test(releaseWorkflow)
+    && /Test-BetaLifecycleReceipt\.ps1/.test(releaseWorkflow)
+    && !/macos-latest|macOS package|release edit|-X DELETE/.test(releaseWorkflow)
     && /hashStatus/.test(productWidget)
     && /signatureStatus/.test(productWidget),
-  "release payloads and CI must surface/enforce installer hash and signature status"
+  "release payloads and CI must distinguish available trust evidence from verification and preserve immutable Windows beta bytes"
 );
 
 assert(

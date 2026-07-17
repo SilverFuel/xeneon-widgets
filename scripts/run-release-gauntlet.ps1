@@ -6,7 +6,9 @@ param(
   [switch]$RequireSignedInstaller,
   [switch]$AllowUnsignedBeta,
   [switch]$AllowGitHubSupportPath,
-  [string]$CommercialEvidencePath = ""
+  [string]$CommercialEvidencePath = "",
+  [string]$ReleaseAssetsPath = "",
+  [string]$LifecycleReceiptPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,6 +24,9 @@ if ($RequireSignedInstaller -and [string]::IsNullOrWhiteSpace($CommercialEvidenc
 }
 if (-not [string]::IsNullOrWhiteSpace($CommercialEvidencePath) -and -not $RequireSignedInstaller) {
   throw "Commercial evidence can only be used with -RequireSignedInstaller."
+}
+if ([string]::IsNullOrWhiteSpace($ReleaseAssetsPath) -ne [string]::IsNullOrWhiteSpace($LifecycleReceiptPath)) {
+  throw "ReleaseAssetsPath and LifecycleReceiptPath must be supplied together for a receipt-bound candidate."
 }
 
 $allowedSignerThumbprints = @()
@@ -126,6 +131,19 @@ try {
     $readyArgs += @("-AllowedSignerThumbprint") + $allowedSignerThumbprints
   }
   Invoke-CheckedCommand "powershell" (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\assert-release-ready.ps1") + $readyArgs) "Release readiness gate failed."
+
+  if (-not [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
+    Write-Step "Checking immutable release manifest and lifecycle receipt"
+    Invoke-CheckedCommand "powershell" @(
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-ReleaseManifest.ps1",
+      "-ReleaseAssetsPath", $ReleaseAssetsPath
+    ) "Release manifest verification failed."
+    Invoke-CheckedCommand "powershell" @(
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-BetaLifecycleReceipt.ps1",
+      "-ReceiptPath", $LifecycleReceiptPath,
+      "-ReleaseAssetsPath", $ReleaseAssetsPath
+    ) "Lifecycle receipt verification failed."
+  }
 
   if ($RequireSignedInstaller) {
     [xml]$project = Get-Content (Join-Path $repoRoot "app\XenonEdgeHost.csproj")

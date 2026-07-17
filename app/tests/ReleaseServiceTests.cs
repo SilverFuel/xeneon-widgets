@@ -7,24 +7,107 @@ namespace XenonEdgeHost.Tests;
 
 public sealed class ReleaseServiceTests
 {
-    [Test]
-    public async Task GetLatestReleaseAsync_ReportsANewerPrereleaseAsAvailable()
+    [TestCase("0.3.0-beta.1", "0.3.0-beta.2", true)]
+    [TestCase("0.3.0-beta.2", "0.3.0-rc.1", true)]
+    [TestCase("0.3.0", "0.3.0", false)]
+    [TestCase("0.3.0", "0.3.1-beta.1", true)]
+    public async Task GetLatestReleaseAsync_UsesSemVerOrdering(string currentVersion, string latestVersion, bool expectedUpdate)
     {
-        const string release = """
-            {
-              "tag_name": "v0.3.1-beta.1",
-              "html_url": "https://example.test/releases/v0.3.1-beta.1",
+        var prerelease = latestVersion.Contains('-');
+        var release = $$"""
+            [{
+              "tag_name": "v{{latestVersion}}",
+              "html_url": "https://example.test/releases/v{{latestVersion}}",
+              "prerelease": {{prerelease.ToString().ToLowerInvariant()}},
               "assets": []
-            }
+            }]
             """;
         using var client = new HttpClient(new StaticResponseHandler(release));
-        var service = new ReleaseService(client);
+        var service = new ReleaseService(client, currentVersion);
+
+        var payload = await service.GetLatestReleaseAsync(prerelease ? "beta" : "stable", CancellationToken.None);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+
+        Assert.That(document.RootElement.GetProperty("versionComparisonKnown").GetBoolean(), Is.True);
+        Assert.That(document.RootElement.GetProperty("updateAvailable").GetBoolean(), Is.EqualTo(expectedUpdate));
+    }
+
+    [Test]
+    public void TryParseReleaseVersion_OrdersReleaseCandidateBeforeStable()
+    {
+        Assert.That(ReleaseService.TryParseReleaseVersion("0.3.0-rc.1", out var releaseCandidate), Is.True);
+        Assert.That(ReleaseService.TryParseReleaseVersion("0.3.0", out var stable), Is.True);
+        Assert.That(releaseCandidate, Is.LessThan(stable));
+    }
+
+    [TestCase("beta")]
+    [TestCase("nightly")]
+    public async Task GetLatestReleaseAsync_DoesNotFallBackAcrossChannels(string channel)
+    {
+        const string releases = """
+            [{
+              "tag_name": "v0.3.0",
+              "html_url": "https://example.test/releases/v0.3.0",
+              "prerelease": false,
+              "assets": []
+            }]
+            """;
+        using var client = new HttpClient(new StaticResponseHandler(releases));
+        var service = new ReleaseService(client, "0.2.0");
+
+        var payload = await service.GetLatestReleaseAsync(channel, CancellationToken.None);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+
+        Assert.That(document.RootElement.GetProperty("status").GetString(), Is.EqualTo("error"));
+        Assert.That(document.RootElement.GetProperty("installerUrl").GetString(), Is.Empty);
+    }
+
+    [Test]
+    public async Task GetLatestReleaseAsync_BetaBuildDefaultsToBetaAndSelectsNewestIndependentOfOrder()
+    {
+        const string releases = """
+            [
+              { "tag_name": "v0.3.0-beta.1", "prerelease": true, "assets": [] },
+              { "tag_name": "v0.3.0-rc.1", "prerelease": true, "assets": [] },
+              { "tag_name": "v0.3.0-beta.2", "prerelease": true, "assets": [] }
+            ]
+            """;
+        using var client = new HttpClient(new StaticResponseHandler(releases));
+        var service = new ReleaseService(client, "0.3.0-beta.1");
 
         var payload = await service.GetLatestReleaseAsync("stable", CancellationToken.None);
         using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
 
-        Assert.That(document.RootElement.GetProperty("versionComparisonKnown").GetBoolean(), Is.True);
+        Assert.That(document.RootElement.GetProperty("channel").GetString(), Is.EqualTo("beta"));
+        Assert.That(document.RootElement.GetProperty("latestVersion").GetString(), Is.EqualTo("v0.3.0-rc.1"));
         Assert.That(document.RootElement.GetProperty("updateAvailable").GetBoolean(), Is.True);
+    }
+
+    [Test]
+    public async Task GetLatestReleaseAsync_SidecarPresenceIsAvailableButNotVerified()
+    {
+        const string release = """
+            [{
+              "tag_name": "v0.3.0-beta.2",
+              "prerelease": true,
+              "assets": [
+                { "name": "Auxora-Setup-0.3.0-beta.2-build.exe", "browser_download_url": "https://example.test/setup.exe", "size": 10 },
+                { "name": "Auxora-Setup-0.3.0-beta.2-build.exe.sha256", "browser_download_url": "https://example.test/setup.exe.sha256", "size": 64 },
+                { "name": "Auxora-Setup-0.3.0-beta.2-build.exe.sig", "browser_download_url": "https://example.test/setup.exe.sig", "size": 64 }
+              ]
+            }]
+            """;
+        using var client = new HttpClient(new StaticResponseHandler(release));
+        var service = new ReleaseService(client, "0.3.0-beta.1");
+
+        var payload = await service.GetLatestReleaseAsync("beta", CancellationToken.None);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        var root = document.RootElement;
+
+        Assert.That(root.GetProperty("hashStatus").GetString(), Is.EqualTo("available"));
+        Assert.That(root.GetProperty("signatureStatus").GetString(), Is.EqualTo("available"));
+        Assert.That(root.GetProperty("trust").GetProperty("verificationStatus").GetString(), Is.EqualTo("not-verified"));
+        Assert.That(root.GetProperty("trust").GetProperty("trusted").GetBoolean(), Is.False);
     }
 
     private sealed class StaticResponseHandler : HttpMessageHandler

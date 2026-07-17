@@ -6,6 +6,8 @@ This app should not make normal users answer setup questions.
 
 Download the Windows setup EXE from GitHub Releases and run it.
 
+For the beta, use only the installer named in `release-manifest.json` and confirm its SHA-256 matches both the manifest and sidecar. Published assets under an existing tag are immutable.
+
 Auxora installs itself for the current Windows user. It does not need admin rights for the normal install path, and it does not ask the user to pick folders or configure services.
 
 The installer handles this automatically:
@@ -21,6 +23,8 @@ The Start Menu folder also includes clearly labeled recovery shortcuts:
 
 - `Auxora Recovery (Safe Mode)` stops any running host process, disables auto-start, ignores saved display placement, and opens on the primary monitor.
 - `Repair Auxora` restores Start Menu/Desktop shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
+
+Before publication, the exact manifest-bound installer must complete the disposable-VM lifecycle receipt: install, live `/api/health`, process restart, reboot/autostart, previous-beta upgrade, repair, normal uninstall, and remove-all-data.
 
 The free beta installer may show a Windows SmartScreen warning until the app is signed. That warning is from Windows. After the user chooses to run the beta installer, Auxora should not ask more setup questions.
 

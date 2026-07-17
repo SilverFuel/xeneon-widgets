@@ -68,10 +68,14 @@ $hashPath = "$resolvedInstaller.sha256"
 if (-not (Test-Path -LiteralPath $hashPath -PathType Leaf)) {
   Add-ArtifactFailure "Installer SHA256 sidecar is missing: $hashPath"
 } else {
-  $expectedHash = ((Get-Content -LiteralPath $hashPath -Raw).Trim() -split '\s+')[0]
+  $hashParts = (Get-Content -LiteralPath $hashPath -Raw).Trim() -split '\s+', 2
+  $expectedHash = $hashParts[0]
   $actualHash = Get-Sha256Hash $resolvedInstaller
-  if (-not ($expectedHash -match '^[0-9A-Fa-f]{64}$' -and $expectedHash.Equals($actualHash, [System.StringComparison]::OrdinalIgnoreCase))) {
-    Add-ArtifactFailure "Installer SHA256 sidecar does not match the artifact."
+  if (($hashParts.Count -ne 2) -or
+      (-not ($expectedHash -match '^[0-9A-Fa-f]{64}$')) -or
+      (-not $expectedHash.Equals($actualHash, [System.StringComparison]::OrdinalIgnoreCase)) -or
+      ($hashParts[1].Trim() -cne $installerName)) {
+    Add-ArtifactFailure "Installer SHA256 sidecar does not match the exact artifact filename and bytes."
   }
 }
 
