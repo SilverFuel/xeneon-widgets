@@ -46,6 +46,7 @@ const homelabWidget = readWorkspaceFile("js/widgets/homelab.js");
 const gameModeWidget = readWorkspaceFile("js/widgets/game-mode.js");
 const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
 const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
+const supportController = readWorkspaceFile("app/Controllers/SupportController.cs");
 const configController = readWorkspaceFile("app/Controllers/ConfigController.cs");
 const dashboardJs = readWorkspaceFile("js/dashboard.js");
 const actionWidget = readWorkspaceFile("js/widgets/actions.js");
@@ -53,6 +54,8 @@ const audioWidget = readWorkspaceFile("js/widgets/audio.js");
 const homelabWidgetJs = readWorkspaceFile("js/widgets/homelab.js");
 const integrationWidget = readWorkspaceFile("js/widgets/integrations.js");
 const productWidget = readWorkspaceFile("js/widgets/product.js");
+const setupWidget = readWorkspaceFile("js/widgets/setup.js");
+const systemWidget = readWorkspaceFile("js/widgets/system.js");
 const sceneService = readWorkspaceFile("app/Services/SceneService.cs");
 const extensionService = readWorkspaceFile("app/Services/ExtensionManifestService.cs");
 const remoteService = readWorkspaceFile("app/Services/RemoteSessionService.cs");
@@ -112,7 +115,8 @@ assert(
   /\.dashboard-router-stage\s*\{[\s\S]*?width:\s*2560px;[\s\S]*?height:\s*720px;/.test(sharedCss)
     && /@media\s*\(max-width:\s*1800px\)/.test(sharedCss)
     && /@media\s*\(max-width:\s*1280px\)/.test(sharedCss)
-    && /@media\s*\(max-width:\s*900px\)/.test(sharedCss),
+    && /@media\s*\(max-width:\s*900px\)/.test(sharedCss)
+    && /@media\s*\(max-height:\s*479px\)\s*and\s*\(orientation:\s*landscape\)/.test(sharedCss),
   "dashboard visual smoke must protect the 2560x720 shell plus 1800/1280/900 responsive breakpoints"
 );
 
@@ -163,6 +167,20 @@ assert(
     && /updateNotifications/.test(dashboardJs)
     && /updateAvailable/.test(productWidget),
   "update availability checks must remain opt-in and visibly report newer releases"
+);
+
+assert(
+  /data-action="select-display"/.test(setupWidget)
+    && /data-display-id=/.test(setupWidget)
+    && /\/api\/display\/preference/.test(setupWidget)
+    && /selectedDisplayId/.test(setupWidget)
+    && !/repairActions\[0\]\.message/.test(setupWidget)
+    && /displayDiagnostics\.Status,\s*"ready"/.test(telemetryController)
+    && /essentialsReady\s*=\s*string\.Equals\(displayDiagnostics\.Status,\s*"ready"/.test(telemetryController)
+    && /state\s*=\s*string\.Equals\(display\.Status,\s*"ready"/.test(supportController)
+    && /function displayTargetReady\([\s\S]*?\.status[\s\S]*?===\s*"ready"/.test(systemWidget)
+    && !/\}\)\[0\]\s*\|\|\s*displays\[0\]/.test(systemWidget),
+  "display diagnostics must identify the saved display, expose a direct selection action, and show repair guidance"
 );
 
 for (const [relativePath, text] of [

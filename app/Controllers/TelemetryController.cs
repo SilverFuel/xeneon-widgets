@@ -138,7 +138,7 @@ public sealed class TelemetryController
         var displayItem = CreateSetupItem(
             "display",
             "Auxora display",
-            displayDiagnostics.EdgeCandidateCount > 0 ? "Ready" : "Needs Setup",
+            string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase) ? "Ready" : "Needs Setup",
             true,
             displayDiagnostics.Message);
 
@@ -245,13 +245,13 @@ public sealed class TelemetryController
             },
             setup = new
             {
-                essentialsReady = true,
+                essentialsReady = string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase),
                 onboardingCompleted = config.Dashboard.OnboardingCompleted,
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
                 onboardingVersion = config.Dashboard.OnboardingVersion,
                 needsAttention = (!string.IsNullOrWhiteSpace(config.Calendar.IcsUrl) && calendar.Status == "error")
                     || (!string.IsNullOrWhiteSpace(config.Hue.BridgeIp) && !hue.Linked)
-                    || displayDiagnostics.EdgeCandidateCount == 0,
+                    || !string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase),
                 provisioning,
                 display = displayDiagnostics,
                 items = new Dictionary<string, object>

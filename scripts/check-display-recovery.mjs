@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
+const mainWindowXaml = readWorkspaceFile("app/MainWindow.xaml");
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
 const installScript = readWorkspaceFile("app/install.ps1");
 
@@ -39,6 +40,18 @@ assert(
     && /DisplayPreferenceChanged/.test(mainWindow)
     && /ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow),
   "main window must recover display placement and use a windowed chooser until one of multiple displays is selected"
+);
+
+assert(
+  /x:Name="DisplayPickerPanel"/.test(mainWindowXaml)
+    && /Background="#FF070B10"/.test(mainWindowXaml)
+    && /x:Name="DisplayPickerList"/.test(mainWindowXaml)
+    && /Foreground="#FFF5F8FA"/.test(mainWindowXaml)
+    && /ShowDisplayPicker/.test(mainWindow)
+    && /HandleDisplayChoice/.test(mainWindow)
+    && /SetDisplayPreference/.test(bridgeManager)
+    && !/Open Settings and select the touch display/.test(mainWindow),
+  "first-run display selection must be an opaque, high-contrast, directly actionable picker"
 );
 
 assert(

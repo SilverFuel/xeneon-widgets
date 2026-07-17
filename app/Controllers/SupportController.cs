@@ -79,7 +79,7 @@ public sealed class SupportController
         actions.Add(new
         {
             id = "display",
-            state = display.EdgeCandidateCount > 0 ? "Ready" : "Needs Setup",
+            state = string.Equals(display.Status, "ready", StringComparison.OrdinalIgnoreCase) ? "Ready" : "Needs Setup",
             message = display.Message,
             repairActions = display.RepairActions
         });
@@ -108,7 +108,7 @@ public sealed class SupportController
         {
             ok = true,
             supported = true,
-            status = display.EdgeCandidateCount > 0 ? "ready" : "needs-setup",
+            status = string.Equals(display.Status, "ready", StringComparison.OrdinalIgnoreCase) ? "ready" : "needs-setup",
             sampledAt = startedAt,
             message = "Auto repair checked display targeting, runtime health, launcher suggestions, and config state.",
             actions,

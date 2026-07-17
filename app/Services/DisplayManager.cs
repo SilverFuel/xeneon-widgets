@@ -31,8 +31,12 @@ public static class DisplayManager
     public static DisplayDiagnosticsSnapshot BuildDiagnostics(string? preferredDisplayId = null)
     {
         var displays = ListDisplays(preferredDisplayId);
-        var selected = displays.FirstOrDefault();
         var preferredAvailable = displays.Any(display => display.IsPreferred);
+        var selected = preferredAvailable
+            ? displays.First(display => display.IsPreferred)
+            : displays.Count == 1
+                ? displays[0]
+                : null;
 
         return new DisplayDiagnosticsSnapshot
         {

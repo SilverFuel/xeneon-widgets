@@ -101,11 +101,13 @@
   }
 
   function renderDisplayDiagnosticsCard(display) {
-    var selected = display && display.selected ? display.selected : null;
     var displays = display && Array.isArray(display.displays) ? display.displays : [];
+    var selectedDisplayId = text(display && display.selectedDisplayId, "");
+    var selected = displays.filter(function (entry) {
+      return Boolean(entry && (entry.preferred || (selectedDisplayId && entry.id === selectedDisplayId)));
+    })[0] || null;
     var repairActions = display && Array.isArray(display.repairActions) ? display.repairActions : [];
-    var visibleDisplays = displays.slice(0, 4);
-    var edgeCount = optionalNumber(display && display.edgeCandidateCount) || 0;
+    var visibleDisplays = displays;
 
     function describeDisplay(entry) {
       var width = optionalNumber(entry && (entry.boundsWidth || entry.modeWidth));
@@ -123,11 +125,11 @@
             '<div class="metric-label">Display targeting</div>' +
             '<div class="router-inline-copy">' + escapeHtml(text(display && display.message, selected ? "Touch display selected." : "No display target selected yet.")) + '</div>' +
           '</div>' +
-          statusPill(edgeCount ? edgeCount + " found" : "Check display", edgeCount ? "good" : "warn") +
+          statusPill(selected ? "Ready" : displays.length ? "Choose one" : "Check display", selected ? "good" : "warn") +
         '</div>' +
         '<div class="setup-display-target">' +
           '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected display") : "No selected touch display") + '</strong>' +
-          '<span>' + escapeHtml(selected ? describeDisplay(selected) : "Connect a touch display, then refresh diagnostics.") + '</span>' +
+          '<span>' + escapeHtml(selected ? describeDisplay(selected) : displays.length ? "Choose one of the detected displays below." : "Connect a display, then refresh diagnostics.") + '</span>' +
         '</div>' +
         '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
           var reasons = Array.isArray(entry.reasons) ? entry.reasons.slice(0, 2).join(" / ") : "";
@@ -137,12 +139,15 @@
                 '<div class="inline-list-title">' + escapeHtml(text(entry.label || entry.friendlyName, "Display")) + '</div>' +
                 '<div class="inline-list-copy">' + escapeHtml(describeDisplay(entry) + (reasons ? " / " + reasons : "")) + '</div>' +
               '</div>' +
-              statusPill(entry.preferred ? "Pinned" : String(entry.score || 0), entry.containsXeneonName || entry.matchesEdgeResolution ? "good" : "muted") +
+              '<div class="setup-display-row__actions">' +
+                statusPill(entry.primary ? "Primary" : entry.preferred ? "In use" : "Available", entry.preferred ? "good" : "muted") +
+                '<button class="inline-button' + (entry.preferred ? '' : ' is-primary') + '" type="button" data-action="select-display" data-display-id="' + escapeHtml(text(entry.id, "")) + '"' + (entry.preferred ? ' disabled' : '') + '>' + (entry.preferred ? 'Selected' : 'Use this display') + '</button>' +
+              '</div>' +
             '</div>';
         }).join("") : emptyState("No displays returned", "The local bridge did not return monitor details yet.")) + '</div>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="run-repair">Repair scan</button>' +
-          (repairActions.length ? '<span class="router-inline-copy">' + escapeHtml(text(repairActions[0].message, "Repair actions are available.")) + '</span>' : '') +
+          (repairActions.length ? '<span class="router-inline-copy">' + escapeHtml(text(repairActions[0], "Repair actions are available.")) + '</span>' : '') +
         '</div>' +
       '</article>';
   }
@@ -271,7 +276,7 @@
               '</div>' +
               statusPill(uniFiItem.state, toneForState(uniFiItem.state)) +
             '</div>' +
-              '<div class="router-inline-copy">Xenon checks the local UniFi console automatically.</div>' +
+              '<div class="router-inline-copy">Auxora checks the local UniFi console automatically.</div>' +
           '</article>' +
           '<article class="list-card inline-card">' +
             '<div class="inline-card-header">' +
@@ -306,7 +311,7 @@
           '<div>' +
             '<div class="eyebrow">Diagnostics</div>' +
             '<h3 class="inline-title">Auto setup and diagnostics</h3>' +
-            '<p class="inline-copy">Xenon scans this PC and prepares the dashboard automatically. Optional extras only need permission when you want them.</p>' +
+            '<p class="inline-copy">Auxora scans this PC and prepares the dashboard automatically. Optional extras only need permission when you want them.</p>' +
           '</div>' +
           '<div class="inline-actions">' +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
@@ -404,6 +409,37 @@
         }, function (error) {
           state.busy = false;
           state.statusText = error.message || "Repair failed";
+          state.statusTone = "danger";
+          redraw();
+        });
+        return;
+      }
+
+      if (action === "select-display") {
+        var displayId = String(target.getAttribute("data-display-id") || "").trim();
+        if (!displayId) {
+          state.statusText = "Display unavailable";
+          state.statusTone = "danger";
+          redraw();
+          return;
+        }
+
+        state.busy = true;
+        state.statusText = "Moving Auxora";
+        state.statusTone = "warn";
+        redraw();
+        requestJson(buildBridgeUrl(env, "/api/display/preference"), {
+          method: "POST",
+          body: { displayId: displayId }
+        }, 8000).then(function () {
+          return setupUpdate(env, "display");
+        }).then(function () {
+          state.busy = false;
+          emitTouchFeedback(env, "Auxora display updated");
+          return refresh();
+        }, function (error) {
+          state.busy = false;
+          state.statusText = error.message || "Display move failed";
           state.statusTone = "danger";
           redraw();
         });

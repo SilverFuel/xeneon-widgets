@@ -62,4 +62,4 @@ if ($taskInstalled) {
 }
 
 Write-Host "The bridge will start automatically at logon."
-Write-Host "Compatibility URL: http://127.0.0.1:8976/dashboard.html?v=20260712-01"
+Write-Host "Compatibility URL: http://127.0.0.1:8976/dashboard.html?v=20260714-03"
