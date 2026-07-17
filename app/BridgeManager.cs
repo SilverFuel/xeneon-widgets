@@ -30,6 +30,8 @@ public sealed class BridgeManager : IDisposable
     private readonly ExtensionController _extensionController;
     private readonly RemoteSessionController _remoteSessionController;
     private readonly RemoteSessionService _remoteSessionService;
+    private readonly LocalDataResetService _localDataResetService;
+    private readonly RecoveryService _recoveryService;
     private readonly ApiRouter _apiRouter;
     private readonly string _dashboardAssetRevision;
     private readonly SystemMetricsService _systemMetrics;
@@ -76,12 +78,7 @@ public sealed class BridgeManager : IDisposable
             Timeout = TimeSpan.FromSeconds(10)
         };
         _weatherService = new WeatherService(_weatherHttpClient);
-        _calendarHttpClient = new HttpClient(new SocketsHttpHandler
-        {
-            AllowAutoRedirect = false,
-            UseProxy = false,
-            ConnectCallback = NetworkEndpointGuard.ConnectPublicHttpsAsync
-        })
+        _calendarHttpClient = new HttpClient(CreateCalendarHttpHandler())
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
@@ -91,7 +88,7 @@ public sealed class BridgeManager : IDisposable
         _releaseService = new ReleaseService(_weatherHttpClient);
         _sceneService = new SceneService(_configStore);
         _mediaService = new MediaService(_logger, _configStore);
-        _launcherService = new LauncherService(_logger);
+        _launcherService = new LauncherService(_logger, _configStore);
         _steamService = new SteamService(_logger);
         _gameActivityService = new GameActivityService(_steamService, _launcherService, _configStore, _logger);
         _gamePerformanceService = new GamePerformanceService(_logger, _configStore);
@@ -114,8 +111,13 @@ public sealed class BridgeManager : IDisposable
         _remoteSessionService = new RemoteSessionService(_sceneService, actionChainService, _logger, _configStore.Current.Port);
         _remoteSessionController = new RemoteSessionController(_remoteSessionService);
         _clipboardHistoryService = new ClipboardHistoryService(_logger);
-        _configController = new ConfigController(_configStore, _provisioningService);
+        _configController = new ConfigController(_configStore, _provisioningService, _launcherService);
         _configController.DisplayPreferenceChanged += () => DisplayPreferenceChanged?.Invoke();
+        _localDataResetService = new LocalDataResetService(_configStore, _launcherService, _gamePerformanceService, _logger);
+        var localDataResetController = new LocalDataResetController(_localDataResetService);
+        _recoveryService = new RecoveryService(_logger);
+        _recoveryService.QuitRequested += () => QuitRequested?.Invoke();
+        var recoveryController = new RecoveryController(_recoveryService);
         _telemetryController = new TelemetryController(
             _configStore,
             _configController,
@@ -166,6 +168,8 @@ public sealed class BridgeManager : IDisposable
             _monitorControlController,
             _extensionController,
             _remoteSessionController,
+            localDataResetController,
+            recoveryController,
             _weatherService,
             _calendarService);
 
@@ -187,6 +191,23 @@ public sealed class BridgeManager : IDisposable
     public event Action? BridgeReady;
 
     public event Action<string>? BridgeStopped;
+
+    public event Action? QuitRequested;
+
+    public void SetBrowserDataClearer(Func<CancellationToken, Task<ResetStepReceipt>> clearBrowserDataAsync)
+    {
+        _localDataResetService.SetBrowserDataClearer(clearBrowserDataAsync);
+    }
+
+    internal static SocketsHttpHandler CreateCalendarHttpHandler()
+    {
+        return new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseProxy = false,
+            ConnectCallback = NetworkEndpointGuard.ConnectPublicHttpsAsync
+        };
+    }
 
     public event Action? DisplayPreferenceChanged;
 
@@ -504,7 +525,11 @@ public sealed class BridgeManager : IDisposable
         }
         finally
         {
-            LogRequestBoundary(requestId, method, path, response.StatusCode, Stopwatch.GetElapsedTime(startedAt));
+            if (!string.Equals(path, "/api/config/reset", StringComparison.OrdinalIgnoreCase)
+                || response.StatusCode >= 400)
+            {
+                LogRequestBoundary(requestId, method, path, response.StatusCode, Stopwatch.GetElapsedTime(startedAt));
+            }
         }
     }
 

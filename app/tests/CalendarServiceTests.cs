@@ -148,6 +148,57 @@ public sealed class CalendarServiceTests
         Assert.That(handler.RequestCount, Is.EqualTo(6));
     }
 
+    [Test]
+    public async Task ConnectionBoundary_RejectsDnsRebindingBeforeConnectorRuns()
+    {
+        var validationCalls = 0;
+        var connectorCalls = 0;
+        var validated = await NetworkEndpointGuard.ValidatePublicHttpsDestinationAsync(
+            "https://calendar.example/feed.ics",
+            "Calendar ICS URL",
+            CancellationToken.None,
+            (_, _) =>
+            {
+                validationCalls++;
+                return Task.FromResult(new[] { IPAddress.Parse("93.184.216.34") });
+            });
+
+        async ValueTask<Stream> Connector(IPAddress _, int __, CancellationToken ___)
+        {
+            connectorCalls++;
+            await Task.Yield();
+            return new MemoryStream();
+        }
+
+        Func<Task> action = async () =>
+            await NetworkEndpointGuard.ConnectPublicHttpsHostAsync(
+                validated.Host,
+                validated.Port,
+                CancellationToken.None,
+                (_, _) => Task.FromResult(new[] { IPAddress.Loopback }),
+                Connector);
+        var error = Assert.ThrowsAsync<InvalidOperationException>(action);
+
+        Assert.That(error!.Message, Does.Contain("non-public"));
+        Assert.That(validationCalls, Is.EqualTo(1));
+        Assert.That(connectorCalls, Is.Zero);
+    }
+
+    [Test]
+    public void ProductionCalendarHandler_DisablesRedirectsAndProxyAndUsesGuardedConnector()
+    {
+        using var handler = BridgeManager.CreateCalendarHttpHandler();
+
+        Action assertions = () =>
+        {
+            Assert.That(handler.AllowAutoRedirect, Is.False);
+            Assert.That(handler.UseProxy, Is.False);
+            Assert.That(handler.ConnectCallback, Is.Not.Null);
+            Assert.That(handler.ConnectCallback!.Method.Name, Is.EqualTo(nameof(NetworkEndpointGuard.ConnectPublicHttpsAsync)));
+        };
+        Assert.Multiple(assertions);
+    }
+
     private CalendarService CreateService(
         HttpClient client,
         Func<string, CancellationToken, Task<IPAddress[]>> resolver)

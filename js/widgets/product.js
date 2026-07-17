@@ -357,7 +357,7 @@
           metricCard("Current build", state.current || env.assetRevision || "local", "Installed host version", null) +
           metricCard("Latest release", state.latest || "Not checked", state.updateAvailable ? "Newer than your installed build" : state.message, null) +
           metricCard("Installer", state.downloadUrl ? "Found" : "Not checked", state.macUrl ? "Windows and Mac assets" : "Windows asset expected", null) +
-          metricCard("Trust", state.trustReady ? "Verified" : "Needs proof", "Hash " + state.hashStatus + " / signature " + state.signatureStatus, null) +
+          metricCard("Trust", state.trustReady ? "Available" : "Not verified", "Proof files: hash " + state.hashStatus + " / signature " + state.signatureStatus + ". Presence is not verification.", null) +
           metricCard("Rollback", state.rollback.configured ? "Ready" : "Pending", state.rollback.message, null) +
         '</div>' +
         '<form class="inline-form product-control-panel" data-form="updates">' +
@@ -397,7 +397,7 @@
         state.macUrl = text(payload && payload.macUrl, "");
         state.hashStatus = text(payload && payload.hashStatus, "missing");
         state.signatureStatus = text(payload && payload.signatureStatus, "missing");
-        state.trustReady = Boolean(payload && payload.trust && payload.trust.trusted);
+        state.trustReady = state.hashStatus === "available" && state.signatureStatus === "available";
         state.message = text(payload && payload.message, "Release feed checked.");
         state.statusText = payload && payload.status === "live" ? (state.updateAvailable ? "Update available" : "Up to date") : "Check failed";
         state.statusTone = payload && payload.status === "live" ? (state.updateAvailable ? "warn" : "good") : "danger";
@@ -904,53 +904,15 @@
   }
 
   function mountRemoteWidget(widget, container, env) {
-    var cleanups = [];
-    var state = { payload: null, busy: false, message: "Remote is stopped", tone: "muted" };
-
-    function redraw() {
-      var active = Boolean(state.payload && state.payload.active);
-      container.innerHTML = productShell(
-        "Local phone control",
-        "Phone Remote",
-        "Start a token-protected remote for Scenes and safe action chains. It expires automatically after 15 minutes.",
-        state.message,
-        state.tone,
-        '<div class="inline-grid inline-grid--3">' +
-          metricCard("Session", active ? "Active" : "Stopped", active ? "Private LAN" : "Start when needed") +
-          metricCard("Account", "Not required", "Local network only") +
-          metricCard("Expires", active ? new Date(state.payload.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "--", "Automatic shutdown") +
-        '</div>' +
-        (active ? '<div class="auxora-remote-share"><div class="auxora-remote-qr" aria-label="Phone remote QR code">' + (state.payload.qrSvg || "") + '</div><div><strong>Scan with your phone</strong><p class="inline-copy">The phone must be on the same private network. Anyone with this temporary link can control Scenes until it expires.</p><code>' + escapeHtml(state.payload.url) + '</code></div></div>' : '<div class="inline-empty"><strong>Remote is off</strong><span>Auxora does not listen on your LAN until you explicitly start a temporary session.</span></div>') +
-        '<div class="inline-actions"><button class="inline-button is-primary" type="button" data-remote-action="' + (active ? "stop" : "start") + '"' + (state.busy ? " disabled" : "") + '>' + (active ? "Stop remote" : "Start 15-minute remote") + '</button></div>'
-      );
-    }
-
-    function request(path, method) {
-      state.busy = true;
-      redraw();
-      return requestJson(buildBridgeUrl(env, path), { method: method || "GET", body: method === "POST" ? {} : undefined }, 10000).then(function (payload) {
-        state.payload = payload;
-        state.message = text(payload.message, payload.active ? "Remote active" : "Remote stopped");
-        state.tone = payload.active ? "good" : "muted";
-      }, function (error) {
-        state.message = error.message || "Remote unavailable";
-        state.tone = "danger";
-      }).finally(function () {
-        state.busy = false;
-        redraw();
-      });
-    }
-
-    addListener(cleanups, container, "click", function (event) {
-      var target = event.target && event.target.closest ? event.target.closest("[data-remote-action]") : null;
-      if (target) {
-        request(target.getAttribute("data-remote-action") === "start" ? "/api/remote/session" : "/api/remote/session/stop", "POST");
-      }
-    });
-
-    redraw();
-    request("/api/remote/session", "GET");
-    return { refresh: function () { return request("/api/remote/session", "GET"); }, destroy: function () { runCleanups(cleanups); container.innerHTML = ""; } };
+    container.innerHTML = productShell(
+      "Not included in 0.3.0-beta.1",
+      "Phone Remote",
+      "Phone Remote is unavailable for this beta. Auxora does not open a phone-control listener or create remote links.",
+      "Unavailable",
+      "muted",
+      '<div class="inline-empty"><strong>No phone session is available</strong><span>There is no phone-control action in this build. Use the Auxora display on this PC.</span></div>'
+    );
+    return { refresh: function () { return Promise.resolve(); }, destroy: function () { container.innerHTML = ""; } };
   }
 
   function mountStreamingWidget(widget, container, env) {
@@ -1178,74 +1140,77 @@
   function mountInstallerWidget(widget, container, env) {
     var cleanups = [];
     var state = {
-      statusText: "Ready",
-      statusTone: "good"
+      statusText: "Checking recovery actions",
+      statusTone: "warn",
+      busy: false,
+      actions: []
     };
 
     function redraw() {
-      var edition = settingValue(env, "installerEdition", "unsigned");
       container.innerHTML = productShell(
-        "Windows setup",
-        "Installer",
-        "Keep the packaging story visible: setup EXE, install path, shortcuts, signing, and sales readiness.",
+        "Customer recovery",
+        "Recovery",
+        "Use these actions when the dashboard or installed app needs help. Actions that require installed support files stay disabled in an unpackaged development run.",
         state.statusText,
         state.statusTone,
-        '<div class="inline-grid inline-grid--3">' +
-          metricCard("Setup EXE", "app\\dist", "Versioned setup EXE", null) +
-          metricCard("Install path", "%LOCALAPPDATA%", "Per-user install", null) +
-          metricCard("Edition", edition === "signed" ? "Signed" : "Unsigned", "Release status", edition === "signed" ? 100 : 55) +
-        '</div>' +
-        '<form class="inline-form product-control-panel" data-form="installer">' +
-          '<label class="inline-field"><span>Release readiness</span><select class="inline-select" name="installerEdition">' +
-            '<option value="unsigned"' + (edition === "unsigned" ? " selected" : "") + '>Unsigned local build</option>' +
-            '<option value="signed"' + (edition === "signed" ? " selected" : "") + '>Signed release candidate</option>' +
-          '</select></label>' +
-        '</form>' +
-        '<div class="inline-actions">' +
-          '<button class="inline-button is-primary" type="button" data-action="copy-installer">Copy build command</button>' +
-          '<button class="inline-button" type="button" data-action="open-updates">Open updates</button>' +
-        '</div>' +
-        '<div class="product-checklist">' +
-          '<span>Start Menu shortcut</span><span>Desktop shortcut</span><span>Auto-start</span><span>Uninstall entry</span><span>SHA256 file</span><span>Support notes</span>' +
-        '</div>'
+        '<div class="inline-list">' + (state.actions.length ? state.actions.map(function (action) {
+          return '<div class="inline-list-item"><div><strong>' + escapeHtml(action.label) + '</strong><div class="inline-list-copy">' + escapeHtml(action.message) + '</div></div>' +
+            '<button class="inline-button" type="button" data-recovery-action="' + escapeHtml(action.id) + '"' + ((!action.available || state.busy) ? " disabled" : "") + ' aria-label="' + escapeHtml(action.label) + '">' + escapeHtml(action.label) + '</button></div>';
+        }).join("") : '<div class="inline-empty"><strong>Recovery actions are loading</strong><span>Auxora is checking which customer actions are available in this run.</span></div>') + '</div>'
       );
     }
 
+    function refresh() {
+      return requestJson(buildBridgeUrl(env, "/api/recovery"), {}, 7000).then(function (payload) {
+        state.actions = Array.isArray(payload.actions) ? payload.actions : [];
+        state.statusText = text(payload.message, "Recovery actions checked");
+        state.statusTone = "good";
+      }, function (error) {
+        state.actions = [];
+        state.statusText = error.message || "Recovery actions unavailable";
+        state.statusTone = "danger";
+      }).finally(redraw);
+    }
+
     addListener(cleanups, container, "click", function (event) {
-      var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
+      var target = event.target && event.target.closest ? event.target.closest("[data-recovery-action]") : null;
+      var action;
       if (!target) {
         return;
       }
 
-      if (target.getAttribute("data-action") === "copy-installer") {
-        copyTextToClipboard("powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1").then(function () {
-          state.statusText = "Command copied";
-          state.statusTone = "good";
-          redraw();
-        }, function (error) {
-          state.statusText = error.message || "Copy failed";
-          state.statusTone = "danger";
-          redraw();
-        });
-      } else if (target.getAttribute("data-action") === "open-updates" && typeof env.selectWidget === "function") {
-        env.selectWidget("updates", true);
-      }
-    });
-
-    addListener(cleanups, container, "change", function (event) {
-      var select = event.target;
-      if (select && select.name === "installerEdition") {
-        saveSettings(env, { installerEdition: select.value });
+      action = target.getAttribute("data-recovery-action");
+      if (action === "retry") {
+        state.statusText = "Retrying dashboard";
+        state.statusTone = "warn";
         redraw();
+        window.location.reload();
+        return;
       }
+
+      state.busy = true;
+      state.statusText = "Starting " + action;
+      state.statusTone = "warn";
+      redraw();
+      requestJson(buildBridgeUrl(env, "/api/recovery/action"), {
+        method: "POST",
+        body: { action: action }
+      }, 8000).then(function (payload) {
+        state.statusText = text(payload.message, "Recovery action started");
+        state.statusTone = payload.ok ? "good" : "warn";
+      }, function (error) {
+        state.statusText = error.message || "Recovery action failed";
+        state.statusTone = "danger";
+      }).finally(function () {
+        state.busy = false;
+        redraw();
+      });
     });
 
     redraw();
+    refresh();
     return {
-      refresh: function () {
-        redraw();
-        return Promise.resolve();
-      },
+      refresh: refresh,
       destroy: function () {
         runCleanups(cleanups);
         container.innerHTML = "";
@@ -1260,7 +1225,8 @@
       statusTone: "good",
       confirmReset: false,
       diagnosticEvents: [],
-      diagnosticsBusy: false
+      diagnosticsBusy: false,
+      foregroundTrackingEnabled: Boolean(env.bridgeConfig && env.bridgeConfig.dashboard && env.bridgeConfig.dashboard.foregroundAppTrackingEnabled)
     };
 
     function redraw() {
@@ -1277,10 +1243,12 @@
           metricCard("Cloud calls", "Optional", "Weather and release checks", null) +
         '</div>' +
         '<div class="product-privacy-list">' +
-        '<div><strong>Stays on this PC</strong><span>Dashboard preferences, widget endpoints, layout, OBS target, and installer readiness.</span></div>' +
+          '<div><strong>Stays on this PC</strong><span>Dashboard preferences, widget endpoints, layout, OBS target, and recovery state.</span></div>' +
           '<div><strong>Requires permission</strong><span>Weather keys, calendar feeds, Hue bridge pairing, and optional connectors you enable.</span></div>' +
+          '<div><strong>Foreground-app tracking is ' + (state.foregroundTrackingEnabled ? "on" : "off") + '</strong><span>When on, Auxora observes the active app executable path and stores its display name, path, source, and last-opened time locally. Up to 24 recent entries are retained until you turn this off or reset app data. Nothing is uploaded.</span></div>' +
           '<div><strong>Independent software</strong><span>This app is not an official CORSAIR product and is not endorsed by integration providers unless a written agreement says otherwise.</span></div>' +
         '</div>' +
+        '<label class="inline-field inline-field--checkbox"><input type="checkbox" data-foreground-tracking' + (state.foregroundTrackingEnabled ? " checked" : "") + (state.diagnosticsBusy ? " disabled" : "") + '> <span>Track the foreground app to build Recent Apps (off by default)</span></label>' +
         '<article class="list-card inline-card">' +
           '<div class="inline-card-header"><div><div class="metric-label">Recent diagnostic events</div><div class="router-inline-copy">Sanitized local host events. Clipboard contents, credentials, and local paths stay excluded.</div></div><button class="inline-button" type="button" data-action="refresh-diagnostics"' + (state.diagnosticsBusy ? " disabled" : "") + '>Refresh</button></div>' +
           '<div class="inline-list">' + (state.diagnosticEvents.length ? state.diagnosticEvents.map(function (entry) {
@@ -1416,6 +1384,35 @@
           redraw();
         });
       }
+    });
+
+    addListener(cleanups, container, "change", function (event) {
+      var target = event.target;
+      if (!target || !target.hasAttribute("data-foreground-tracking")) {
+        return;
+      }
+
+      state.diagnosticsBusy = true;
+      state.statusText = target.checked ? "Enabling foreground tracking" : "Disabling and clearing recent history";
+      state.statusTone = "warn";
+      redraw();
+      requestJson(buildBridgeUrl(env, "/api/config/dashboard"), {
+        method: "POST",
+        body: { foregroundAppTrackingEnabled: Boolean(target.checked) }
+      }, 8000).then(function (payload) {
+        state.foregroundTrackingEnabled = Boolean(payload.dashboard && payload.dashboard.foregroundAppTrackingEnabled);
+        if (env.bridgeConfig && env.bridgeConfig.dashboard) {
+          env.bridgeConfig.dashboard.foregroundAppTrackingEnabled = state.foregroundTrackingEnabled;
+        }
+        state.statusText = state.foregroundTrackingEnabled ? "Foreground tracking enabled" : "Foreground tracking off; recent history cleared";
+        state.statusTone = state.foregroundTrackingEnabled ? "warn" : "good";
+      }, function (error) {
+        state.statusText = error.message || "Privacy setting failed";
+        state.statusTone = "danger";
+      }).finally(function () {
+        state.diagnosticsBusy = false;
+        redraw();
+      });
     });
 
     redraw();

@@ -75,6 +75,8 @@ public sealed partial class MainWindow : Window
         _bridgeManager.BridgeReady += HandleBridgeReady;
         _bridgeManager.BridgeStopped += HandleBridgeStopped;
         _bridgeManager.DisplayPreferenceChanged += HandleDisplayPreferenceChanged;
+        _bridgeManager.QuitRequested += HandleRecoveryQuitRequested;
+        _bridgeManager.SetBrowserDataClearer(ClearWebViewBrowsingDataAsync);
 
         AppWindow.Closing += HandleAppWindowClosing;
         Activated += HandleActivated;
@@ -811,6 +813,62 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void HandleRecoveryQuitRequested()
+    {
+        if (!DispatcherQueue.TryEnqueue(QuitApplication))
+        {
+            QuitApplication();
+        }
+    }
+
+    private Task<ResetStepReceipt> ClearWebViewBrowsingDataAsync(CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<ResetStepReceipt>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var profile = DashboardView.CoreWebView2?.Profile;
+                if (profile is null)
+                {
+                    completion.TrySetResult(new ResetStepReceipt
+                    {
+                        Id = "webview-data",
+                        Label = "WebView browsing data",
+                        Required = false,
+                        Status = "unavailable",
+                        Message = "The WebView profile was not initialized, so no profile deletion was claimed."
+                    });
+                    return;
+                }
+
+                await profile.ClearBrowsingDataAsync();
+                completion.TrySetResult(new ResetStepReceipt
+                {
+                    Id = "webview-data",
+                    Label = "WebView browsing data",
+                    Required = false,
+                    Status = "cleared",
+                    Message = "Cleared the active WebView profile browsing data."
+                });
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                completion.TrySetCanceled(cancellationToken);
+            }
+            catch (Exception error)
+            {
+                completion.TrySetException(error);
+            }
+        }))
+        {
+            completion.TrySetException(new InvalidOperationException("The WebView dispatcher is unavailable."));
+        }
+
+        return completion.Task;
+    }
+
     private void StartShowDisplaySignalListener()
     {
         if (_showDisplayEvent is not null)
@@ -1013,6 +1071,7 @@ public sealed partial class MainWindow : Window
         _bridgeManager.StatusChanged -= HandleBridgeStatusChanged;
         _bridgeManager.BridgeReady -= HandleBridgeReady;
         _bridgeManager.BridgeStopped -= HandleBridgeStopped;
+        _bridgeManager.QuitRequested -= HandleRecoveryQuitRequested;
         _showDisplayWaitHandle?.Unregister(null);
         _showDisplayEvent?.Dispose();
         _displayRecoveryCancellation?.Cancel();
