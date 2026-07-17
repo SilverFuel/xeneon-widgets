@@ -282,6 +282,11 @@ public sealed class ConfigStore
             _secretStore.Set("weather.apiKey", config.Weather.ApiKey);
         }
 
+        if (!string.IsNullOrWhiteSpace(config.Calendar.IcsUrl))
+        {
+            _secretStore.Set("calendar.icsUrl", config.Calendar.IcsUrl);
+        }
+
         if (!string.IsNullOrWhiteSpace(config.Hue.AppKey))
         {
             _secretStore.Set("hue.appKey", config.Hue.AppKey);
@@ -306,6 +311,12 @@ public sealed class ConfigStore
             config.Weather.ApiKey = weatherApiKey;
         }
 
+        var calendarIcsUrl = _secretStore.Get("calendar.icsUrl");
+        if (!string.IsNullOrWhiteSpace(calendarIcsUrl))
+        {
+            config.Calendar.IcsUrl = calendarIcsUrl;
+        }
+
         var hueAppKey = _secretStore.Get("hue.appKey");
         if (!string.IsNullOrWhiteSpace(hueAppKey))
         {
@@ -328,6 +339,7 @@ public sealed class ConfigStore
     private void SaveProtectedSecrets(AppConfig config)
     {
         _secretStore.Set("weather.apiKey", config.Weather.ApiKey);
+        _secretStore.Set("calendar.icsUrl", config.Calendar.IcsUrl);
         _secretStore.Set("hue.appKey", config.Hue.AppKey);
         _secretStore.Set("hue.clientKey", config.Hue.ClientKey);
         _secretStore.Set("unifi.password", config.UniFi.Password);
@@ -336,6 +348,7 @@ public sealed class ConfigStore
     private static void RemoveSecretsFromDiskConfig(AppConfig config)
     {
         config.Weather.ApiKey = "";
+        config.Calendar.IcsUrl = "";
         config.Hue.AppKey = "";
         config.Hue.ClientKey = "";
         config.UniFi.Password = "";
