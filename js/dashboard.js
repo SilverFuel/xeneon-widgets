@@ -96,6 +96,7 @@
       onboardingVersion: onboardingVersion,
       launcherReviewRequired: true,
       autoApplyLauncherSuggestions: false,
+      foregroundAppTrackingEnabled: false,
       preferredDisplayId: "",
       preferredDisplayDeviceName: "",
       performanceBudget: "balanced",
@@ -1965,9 +1966,9 @@
         title: "Phone Remote",
         requiresBridge: true,
         tier: "product",
-        kicker: "Temporary local session",
-        copy: "Start a short-lived, token-protected remote on your private network.",
-        viewerLabel: "No account"
+        kicker: "Unavailable in this beta",
+        copy: "Phone Remote is not included in 0.3.0-beta.1. Auxora does not open a phone-control listener.",
+        viewerLabel: "Unavailable"
       },
       {
         id: "installer",
@@ -1975,8 +1976,8 @@
         requiresBridge: true,
         tier: "product",
         kicker: "Install health",
-        copy: "Verify installer, update, rollback, and repair readiness.",
-        viewerLabel: "Release safety"
+        copy: "Retry the dashboard, repair an installed copy, restart in Safe Mode, open logs, or quit.",
+        viewerLabel: "Customer recovery"
       },
       {
         id: "system",
@@ -2294,6 +2295,11 @@
       hasPayload = true;
     }
 
+    if (Object.prototype.hasOwnProperty.call(values || {}, "foregroundAppTrackingEnabled")) {
+      payload.foregroundAppTrackingEnabled = String(values.foregroundAppTrackingEnabled || "0") !== "0";
+      hasPayload = true;
+    }
+
     if (!hasPayload) {
       return;
     }
@@ -2342,9 +2348,8 @@
 
   function clearDashboardBrowserStorage() {
     try {
-      window.localStorage.removeItem(settingsStorageKey);
-      window.localStorage.removeItem(widgetStorageKey);
-      window.localStorage.removeItem(lastPrimaryWidgetStorageKey);
+      window.localStorage.clear();
+      window.sessionStorage.clear();
     } catch (error) {
       console.warn("Unable to clear dashboard browser storage", error);
     }
@@ -2357,7 +2362,10 @@
   }
 
   function resetAllLocalData() {
-    return postJson(buildUrl(bridgeOrigin, "/api/config/reset"), {}, 10000).then(function () {
+    return postJson(buildUrl(bridgeOrigin, "/api/config/reset"), {}, 15000).then(function (receipt) {
+      if (!receipt || receipt.ok !== true) {
+        throw new Error(receipt && receipt.message ? receipt.message : "Required app data could not be cleared.");
+      }
       clearDashboardBrowserStorage();
       return refreshBridgeState({
         resolveInitialWidget: true,
@@ -2701,10 +2709,12 @@
     if (!schema) {
       settingsNode.innerHTML = '' +
         renderGlobalSettings() +
+        renderForegroundTrackingControl(widget) +
         '<div class="router-settings__empty">' +
           '<div class="router-settings__note">' + escapeHtml(renderNoSettingsCopy(widget)) + '</div>' +
         '</div>';
       bindGlobalSettings();
+      bindForegroundTrackingControl();
       renderDashboardChromeState();
       return;
     }
@@ -2712,10 +2722,12 @@
     if (!schema.fields.length) {
       settingsNode.innerHTML = '' +
         renderGlobalSettings() +
+        renderForegroundTrackingControl(widget) +
         '<div class="router-settings__empty">' +
           '<div class="router-settings__note">' + escapeHtml(schema.copy) + '</div>' +
         '</div>';
       bindGlobalSettings();
+      bindForegroundTrackingControl();
       renderDashboardChromeState();
       return;
     }
@@ -2753,6 +2765,48 @@
     bindGlobalSettings();
     bindSettingsForm(widget, schema);
     renderDashboardChromeState();
+  }
+
+  function renderForegroundTrackingControl(widget) {
+    var dashboard = bridgeConfig && bridgeConfig.dashboard ? bridgeConfig.dashboard : {};
+    var enabled = Boolean(dashboard.foregroundAppTrackingEnabled);
+    if (!widget || (widget.id !== "setup" && widget.id !== "privacy")) {
+      return "";
+    }
+
+    return '' +
+      '<div class="router-settings__form" data-foreground-tracking-panel>' +
+        '<label class="router-settings__field">' +
+          '<span><input type="checkbox" data-foreground-tracking-setting' + (enabled ? " checked" : "") + '> Track the foreground app to build Recent Apps</span>' +
+          '<small class="router-settings__field-help">Off by default. When on, Auxora observes the active executable and stores up to 24 names, paths, sources, and last-opened times locally. Turning it off clears that history.</small>' +
+        '</label>' +
+        '<div class="router-settings__note" role="status" data-foreground-tracking-status>' + (enabled ? "Foreground tracking is on." : "Foreground tracking is off.") + '</div>' +
+      '</div>';
+  }
+
+  function bindForegroundTrackingControl() {
+    var toggle = settingsNode.querySelector("[data-foreground-tracking-setting]");
+    var status = settingsNode.querySelector("[data-foreground-tracking-status]");
+    if (!toggle || !status) {
+      return;
+    }
+
+    toggle.addEventListener("change", function () {
+      var enabled = Boolean(toggle.checked);
+      toggle.disabled = true;
+      status.textContent = enabled ? "Enabling foreground tracking..." : "Disabling tracking and clearing recent history...";
+      postJson(buildUrl(bridgeOrigin, "/api/config/dashboard"), {
+        foregroundAppTrackingEnabled: enabled
+      }, 8000).then(function (payload) {
+        bridgeConfig = Object.assign({}, bridgeConfig, payload || {});
+        status.textContent = enabled ? "Foreground tracking is on." : "Foreground tracking is off and recent history was cleared.";
+      }).catch(function (error) {
+        toggle.checked = !enabled;
+        status.textContent = error.message || "Foreground tracking could not be changed.";
+      }).finally(function () {
+        toggle.disabled = false;
+      });
+    });
   }
 
   function bindSettingsForm(widget, schema) {
@@ -2958,6 +3012,7 @@
       onboardingVersion: onboardingVersion,
       launcherReviewRequired: true,
       autoApplyLauncherSuggestions: false,
+      foregroundAppTrackingEnabled: false,
       preferredDisplayId: "",
       preferredDisplayDeviceName: "",
       performanceBudget: "balanced",
@@ -3090,6 +3145,94 @@
     );
   });
 
+  function scheduleRenderedLayoutProbe() {
+    if (getParam("renderedTest") !== "1") {
+      return;
+    }
+
+    var attempts = 0;
+    var runProbe = function () {
+      attempts++;
+      var viewport = { width: window.innerWidth, height: window.innerHeight };
+      var visible = function (element) {
+        var style = window.getComputedStyle(element);
+        var rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+      };
+      var rectOf = function (selector) {
+        var element = document.querySelector(selector);
+        if (!element || !visible(element)) {
+          return null;
+        }
+        var rect = element.getBoundingClientRect();
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+      };
+      var inBounds = function (rect) {
+        return rect && rect.left >= -1 && rect.top >= -1 && rect.right <= viewport.width + 1 && rect.bottom <= viewport.height + 1;
+      };
+      var horizontallyInBounds = function (rect) {
+        return rect && rect.left >= -1 && rect.right <= viewport.width + 1;
+      };
+      var overlaps = function (left, right) {
+        return Boolean(left && right && left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top);
+      };
+      var shell = rectOf(".dashboard-stage-shell");
+      var navigation = rectOf("#dashboard-primary-nav");
+      var viewer = rectOf(".router-viewer");
+      var visibleControls = Array.prototype.slice.call(document.querySelectorAll("button, a[href], input, select, textarea"))
+        .filter(visible);
+      if ((!navigation || !viewer || visibleControls.length < 10) && attempts < 20) {
+        window.setTimeout(runProbe, 400);
+        return;
+      }
+      var unnamed = visibleControls.filter(function (element) {
+        return !(element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent.trim() || element.labels && element.labels.length);
+      });
+      var undersized = visibleControls.filter(function (element) {
+        var rect = element.getBoundingClientRect();
+        return rect.width < 32 || rect.height < 32;
+      });
+      var settingsButton = document.querySelector('[data-destination="settings"]');
+      var keyboardFocus = false;
+      var keyboardActivation = false;
+      if (settingsButton && visible(settingsButton)) {
+        settingsButton.focus();
+        keyboardFocus = document.activeElement === settingsButton;
+        settingsButton.click();
+        keyboardActivation = settingsButton.classList.contains("is-active")
+          || settingsButton.getAttribute("aria-current") === "page"
+          || settingsButton.getAttribute("aria-pressed") === "true";
+      }
+
+      var result = {
+        viewport: viewport,
+        layoutClass: document.body.dataset.layoutClass || "",
+        shell: shell,
+        navigation: navigation,
+        viewer: viewer,
+        shellInBounds: inBounds(shell),
+        shellHorizontallyInBounds: horizontallyInBounds(shell),
+        navigationInBounds: inBounds(navigation),
+        navigationHorizontallyInBounds: horizontallyInBounds(navigation),
+        viewerInBounds: inBounds(viewer),
+        viewerHorizontallyInBounds: horizontallyInBounds(viewer),
+        horizontalOverflow: document.documentElement.scrollWidth > viewport.width + 1,
+        navigationViewerOverlap: overlaps(navigation, viewer),
+        keyboardFocus: keyboardFocus,
+        keyboardActivation: keyboardActivation,
+        visibleControlCount: visibleControls.length,
+        undersizedControls: undersized.map(function (element) { return element.id || element.getAttribute("aria-label") || element.textContent.trim().slice(0, 60); }),
+        unnamedControls: unnamed.map(function (element) { return element.outerHTML.slice(0, 160); })
+      };
+      var output = document.createElement("script");
+      output.id = "auxora-rendered-test-result";
+      output.type = "application/json";
+      output.textContent = JSON.stringify(result);
+      document.body.appendChild(output);
+    };
+    window.setTimeout(runProbe, 600);
+  }
+
   function bootDashboard() {
     try {
       var explicitWidgetParam = params.has("widget") && params.get("widget") !== "";
@@ -3210,6 +3353,7 @@
       setRailCopy();
       renderPicker();
       renderDiagnostics();
+      scheduleRenderedLayoutProbe();
 
       if (isLocalBridgeBlockedByPageOrigin()) {
         showLocalhostWarning(preferredWidgetId || "system");

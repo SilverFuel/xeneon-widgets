@@ -142,9 +142,23 @@ assert(
   /RSA\.Create/.test(extensionService)
     && /RSASignaturePadding\.Pss/.test(extensionService)
     && /AllowedPermissions/.test(extensionService)
-    && /AddMinutes\(15\)/.test(remoteService)
-    && /FixedTimeEquals/.test(remoteService),
-  "extension signatures and temporary token-protected phone sessions must retain their trust boundaries"
+    && /EnabledForCurrentBeta\s*=\s*false/.test(remoteService)
+    && /Phone Remote is unavailable for this beta/.test(productWidget)
+    && !/data-remote-action/.test(productWidget)
+    && !/Start 15-minute remote/.test(productWidget),
+  "extension signatures must retain their trust boundaries and Phone Remote must remain truthfully disabled for this beta"
+);
+
+assert(
+  /foregroundAppTrackingEnabled/.test(configController)
+    && /data-foreground-tracking/.test(productWidget)
+    && /off by default/i.test(productWidget)
+    && /\/api\/recovery\/action/.test(productWidget)
+    && /Available/.test(productWidget)
+    && /Not verified/.test(productWidget)
+    && /state\.trustReady\s*=\s*state\.hashStatus\s*===\s*"available"\s*&&\s*state\.signatureStatus\s*===\s*"available"/.test(productWidget)
+    && !/metricCard\("Trust",\s*state\.trustReady\s*\?\s*"Verified"/.test(productWidget),
+  "privacy, customer recovery, and update trust labels must expose the beta-safe UI contracts"
 );
 
 assert(

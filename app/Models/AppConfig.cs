@@ -78,6 +78,8 @@ public sealed class DashboardConfig
 
     public bool AutoApplyLauncherSuggestions { get; set; }
 
+    public bool ForegroundAppTrackingEnabled { get; set; }
+
     public bool OnboardingCompleted { get; set; }
 
     public string OnboardingCompletedAt { get; set; } = "";
@@ -236,6 +238,8 @@ public sealed class DashboardConfigRequest
     public bool? LauncherReviewRequired { get; set; }
 
     public bool? AutoApplyLauncherSuggestions { get; set; }
+
+    public bool? ForegroundAppTrackingEnabled { get; set; }
 
     public string? PreferredDisplayId { get; set; }
 

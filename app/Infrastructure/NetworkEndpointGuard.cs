@@ -107,23 +107,36 @@ public static class NetworkEndpointGuard
         SocketsHttpConnectionContext context,
         CancellationToken cancellationToken)
     {
-        var addresses = await ResolvePublicAddressesAsync(
+        return await ConnectPublicHttpsHostAsync(
             context.DnsEndPoint.Host,
+            context.DnsEndPoint.Port,
+            cancellationToken,
+            resolver: null,
+            ConnectSocketAsync);
+    }
+
+    internal static async ValueTask<Stream> ConnectPublicHttpsHostAsync(
+        string host,
+        int port,
+        CancellationToken cancellationToken,
+        Func<string, CancellationToken, Task<IPAddress[]>>? resolver,
+        Func<IPAddress, int, CancellationToken, ValueTask<Stream>> connector)
+    {
+        var addresses = await ResolvePublicAddressesAsync(
+            host,
             "Calendar ICS destination",
-            cancellationToken);
+            cancellationToken,
+            resolver);
         Exception? lastError = null;
 
         foreach (var address in addresses)
         {
-            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             try
             {
-                await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), cancellationToken);
-                return new NetworkStream(socket, ownsSocket: true);
+                return await connector(address, port, cancellationToken);
             }
             catch (Exception error) when (error is SocketException or OperationCanceledException)
             {
-                socket.Dispose();
                 lastError = error;
                 if (error is OperationCanceledException)
                 {
@@ -133,6 +146,24 @@ public static class NetworkEndpointGuard
         }
 
         throw new HttpRequestException("Calendar ICS destination could not be reached.", lastError);
+    }
+
+    private static async ValueTask<Stream> ConnectSocketAsync(
+        IPAddress address,
+        int port,
+        CancellationToken cancellationToken)
+    {
+        var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        try
+        {
+            await socket.ConnectAsync(new IPEndPoint(address, port), cancellationToken);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
     }
 
     public static bool IsLocalOrPrivateHost(string? host)

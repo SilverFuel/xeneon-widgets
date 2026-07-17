@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 const hostUrl = "http://127.0.0.1:8976";
 const executable = resolve(
   process.cwd(),
-  "app/bin/Release/net8.0-windows10.0.19041.0/win-x64/XenonEdgeHost.exe"
+  "app/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/XenonEdgeHost.exe"
 );
 
 function assert(condition, message) {
@@ -48,12 +48,15 @@ async function waitForHost(child, timeoutMs = 45000) {
 
 async function stopChild(child) {
   if (child.exitCode !== null) return;
-  child.kill();
+  spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+    stdio: "ignore",
+    windowsHide: true,
+    timeout: 10000
+  });
   await Promise.race([
     new Promise(resolvePromise => child.once("exit", resolvePromise)),
     new Promise(resolvePromise => setTimeout(resolvePromise, 5000))
   ]);
-  if (child.exitCode === null) child.kill("SIGKILL");
 }
 
 assert(process.platform === "win32", "launched native host test requires Windows");
@@ -106,5 +109,5 @@ try {
   console.log("launched native host and verified live health, config, embedded dashboard, origin, and mutation boundaries");
 } finally {
   await stopChild(child);
-  rmSync(profileRoot, { recursive: true, force: true });
+  rmSync(profileRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
 }

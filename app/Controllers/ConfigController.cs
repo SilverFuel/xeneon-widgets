@@ -4,13 +4,18 @@ public sealed class ConfigController
 {
     private readonly ConfigStore _configStore;
     private readonly ProvisioningService _provisioningService;
+    private readonly LauncherService? _launcherService;
 
     public event Action? DisplayPreferenceChanged;
 
-    public ConfigController(ConfigStore configStore, ProvisioningService provisioningService)
+    public ConfigController(
+        ConfigStore configStore,
+        ProvisioningService provisioningService,
+        LauncherService? launcherService = null)
     {
         _configStore = configStore;
         _provisioningService = provisioningService;
+        _launcherService = launcherService;
     }
 
     public object GetSnapshot()
@@ -81,6 +86,7 @@ public sealed class ConfigController
                 autoProvisioningVersion = config.Dashboard.AutoProvisioningVersion,
                 launcherReviewRequired = config.Dashboard.LauncherReviewRequired,
                 autoApplyLauncherSuggestions = config.Dashboard.AutoApplyLauncherSuggestions,
+                foregroundAppTrackingEnabled = config.Dashboard.ForegroundAppTrackingEnabled,
                 onboardingCompleted = config.Dashboard.OnboardingCompleted,
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
                 onboardingVersion = config.Dashboard.OnboardingVersion,
@@ -223,6 +229,11 @@ public sealed class ConfigController
                 current.Dashboard.AutoApplyLauncherSuggestions = payload.AutoApplyLauncherSuggestions.Value;
             }
 
+            if (payload.ForegroundAppTrackingEnabled.HasValue)
+            {
+                current.Dashboard.ForegroundAppTrackingEnabled = payload.ForegroundAppTrackingEnabled.Value;
+            }
+
             if (payload.PreferredDisplayId is not null)
             {
                 current.Dashboard.PreferredDisplayId = payload.PreferredDisplayId.Trim();
@@ -291,6 +302,11 @@ public sealed class ConfigController
 
             return current;
         });
+
+        if (payload.ForegroundAppTrackingEnabled == false)
+        {
+            _launcherService?.ClearRecentHistory();
+        }
 
         return GetSnapshot();
     }

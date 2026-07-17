@@ -25,6 +25,8 @@ public sealed class ApiRouter
     private readonly MonitorControlController _monitorControlController;
     private readonly ExtensionController _extensionController;
     private readonly RemoteSessionController _remoteSessionController;
+    private readonly LocalDataResetController _localDataResetController;
+    private readonly RecoveryController _recoveryController;
     private readonly WeatherService _weatherService;
     private readonly CalendarService _calendarService;
 
@@ -42,6 +44,8 @@ public sealed class ApiRouter
         MonitorControlController monitorControlController,
         ExtensionController extensionController,
         RemoteSessionController remoteSessionController,
+        LocalDataResetController localDataResetController,
+        RecoveryController recoveryController,
         WeatherService weatherService,
         CalendarService calendarService)
     {
@@ -58,6 +62,8 @@ public sealed class ApiRouter
         _monitorControlController = monitorControlController;
         _extensionController = extensionController;
         _remoteSessionController = remoteSessionController;
+        _localDataResetController = localDataResetController;
+        _recoveryController = recoveryController;
         _weatherService = weatherService;
         _calendarService = calendarService;
     }
@@ -104,6 +110,12 @@ public sealed class ApiRouter
                 return;
             case "/api/config/reset" when request.HttpMethod == "POST":
                 await HandleConfigResetAsync(response, cancellationToken);
+                return;
+            case "/api/recovery" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _recoveryController.Get(), cancellationToken);
+                return;
+            case "/api/recovery/action" when request.HttpMethod == "POST":
+                await HandleRecoveryActionAsync(request, response, cancellationToken);
                 return;
             case "/api/config/backup" when request.HttpMethod == "GET":
                 await WriteJsonAsync(response, 200, _configController.BuildPortableBackup(), cancellationToken);
@@ -367,14 +379,17 @@ public sealed class ApiRouter
 
     private async Task HandleConfigResetAsync(HttpListenerResponse response, CancellationToken cancellationToken)
     {
-        _configController.ResetLocalData();
-        await WriteJsonAsync(response, 200, new
-        {
-            ok = true,
-            message = "Local settings and protected secrets were reset.",
-            config = _configController.GetSnapshot(),
-            health = await _telemetryController.BuildHealthPayloadAsync(cancellationToken)
-        }, cancellationToken);
+        var receipt = await _localDataResetController.ResetAllAsync(cancellationToken);
+        await WriteJsonAsync(response, receipt.Ok ? 200 : 500, receipt, cancellationToken);
+    }
+
+    private async Task HandleRecoveryActionAsync(
+        HttpListenerRequest request,
+        HttpListenerResponse response,
+        CancellationToken cancellationToken)
+    {
+        var result = _recoveryController.Execute(await ReadJsonAsync<RecoveryActionRequest>(request, cancellationToken));
+        await WriteJsonAsync(response, result.Ok ? 200 : 409, result, cancellationToken);
     }
 
     private async Task HandleLauncherIconAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)

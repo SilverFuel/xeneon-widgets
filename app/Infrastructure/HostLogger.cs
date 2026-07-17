@@ -35,6 +35,22 @@ public sealed class HostLogger : IDisposable
         WriteEntry("ERROR", text);
     }
 
+    public void Clear()
+    {
+        lock (_writeLock)
+        {
+            if (File.Exists(_logPath))
+            {
+                File.Delete(_logPath);
+            }
+
+            if (File.Exists(_logPath))
+            {
+                throw new IOException("The Auxora log could not be deleted.");
+            }
+        }
+    }
+
     public void Dispose()
     {
         _disposed = true;

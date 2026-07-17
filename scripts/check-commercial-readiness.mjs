@@ -63,7 +63,7 @@ try {
     .join("\n");
   throw new Error(`commercial launch evidence gate fixtures failed:\n${output}`);
 }
-assert(/Auxora \$TAG_NAME Free Public Beta/.test(workflow), "GitHub beta releases must use the Auxora public name");
+assert(/Auxora \$\(\$manifest\.version\) Free Public Beta/.test(workflow), "GitHub beta releases must use the Auxora public name from the validated manifest version");
 assert(/build-installer\.ps1/.test(buildLauncher) && /ExecutionPolicy\s+Bypass/i.test(buildLauncher), "Auxora build launcher must work under restrictive default PowerShell policies");
 assert(/start-xeneon\.ps1/.test(openLauncher) && /ExecutionPolicy\s+Bypass/i.test(openLauncher), "Auxora app launcher must work under restrictive default PowerShell policies");
 assert(/Blocking evidence/.test(read("docs/release/COMMERCIAL-LAUNCH.md")), "commercial launch gate must define blocking evidence");
