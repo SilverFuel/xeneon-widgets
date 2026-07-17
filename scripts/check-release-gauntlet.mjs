@@ -7,6 +7,9 @@ const releaseWorkflow = readWorkspaceFile(".github/workflows/release.yml");
 const productWidget = readWorkspaceFile("js/widgets/product.js");
 const releaseManifest = readWorkspaceFile("scripts/Test-ReleaseManifest.ps1");
 const lifecycleReceipt = readWorkspaceFile("scripts/Test-BetaLifecycleReceipt.ps1");
+const releaseReadiness = readWorkspaceFile("scripts/assert-release-ready.ps1");
+const releaseVersionMode = readWorkspaceFile("scripts/lib/ReleaseVersionMode.ps1");
+const releaseVersionModeFixtures = readWorkspaceFile("scripts/test-release-version-mode.ps1");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 
 function readWorkspaceFile(relativePath) {
@@ -35,8 +38,18 @@ assert(
     && /Signed commercial releases require -CommercialEvidencePath/.test(gauntlet)
     && /assert-commercial-launch-evidence\.ps1/.test(gauntlet)
     && /AllowedSignerThumbprint/.test(gauntlet)
+    && /if\s*\(\$AllowUnsignedBeta\)\s*\{\s*\$readyArgs\s*\+=\s*"-AllowBetaVersion"\s*\}/.test(gauntlet)
     && /Test-ReleaseManifest\.ps1/.test(gauntlet)
-    && /Test-BetaLifecycleReceipt\.ps1/.test(gauntlet),
+    && /Test-BetaLifecycleReceipt\.ps1/.test(gauntlet)
+    && /Assert-ReleaseVersionMode/.test(releaseReadiness)
+    && /\$AllowBetaVersion\s+-and\s+\$RequireSignedInstaller/.test(releaseVersionMode)
+    && /Unsigned beta mode requires/.test(releaseVersionMode)
+    && /Default and signed release modes require/.test(releaseVersionMode)
+    && /unsigned beta mode with stable/.test(releaseVersionModeFixtures)
+    && /signed beta conflicting flags/.test(releaseVersionModeFixtures)
+    && /leading-zero identifier/.test(releaseVersionModeFixtures)
+    && /stable Unicode digit/.test(releaseVersionModeFixtures)
+    && /beta Unicode digit/.test(releaseVersionModeFixtures),
   "release gauntlet must reject conflicting signing modes and support exact manifest and lifecycle evidence"
 );
 
