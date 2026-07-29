@@ -280,6 +280,11 @@ assert(
 );
 
 assert(
+  /\.auxora-primary-nav button,\s*\.auxora-quick-drawer button,\s*\.auxora-quick-toggle\s*\{[\s\S]*?min-height:\s*44px;/.test(sharedCss),
+  "global navigation and Quick controls must keep 44px touch targets"
+);
+
+assert(
   /inline-grid--4 inline-grid--updates/.test(productWidget)
     && /product-control-panel product-control-panel--updates/.test(productWidget)
     && /\.inline-grid--updates\s*\{\s*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/.test(productCss)
