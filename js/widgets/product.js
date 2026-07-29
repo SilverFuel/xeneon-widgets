@@ -355,14 +355,14 @@
         "Check the public release feed from the local host so customers have one clear update path.",
         state.statusText,
         state.statusTone,
-        '<div class="inline-grid inline-grid--4">' +
+        '<div class="inline-grid inline-grid--4 inline-grid--updates">' +
           metricCard("Current build", state.current || env.assetRevision || "local", "Installed host version", null) +
           metricCard("Latest release", state.latest || "Not checked", state.updateAvailable ? "Newer than your installed build" : state.message, null) +
           metricCard("Installer", state.downloadUrl ? "Found" : "Not checked", state.macUrl ? "Windows and Mac assets" : "Windows asset expected", null) +
           metricCard("Trust", state.trustReady ? "Available" : "Not verified", "Proof files: hash " + state.hashStatus + " / signature " + state.signatureStatus + ". Presence is not verification.", null) +
           metricCard("Rollback", state.rollback.configured ? "Ready" : "Pending", state.rollback.message, null) +
         '</div>' +
-        '<form class="inline-form product-control-panel" data-form="updates">' +
+        '<form class="inline-form product-control-panel product-control-panel--updates" data-form="updates">' +
           '<label class="inline-field"><span>Release channel</span><select class="inline-select" name="releaseChannel">' +
             '<option value="stable"' + (channel === "stable" ? " selected" : "") + '>Stable</option>' +
             '<option value="beta"' + (channel === "beta" ? " selected" : "") + '>Beta</option>' +

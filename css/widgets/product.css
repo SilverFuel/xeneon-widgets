@@ -266,6 +266,19 @@
   .product-range-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .inline-grid--updates {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .product-control-panel--updates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .product-shell:has(> .inline-grid--updates) {
+    gap: 8px;
+  }
 }
 
 .product-card,
