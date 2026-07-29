@@ -822,6 +822,32 @@
     return { refresh: refresh, destroy: function () { runCleanups(cleanups); container.innerHTML = ""; } };
   }
 
+  function monitorInputLabel(value) {
+    var input = Number(value);
+    var names = {
+      1: "VGA 1",
+      2: "VGA 2",
+      3: "DVI 1",
+      4: "DVI 2",
+      5: "Composite 1",
+      6: "Composite 2",
+      7: "S-Video 1",
+      8: "S-Video 2",
+      9: "TV tuner 1",
+      10: "TV tuner 2",
+      11: "TV tuner 3",
+      12: "Component 1",
+      13: "Component 2",
+      14: "Component 3",
+      15: "DisplayPort 1",
+      16: "DisplayPort 2",
+      17: "HDMI 1",
+      18: "HDMI 2",
+      27: "USB-C"
+    };
+    return names[input] || "Input " + input;
+  }
+
   function mountDisplayControlsWidget(widget, container, env) {
     var cleanups = [];
     var state = { payload: null, busy: false, confirmPowerIndex: -1, message: "Checking monitor controls", tone: "warn" };
@@ -841,7 +867,7 @@
               (display.contrastSupported ? '<label class="inline-field product-range-field"><span>Contrast ' + escapeHtml(String(display.contrast)) + '%</span><input class="inline-range" type="range" min="0" max="100" value="' + escapeHtml(String(display.contrast)) + '" aria-label="Contrast for ' + escapeHtml(display.name) + '" data-monitor-control="contrast" data-monitor-index="' + display.index + '"></label>' : '') +
             '</div>' +
             '<div class="inline-actions">' +
-              (display.inputSupported ? '<label class="inline-field"><span>Input code</span><input class="inline-input" type="number" min="1" max="31" value="' + escapeHtml(String(display.inputSource)) + '" data-monitor-control="input" data-monitor-index="' + display.index + '"></label>' : '') +
+              (display.inputSupported ? '<label class="inline-field"><span>Input source: ' + escapeHtml(monitorInputLabel(display.inputSource)) + '</span><input class="inline-input" type="number" min="1" max="31" value="' + escapeHtml(String(display.inputSource)) + '" data-monitor-control="input" data-monitor-index="' + display.index + '"></label>' : '') +
               (display.powerSupported ? '<button class="inline-button" type="button" data-monitor-power="' + display.index + '">' + (state.confirmPowerIndex === display.index ? "Confirm display off" : "Turn display off") + '</button>' : '') +
             '</div></article>';
         }).join("") + '</div>' : '<div class="inline-empty"><strong>No DDC/CI controls found</strong><span>Auxora hides unavailable monitor controls. Enable DDC/CI in the monitor menu if it is supported.</span></div>'
