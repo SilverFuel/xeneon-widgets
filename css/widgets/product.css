@@ -97,7 +97,7 @@
     gap: 10px;
   }
 
-  .auxora-scene-grid .product-card {
+  .product-shell .auxora-scene-grid .product-card {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "topline actions"
