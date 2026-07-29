@@ -1756,7 +1756,7 @@
     }
 
     if (widget.id === "weather" || widget.id === "hue" || widget.id === "calendar") {
-      return isWidgetSupported(widget.id) && getWidgetState(widget.id) !== "Optional";
+      return true;
     }
 
     if (widget.tier === "advanced") {
