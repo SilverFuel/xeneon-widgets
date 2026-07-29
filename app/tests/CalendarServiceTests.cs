@@ -107,11 +107,12 @@ public sealed class CalendarServiceTests
     [Test]
     public async Task Fetch_AllowsValidPublicHttpsFeed()
     {
-        const string ics = """
+        var eventStart = DateTimeOffset.UtcNow.AddDays(1).ToString("yyyyMMdd'T'HHmmss'Z'");
+        var ics = $$"""
             BEGIN:VCALENDAR
             BEGIN:VEVENT
             UID:security-test
-            DTSTART:20260718T130000Z
+            DTSTART:{{eventStart}}
             SUMMARY:Public feed
             LOCATION:Desk
             END:VEVENT
