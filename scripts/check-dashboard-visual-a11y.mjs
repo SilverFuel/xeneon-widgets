@@ -280,6 +280,14 @@ assert(
 );
 
 assert(
+  /inline-grid--4 inline-grid--updates/.test(productWidget)
+    && /product-control-panel product-control-panel--updates/.test(productWidget)
+    && /\.inline-grid--updates\s*\{\s*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/.test(productCss)
+    && /\.product-control-panel--updates\s*\{\s*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(productCss),
+  "wide Updates layouts must keep all status cards and controls above the fold"
+);
+
+assert(
   /\.product-layout-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(180px,\s*1fr\)\s+auto;/.test(productCss),
   "Layout Editor titles must keep a readable column when the drag handle is hidden"
 );
