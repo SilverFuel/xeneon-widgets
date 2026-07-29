@@ -153,6 +153,11 @@ assert(
     && /action === "setup"[\s\S]*?env\.selectWidget\("setup", true\)/.test(integrationWidget),
   "Weather's empty setup state must provide a working setup action"
 );
+assert(
+  /Open Calendar setup[\s\S]*?action === "setup"[\s\S]*?env\.selectWidget\("setup", true\)/.test(setupWidget),
+  "Calendar's empty setup state must provide a working setup action"
+);
+
 
 
 

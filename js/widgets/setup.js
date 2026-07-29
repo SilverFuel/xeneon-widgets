@@ -678,6 +678,7 @@
             '<p class="inline-copy">' + escapeHtml(text(data.message, configured ? "ICS feed is configured." : "Add an ICS feed in Diagnostics to enable calendar.")) + '</p>' +
           '</div>' +
           '<div class="inline-actions">' +
+            (!configured ? '<button class="inline-button is-primary" type="button" data-action="setup">Open Calendar setup</button>' : '') +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
             statusPill(state.statusText, state.statusTone) +
           '</div>' +
@@ -734,7 +735,14 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
-      if (event.target && event.target.getAttribute("data-action") === "refresh") {
+      var action = event.target && event.target.getAttribute("data-action");
+      if (action === "setup") {
+        if (env && typeof env.selectWidget === "function") {
+          env.selectWidget("setup", true);
+        }
+        return;
+      }
+      if (action === "refresh") {
         refresh();
       }
     });
