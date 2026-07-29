@@ -958,7 +958,7 @@
 }
 
 .audio-eq-band input[type="range"] {
-  width: 24px;
+  width: min(44px, 100%);
   height: 92px;
   margin: 0;
   accent-color: var(--audio-accent);
@@ -1336,6 +1336,12 @@
     padding-block: 6px;
   }
 
+  .dashboard-native-page--adaptive .audio-master-mute,
+  .dashboard-native-page--adaptive .audio-master-row .inline-range,
+  .dashboard-native-page--adaptive .audio-media-controls .inline-button {
+    min-height: 44px !important;
+  }
+
   .audio-equalizer-toolbar {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1390,6 +1396,12 @@
 
   .audio-now-apps .inline-list-copy {
     display: none;
+  }
+}
+
+@media (min-width: 1950px) and (max-height: 760px) {
+  .audio-command-grid {
+    grid-template-columns: minmax(310px, 0.68fr) minmax(700px, 1.75fr) minmax(495px, 1fr);
   }
 }
 
