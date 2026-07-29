@@ -144,6 +144,11 @@ assert(
   "Ready product panels such as Streaming must remain selectable"
 );
 
+assert(
+  /if \(widget\.id === "weather" \|\| widget\.id === "hue" \|\| widget\.id === "calendar"\) \{[\s\S]*?return true;/.test(dashboardJs),
+  "Visible optional integration panels must remain selectable before setup"
+);
+
 
 assert(
   /registerRenderer\("home"/.test(productWidget)
