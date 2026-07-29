@@ -6,6 +6,54 @@
   min-width: 0;
 }
 
+.setup-diagnostics-details {
+  min-width: 0;
+}
+
+.setup-diagnostics-details summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+
+.setup-diagnostics-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.setup-diagnostics-details summary::after {
+  content: "+";
+  margin-left: auto;
+  color: var(--color-text-dim);
+}
+
+.setup-diagnostics-details[open] summary::after {
+  content: "−";
+}
+
+.setup-diagnostics-details__body {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+@media (min-width: 1680px) {
+  .setup-health-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .setup-health-card {
+    padding: 12px;
+  }
+}
+
 .setup-display-target {
   display: grid;
   gap: 4px;

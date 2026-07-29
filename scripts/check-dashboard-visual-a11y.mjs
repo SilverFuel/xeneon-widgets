@@ -56,6 +56,7 @@ const integrationWidget = readWorkspaceFile("js/widgets/integrations.js");
 const productWidget = readWorkspaceFile("js/widgets/product.js");
 const productCss = readWorkspaceFile("css/widgets/product.css");
 const setupWidget = readWorkspaceFile("js/widgets/setup.js");
+const setupCss = readWorkspaceFile("css/widgets/setup.css");
 const systemWidget = readWorkspaceFile("js/widgets/system.js");
 const sceneService = readWorkspaceFile("app/Services/SceneService.cs");
 const extensionService = readWorkspaceFile("app/Services/ExtensionManifestService.cs");
@@ -282,6 +283,14 @@ assert(
 assert(
   /\.auxora-primary-nav button,\s*\.auxora-quick-drawer button,\s*\.auxora-quick-toggle\s*\{[\s\S]*?min-height:\s*44px;/.test(sharedCss),
   "global navigation and Quick controls must keep 44px touch targets"
+);
+
+assert(
+  /inline-grid--4 setup-health-grid/.test(setupWidget)
+    && /setup-diagnostics-details/.test(setupWidget)
+    && /\.setup-health-grid\s*\{\s*grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/.test(setupCss)
+    && /\.setup-diagnostics-details summary\s*\{[\s\S]*?min-height:\s*44px;/.test(setupCss),
+  "wide Diagnostics must keep health visible and place management details behind full-size summaries"
 );
 
 assert(
