@@ -3092,6 +3092,7 @@
       if (settings.resolveInitialWidget) {
         currentWidgetId = resolveInitialWidget(settings.preferredWidgetId, settings.explicitWidgetParam);
         persistWidgetChoice(currentWidgetId);
+        renderPrimaryNavigation();
       } else if (settings.moveOffSetup && currentWidgetId === "setup" && bridgeSetup.onboardingCompleted) {
         currentWidgetId = getFallbackPrimaryWidget();
         persistWidgetChoice(currentWidgetId);
