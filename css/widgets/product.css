@@ -84,6 +84,26 @@
   .auxora-glance-chains > .inline-actions {
     justify-content: flex-end;
   }
+
+  .auxora-glance-chains .inline-button {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 1500px) and (min-height: 600px) {
+  .dashboard-native-page--now-strip-visible:has(.product-shell > .auxora-glance-hero) .router-inline-widget {
+    padding-block: 12px;
+  }
+
+  .dashboard-native-page--now-strip-visible:has(.product-shell > .auxora-glance-hero) .dashboard-now-strip {
+    inset: 48px 258px auto auto;
+    width: min(760px, calc(100vw - 1050px));
+    transform: none;
+  }
+
+  .dashboard-native-page:has(.product-shell > .auxora-glance-hero) .auxora-quick-toggle {
+    inset: 51px 106px auto auto;
+  }
 }
 
 .auxora-scene-grid .product-card {
