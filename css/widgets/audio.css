@@ -433,12 +433,52 @@
 
 .audio-album-cover__placeholder {
   display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
   place-items: center;
+  padding: 24px;
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--audio-accent) 24%, transparent), transparent 58%),
     var(--audio-surface-strong);
   color: var(--audio-accent);
-  font-size: 3rem;
+  text-align: center;
+}
+
+.audio-album-cover__placeholder-label {
+  padding: 5px 9px;
+  border: 1px solid var(--audio-accent-border);
+  border-radius: 999px;
+  background: var(--audio-selected-surface);
+  color: var(--audio-accent);
+  font-size: max(11px, 0.68rem);
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.audio-album-cover__placeholder-title,
+.audio-album-cover__placeholder-artist {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+}
+
+.audio-album-cover__placeholder-title {
+  color: var(--color-text);
+  font-size: clamp(1.15rem, 1.6vw, 1.7rem);
+  line-height: 1.08;
+  -webkit-line-clamp: 3;
+}
+
+.audio-album-cover__placeholder-artist {
+  color: var(--color-text-dim);
+  font-size: max(12px, 0.78rem);
+  font-weight: 750;
+  line-height: 1.25;
+  -webkit-line-clamp: 2;
 }
 
 .audio-album-cover__fallback {
