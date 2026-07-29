@@ -222,13 +222,69 @@ public sealed class MediaService
             await reader.LoadAsync((uint)stream.Size);
             var buffer = new byte[stream.Size];
             reader.ReadBytes(buffer);
-            var contentType = string.IsNullOrWhiteSpace(stream.ContentType) ? "image/png" : stream.ContentType;
+            var contentType = ResolveArtworkContentType(stream.ContentType, buffer);
             return $"data:{contentType};base64,{Convert.ToBase64String(buffer)}";
         }
         catch
         {
             return "";
         }
+    }
+
+    internal static string ResolveArtworkContentType(string? reportedContentType, ReadOnlySpan<byte> content)
+    {
+        if (content.Length >= 3
+            && content[0] == 0xFF
+            && content[1] == 0xD8
+            && content[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        if (content.Length >= 8
+            && content[0] == 0x89
+            && content[1] == 0x50
+            && content[2] == 0x4E
+            && content[3] == 0x47
+            && content[4] == 0x0D
+            && content[5] == 0x0A
+            && content[6] == 0x1A
+            && content[7] == 0x0A)
+        {
+            return "image/png";
+        }
+
+        if (content.Length >= 6
+            && content[0] == (byte)'G'
+            && content[1] == (byte)'I'
+            && content[2] == (byte)'F'
+            && content[3] == (byte)'8'
+            && (content[4] == (byte)'7' || content[4] == (byte)'9')
+            && content[5] == (byte)'a')
+        {
+            return "image/gif";
+        }
+
+        if (content.Length >= 12
+            && content[0] == (byte)'R'
+            && content[1] == (byte)'I'
+            && content[2] == (byte)'F'
+            && content[3] == (byte)'F'
+            && content[8] == (byte)'W'
+            && content[9] == (byte)'E'
+            && content[10] == (byte)'B'
+            && content[11] == (byte)'P')
+        {
+            return "image/webp";
+        }
+
+        var normalized = (reportedContentType ?? "").Split(';', 2)[0].Trim().ToLowerInvariant();
+        if (System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^image/[a-z0-9][a-z0-9.+-]*$"))
+        {
+            return normalized;
+        }
+
+        return "image/png";
     }
 }
 
