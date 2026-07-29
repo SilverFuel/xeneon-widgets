@@ -758,7 +758,7 @@
   function renderClipboardWidget(state) {
     var data = state.data;
     return '' +
-      '<div class="inline-widget-shell">' +
+      '<div class="inline-widget-shell inline-widget-shell--clipboard">' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Items", String(data.entries.length), data.entries.length ? "Recent history" : (data.configured ? "Nothing recent" : "Enable clipboard history")) +
           metricCard("Privacy", data.privacy.widgetPaused ? "Paused" : data.privacy.hidePreviews ? "Hidden" : "Visible", data.privacy.excludeFromDiagnostics ? "Excluded from diagnostics" : "Diagnostics status only") +
@@ -769,7 +769,7 @@
           '<button class="inline-button" type="button" data-action="toggle-pause-widget"' + (state.busy ? " disabled" : "") + '>' + (data.privacy.widgetPaused ? "Resume widget" : "Pause widget") + '</button>' +
           '<button class="inline-button" type="button" data-action="toggle-exclude-diagnostics"' + (state.busy ? " disabled" : "") + '>' + (data.privacy.excludeFromDiagnostics ? "Diagnostics excluded" : "Exclude diagnostics") + '</button>' +
         '</div>' +
-        '<article class="list-card inline-card">' +
+        '<article class="list-card inline-card clipboard-history-card">' +
           '<div class="inline-card-header"><div><div class="metric-label">Recent Entries</div><div class="router-inline-copy">Tap an item to copy it back to the current clipboard.</div></div></div>' +
           '<div class="inline-list">' + (data.entries.length ? data.entries.map(function (entry) {
             return '' +

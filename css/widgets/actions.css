@@ -313,6 +313,28 @@
   word-break: break-word;
 }
 
+.inline-widget-shell--clipboard {
+  height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
+  overflow: hidden;
+}
+
+.inline-widget-shell--clipboard > .inline-grid--3 .metric-card {
+  padding-block: 12px;
+}
+
+.inline-widget-shell--clipboard > .inline-grid--3 .metric-value {
+  margin-top: 6px;
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+}
+
+.clipboard-history-card {
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
 @media (pointer: coarse) {
 
   .inline-action-button {
