@@ -127,11 +127,19 @@
     ].join("|").toLowerCase();
   }
 
+  function getFriendlyMediaLabel(value, fallback) {
+    var label = text(value, "").trim();
+    var isOpaqueToken = /^[a-f0-9]{12,}$/i.test(label)
+      || /^[{(]?[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}[})]?$/i.test(label);
+    return !label || isOpaqueToken ? text(fallback, "Local media") : label;
+  }
+
   function createObservedAlbum(data) {
+    var source = getFriendlyMediaLabel(formatMediaAppLabel(data && data.appId), "Local media");
     return {
       key: getObservedAlbumKey(data),
       title: text(data && data.title, "Media playing"),
-      artist: text(data && data.artist, text(data && data.albumArtist, "Local media")),
+      artist: getFriendlyMediaLabel(text(data && data.artist, text(data && data.albumArtist, "")), source),
       albumTitle: text(data && data.albumTitle, ""),
       appId: text(data && data.appId, ""),
       thumbnailDataUrl: text(data && data.thumbnailDataUrl, "")
@@ -407,8 +415,8 @@
     var playbackLabel = getMediaPlaybackLabel(media);
     var progressPercent = getMediaProgressPercent(media);
     var primaryAction = getMediaPrimaryAction(media);
-    var mediaSource = formatMediaAppLabel(media.appId);
-    var mediaArtist = text(media.artist, text(media.albumArtist, mediaSource));
+    var mediaSource = getFriendlyMediaLabel(formatMediaAppLabel(media.appId), "Local media");
+    var mediaArtist = getFriendlyMediaLabel(text(media.artist, text(media.albumArtist, "")), mediaSource);
     var mediaSubtitle = mediaArtist + (text(media.albumTitle, "") ? " — " + text(media.albumTitle, "") : "");
     var canSeek = Boolean(media.canSeek && media.durationMs > 0);
     var hiddenSessionCount = Math.max(0, activeSessions.length - visibleSessions.length);
@@ -876,6 +884,7 @@
     createObservedAlbum: createObservedAlbum,
     deleteObservedAlbum: deleteObservedAlbum,
     getAudioSessionLabel: getAudioSessionLabel,
+    getFriendlyMediaLabel: getFriendlyMediaLabel,
     getObservedAlbumKey: getObservedAlbumKey,
     isUsefulAudioSession: isUsefulAudioSession,
     rememberDismissedAlbum: rememberDismissedAlbum,
