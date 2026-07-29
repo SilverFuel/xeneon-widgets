@@ -54,6 +54,7 @@ const audioWidget = readWorkspaceFile("js/widgets/audio.js");
 const homelabWidgetJs = readWorkspaceFile("js/widgets/homelab.js");
 const integrationWidget = readWorkspaceFile("js/widgets/integrations.js");
 const productWidget = readWorkspaceFile("js/widgets/product.js");
+const productCss = readWorkspaceFile("css/widgets/product.css");
 const setupWidget = readWorkspaceFile("js/widgets/setup.js");
 const systemWidget = readWorkspaceFile("js/widgets/system.js");
 const sceneService = readWorkspaceFile("app/Services/SceneService.cs");
@@ -262,6 +263,12 @@ assert(
     && /certificateTrustRequired/.test(homelabWidget)
     && /trustedCertificateThumbprint/.test(networkWidget),
   "UniFi certificate review UI must stay visible in the network widget"
+);
+
+assert(
+  /product-profile-grid product-profile-grid--packs/.test(productWidget)
+    && /\.product-profile-grid--packs\s*\{\s*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/.test(productCss),
+  "wide Marketplace layouts must keep all five built-in packs on one row"
 );
 
 assert(
