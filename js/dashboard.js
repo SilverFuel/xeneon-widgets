@@ -1746,7 +1746,9 @@
     }
 
     if (widget.id === "clipboard") {
-      return false;
+      // Clipboard contents are read only after the user opens this surface. The
+      // health snapshot reports capability without enumerating private data.
+      return isWidgetSupported(widget.id);
     }
 
     if (widget.id === "media") {

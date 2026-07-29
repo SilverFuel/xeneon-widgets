@@ -135,6 +135,12 @@ assert(
 );
 
 assert(
+  /if \(widget\.id === "clipboard"\) \{[\s\S]*?return isWidgetSupported\(widget\.id\);/.test(dashboardJs),
+  "Clipboard must remain selectable when the bridge reports it ready"
+);
+
+
+assert(
   /registerRenderer\("home"/.test(productWidget)
     && /registerRenderer\("scenes"/.test(productWidget)
     && /Manual selection/.test(sceneService)
