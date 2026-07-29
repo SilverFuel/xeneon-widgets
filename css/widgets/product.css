@@ -152,13 +152,13 @@
   }
 
   .dashboard-native-page--adaptive.dashboard-native-page--now-strip-visible .dashboard-now-strip {
-    inset: 48px 258px auto auto;
-    width: min(760px, calc(100vw - 1050px));
+    inset: 48px auto auto max(780px, calc(50% - 201px));
+    width: min(760px, calc(100vw - 1210px));
     transform: none;
   }
 
   .dashboard-native-page--adaptive .auxora-quick-toggle {
-    inset: 51px 106px auto auto;
+    inset: 51px 280px auto auto;
   }
 }
 
