@@ -131,6 +131,9 @@
           '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected display") : "No selected touch display") + '</strong>' +
           '<span>' + escapeHtml(selected ? describeDisplay(selected) : displays.length ? "Choose one of the detected displays below." : "Connect a display, then refresh diagnostics.") + '</span>' +
         '</div>' +
+        '<details class="setup-diagnostics-details">' +
+          '<summary>Manage companion displays</summary>' +
+          '<div class="setup-diagnostics-details__body">' +
         '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
           var reasons = Array.isArray(entry.reasons) ? entry.reasons.slice(0, 2).join(" / ") : "";
           return '' +
@@ -149,6 +152,8 @@
           '<button class="inline-button is-primary" type="button" data-action="run-repair">Repair scan</button>' +
           (repairActions.length ? '<span class="router-inline-copy">' + escapeHtml(text(repairActions[0], "Repair actions are available.")) + '</span>' : '') +
         '</div>' +
+          '</div>' +
+        '</details>' +
       '</article>';
   }
 
@@ -169,6 +174,9 @@
           '</div>' +
           statusPill(suggestions.length + " found", "warn") +
         '</div>' +
+        '<details class="setup-diagnostics-details">' +
+          '<summary>Review detected apps</summary>' +
+          '<div class="setup-diagnostics-details__body">' +
         '<div class="setup-launcher-suggestions">' + visible.map(function (entry) {
           return '' +
             '<label class="setup-launcher-suggestion">' +
@@ -180,6 +188,8 @@
           '<button class="inline-button is-primary" type="button" data-action="apply-launcher-suggestions">Pin selected</button>' +
           '<button class="inline-button" type="button" data-action="run-repair">Rescan</button>' +
         '</div>' +
+          '</div>' +
+        '</details>' +
       '</article>';
   }
 
@@ -322,13 +332,12 @@
             statusPill(state.statusText, state.statusTone) +
           '</div>' +
         '</div>' +
-        '<div class="inline-grid inline-grid--4">' +
+        '<div class="inline-grid inline-grid--4 setup-health-grid">' +
           items.map(function (item) {
             return '' +
-              '<article class="metric-card inline-card">' +
-                '<div class="metric-label">' + escapeHtml(item.label) + '</div>' +
-                '<div class="metric-value">' + escapeHtml(item.state) + '</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(item.nextStep) + '</div>' +
+              '<article class="metric-card inline-card setup-health-card">' +
+                '<div class="inline-card-header"><div class="metric-label">' + escapeHtml(item.label) + '</div>' + statusPill(item.state, toneForState(item.state)) + '</div>' +
+                (item.state === "Ready" ? "" : '<div class="router-inline-copy">' + escapeHtml(item.nextStep) + '</div>') +
               '</article>';
           }).join("") +
         '</div>' +
