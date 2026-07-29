@@ -279,6 +279,22 @@
   .product-shell:has(> .inline-grid--updates) {
     gap: 8px;
   }
+
+  .inline-list--recovery {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    padding-right: 0;
+    overflow: visible;
+  }
+
+  .inline-list--recovery .inline-list-item {
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-items: stretch;
+  }
+
+  .inline-list--recovery .inline-button {
+    width: 100%;
+  }
 }
 
 .product-card,
