@@ -188,6 +188,14 @@
     return "--album-x:" + translate + "px;--album-rotate:" + rotate + "deg;--album-scale:" + scale + ";--album-z:" + (10 - distance) + ";";
   }
 
+  function renderAlbumPlaceholder(album, extraClass) {
+    return '<span class="audio-album-cover__placeholder' + (extraClass ? " " + extraClass : "") + '" aria-hidden="true">' +
+      '<span class="audio-album-cover__placeholder-label">Now playing</span>' +
+      '<strong class="audio-album-cover__placeholder-title">' + escapeHtml(album.title) + '</strong>' +
+      '<small class="audio-album-cover__placeholder-artist">' + escapeHtml(album.artist) + '</small>' +
+    '</span>';
+  }
+
   function renderAlbumCarousel(state, media) {
     var albums = state.observedAlbums;
     if (!albums.length) {
@@ -212,8 +220,8 @@
         '<button class="audio-album-cover" type="button" data-action="carousel-select" data-carousel-index="' + index + '" aria-label="' + escapeHtml(selectedLabel + ": " + album.title + " by " + album.artist) + '"' + (offset === 0 ? ' aria-current="true"' : '') + '>' +
           (album.thumbnailDataUrl
             ? '<img src="' + escapeHtml(album.thumbnailDataUrl) + '" alt="">' +
-              '<span class="audio-album-cover__placeholder audio-album-cover__fallback" aria-hidden="true">♫</span>'
-            : '<span class="audio-album-cover__placeholder" aria-hidden="true">♫</span>') +
+              renderAlbumPlaceholder(album, "audio-album-cover__fallback")
+            : renderAlbumPlaceholder(album, "")) +
         '</button>' +
         '<button class="audio-album-card__delete" type="button" data-action="carousel-delete" data-album-key="' + escapeHtml(album.key) + '" aria-label="' + escapeHtml("Delete music card for " + album.title + " by " + album.artist) + '" title="Delete this card">' +
           '<span aria-hidden="true">×</span>' +

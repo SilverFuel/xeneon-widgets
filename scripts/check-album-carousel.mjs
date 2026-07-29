@@ -118,6 +118,7 @@ assert(/\.audio-album-card/.test(audioCss) && /perspective:\s*900px/.test(audioC
 assert(/\.audio-album-card__delete/.test(audioCss) && /min-height:\s*44px/.test(audioCss), "Card delete controls must meet the touch target minimum");
 assert(/is-single/.test(audioSource) && /\.audio-album-carousel\.is-single/.test(audioCss), "A single observed card must use the larger focused presentation");
 assert(/has-artwork-error/.test(audioSource) && /\.audio-album-cover\.has-artwork-error/.test(audioCss), "Broken artwork must fall back to a local placeholder instead of a broken-image icon");
+assert(/audio-album-cover__placeholder-title/.test(audioSource) && /audio-album-cover__placeholder-artist/.test(audioSource), "Artwork-free cards must show useful title and artist text");
 assert(/prefers-reduced-motion:\s*reduce/.test(audioCss) && /motion-off.*audio-album-card/.test(audioCss), "Carousel motion must honor both system and Auxora motion settings");
 
 console.log("checked zero-cost local deletable music-card carousel");
