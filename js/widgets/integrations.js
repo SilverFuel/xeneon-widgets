@@ -52,8 +52,16 @@
 
   function renderWeatherWidget(state) {
     var data = state.data;
+    var needsSetup = !data.configured
+      || (String(state.statusText || "").toLowerCase() === "setup"
+        && data.temperature == null
+        && !data.hourly.length
+        && !data.daily.length);
     return '' +
       '<div class="inline-widget-shell">' +
+        (needsSetup
+          ? '<div class="inline-toolbar"><div><div class="eyebrow">Optional feature</div><h3 class="inline-title">Set up Weather</h3><p class="inline-copy">Add an OpenWeather key and location in Settings to enable current and forecast conditions.</p></div><div class="inline-actions"><button class="inline-button is-primary" type="button" data-action="setup">Open Weather setup</button></div></div>'
+          : '') +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Current", data.temperature == null ? "--" : Math.round(data.temperature) + "°", /imperial/i.test(data.units) ? "Imperial" : "Metric") +
           metricCard("Source", data.source, state.statusText || "Bridge weather feed") +
@@ -115,7 +123,14 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
-      if (event.target && event.target.getAttribute("data-action") === "refresh") {
+      var action = event.target && event.target.getAttribute("data-action");
+      if (action === "setup") {
+        if (env && typeof env.selectWidget === "function") {
+          env.selectWidget("setup", true);
+        }
+        return;
+      }
+      if (action === "refresh") {
         refresh();
       }
     });

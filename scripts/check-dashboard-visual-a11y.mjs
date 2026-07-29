@@ -148,6 +148,12 @@ assert(
   /if \(widget\.id === "weather" \|\| widget\.id === "hue" \|\| widget\.id === "calendar"\) \{[\s\S]*?return true;/.test(dashboardJs),
   "Visible optional integration panels must remain selectable before setup"
 );
+assert(
+  /var needsSetup = !data\.configured[\s\S]*?state\.statusText[\s\S]*?Open Weather setup/.test(integrationWidget)
+    && /action === "setup"[\s\S]*?env\.selectWidget\("setup", true\)/.test(integrationWidget),
+  "Weather's empty setup state must provide a working setup action"
+);
+
 
 
 assert(
