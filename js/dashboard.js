@@ -1858,7 +1858,7 @@
       },
       {
         id: "scenes",
-        title: "Scenes",
+        title: "Modes",
         requiresBridge: true,
         tier: "product",
         kicker: "Adaptive experience",
