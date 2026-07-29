@@ -165,6 +165,11 @@
   .dashboard-native-page--adaptive .auxora-quick-toggle {
     min-height: 44px;
   }
+
+  .dashboard-native-page--adaptive .inline-input,
+  .dashboard-native-page--adaptive .inline-select {
+    min-height: 44px;
+  }
 }
 
 .auxora-scene-grid .product-card {
