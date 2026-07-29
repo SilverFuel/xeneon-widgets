@@ -1726,7 +1726,7 @@
     }
 
     if (widget.tier === "product") {
-      return isLocalProductWidget(widget.id);
+      return true;
     }
 
     if (isLocalProductWidget(widget.id)) {
