@@ -224,7 +224,7 @@
     var hasGpuPower = gpuPower && (gpuPower.totalPower || gpuPower.pins.length || gpuPower.rails.length || gpuPower.power.length);
     var sensorTone = gpuPower && gpuPower.alerts.length ? "danger" : (hasTemps || hasGpuPower ? "good" : "warn");
     var sensorLabel = gpuPower && gpuPower.alerts.length ? "Power alert" : (hasTemps || hasGpuPower ? "Live" : "Limited");
-    var powerValue = sensorValue(gpuPower && gpuPower.totalPower, "--");
+    var powerValue = sensorValue(gpuPower && gpuPower.totalPower, "Unavailable");
 
     return '' +
       '<article class="system-panel system-sensor-panel">' +
@@ -261,7 +261,7 @@
             '</article>' +
             renderSystemStatCard("CPU", formatPercent(data.cpu), data.cpuTemp != null ? formatTemp(data.cpuTemp) : topProcessText, data.cpu, systemMetricTone(data.cpu, 78, 92), history.cpu) +
             renderSystemStatCard("GPU", formatPercent(data.gpu), data.gpuTemp != null ? formatTemp(data.gpuTemp) : "GPU load", data.gpu, systemMetricTone(data.gpu, 82, 92), history.gpu) +
-            renderSystemStatCard("RAM", formatPercent(data.ram), "Memory pressure", data.ram, systemMetricTone(data.ram, 78, 90), history.ram) +
+            renderSystemStatCard("RAM", formatPercent(data.ram), "Memory used", data.ram, systemMetricTone(data.ram, 78, 90), history.ram) +
             renderSystemStatCard("Display", formatHz(displayHz), selectedDisplayLabel, displayHz == null ? null : Math.min(displayHz, 240) / 240 * 100, displayTargetReady(displayDiagnostics) ? "good" : "warn", []) +
           '</section>' +
           '<section class="system-detail-grid">' +
