@@ -1135,7 +1135,7 @@ a.is-touch-pressing,
 .auxora-primary-nav button,
 .auxora-quick-drawer button,
 .auxora-quick-toggle {
-  min-height: 42px;
+  min-height: 44px;
   padding: 8px 10px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
