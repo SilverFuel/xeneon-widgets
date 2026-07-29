@@ -72,6 +72,7 @@ const liveTrack = (index, overrides = {}) => ({
 
 assert(helpers.getFriendlyMediaLabel("308046B0AF4A39CB", "Local media") === "Local media", "Opaque Windows media identifiers must not leak into the visible UI");
 assert(helpers.getFriendlyMediaLabel("Corey Kent", "Local media") === "Corey Kent", "Real artist names must remain visible");
+assert(/Media app/.test(audioSource) && /Names private/.test(audioSource) && !/Music app/.test(audioSource), "Private app-volume rows must use media-neutral wording and explain why names are hidden");
 
 let history = helpers.rememberObservedAlbum([], { status: "idle", title: "Nothing" });
 assert(history.length === 0, "Idle sessions must not enter observed album history");
