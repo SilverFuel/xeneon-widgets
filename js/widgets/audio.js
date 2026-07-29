@@ -361,7 +361,7 @@
       '<div class="audio-equalizer-toolbar">' +
         '<div class="audio-preset-strip" role="group" aria-label="Equalizer presets">' + presets + '</div>' +
         '<div class="inline-actions audio-equalizer-actions">' +
-          '<button class="inline-button" type="button" data-action="equalizer-bypass">' + (equalizer.bypassed ? "Turn on" : "Bypass") + '</button>' +
+          '<button class="inline-button" type="button" data-action="equalizer-bypass" title="' + (equalizer.bypassed ? "Turn the equalizer on" : "Turn the equalizer off") + '">' + (equalizer.bypassed ? "EQ on" : "EQ off") + '</button>' +
           '<button class="inline-button" type="button" data-action="equalizer-reset">Reset</button>' +
         '</div>' +
       '</div>' +
@@ -466,7 +466,7 @@
             '<div class="inline-card-header">' +
               '<div>' +
                 '<div class="metric-label">Current output</div>' +
-                '<div class="audio-current-output" title="' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '">' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '</div>' +
+                '<div class="audio-current-output" title="' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '">' + escapeHtml(defaultDevice ? getFriendlyAudioDeviceName(defaultDevice.name) : "No default playback device") + '</div>' +
                 '<div class="router-inline-copy">' + escapeHtml(data.muted ? "Sound is muted." : defaultDevice ? "Windows is sending sound here." : "No output is selected.") + '</div>' +
               '</div>' +
             '</div>' +
