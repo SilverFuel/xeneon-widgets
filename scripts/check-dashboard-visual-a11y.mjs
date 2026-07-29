@@ -285,6 +285,11 @@ assert(
 );
 
 assert(
+  /widgetId === "remote"\)\s*\{\s*return "Unavailable";/.test(dashboardJs),
+  "Phone Remote must not be labeled Ready while the beta intentionally disables it"
+);
+
+assert(
   /case "\/api\/config" when request\.HttpMethod == "GET"/.test(apiRouter)
     && /case "\/api\/system":[\s\S]*?_telemetryController\.GetSystemSnapshot/.test(apiRouter)
     && /case "\/api\/network":[\s\S]*?_telemetryController\.GetNetworkSnapshot/.test(apiRouter)
