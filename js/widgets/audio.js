@@ -239,6 +239,19 @@
     return frequency >= 1000 ? (frequency / 1000) + "k" : String(frequency);
   }
 
+  function getFriendlyAudioDeviceName(name) {
+    var deviceName = text(name, "Output").trim();
+    var wrappedDevice = deviceName.match(/^(?:Headphones|Headset Earphone|Speakers)\s+\((.+)\)$/i);
+    if (wrappedDevice) {
+      deviceName = wrappedDevice[1];
+    }
+
+    return deviceName
+      .replace(/\s+\((?:NVIDIA High Definition Audio|Realtek\(R\) Audio)\)$/i, "")
+      .replace(/\s+Wireless Gaming Headset$/i, "")
+      .trim();
+  }
+
   function getEqualizerTone(equalizer) {
     if (equalizer.status === "error") {
       return "danger";
@@ -473,7 +486,7 @@
               return '' +
                 '<button class="inline-button audio-route-button" type="button" title="' + escapeHtml(text(device.name, "Output")) + '" data-ui-key="audio-device-' + escapeHtml(text(device.id, text(device.name, "unknown"))) + '" data-action="switch-device" data-device-id="' + escapeHtml(text(device.id, "")) + '">' +
                   '<strong>' + escapeHtml(text(device.kind, "output")) + '</strong>' +
-                  '<span>' + escapeHtml(text(device.name, "Output")) + '</span>' +
+                  '<span>' + escapeHtml(getFriendlyAudioDeviceName(device.name)) + '</span>' +
                 '</button>';
             }).join("") : emptyState("No other outputs", defaultDevice ? "The current output is the only active route." : "No playback devices were returned by Windows.")) + '</div>' +
           '</article>' +
