@@ -637,7 +637,7 @@
           '<button class="inline-button" type="button" data-home-open="system">System detail</button>' +
           '<button class="inline-button" type="button" data-home-open="layout-editor">Edit Home</button>' +
         '</div>' +
-        '<article class="list-card inline-card"><div class="inline-card-header"><div><div class="metric-label">One-tap chains</div><div class="router-inline-copy">Safe local combinations for the moment you are moving into.</div></div></div><div class="inline-actions">' + chains.map(function (chain) {
+        '<article class="list-card inline-card auxora-glance-chains"><div class="inline-card-header"><div><div class="metric-label">One-tap chains</div><div class="router-inline-copy">Safe local combinations for the moment you are moving into.</div></div></div><div class="inline-actions">' + chains.map(function (chain) {
           return '<button class="inline-button" type="button" data-action-chain="' + escapeHtml(chain.id) + '" title="' + escapeHtml(chain.description) + '">' + escapeHtml(chain.name) + '</button>';
         }).join("") + '</div></article>'
       );

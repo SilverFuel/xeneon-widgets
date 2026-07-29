@@ -66,6 +66,26 @@
   letter-spacing: -0.05em;
 }
 
+@media (min-width: 1200px) and (min-height: 600px) {
+  .product-shell:has(> .auxora-glance-hero) {
+    gap: 8px;
+  }
+
+  .product-shell > .auxora-glance-hero {
+    padding-block: 10px;
+  }
+
+  .auxora-glance-chains {
+    grid-template-columns: minmax(300px, 1fr) auto;
+    align-items: center;
+    padding-block: 10px;
+  }
+
+  .auxora-glance-chains > .inline-actions {
+    justify-content: flex-end;
+  }
+}
+
 .auxora-scene-grid .product-card {
   min-height: 200px;
 }
