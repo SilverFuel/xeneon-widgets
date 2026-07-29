@@ -420,6 +420,9 @@
     var mediaSubtitle = mediaArtist + (text(media.albumTitle, "") ? " — " + text(media.albumTitle, "") : "");
     var canSeek = Boolean(media.canSeek && media.durationMs > 0);
     var hiddenSessionCount = Math.max(0, activeSessions.length - visibleSessions.length);
+    var hasPrivateSessionLabels = visibleSessions.some(function (session) {
+      return /^(audio )?app(?:lication)?$/i.test(getAudioSessionLabel(session));
+    });
     var mediaControlsHtml = hasMediaSession ? (
       '<div class="audio-media-now">' +
         renderAlbumCarousel(state, media) +
@@ -446,7 +449,7 @@
             '<button class="inline-button" type="button" title="Next track" data-action="media-control" data-media-action="next"' + (state.busy || !media.canGoNext ? " disabled" : "") + '>Next</button>' +
           '</div>' +
           '<div class="audio-now-apps">' +
-            '<div class="metric-label">App volume</div>' +
+            '<div class="metric-label">App volume' + (hasPrivateSessionLabels ? " · Names private" : "") + '</div>' +
             '<div class="audio-session-stack">__AUXORA_ACTIVE_SESSIONS__</div>' +
           '</div>' +
         '</div>' +
@@ -455,7 +458,7 @@
     var sessionRowsHtml = visibleSessions.length ? visibleSessions.map(function (session, sessionIndex) {
       var sessionLabel = getAudioSessionLabel(session);
       var sessionDisplayLabel = /^(audio )?app(?:lication)?$/i.test(sessionLabel)
-        ? (hasMediaSession ? "Music app" : "Active app") + (visibleSessions.length > 1 ? " " + (sessionIndex + 1) : "")
+        ? (hasMediaSession ? "Media app" : "Active app") + (visibleSessions.length > 1 ? " " + (sessionIndex + 1) : "")
         : sessionLabel;
       var sessionControlLabel = getAudioSessionLabel(session) + " " + (sessionIndex + 1);
       return '' +
