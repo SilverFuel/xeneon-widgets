@@ -122,6 +122,9 @@ assert(
 
 assert(
   ["home", "scenes", "library", "settings"].every(destination => dashboardHtml.includes(`data-destination="${destination}"`))
+    && /data-destination="scenes"[^>]*>Modes<\/button>/.test(dashboardHtml)
+    && /data-destination="library"[^>]*>Apps &amp; Controls<\/button>/.test(dashboardHtml)
+    && !/>Scenes<\/button>|>Library<\/button>/.test(dashboardHtml)
     && /dashboard-native-page--layout-compact/.test(dashboardJs)
     && /dashboard-native-page--layout-portrait/.test(dashboardJs)
     && /dashboard-native-page--layout-ultrawide/.test(dashboardJs)

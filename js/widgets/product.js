@@ -716,7 +716,11 @@
 
   function mountScenesWidget(widget, container, env) {
     var cleanups = [];
-    var state = { payload: null, displays: [], busy: false, message: "Loading Scenes", tone: "warn" };
+    var state = { payload: null, displays: [], busy: false, message: "Loading Modes", tone: "warn" };
+
+    function modeMessage(value, fallback) {
+      return text(value, fallback).replace(/\bScenes\b/g, "Modes").replace(/\bScene\b/g, "Mode");
+    }
 
     function redraw() {
       var profiles = state.payload && Array.isArray(state.payload.profiles) ? state.payload.profiles : [];
@@ -724,7 +728,7 @@
       var assignments = state.payload && Array.isArray(state.payload.displayAssignments) ? state.payload.displayAssignments : [];
       container.innerHTML = productShell(
         "Adaptive experience",
-        "Scenes",
+        "Modes",
         "Change Auxora's layout, energy, controls, and priorities in one tap.",
         state.message,
         state.tone,
@@ -739,7 +743,7 @@
               var assignment = assignments.filter(function (item) { return item.displayId === display.id && item.sceneId === scene.id; })[0];
               return '<option value="' + escapeHtml(display.id) + '"' + (assignment ? " selected" : "") + '>' + escapeHtml(display.label) + '</option>';
             }).join("") + '</select></label>' : '') +
-            '<div class="inline-actions"><button class="inline-button' + (active ? " is-primary" : "") + '" type="button" data-scene-activate="' + escapeHtml(scene.id) + '"' + (state.busy ? " disabled" : "") + '>' + (active ? "Active" : "Use Scene") + '</button><button class="inline-button" type="button" data-scene-duplicate="' + escapeHtml(scene.id) + '"' + (state.busy ? " disabled" : "") + '>Duplicate</button></div>' +
+            '<div class="inline-actions"><button class="inline-button' + (active ? " is-primary" : "") + '" type="button" data-scene-activate="' + escapeHtml(scene.id) + '"' + (state.busy ? " disabled" : "") + '>' + (active ? "Active" : "Use Mode") + '</button><button class="inline-button" type="button" data-scene-duplicate="' + escapeHtml(scene.id) + '"' + (state.busy ? " disabled" : "") + '>Duplicate</button></div>' +
           '</article>';
         }).join("") + '</div>' +
         '<div class="inline-actions"><button class="inline-button is-primary" type="button" data-scene-resume' + (state.busy ? " disabled" : "") + '>Resume automatic switching</button><span class="inline-copy">Manual override: ' + escapeHtml(text(state.payload && state.payload.manualOverrideUntil, "off")) + '</span></div>'
@@ -753,11 +757,11 @@
       ]).then(function (payloads) {
         state.payload = payloads[0];
         state.displays = Array.isArray(payloads[1].displays) ? payloads[1].displays : [];
-        state.message = text(payloads[0].message, "Scenes ready");
+        state.message = modeMessage(payloads[0].message, "Modes ready");
         state.tone = "good";
         redraw();
       }, function (error) {
-        state.message = error.message || "Scenes unavailable";
+        state.message = modeMessage(error.message, "Modes unavailable");
         state.tone = "danger";
         redraw();
       });
@@ -783,10 +787,10 @@
       if (operation) {
         Promise.resolve(operation).then(function (payload) {
           state.payload = payload;
-          state.message = text(payload.message, "Scene updated");
+          state.message = modeMessage(payload.message, "Mode updated");
           state.tone = "good";
         }, function (error) {
-          state.message = error.message || "Scene update failed";
+          state.message = modeMessage(error.message, "Mode update failed");
           state.tone = "danger";
         }).finally(function () {
           state.busy = false;
