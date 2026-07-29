@@ -1619,6 +1619,10 @@
       return getSetupItem("unifi").state || "Optional";
     }
 
+    if (widgetId === "remote") {
+      return "Unavailable";
+    }
+
     return isWidgetConfigured(widgetId) ? "Ready" : "Optional";
   }
 
