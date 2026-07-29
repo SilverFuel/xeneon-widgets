@@ -617,6 +617,7 @@
     function redraw() {
       var scene = activeScene();
       var entries = state.calendar && Array.isArray(state.calendar.entries) ? state.calendar.entries : [];
+      var chains = state.chains && Array.isArray(state.chains.chains) ? state.chains.chains : [];
       container.innerHTML = productShell(
         "Smart Glance",
         "Good " + (new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"),
