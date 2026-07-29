@@ -56,7 +56,7 @@
       : requiresConfirmation
         ? "Tap once to confirm"
         : text(item && item.detail, text(item && item.state, "Ready"));
-    var stateLabel = isConfirm ? "Confirm" : requiresConfirmation ? "Confirm" : text(item && item.state, "Ready");
+    var stateLabel = isConfirm ? "Confirm" : requiresConfirmation ? "Two-step" : text(item && item.state, "Ready");
     return '' +
       '<button class="inline-action-button" type="button" data-action="' + escapeHtml(action) + '" data-id="' + escapeHtml(itemId) + '" data-style="' + escapeHtml(text(item && item.style, "command")) + '"' + (requiresConfirmation ? ' data-confirmation-required="true"' : "") + (isConfirm ? ' data-state="confirm"' : "") + (((disabled || !item || item.enabled === false) ? " disabled" : "")) + '>' +
         '<strong>' + escapeHtml(buttonLabel) + '</strong>' +
