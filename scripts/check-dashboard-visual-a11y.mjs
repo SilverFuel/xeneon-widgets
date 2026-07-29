@@ -294,6 +294,17 @@ assert(
 );
 
 assert(
+  /product-privacy-metrics/.test(productWidget)
+    && /product-privacy-disclosure/.test(productWidget)
+    && /product-privacy-permissions/.test(productWidget)
+    && /Backup, restore, and reset/.test(productWidget)
+    && /\.product-privacy-permissions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/.test(productCss)
+    && /\.product-privacy-tools\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(productCss)
+    && /\.product-privacy-details summary\s*\{[\s\S]*?min-height:\s*44px;/.test(productCss),
+  "Privacy must keep its plain-language overview and permissions visible while collapsing infrequent tools"
+);
+
+assert(
   /inline-grid--4 inline-grid--updates/.test(productWidget)
     && /product-control-panel product-control-panel--updates/.test(productWidget)
     && /\.inline-grid--updates\s*\{\s*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/.test(productCss)
