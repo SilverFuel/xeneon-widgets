@@ -17,6 +17,7 @@
   --audio-selected-surface: var(--theme-selected-surface, color-mix(in srgb, var(--audio-accent) 13%, transparent));
   --audio-surface-strong: var(--theme-surface-strong, rgba(8, 13, 20, 0.94));
   --audio-surface-muted: var(--theme-surface-muted, rgba(255, 255, 255, 0.055));
+  --audio-warning: var(--status-warning-text, #f0b86a);
   min-height: auto;
 }
 
@@ -932,7 +933,7 @@
 }
 
 .audio-eq-band[data-zone="bass"] {
-  border-bottom-color: var(--status-warning-text);
+  border-bottom-color: var(--audio-warning);
 }
 
 .audio-eq-band[data-zone="voices"] {
@@ -1039,7 +1040,7 @@
 }
 
 .audio-equalizer-zones > div[data-zone="bass"] {
-  border-top: 3px solid var(--status-warning-text);
+  border-top: 3px solid var(--audio-warning);
 }
 
 .audio-equalizer-zones > div[data-zone="voices"] {
