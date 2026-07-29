@@ -139,6 +139,11 @@ assert(
   "Clipboard must remain selectable when the bridge reports it ready"
 );
 
+assert(
+  /if \(widget\.tier === "product"\) \{[\s\S]*?return true;/.test(dashboardJs),
+  "Ready product panels such as Streaming must remain selectable"
+);
+
 
 assert(
   /registerRenderer\("home"/.test(productWidget)
