@@ -254,6 +254,18 @@
   .product-profile-grid--packs {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
+
+  .product-theme-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .product-control-panel .inline-form-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .product-range-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .product-card,
@@ -361,6 +373,11 @@
 
 .product-range-field {
   gap: 8px;
+}
+
+.product-range-grid {
+  display: grid;
+  gap: 10px;
 }
 
 .product-layout-list,
