@@ -263,6 +263,256 @@
     }
   }
 
+  function stableNodeKey(node) {
+    var explicitKey;
+    if (!node || node.nodeType !== 1) {
+      return "";
+    }
+
+    explicitKey = node.getAttribute("data-ui-key");
+    if (explicitKey) {
+      return "key:" + explicitKey;
+    }
+    if (node.id) {
+      return "id:" + node.id;
+    }
+    explicitKey = node.getAttribute("data-action");
+    if (explicitKey) {
+      return "action:" + node.tagName + ":" + explicitKey;
+    }
+    explicitKey = node.getAttribute("name");
+    if (explicitKey && node.matches("input, textarea, select, button")) {
+      if (node.matches('input[type="checkbox"], input[type="radio"]')) {
+        return "name:" + node.tagName + ":" + explicitKey + ":" + text(node.value, "on");
+      }
+      return "name:" + node.tagName + ":" + explicitKey;
+    }
+    return "";
+  }
+
+  function compatibleStableNodes(currentNode, nextNode) {
+    return Boolean(currentNode && nextNode
+      && currentNode.nodeType === nextNode.nodeType
+      && (currentNode.nodeType !== 1 || currentNode.tagName === nextNode.tagName));
+  }
+
+  function dirtyFormControl(node) {
+    var options;
+
+    if (!node || !node.matches || !node.matches("input, textarea, select")) {
+      return false;
+    }
+    if (node.matches('input[type="checkbox"], input[type="radio"]')) {
+      return node.checked !== node.defaultChecked;
+    }
+    if (node.matches('input[type="file"]')) {
+      return false;
+    }
+    if (node.matches("select")) {
+      options = Array.prototype.slice.call(node.options || []);
+      return options.some(function (option) {
+        return option.selected !== option.defaultSelected;
+      });
+    }
+    return node.value !== node.defaultValue;
+  }
+
+  function captureFormControlState(node) {
+    if (node.matches('input[type="checkbox"], input[type="radio"]')) {
+      return { node: node, kind: "checked", checked: node.checked };
+    }
+    if (node.matches("select")) {
+      return {
+        node: node,
+        kind: "select",
+        selectedValues: Array.prototype.slice.call(node.options || []).filter(function (option) {
+          return option.selected;
+        }).map(function (option) {
+          return option.value;
+        })
+      };
+    }
+    return { node: node, kind: "value", value: node.value };
+  }
+
+  function restoreFormControlState(state) {
+    if (!state.node.isConnected) {
+      return;
+    }
+    if (state.kind === "checked") {
+      state.node.checked = state.checked;
+      return;
+    }
+    if (state.kind === "select") {
+      Array.prototype.slice.call(state.node.options || []).forEach(function (option) {
+        option.selected = state.selectedValues.indexOf(option.value) !== -1;
+      });
+      return;
+    }
+    if (!state.node.matches('input[type="file"]')) {
+      state.node.value = state.value;
+    }
+  }
+
+  function syncStableAttributes(currentNode, nextNode, activeNode) {
+    var preserveValue = currentNode === activeNode;
+    var nextNames = {};
+
+    Array.prototype.slice.call(nextNode.attributes || []).forEach(function (attribute) {
+      nextNames[attribute.name] = true;
+      if (preserveValue && (attribute.name === "value" || attribute.name === "checked" || attribute.name === "selected")) {
+        return;
+      }
+      if (currentNode.getAttribute(attribute.name) !== attribute.value) {
+        currentNode.setAttribute(attribute.name, attribute.value);
+      }
+    });
+
+    Array.prototype.slice.call(currentNode.attributes || []).forEach(function (attribute) {
+      if (!nextNames[attribute.name]
+          && !(preserveValue && (attribute.name === "value" || attribute.name === "checked" || attribute.name === "selected"))) {
+        currentNode.removeAttribute(attribute.name);
+      }
+    });
+
+    if (!preserveValue && currentNode.matches && currentNode.matches("input, textarea, select")) {
+      if (currentNode.value !== nextNode.value) {
+        currentNode.value = nextNode.value;
+      }
+      if (currentNode.matches('input[type="checkbox"], input[type="radio"]')) {
+        currentNode.checked = nextNode.checked;
+      }
+    }
+  }
+
+  function reconcileStableNode(currentNode, nextNode, activeNode) {
+    var currentChildren;
+    var usedChildren = [];
+
+    if (!compatibleStableNodes(currentNode, nextNode)) {
+      return nextNode.cloneNode(true);
+    }
+
+    if (currentNode.nodeType === 3 || currentNode.nodeType === 8) {
+      if (currentNode.nodeValue !== nextNode.nodeValue) {
+        currentNode.nodeValue = nextNode.nodeValue;
+      }
+      return currentNode;
+    }
+
+    syncStableAttributes(currentNode, nextNode, activeNode);
+    currentChildren = Array.prototype.slice.call(currentNode.childNodes);
+
+    Array.prototype.slice.call(nextNode.childNodes).forEach(function (desiredChild, desiredIndex) {
+      var desiredKey = stableNodeKey(desiredChild);
+      var match = null;
+      var referenceNode = currentNode.childNodes[desiredIndex] || null;
+
+      if (desiredKey) {
+        match = currentChildren.filter(function (candidate) {
+          return usedChildren.indexOf(candidate) === -1 && stableNodeKey(candidate) === desiredKey;
+        })[0] || null;
+      } else if (referenceNode
+          && usedChildren.indexOf(referenceNode) === -1
+          && !stableNodeKey(referenceNode)
+          && compatibleStableNodes(referenceNode, desiredChild)) {
+        match = referenceNode;
+      } else {
+        match = currentChildren.filter(function (candidate) {
+          return usedChildren.indexOf(candidate) === -1
+            && !stableNodeKey(candidate)
+            && compatibleStableNodes(candidate, desiredChild);
+        })[0] || null;
+      }
+
+      if (!match) {
+        match = desiredChild.cloneNode(true);
+      } else {
+        match = reconcileStableNode(match, desiredChild, activeNode);
+      }
+
+      referenceNode = currentNode.childNodes[desiredIndex] || null;
+      if (referenceNode && referenceNode.parentNode !== currentNode) {
+        referenceNode = null;
+      }
+      if (match !== referenceNode) {
+        currentNode.insertBefore(match, referenceNode);
+      }
+      usedChildren.push(match);
+    });
+
+    Array.prototype.slice.call(currentNode.childNodes).forEach(function (child) {
+      if (usedChildren.indexOf(child) === -1 && child.parentNode === currentNode) {
+        currentNode.removeChild(child);
+      }
+    });
+    return currentNode;
+  }
+
+  function patchStableDom(container, html) {
+    var activeNode = document.activeElement && container.contains(document.activeElement) ? document.activeElement : null;
+    var formControlStates = [];
+    var selection = null;
+    var scrollStates = [];
+    var fragment;
+    var nextContainer;
+
+    if (activeNode && typeof activeNode.selectionStart === "number") {
+      selection = {
+        start: activeNode.selectionStart,
+        end: activeNode.selectionEnd,
+        direction: activeNode.selectionDirection
+      };
+    }
+
+    [container].concat(Array.prototype.slice.call(container.querySelectorAll("*"))).forEach(function (node) {
+      if (node.scrollTop || node.scrollLeft) {
+        scrollStates.push({ node: node, top: node.scrollTop, left: node.scrollLeft });
+      }
+    });
+
+    Array.prototype.slice.call(container.querySelectorAll("input, textarea, select")).forEach(function (node) {
+      if (node === activeNode || dirtyFormControl(node)) {
+        formControlStates.push(captureFormControlState(node));
+      }
+    });
+
+    var range = document.createRange();
+    range.selectNodeContents(container);
+    fragment = range.createContextualFragment(String(html || "").trim());
+    nextContainer = container.cloneNode(false);
+    nextContainer.appendChild(fragment);
+    if (container.innerHTML === nextContainer.innerHTML) {
+      return container.firstElementChild;
+    }
+    reconcileStableNode(container, nextContainer, activeNode);
+
+    formControlStates.forEach(restoreFormControlState);
+
+    scrollStates.forEach(function (state) {
+      if (state.node.isConnected) {
+        state.node.scrollTop = state.top;
+        state.node.scrollLeft = state.left;
+      }
+    });
+
+    if (activeNode && activeNode.isConnected && document.activeElement !== activeNode) {
+      try {
+        activeNode.focus({ preventScroll: true });
+      } catch (error) {
+        activeNode.focus();
+      }
+    }
+    if (selection && activeNode && activeNode.isConnected && typeof activeNode.setSelectionRange === "function") {
+      try {
+        activeNode.setSelectionRange(selection.start, selection.end, selection.direction || "none");
+      } catch (error) {
+        // Some input types expose selectionStart but do not accept setSelectionRange.
+      }
+    }
+    return container.firstElementChild;
+  }
+
   function createTimerLoop(refreshFn, intervalMs, shouldPauseFn) {
     var timerId = 0;
     var disposed = false;
@@ -544,6 +794,7 @@
     normalizeMediaPayload: normalizeMediaPayload,
     nullableNumber: nullableNumber,
     optionalNumber: optionalNumber,
+    patchStableDom: patchStableDom,
     productShell: productShell,
     productThemes: productThemes,
     registerHelpers: registerRuntimeHelpers,

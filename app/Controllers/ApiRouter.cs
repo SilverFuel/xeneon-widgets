@@ -283,6 +283,15 @@ public sealed class ApiRouter
             case "/api/audio/session-mute" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _telemetryController.SetAudioSessionMuteAsync(await ReadJsonAsync<AudioSessionMuteRequest>(request, cancellationToken), cancellationToken), cancellationToken);
                 return;
+            case "/api/audio/equalizer" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _telemetryController.GetAudioEqualizer(), cancellationToken);
+                return;
+            case "/api/audio/equalizer/connect" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _telemetryController.EnableAudioEqualizer(), cancellationToken);
+                return;
+            case "/api/audio/equalizer" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _telemetryController.UpdateAudioEqualizer(await ReadJsonAsync<EqualizerApoUpdateRequest>(request, cancellationToken)), cancellationToken);
+                return;
             case "/api/weather":
                 await HandleWeatherRequestAsync(request, response, cancellationToken);
                 return;
