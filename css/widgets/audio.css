@@ -206,7 +206,7 @@
   align-content: center;
   gap: 4px;
   padding: 14px 16px;
-  border-color: var(--theme-border);
+  border: 1px solid var(--theme-border);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 7%, transparent), transparent 62%),
     color-mix(in srgb, var(--theme-surface-muted) 92%, transparent);
