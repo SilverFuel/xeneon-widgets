@@ -748,7 +748,7 @@
             '<div class="inline-actions"><button class="inline-button' + (active ? " is-primary" : "") + '" type="button" data-scene-activate="' + escapeHtml(scene.id) + '"' + (state.busy ? " disabled" : "") + '>' + (active ? "Active" : "Use Mode") + '</button><button class="inline-button" type="button" data-scene-duplicate="' + escapeHtml(scene.id) + '"' + (state.busy ? " disabled" : "") + '>Duplicate</button></div>' +
           '</article>';
         }).join("") + '</div>' +
-        '<div class="inline-actions"><button class="inline-button is-primary" type="button" data-scene-resume' + (state.busy ? " disabled" : "") + '>Resume automatic switching</button><span class="inline-copy">Manual override: ' + escapeHtml(text(state.payload && state.payload.manualOverrideUntil, "off")) + '</span></div>'
+        '<div class="inline-actions"><button class="inline-button is-primary" type="button" data-scene-resume' + (state.busy ? " disabled" : "") + '>Resume automatic switching</button><span class="inline-copy">' + (text(state.payload && state.payload.manualOverrideUntil, "off") === "off" ? "Automatic switching is ready" : "A manual Mode is active") + '</span></div>'
       );
     }
 

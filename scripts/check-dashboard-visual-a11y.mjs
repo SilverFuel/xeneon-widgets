@@ -294,6 +294,11 @@ assert(
 );
 
 assert(
+  !/Manual override:/.test(productWidget) && /A manual Mode is active/.test(productWidget),
+  "Modes must explain manual switching without exposing a raw timestamp"
+);
+
+assert(
   /\.product-layout-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(180px,\s*1fr\)\s+auto;/.test(productCss),
   "Layout Editor titles must keep a readable column when the drag handle is hidden"
 );
