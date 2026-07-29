@@ -365,6 +365,11 @@
           '<button class="inline-button" type="button" data-action="equalizer-reset">Reset</button>' +
         '</div>' +
       '</div>' +
+      '<div class="audio-equalizer-zones" aria-label="Equalizer sound areas">' +
+        '<div data-zone="bass"><strong>Bass</strong><span>31–250 Hz</span><small>Thump and warmth</small></div>' +
+        '<div data-zone="voices"><strong>Voices</strong><span>500 Hz–2 kHz</span><small>Singing and speech</small></div>' +
+        '<div data-zone="detail"><strong>Detail</strong><span>4–16 kHz</span><small>Clarity and sparkle</small></div>' +
+      '</div>' +
       '<div class="audio-eq-bands' + (equalizer.bypassed ? " is-bypassed" : "") + '">' + bands + '</div>' +
       '<div class="audio-equalizer-footer">' +
         '<span><strong>' + escapeHtml(equalizer.preset) + ':</strong> ' + escapeHtml(getEqualizerPresetSummary(equalizer.preset)) + '</span>' +
@@ -374,11 +379,6 @@
         '<div class="audio-equalizer-guide__intro">' +
           '<strong>How to read this</strong>' +
           '<span>Up adds more. Down removes some. 0 dB means no change.</span>' +
-        '</div>' +
-        '<div class="audio-equalizer-zones">' +
-          '<div data-zone="bass"><strong>Bass</strong><span>31–250 Hz</span><small>Thump and warmth</small></div>' +
-          '<div data-zone="voices"><strong>Voices</strong><span>500 Hz–2 kHz</span><small>Singing and speech</small></div>' +
-          '<div data-zone="detail"><strong>Detail</strong><span>4–16 kHz</span><small>Clarity and sparkle</small></div>' +
         '</div>' +
       '</div>' +
     '</article>';
