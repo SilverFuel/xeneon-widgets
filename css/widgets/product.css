@@ -250,6 +250,12 @@
   gap: 12px;
 }
 
+@media (min-width: 1680px) {
+  .product-profile-grid--packs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
 .product-card,
 .product-swatch,
 .product-layout-row,

@@ -1112,7 +1112,7 @@
         "Apply local curated dashboard bundles. Downloadable packs stay disabled until signed manifests and permission review are available.",
         findById(productPacks, activePack).name,
         "good",
-        '<div class="product-profile-grid">' +
+        '<div class="product-profile-grid product-profile-grid--packs">' +
           productPacks.map(function (pack) {
             return productButtonCard(pack, pack.id === activePack, "pack", '<span class="product-card__meta">' + escapeHtml(pack.layout.length + " panels") + '</span>');
           }).join("") +
