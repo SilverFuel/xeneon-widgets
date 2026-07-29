@@ -1286,6 +1286,14 @@
     padding-block: 6px;
   }
 
+  .audio-equalizer-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .audio-equalizer-actions {
+    justify-content: flex-end;
+  }
+
   .audio-playback-card .audio-album-carousel__track,
   .audio-playback-card .audio-album-carousel.is-single .audio-album-carousel__track {
     height: 340px;
