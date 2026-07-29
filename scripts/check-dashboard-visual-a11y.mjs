@@ -125,6 +125,8 @@ assert(
     && /data-destination="scenes"[^>]*>Modes<\/button>/.test(dashboardHtml)
     && /data-destination="library"[^>]*>Apps &amp; Controls<\/button>/.test(dashboardHtml)
     && !/>Scenes<\/button>|>Library<\/button>/.test(dashboardHtml)
+    && /active Mode/.test(dashboardJs)
+    && /Active Mode/.test(productWidget)
     && /dashboard-native-page--layout-compact/.test(dashboardJs)
     && /dashboard-native-page--layout-portrait/.test(dashboardJs)
     && /dashboard-native-page--layout-ultrawide/.test(dashboardJs)

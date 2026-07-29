@@ -624,7 +624,7 @@
         briefing(),
         text(scene.name, state.loading ? "Loading" : "Work"),
         state.loading ? "warn" : "good",
-        '<div class="auxora-glance-hero"><div><span>Active Scene</span><strong>' + escapeHtml(text(scene.name, "Work")) + '</strong><small>' + escapeHtml(text(state.scenes && state.scenes.lastActivationReason, "Default scene")) + '</small></div><div class="auxora-glance-clock">' + escapeHtml(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })) + '</div></div>' +
+        '<div class="auxora-glance-hero"><div><span>Active Mode</span><strong>' + escapeHtml(text(scene.name, "Work")) + '</strong><small>' + escapeHtml(text(state.scenes && state.scenes.lastActivationReason, "Default Mode")) + '</small></div><div class="auxora-glance-clock">' + escapeHtml(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })) + '</div></div>' +
         '<div class="inline-grid inline-grid--4">' +
           metricCard("CPU", value(state.system && state.system.cpu, "%"), state.system && state.system.cpuTemp != null ? value(state.system.cpuTemp, "°") : "System load") +
           metricCard("Memory", value(state.system && state.system.ram, "%"), "Memory pressure") +

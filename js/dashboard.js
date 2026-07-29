@@ -1853,7 +1853,7 @@
         requiresBridge: true,
         tier: "product",
         kicker: "Smart Glance",
-        copy: "The most important information and actions for the active Scene.",
+        copy: "The most important information and actions for the active Mode.",
         viewerLabel: "Auxora"
       },
       {
@@ -1931,7 +1931,7 @@
         requiresBridge: false,
         tier: "product",
         kicker: "Edit mode",
-        copy: "Reorder and pin the cards that belong on your active Scene.",
+        copy: "Reorder and pin the cards that belong on your active Mode.",
         viewerLabel: "Local layout"
       },
       {
