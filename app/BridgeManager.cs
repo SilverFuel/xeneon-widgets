@@ -38,6 +38,7 @@ public sealed class BridgeManager : IDisposable
     private readonly GpuPowerMonitorService _gpuPowerMonitor;
     private readonly NetworkMetricsService _networkMetrics;
     private readonly AudioService _audioService;
+    private readonly EqualizerApoService _equalizerApoService;
     private readonly WeatherService _weatherService;
     private readonly CalendarService _calendarService;
     private readonly HueService _hueService;
@@ -73,6 +74,7 @@ public sealed class BridgeManager : IDisposable
         _gpuPowerMonitor = new GpuPowerMonitorService(_logger);
         _networkMetrics = new NetworkMetricsService(_logger, _configStore);
         _audioService = new AudioService(_logger, _configStore);
+        _equalizerApoService = new EqualizerApoService(_logger);
         _weatherHttpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(10)
@@ -125,6 +127,7 @@ public sealed class BridgeManager : IDisposable
             _gpuPowerMonitor,
             _networkMetrics,
             _audioService,
+            _equalizerApoService,
             _calendarService,
             _hueService,
             _uniFiService,

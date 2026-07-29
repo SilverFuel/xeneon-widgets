@@ -8,6 +8,7 @@ public sealed class TelemetryController
     private readonly GpuPowerMonitorService _gpuPowerMonitor;
     private readonly NetworkMetricsService _networkMetrics;
     private readonly AudioService _audioService;
+    private readonly EqualizerApoService _equalizerApoService;
     private readonly CalendarService _calendarService;
     private readonly HueService _hueService;
     private readonly UniFiService _uniFiService;
@@ -24,6 +25,7 @@ public sealed class TelemetryController
         GpuPowerMonitorService gpuPowerMonitor,
         NetworkMetricsService networkMetrics,
         AudioService audioService,
+        EqualizerApoService equalizerApoService,
         CalendarService calendarService,
         HueService hueService,
         UniFiService uniFiService,
@@ -39,6 +41,7 @@ public sealed class TelemetryController
         _gpuPowerMonitor = gpuPowerMonitor;
         _networkMetrics = networkMetrics;
         _audioService = audioService;
+        _equalizerApoService = equalizerApoService;
         _calendarService = calendarService;
         _hueService = hueService;
         _uniFiService = uniFiService;
@@ -117,6 +120,21 @@ public sealed class TelemetryController
     public Task<AudioSnapshotPayload> SetAudioSessionMuteAsync(AudioSessionMuteRequest request, CancellationToken cancellationToken)
     {
         return _audioService.SetSessionMuteAsync(request.SessionId, request.Muted, cancellationToken);
+    }
+
+    public EqualizerApoSnapshot GetAudioEqualizer()
+    {
+        return _equalizerApoService.GetSnapshot();
+    }
+
+    public EqualizerApoSnapshot EnableAudioEqualizer()
+    {
+        return _equalizerApoService.EnableIntegration();
+    }
+
+    public EqualizerApoSnapshot UpdateAudioEqualizer(EqualizerApoUpdateRequest request)
+    {
+        return _equalizerApoService.Update(request);
     }
 
     public async Task<object> BuildHealthPayloadAsync(CancellationToken cancellationToken)
