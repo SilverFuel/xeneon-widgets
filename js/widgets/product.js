@@ -1186,7 +1186,7 @@
         "Use these actions when the dashboard or installed app needs help. Actions that require installed support files stay disabled in an unpackaged development run.",
         state.statusText,
         state.statusTone,
-        '<div class="inline-list">' + (state.actions.length ? state.actions.map(function (action) {
+        '<div class="inline-list inline-list--recovery">' + (state.actions.length ? state.actions.map(function (action) {
           return '<div class="inline-list-item"><div><strong>' + escapeHtml(action.label) + '</strong><div class="inline-list-copy">' + escapeHtml(action.message) + '</div></div>' +
             '<button class="inline-button" type="button" data-recovery-action="' + escapeHtml(action.id) + '"' + ((!action.available || state.busy) ? " disabled" : "") + ' aria-label="' + escapeHtml(action.label) + '">' + escapeHtml(action.label) + '</button></div>';
         }).join("") : '<div class="inline-empty"><strong>Recovery actions are loading</strong><span>Auxora is checking which customer actions are available in this run.</span></div>') + '</div>'

@@ -288,6 +288,12 @@ assert(
 );
 
 assert(
+  /inline-list inline-list--recovery/.test(productWidget)
+    && /\.inline-list--recovery\s*\{\s*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/.test(productCss),
+  "wide Recovery layouts must keep every recovery action visible together"
+);
+
+assert(
   /\.product-layout-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(180px,\s*1fr\)\s+auto;/.test(productCss),
   "Layout Editor titles must keep a readable column when the drag handle is hidden"
 );
