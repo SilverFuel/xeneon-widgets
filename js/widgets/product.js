@@ -977,17 +977,17 @@
         state.statusTone,
         '<form class="inline-form product-control-panel" data-form="streaming">' +
           '<div class="inline-form-grid inline-form-grid--2">' +
-            '<label class="inline-field"><span>OBS WebSocket</span><input class="inline-input" type="text" name="obsEndpoint" value="' + escapeHtml(endpoint) + '" placeholder="ws://127.0.0.1:4455"></label>' +
+            '<label class="inline-field"><span>OBS address</span><input class="inline-input" type="text" name="obsEndpoint" value="' + escapeHtml(endpoint) + '" placeholder="ws://127.0.0.1:4455"></label>' +
             '<label class="inline-field"><span>Main scene</span><input class="inline-input" type="text" name="streamScene" value="' + escapeHtml(scene) + '" placeholder="Main"></label>' +
           '</div>' +
         '</form>' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Scene", scene, "Saved locally", null) +
           metricCard("OBS", state.statusText, "Connection probe", null) +
-          metricCard("Mode", "Stream deck", "Quick glance controls", null) +
+          metricCard("Layout", "Stream controls", "Quick glance setup", null) +
         '</div>' +
         '<div class="inline-actions">' +
-          '<button class="inline-button is-primary" type="button" data-action="probe-obs"' + (state.busy ? " disabled" : "") + '>Probe OBS</button>' +
+          '<button class="inline-button is-primary" type="button" data-action="probe-obs"' + (state.busy ? " disabled" : "") + '>Check OBS connection</button>' +
           '<button class="inline-button" type="button" data-action="open-media">Open Audio & Media</button>' +
           '<button class="inline-button" type="button" data-action="stream-profile">Use streaming layout</button>' +
         '</div>'
