@@ -280,6 +280,11 @@ assert(
 );
 
 assert(
+  /\.product-layout-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(180px,\s*1fr\)\s+auto;/.test(productCss),
+  "Layout Editor titles must keep a readable column when the drag handle is hidden"
+);
+
+assert(
   /case "\/api\/config" when request\.HttpMethod == "GET"/.test(apiRouter)
     && /case "\/api\/system":[\s\S]*?_telemetryController\.GetSystemSnapshot/.test(apiRouter)
     && /case "\/api\/network":[\s\S]*?_telemetryController\.GetNetworkSnapshot/.test(apiRouter)

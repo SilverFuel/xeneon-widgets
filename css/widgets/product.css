@@ -391,7 +391,7 @@
 .product-layout-row {
   position: relative;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) auto;
   align-items: center;
   gap: 12px;
   min-height: 58px;
