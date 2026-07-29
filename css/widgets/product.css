@@ -459,6 +459,114 @@
   padding: 12px 14px;
 }
 
+.product-privacy-metric {
+  gap: 6px;
+  min-height: 0;
+  padding: 12px;
+}
+
+.product-privacy-metric__state {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.product-privacy-overview {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--status-success-border);
+  border-radius: 12px;
+  background: var(--status-success-surface);
+}
+
+.product-privacy-overview span {
+  color: var(--color-text-dim);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.product-privacy-disclosure,
+.product-privacy-details {
+  min-width: 0;
+}
+
+.product-privacy-disclosure summary,
+.product-privacy-details summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+
+.product-privacy-disclosure summary::-webkit-details-marker,
+.product-privacy-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.product-privacy-disclosure summary::after,
+.product-privacy-details summary::after {
+  content: "+";
+  margin-left: auto;
+  color: var(--color-text-dim);
+}
+
+.product-privacy-disclosure[open] summary::after,
+.product-privacy-details[open] summary::after {
+  content: "−";
+}
+
+.product-privacy-details summary > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.product-privacy-details summary small {
+  color: var(--color-text-dim);
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.product-privacy-details__body {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.product-privacy-permissions-label {
+  margin-bottom: -4px;
+}
+
+.product-privacy-permissions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.product-privacy-permissions .inline-field {
+  min-width: 0;
+  margin: 0;
+}
+
+.product-privacy-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .product-code-preview {
   max-height: 120px;
   overflow: auto;
@@ -477,6 +585,11 @@
   }
 
   .product-layout-row {
+    grid-template-columns: 1fr;
+  }
+
+  .product-privacy-permissions,
+  .product-privacy-tools {
     grid-template-columns: 1fr;
   }
 }

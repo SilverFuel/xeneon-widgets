@@ -1270,33 +1270,52 @@
         "Review what stays local, then safely export or import dashboard-only preferences without exposing credentials.",
         state.statusText,
         state.statusTone,
-        '<div class="inline-grid inline-grid--3">' +
-          metricCard("Local settings", "Browser storage", "Theme, layout, endpoints", null) +
-          metricCard("Bridge data", "127.0.0.1", "System, network, audio", null) +
-          metricCard("Cloud calls", "Optional", "Weather and release checks", null) +
+        '<div class="inline-grid inline-grid--3 product-privacy-metrics">' +
+          '<article class="list-card inline-card product-privacy-metric"><div class="metric-label">Settings</div><div class="product-privacy-metric__state"><strong>Saved on this PC</strong>' + statusPill("Local", "good") + '</div><div class="router-inline-copy">Theme, layout, and panel preferences</div></article>' +
+          '<article class="list-card inline-card product-privacy-metric"><div class="metric-label">Device controls</div><div class="product-privacy-metric__state"><strong>Stay on this PC</strong>' + statusPill("Local", "good") + '</div><div class="router-inline-copy">System, network, and audio controls</div></article>' +
+          '<article class="list-card inline-card product-privacy-metric"><div class="metric-label">Internet use</div><div class="product-privacy-metric__state"><strong>Only when enabled</strong>' + statusPill("Optional", "muted") + '</div><div class="router-inline-copy">Weather, updates, and connections you add</div></article>' +
         '</div>' +
-        '<div class="product-privacy-list">' +
-          '<div><strong>Stays on this PC</strong><span>Dashboard preferences, widget endpoints, layout, OBS target, and recovery state.</span></div>' +
-          '<div><strong>Requires permission</strong><span>Weather keys, calendar feeds, Hue bridge pairing, and optional connectors you enable.</span></div>' +
-          '<div><strong>Foreground-app tracking is ' + (state.foregroundTrackingEnabled ? "on" : "off") + '</strong><span>When on, Auxora observes the active app executable path and stores its display name, path, source, and last-opened time locally. Up to 24 recent entries are retained until you turn this off or reset app data. Nothing is uploaded.</span></div>' +
-          '<div><strong>Independent software</strong><span>This app is not an official CORSAIR product and is not endorsed by integration providers unless a written agreement says otherwise.</span></div>' +
+        '<div class="product-privacy-overview"><strong>Private by default</strong><span>Auxora keeps settings and device controls on this PC. It uses the internet only for features you turn on.</span></div>' +
+        '<details class="product-privacy-disclosure">' +
+          '<summary>What Auxora stores</summary>' +
+          '<div class="product-privacy-details__body">' +
+            '<div class="product-privacy-list">' +
+              '<div><strong>Stays on this PC</strong><span>Dashboard preferences, widget endpoints, layout, OBS target, and recovery state.</span></div>' +
+              '<div><strong>Requires permission</strong><span>Weather keys, calendar feeds, Hue bridge pairing, and optional connectors you enable.</span></div>' +
+              '<div><strong>Foreground-app tracking is ' + (state.foregroundTrackingEnabled ? "on" : "off") + '</strong><span>When on, Auxora observes the active app executable path and stores its display name, path, source, and last-opened time locally. Up to 24 recent entries are retained until you turn this off or reset app data. Nothing is uploaded.</span></div>' +
+              '<div><strong>Independent software</strong><span>This app is not an official CORSAIR product and is not endorsed by integration providers unless a written agreement says otherwise.</span></div>' +
+            '</div>' +
+          '</div>' +
+        '</details>' +
+        '<div class="metric-label product-privacy-permissions-label">Optional permissions — off by default</div>' +
+        '<div class="product-privacy-permissions">' +
+          '<label class="inline-field inline-field--checkbox"><input type="checkbox" data-foreground-tracking' + (state.foregroundTrackingEnabled ? " checked" : "") + (state.diagnosticsBusy ? " disabled" : "") + '> <span>Build Recent Apps from the app I am using</span></label>' +
         '</div>' +
-        '<label class="inline-field inline-field--checkbox"><input type="checkbox" data-foreground-tracking' + (state.foregroundTrackingEnabled ? " checked" : "") + (state.diagnosticsBusy ? " disabled" : "") + '> <span>Track the foreground app to build Recent Apps (off by default)</span></label>' +
-        '<article class="list-card inline-card">' +
-          '<div class="inline-card-header"><div><div class="metric-label">Recent diagnostic events</div><div class="router-inline-copy">Sanitized local host events. Clipboard contents, credentials, and local paths stay excluded.</div></div><button class="inline-button" type="button" data-action="refresh-diagnostics"' + (state.diagnosticsBusy ? " disabled" : "") + '>Refresh</button></div>' +
-          '<div class="inline-list">' + (state.diagnosticEvents.length ? state.diagnosticEvents.map(function (entry) {
-            return '<div class="inline-list-item"><div class="inline-list-copy">' + escapeHtml(entry) + '</div></div>';
-          }).join("") : '<div class="inline-empty"><strong>No diagnostics loaded</strong><span>Refresh to read the latest sanitized local events.</span></div>') + '</div>' +
-        '</article>' +
-        '<div class="inline-actions">' +
-          '<button class="inline-button is-primary" type="button" data-action="export-backup">Copy Auxora backup</button>' +
-          '<button class="inline-button" type="button" data-action="restore-backup">Restore Auxora backup</button>' +
-          '<button class="inline-button" type="button" data-action="reset-settings">Reset local settings</button>' +
-          '<button class="inline-button" type="button" data-action="reset-all-local-data">' + (state.confirmReset ? "Confirm reset" : "Reset all app data") + '</button>' +
-          '<a class="inline-button" href="/support.html" target="_blank" rel="noreferrer">Support</a>' +
-        '</div>' +
-        '<label class="inline-field"><span>Restore presentation and Scenes</span><textarea class="inline-input" data-settings-import rows="4" placeholder="Paste an Auxora backup. Credentials, endpoints, launcher paths, display IDs, and logs are never included."></textarea></label>' +
-        '<div class="product-code-preview">' + escapeHtml(JSON.stringify(settings, null, 2).slice(0, 520)) + '</div>'
+        '<div class="product-privacy-tools">' +
+          '<details class="product-privacy-details">' +
+            '<summary><span><strong>Diagnostic events</strong><small>Sanitized local events; no clipboard text, passwords, or local paths.</small></span></summary>' +
+            '<div class="product-privacy-details__body">' +
+              '<div class="inline-card-header"><div class="metric-label">Recent diagnostic events</div><button class="inline-button" type="button" data-action="refresh-diagnostics"' + (state.diagnosticsBusy ? " disabled" : "") + '>Refresh</button></div>' +
+              '<div class="inline-list">' + (state.diagnosticEvents.length ? state.diagnosticEvents.map(function (entry) {
+                return '<div class="inline-list-item"><div class="inline-list-copy">' + escapeHtml(entry) + '</div></div>';
+              }).join("") : '<div class="inline-empty"><strong>No diagnostics loaded</strong><span>Refresh to read the latest sanitized local events.</span></div>') + '</div>' +
+            '</div>' +
+          '</details>' +
+          '<details class="product-privacy-details"' + (state.confirmReset ? " open" : "") + '>' +
+            '<summary><span><strong>Backup, restore, and reset</strong><small>Copy portable settings, restore a backup, or reset this installation.</small></span></summary>' +
+            '<div class="product-privacy-details__body">' +
+              '<div class="inline-actions">' +
+                '<button class="inline-button is-primary" type="button" data-action="export-backup">Copy Auxora backup</button>' +
+                '<button class="inline-button" type="button" data-action="restore-backup">Restore Auxora backup</button>' +
+                '<button class="inline-button" type="button" data-action="reset-settings">Reset local settings</button>' +
+                '<button class="inline-button" type="button" data-action="reset-all-local-data">' + (state.confirmReset ? "Confirm reset" : "Reset all app data") + '</button>' +
+                '<a class="inline-button" href="/support.html" target="_blank" rel="noreferrer">Support</a>' +
+              '</div>' +
+              '<label class="inline-field"><span>Restore presentation and Scenes</span><textarea class="inline-input" data-settings-import rows="4" placeholder="Paste an Auxora backup. Credentials, endpoints, launcher paths, display IDs, and logs are never included."></textarea></label>' +
+              '<div><div class="metric-label">Current portable settings</div><div class="product-code-preview">' + escapeHtml(JSON.stringify(settings, null, 2).slice(0, 520)) + '</div></div>' +
+            '</div>' +
+          '</details>' +
+        '</div>'
       );
     }
 
