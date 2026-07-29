@@ -1259,7 +1259,7 @@
   .audio-master-card,
   .audio-equalizer-card,
   .audio-playback-card {
-    gap: 8px;
+    gap: 6px;
   }
 
   .dashboard-native-page--adaptive .audio-route-button {
@@ -1268,8 +1268,8 @@
   }
 
   .audio-eq-bands {
-    min-height: 128px;
-    padding-block: 5px;
+    min-height: 116px;
+    padding-block: 2px;
   }
 
   .audio-eq-band {
@@ -1292,6 +1292,20 @@
 
   .audio-equalizer-actions {
     justify-content: flex-end;
+  }
+
+  .audio-equalizer-guide {
+    gap: 6px;
+    padding-top: 6px;
+  }
+
+  .audio-equalizer-guide__intro {
+    padding: 7px 9px;
+  }
+
+  .audio-equalizer-zones > div {
+    min-height: 60px;
+    padding: 7px 9px;
   }
 
   .audio-playback-card .audio-album-carousel__track,
