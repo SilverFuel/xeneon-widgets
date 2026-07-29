@@ -133,7 +133,7 @@
         '<div class="network-quality-details">' +
           networkPill("Ping", ping == null ? "--" : Math.round(ping) + " ms", detail, ping == null ? "warn" : ping >= 100 ? "danger" : ping >= 60 ? "warn" : "good") +
           networkPill("Link", networkTypeLabel(bridgeData.type), networkLinkSpeed(bridgeData.linkSpeedMbps), bridgeData.type === "wifi" ? "warn" : "good") +
-          networkPill("Gateway", bridgeData.gateway || "--", bridgeData.ipAddress || "Local adapter", bridgeData.gateway ? "good" : "warn") +
+          networkPill("Gateway", bridgeData.gateway || "Not detected", bridgeData.gateway ? (bridgeData.ipAddress || "Local adapter") : (bridgeData.ipAddress ? "PC " + bridgeData.ipAddress : "No local address"), bridgeData.gateway ? "good" : "warn") +
         '</div>' +
       '</article>';
   }
@@ -245,7 +245,7 @@
             '<div class="inline-card-header"><div><div class="metric-label">Local path</div><div class="router-inline-copy">' + escapeHtml(text(bridgeData.name, bridgeData.source)) + '</div></div></div>' +
             '<div class="network-path-grid">' +
               networkPill("PC IP", bridgeData.ipAddress || "--", bridgeData.description || "Adapter", bridgeData.ipAddress ? "good" : "warn") +
-              networkPill("Gateway", bridgeData.gateway || "--", "Router", bridgeData.gateway ? "good" : "warn") +
+              networkPill("Gateway", bridgeData.gateway || "Not detected", "Router", bridgeData.gateway ? "good" : "warn") +
               networkPill("DNS", dns, "Resolvers", bridgeData.dnsServers.length ? "good" : "muted") +
             '</div>' +
           '</article>' +
