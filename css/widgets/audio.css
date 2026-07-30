@@ -134,10 +134,16 @@
 
 .audio-playback-grid--mixer-only {
   grid-template-columns: 1fr;
+  height: auto;
+}
+
+.audio-playback-card:has(.audio-playback-grid--mixer-only) {
+  align-self: start;
+  height: auto;
 }
 
 .audio-playback-grid--mixer-only .audio-playback-sessions {
-  grid-template-rows: minmax(112px, 1fr) auto auto;
+  grid-template-rows: auto auto auto;
   padding-left: 0;
   border-left: 0;
 }
