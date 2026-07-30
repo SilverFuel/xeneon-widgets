@@ -33,6 +33,15 @@
   position: relative;
 }
 
+@media (max-width: 560px) {
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .product-shell),
+  .dashboard-native-page--browser .router-inline-widget:has(> .product-shell) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+}
+
 .auxora-glance-hero {
   display: flex;
   align-items: center;
