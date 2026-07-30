@@ -913,6 +913,26 @@ a.is-touch-pressing,
   overflow: visible;
 }
 
+@media (max-width: 560px) {
+  .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell),
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
+  .dashboard-native-page--browser .router-inline-widget > .inline-widget-mount > .inline-widget-shell,
+  .dashboard-native-page--browser .router-inline-widget > .inline-widget-shell {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+}
+
 .dashboard-native-page--browser .router-viewer__loading,
 .dashboard-native-page--browser .router-viewer__empty {
   position: relative;
