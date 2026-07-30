@@ -431,8 +431,8 @@
       '<div class="audio-equalizer-toolbar">' +
         '<div class="audio-preset-strip" role="group" aria-label="Equalizer presets">' + presets + '</div>' +
         '<div class="inline-actions audio-equalizer-actions">' +
-          '<button class="inline-button" type="button" data-action="equalizer-bypass" title="' + (equalizer.bypassed ? "Turn the equalizer on" : "Turn the equalizer off") + '">' + (equalizer.bypassed ? "EQ on" : "EQ off") + '</button>' +
-          '<button class="inline-button" type="button" data-action="equalizer-reset">Reset</button>' +
+          '<button class="inline-button" type="button" data-action="equalizer-bypass" title="' + (equalizer.bypassed ? "Turn the equalizer on" : "Turn the equalizer off") + '">' + (equalizer.bypassed ? "Turn EQ on" : "Turn EQ off") + '</button>' +
+          '<button class="inline-button" type="button" data-action="equalizer-reset" title="Return every sound control to unchanged">Reset sound</button>' +
         '</div>' +
       '</div>' +
       '<div class="audio-preset-summary"><strong>' + escapeHtml(presetLabel) + ' sound</strong><span>' + escapeHtml(presetSummary) + '</span></div>' +
