@@ -405,6 +405,8 @@
     var presets = equalizer.presets.map(function (preset) {
       return '<button class="audio-preset-button' + (equalizer.preset === preset && !equalizer.bypassed ? " is-active" : "") + '" type="button" data-action="equalizer-preset" data-preset="' + escapeHtml(preset) + '" title="' + escapeHtml(getEqualizerPresetSummary(preset)) + '"' + (state.busy ? " disabled" : "") + '>' + escapeHtml(getEqualizerPresetLabel(preset)) + '</button>';
     }).join("");
+    var presetLabel = equalizer.bypassed ? "EQ off" : getEqualizerPresetLabel(equalizer.preset);
+    var presetSummary = equalizer.bypassed ? "Sound is unchanged until you turn the equalizer back on." : getEqualizerPresetSummary(equalizer.preset);
     var tones = getEqualizerToneGroups().map(function (tone) {
       var toneValue = getEqualizerToneValue(equalizer.bands, tone.indexes);
       return '<label class="audio-tone-control" data-tone="' + tone.id + '">' +
@@ -433,6 +435,7 @@
           '<button class="inline-button" type="button" data-action="equalizer-reset">Reset</button>' +
         '</div>' +
       '</div>' +
+      '<div class="audio-preset-summary"><strong>' + escapeHtml(presetLabel) + ' sound</strong><span>' + escapeHtml(presetSummary) + '</span></div>' +
       '<div class="audio-tone-heading">' +
         '<span><strong>Simple tone</strong><small>Move left for less or right for more.</small></span>' +
         '<span>Center = unchanged</span>' +
@@ -443,7 +446,6 @@
         '<div class="audio-eq-bands' + (equalizer.bypassed ? " is-bypassed" : "") + '">' + bands + '</div>' +
       '</details>' +
       '<div class="audio-equalizer-footer">' +
-        '<span><strong>' + escapeHtml(equalizer.preset) + ':</strong> ' + escapeHtml(getEqualizerPresetSummary(equalizer.preset)) + '</span>' +
         '<span><strong>Safety:</strong> ' + escapeHtml(getEqualizerSafetySummary(equalizer.headroomDb)) + '</span>' +
       '</div>' +
     '</article>';
