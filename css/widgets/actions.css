@@ -104,6 +104,26 @@
   overflow: hidden;
 }
 
+@media (max-width: 560px) {
+  .dashboard-native-page--browser .router-viewer:has(.quick-actions-shell) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .quick-actions-shell),
+  .dashboard-native-page--browser .router-inline-widget:has(> .quick-actions-shell) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
+  .dashboard-native-page--browser .quick-actions-shell,
+  .dashboard-native-page--browser .quick-actions-card {
+    height: auto;
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+}
+
 .quick-actions-card {
   height: 100%;
   min-height: 0;
