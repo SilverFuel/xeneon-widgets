@@ -1363,6 +1363,10 @@
 }
 
 @media (max-width: 560px) {
+  .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell--audio) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
   .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--audio),
   .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell--audio) {
     position: absolute;
