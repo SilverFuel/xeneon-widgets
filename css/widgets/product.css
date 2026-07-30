@@ -34,6 +34,10 @@
 }
 
 @media (max-width: 560px) {
+  .dashboard-native-page--browser .router-viewer:has(.product-shell) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
   .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .product-shell),
   .dashboard-native-page--browser .router-inline-widget:has(> .product-shell) {
     position: absolute;
