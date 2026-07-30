@@ -1338,8 +1338,27 @@
 }
 
 @media (max-width: 560px) {
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--audio),
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell--audio) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
   .audio-preset-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .audio-equalizer-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .audio-equalizer-actions {
+    justify-content: stretch;
+  }
+
+  .audio-equalizer-actions .inline-button {
+    flex: 1 1 0;
   }
 
   .audio-eq-bands {
