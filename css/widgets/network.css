@@ -6,6 +6,56 @@
   overflow: hidden;
 }
 
+@media (max-width: 560px) {
+  .dashboard-native-page--browser .router-viewer:has(.network-command-shell) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .network-command-shell),
+  .dashboard-native-page--browser .router-inline-widget:has(> .network-command-shell) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
+  .dashboard-native-page--browser .network-command-shell {
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .dashboard-native-page--browser .network-command-shell .network-command-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    gap: 8px;
+    overflow: visible;
+  }
+
+  .dashboard-native-page--browser .network-command-shell .network-quality-card,
+  .dashboard-native-page--browser .network-command-shell .network-kpi-grid,
+  .dashboard-native-page--browser .network-command-shell .network-adapter-card,
+  .dashboard-native-page--browser .network-command-shell .network-unifi-card,
+  .dashboard-native-page--browser .network-command-shell .network-list-card--clients,
+  .dashboard-native-page--browser .network-command-shell .network-list-card--aps {
+    grid-column: auto;
+    grid-row: auto;
+    overflow: visible;
+  }
+
+  .dashboard-native-page--browser .network-command-shell .network-kpi-grid,
+  .dashboard-native-page--browser .network-command-shell .network-unifi-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dashboard-native-page--browser .network-command-shell .network-path-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-native-page--browser .network-command-shell .network-compact-list {
+    overflow: visible;
+  }
+}
+
 .network-command-grid {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr) minmax(0, 1fr) 430px;
