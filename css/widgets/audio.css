@@ -1328,6 +1328,42 @@
   }
 }
 
+@media (max-width: 1280px) {
+  .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell--audio) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--audio),
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell--audio) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
+  .dashboard-native-page--browser .inline-widget-shell--audio {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .audio-command-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "playback"
+      "output"
+      "equalizer";
+  }
+
+  .audio-playback-card {
+    grid-column: auto;
+  }
+
+  .audio-playback-grid,
+  .audio-playback-card .audio-media-now {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 900px) {
   .audio-command-grid,
   .audio-playback-grid {
