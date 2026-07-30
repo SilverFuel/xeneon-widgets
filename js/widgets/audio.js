@@ -560,7 +560,7 @@
           '</article>' +
           renderEqualizerCard(state) +
           '<article class="list-card inline-card audio-playback-card">' +
-            '<div class="metric-label audio-playback-heading">Playing now</div>' +
+            '<div class="metric-label audio-playback-heading">' + (hasMediaSession ? "Playing now" : "Sound activity") + '</div>' +
             '<div class="audio-playback-grid' + (hasMediaSession ? "" : " audio-playback-grid--mixer-only") + '">' +
               (hasMediaSession ? '<section class="audio-playback-section audio-playback-media">' +
                 '<div class="audio-card-subhead">' +
@@ -572,6 +572,13 @@
                 mediaControlsHtml +
               '</section>' : '') +
               (!hasMediaSession ? '<section class="audio-playback-section audio-playback-sessions">' +
+                '<div class="audio-media-idle">' +
+                  '<div class="audio-media-idle__icon" aria-hidden="true">♫</div>' +
+                  '<div>' +
+                    '<strong>Nothing is playing</strong>' +
+                    '<span>Start music, a video, or a game. Album art and playback controls will appear here.</span>' +
+                  '</div>' +
+                '</div>' +
                 '<div class="audio-card-subhead">' +
                   '<div>' +
                     '<div class="metric-label">App volumes</div>' +

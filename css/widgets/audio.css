@@ -137,6 +137,7 @@
 }
 
 .audio-playback-grid--mixer-only .audio-playback-sessions {
+  grid-template-rows: minmax(112px, 1fr) auto auto;
   padding-left: 0;
   border-left: 0;
 }
@@ -160,6 +161,48 @@
 .audio-playback-sessions {
   padding-left: 0;
   border-left: 0;
+}
+
+.audio-media-idle {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  align-self: stretch;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px dashed color-mix(in srgb, var(--audio-accent) 32%, var(--audio-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--audio-surface-muted) 82%, transparent);
+}
+
+.audio-media-idle__icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--audio-accent) 16%, transparent);
+  color: var(--audio-accent);
+  font-size: 1.45rem;
+  font-weight: 800;
+}
+
+.audio-media-idle > div:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.audio-media-idle strong {
+  color: var(--color-text);
+  font-size: max(14px, 0.9rem);
+}
+
+.audio-media-idle span {
+  color: var(--color-text-dim);
+  font-size: max(12px, 0.74rem);
+  line-height: 1.35;
 }
 
 .audio-playback-media + .audio-playback-sessions {
