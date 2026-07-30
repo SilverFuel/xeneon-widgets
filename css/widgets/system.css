@@ -6,6 +6,46 @@
   overflow: hidden;
 }
 
+@media (max-width: 560px) {
+  .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell--system) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--system),
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell--system) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
+  .dashboard-native-page--browser .inline-widget-shell--system {
+    height: auto;
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .dashboard-native-page--browser .inline-widget-shell--system .system-monitor-cockpit {
+    grid-template-rows: auto auto;
+    gap: 10px;
+    overflow: visible;
+  }
+
+  .dashboard-native-page--browser .inline-widget-shell--system .system-health-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dashboard-native-page--browser .inline-widget-shell--system .system-health-card {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-native-page--browser .inline-widget-shell--system .system-detail-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    overflow: visible;
+  }
+}
+
 .system-toolbar-actions {
   display: flex;
   align-items: center;
