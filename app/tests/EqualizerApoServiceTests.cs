@@ -130,6 +130,23 @@ public sealed class EqualizerApoServiceTests
         Assert.That(managedConfiguration, Does.Contain("GraphicEQ: 31 6; 62 5;"));
     }
 
+    [TestCase("Warm", 31, 3)]
+    [TestCase("Bright", 16000, 6)]
+    [TestCase("Late Night", 31, -4)]
+    public void Update_WithExpandedPreset_AppliesTheExpectedSoundShape(
+        string preset,
+        int frequency,
+        double expectedGain)
+    {
+        var configPath = CreateEqualizerConfig(EqualizerApoService.IncludeDirective);
+        var service = new EqualizerApoService(_logger, () => configPath);
+
+        var snapshot = service.Update(new EqualizerApoUpdateRequest { Preset = preset });
+
+        Assert.That(snapshot.Preset, Is.EqualTo(preset));
+        Assert.That(snapshot.Bands.Single(band => band.Frequency == frequency).Gain, Is.EqualTo(expectedGain));
+    }
+
     [Test]
     public void Update_WhenBypassed_PreservesTheSelectedPreset()
     {
