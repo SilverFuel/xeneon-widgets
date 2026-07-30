@@ -72,7 +72,7 @@
       bands: bands,
       presets: Array.isArray(payload.presets) && payload.presets.length
         ? payload.presets
-        : ["Flat", "Bass Boost", "Voice", "Movie", "Gaming"]
+        : ["Flat", "Bass Boost", "Warm", "Voice", "Movie", "Gaming", "Bright", "Late Night"]
     };
   }
 
@@ -285,15 +285,60 @@
     switch (preset) {
       case "Bass Boost":
         return "Adds more thump and warmth.";
+      case "Warm":
+        return "Adds body and softens sharp sounds.";
       case "Voice":
         return "Cuts rumble and brings voices forward.";
       case "Movie":
         return "Adds impact while keeping dialogue clear.";
       case "Gaming":
         return "Brings footsteps and small details forward.";
+      case "Bright":
+        return "Adds clarity and sparkle.";
+      case "Late Night":
+        return "Reduces rumble and harsh highs while keeping voices clear.";
       default:
         return "Leaves the sound unchanged.";
     }
+  }
+
+  function getEqualizerPresetLabel(preset) {
+    if (preset === "Bass Boost") {
+      return "Bass";
+    }
+    if (preset === "Late Night") {
+      return "Night";
+    }
+    return preset;
+  }
+
+  function getEqualizerToneGroups() {
+    return [
+      { id: "bass", label: "Bass", help: "Thump and warmth", indexes: [0, 1, 2, 3] },
+      { id: "voices", label: "Voices", help: "Speech and singing", indexes: [4, 5, 6] },
+      { id: "detail", label: "Clarity", help: "Instruments and detail", indexes: [7, 8] },
+      { id: "highs", label: "Highs", help: "Sparkle and air", indexes: [9] }
+    ];
+  }
+
+  function getEqualizerToneValue(bands, indexes) {
+    var total = indexes.reduce(function (sum, index) {
+      return sum + Number(bands[index] && bands[index].gain || 0);
+    }, 0);
+    return clamp(Math.round((total / indexes.length) * 2) / 2, -6, 6);
+  }
+
+  function formatEqualizerGain(gain) {
+    gain = Math.round((Number(gain) || 0) * 10) / 10;
+    return (gain > 0 ? "+" : "") + gain + " dB";
+  }
+
+  function updateEqualizerHeadroom(equalizer) {
+    equalizer.preset = "Custom";
+    equalizer.bypassed = false;
+    equalizer.headroomDb = -Math.max(0, Math.max.apply(null, equalizer.bands.map(function (band) {
+      return band.gain;
+    })));
   }
 
   function getEqualizerSafetySummary(headroomDb) {
@@ -358,17 +403,24 @@
     }
 
     var presets = equalizer.presets.map(function (preset) {
-      var presetLabel = preset === "Bass Boost" ? "Bass" : preset;
-      return '<button class="audio-preset-button' + (equalizer.preset === preset && !equalizer.bypassed ? " is-active" : "") + '" type="button" data-action="equalizer-preset" data-preset="' + escapeHtml(preset) + '" title="' + escapeHtml(preset) + '"' + (state.busy ? " disabled" : "") + '>' + escapeHtml(presetLabel) + '</button>';
+      return '<button class="audio-preset-button' + (equalizer.preset === preset && !equalizer.bypassed ? " is-active" : "") + '" type="button" data-action="equalizer-preset" data-preset="' + escapeHtml(preset) + '" title="' + escapeHtml(getEqualizerPresetSummary(preset)) + '"' + (state.busy ? " disabled" : "") + '>' + escapeHtml(getEqualizerPresetLabel(preset)) + '</button>';
+    }).join("");
+    var tones = getEqualizerToneGroups().map(function (tone) {
+      var toneValue = getEqualizerToneValue(equalizer.bands, tone.indexes);
+      return '<label class="audio-tone-control" data-tone="' + tone.id + '">' +
+        '<span><strong>' + tone.label + '</strong><small>' + tone.help + '</small></span>' +
+        '<strong data-eq-tone-value="' + tone.id + '">' + escapeHtml(formatEqualizerGain(toneValue)) + '</strong>' +
+        '<input type="range" min="-6" max="6" step="0.5" value="' + toneValue + '" aria-label="' + tone.label + ': less or more" data-action="equalizer-tone" data-tone="' + tone.id + '" data-tone-indexes="' + tone.indexes.join(",") + '" data-tone-value="' + toneValue + '"' + (state.busy || equalizer.bypassed ? " disabled" : "") + '>' +
+      '</label>';
     }).join("");
     var bands = equalizer.bands.map(function (band, index) {
       var gain = Math.round(band.gain * 10) / 10;
-      var gainLabel = (gain > 0 ? "+" : "") + gain + " dB";
+      var gainLabel = formatEqualizerGain(gain);
       var zone = index < 4 ? "bass" : index < 7 ? "voices" : "detail";
       return '<label class="audio-eq-band" data-zone="' + zone + '">' +
-        '<strong data-eq-value="' + index + '">' + escapeHtml(gainLabel) + '</strong>' +
-        '<input type="range" min="-12" max="12" step="0.5" value="' + gain + '" aria-label="' + escapeHtml(formatEqualizerFrequency(band.frequency) + " hertz equalizer gain") + '" data-action="equalizer-band" data-band-index="' + index + '"' + (state.busy || equalizer.bypassed ? " disabled" : "") + '>' +
         '<span>' + escapeHtml(formatEqualizerFrequency(band.frequency)) + '</span>' +
+        '<input type="range" min="-12" max="12" step="0.5" value="' + gain + '" aria-label="' + escapeHtml(formatEqualizerFrequency(band.frequency) + " hertz equalizer gain") + '" data-action="equalizer-band" data-band-index="' + index + '"' + (state.busy || equalizer.bypassed ? " disabled" : "") + '>' +
+        '<strong data-eq-value="' + index + '">' + escapeHtml(gainLabel) + '</strong>' +
       '</label>';
     }).join("");
 
@@ -381,21 +433,18 @@
           '<button class="inline-button" type="button" data-action="equalizer-reset">Reset</button>' +
         '</div>' +
       '</div>' +
-      '<div class="audio-equalizer-zones" aria-label="Equalizer sound areas">' +
-        '<div data-zone="bass"><strong>Bass</strong><span>31–250 Hz</span><small>Thump and warmth</small></div>' +
-        '<div data-zone="voices"><strong>Voices</strong><span>500 Hz–2 kHz</span><small>Singing and speech</small></div>' +
-        '<div data-zone="detail"><strong>Detail</strong><span>4–16 kHz</span><small>Clarity and sparkle</small></div>' +
+      '<div class="audio-tone-heading">' +
+        '<span><strong>Simple tone</strong><small>Move left for less or right for more.</small></span>' +
+        '<span>Center = unchanged</span>' +
       '</div>' +
-      '<div class="audio-eq-bands' + (equalizer.bypassed ? " is-bypassed" : "") + '">' + bands + '</div>' +
+      '<div class="audio-tone-grid' + (equalizer.bypassed ? " is-bypassed" : "") + '">' + tones + '</div>' +
+      '<details class="audio-equalizer-fine-tune"' + (state.equalizerFineTuneOpen ? " open" : "") + '>' +
+        '<summary><span><strong>Fine tune</strong><small>Advanced 10-band control</small></span><span>10 bands</span></summary>' +
+        '<div class="audio-eq-bands' + (equalizer.bypassed ? " is-bypassed" : "") + '">' + bands + '</div>' +
+      '</details>' +
       '<div class="audio-equalizer-footer">' +
         '<span><strong>' + escapeHtml(equalizer.preset) + ':</strong> ' + escapeHtml(getEqualizerPresetSummary(equalizer.preset)) + '</span>' +
         '<span><strong>Safety:</strong> ' + escapeHtml(getEqualizerSafetySummary(equalizer.headroomDb)) + '</span>' +
-      '</div>' +
-      '<div class="audio-equalizer-guide">' +
-        '<div class="audio-equalizer-guide__intro">' +
-          '<strong>How to read this</strong>' +
-          '<span>Up adds more. Down removes some. 0 dB means no change.</span>' +
-        '</div>' +
       '</div>' +
     '</article>';
   }
@@ -549,6 +598,7 @@
       mediaStatusTone: "warn",
       busy: false,
       interacting: false,
+      equalizerFineTuneOpen: false,
       observedAlbums: [],
       dismissedAlbumKeys: [],
       carouselIndex: 0,
@@ -749,28 +799,74 @@
       image.closest(".audio-album-cover").classList.add("has-artwork-error");
     }, true);
 
+    addListener(cleanups, container, "toggle", function (event) {
+      if (event.target && event.target.matches && event.target.matches(".audio-equalizer-fine-tune")) {
+        state.equalizerFineTuneOpen = event.target.open;
+      }
+    }, true);
+
     addListener(cleanups, container, "input", function (event) {
       var target = event.target;
       var action = target && target.getAttribute("data-action");
-      if (action !== "master-volume" && action !== "session-volume" && action !== "equalizer-band") {
+      if (action !== "master-volume" && action !== "session-volume" && action !== "equalizer-band" && action !== "equalizer-tone") {
         return;
       }
 
       state.interacting = true;
+      if (action === "equalizer-tone") {
+        var toneIndexes = String(target.getAttribute("data-tone-indexes") || "").split(",").map(Number).filter(function (index) {
+          return Number.isInteger(index) && state.equalizer.bands[index];
+        });
+        var previousToneValue = optionalNumber(target.getAttribute("data-tone-value")) || 0;
+        var toneValue = clamp(optionalNumber(target.value) || 0, -6, 6);
+        var toneDelta = toneValue - previousToneValue;
+
+        toneIndexes.forEach(function (index) {
+          var nextGain = clamp(Math.round((state.equalizer.bands[index].gain + toneDelta) * 2) / 2, -12, 12);
+          state.equalizer.bands[index].gain = nextGain;
+          var advancedValue = container.querySelector('[data-eq-value="' + index + '"]');
+          var advancedInput = container.querySelector('[data-action="equalizer-band"][data-band-index="' + index + '"]');
+          if (advancedValue) {
+            advancedValue.textContent = formatEqualizerGain(nextGain);
+          }
+          if (advancedInput) {
+            advancedInput.value = nextGain;
+          }
+        });
+
+        target.setAttribute("data-tone-value", toneValue);
+        updateEqualizerHeadroom(state.equalizer);
+        var toneId = String(target.getAttribute("data-tone") || "");
+        var toneValueNode = container.querySelector('[data-eq-tone-value="' + toneId + '"]');
+        if (toneValueNode) {
+          toneValueNode.textContent = formatEqualizerGain(toneValue);
+        }
+        return;
+      }
+
       if (action === "equalizer-band") {
         var bandIndex = Number(target.getAttribute("data-band-index"));
         var bandGain = clamp(optionalNumber(target.value) || 0, -12, 12);
         if (state.equalizer.bands[bandIndex]) {
           state.equalizer.bands[bandIndex].gain = bandGain;
-          state.equalizer.preset = "Custom";
-          state.equalizer.headroomDb = -Math.max(0, Math.max.apply(null, state.equalizer.bands.map(function (band) {
-            return band.gain;
-          })));
+          updateEqualizerHeadroom(state.equalizer);
         }
         var bandValue = container.querySelector('[data-eq-value="' + bandIndex + '"]');
         if (bandValue) {
-          bandValue.textContent = (bandGain > 0 ? "+" : "") + bandGain + " dB";
+          bandValue.textContent = formatEqualizerGain(bandGain);
         }
+        getEqualizerToneGroups().forEach(function (tone) {
+          var updatedToneValue = getEqualizerToneValue(state.equalizer.bands, tone.indexes);
+          var updatedToneLabel = container.querySelector('[data-eq-tone-value="' + tone.id + '"]');
+          var updatedToneInput = container.querySelector('[data-action="equalizer-tone"][data-tone="' + tone.id + '"]');
+          if (updatedToneLabel) {
+            updatedToneLabel.textContent = formatEqualizerGain(updatedToneValue);
+          }
+          if (updatedToneInput) {
+            updatedToneInput.value = updatedToneValue;
+            updatedToneInput.setAttribute("data-tone-value", updatedToneValue);
+          }
+        });
         return;
       }
 
@@ -805,7 +901,7 @@
         return;
       }
 
-      if (action === "equalizer-band") {
+      if (action === "equalizer-band" || action === "equalizer-tone") {
         commit("/api/audio/equalizer", {
           bypassed: false,
           bands: state.equalizer.bands.map(function (band) {
