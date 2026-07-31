@@ -33,12 +33,12 @@
   position: relative;
 }
 
-@media (min-width: 1281px) {
+@media (min-width: 961px) {
   body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell {
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
-  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-toolbar .inline-title {
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-toolbar {
     display: none;
   }
 
