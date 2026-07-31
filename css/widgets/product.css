@@ -170,6 +170,10 @@
 }
 
 @media (min-width: 1200px) and (min-height: 600px) {
+  body:has(#dashboard-widget-picker [data-widget-id="home"].is-active) .router-inline-widget {
+    padding-block: 9px;
+  }
+
   .product-shell:has(> .auxora-glance-hero) {
     gap: 8px;
   }
