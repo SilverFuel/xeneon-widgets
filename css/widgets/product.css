@@ -79,10 +79,14 @@
   }
 
   body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-empty strong {
+    grid-column: 2;
+    grid-row: 1;
     font-size: clamp(1.05rem, 1.4vw, 1.35rem);
   }
 
   body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-empty span {
+    grid-column: 2;
+    grid-row: 2;
     margin-top: 6px;
     color: var(--color-text-dim);
     font-size: 0.92rem;
