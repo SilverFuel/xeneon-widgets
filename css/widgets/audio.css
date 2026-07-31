@@ -258,6 +258,10 @@
   grid-auto-rows: minmax(78px, 1fr);
 }
 
+.audio-route-strip > .audio-route-button:nth-child(odd):last-child {
+  grid-column: 1 / -1;
+}
+
 .audio-route-button {
   min-height: 78px;
   display: grid;
