@@ -57,6 +57,51 @@ html.is-touch-scrolling .is-touch-pressing {
   transform: none !important;
 }
 
+/* Keep scrollable control areas visible without making the browser chrome a focal point. */
+.router-picker,
+.router-inline-widget,
+.inline-list,
+.dashboard-launcher-dock__apps {
+  color-scheme: dark;
+  scrollbar-color: var(--theme-border-strong, rgba(77, 255, 194, 0.54)) var(--theme-hover-surface, rgba(255, 255, 255, 0.045));
+  scrollbar-width: thin;
+}
+
+.router-picker::-webkit-scrollbar,
+.router-inline-widget::-webkit-scrollbar,
+.inline-list::-webkit-scrollbar,
+.dashboard-launcher-dock__apps::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.router-picker::-webkit-scrollbar-track,
+.router-inline-widget::-webkit-scrollbar-track,
+.inline-list::-webkit-scrollbar-track,
+.dashboard-launcher-dock__apps::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: var(--theme-hover-surface, rgba(255, 255, 255, 0.045));
+}
+
+.router-picker::-webkit-scrollbar-thumb,
+.router-inline-widget::-webkit-scrollbar-thumb,
+.inline-list::-webkit-scrollbar-thumb,
+.dashboard-launcher-dock__apps::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--theme-border-strong, rgba(77, 255, 194, 0.54));
+  background-clip: padding-box;
+}
+
+.router-picker::-webkit-scrollbar-button,
+.router-inline-widget::-webkit-scrollbar-button,
+.inline-list::-webkit-scrollbar-button,
+.dashboard-launcher-dock__apps::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 button.is-touch-pressing:not(:disabled),
 a.is-touch-pressing,
 [role="button"].is-touch-pressing,
