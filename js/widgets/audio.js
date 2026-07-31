@@ -297,6 +297,8 @@
         return "Adds clarity and sparkle.";
       case "Late Night":
         return "Reduces rumble and harsh highs while keeping voices clear.";
+      case "Custom":
+        return "Your own mix is active. Move a control back to the middle to undo that part.";
       default:
         return "Leaves the sound unchanged.";
     }
@@ -319,6 +321,26 @@
       { id: "detail", label: "Clarity", help: "Instruments and detail", indexes: [7, 8] },
       { id: "highs", label: "Highs", help: "Sparkle and air", indexes: [9] }
     ];
+  }
+
+  function getEqualizerToneDirection(tone, gain) {
+    var roundedGain = Math.round((Number(gain) || 0) * 10) / 10;
+    var label = String(tone && tone.label || "sound").toLowerCase();
+    if (roundedGain > 0) {
+      return "More " + label;
+    }
+    if (roundedGain < 0) {
+      return "Less " + label;
+    }
+    return "Unchanged";
+  }
+
+  function getEqualizerToneHelp(tone, gain) {
+    return String(tone && tone.help || "") + " · " + getEqualizerToneDirection(tone, gain);
+  }
+
+  function getEqualizerToneAriaValue(tone, gain) {
+    return getEqualizerToneDirection(tone, gain) + " (" + formatEqualizerGain(gain) + ")";
   }
 
   function getEqualizerToneValue(bands, indexes) {
@@ -410,9 +432,9 @@
     var tones = getEqualizerToneGroups().map(function (tone) {
       var toneValue = getEqualizerToneValue(equalizer.bands, tone.indexes);
       return '<label class="audio-tone-control" data-tone="' + tone.id + '">' +
-        '<span><strong>' + tone.label + '</strong><small>' + tone.help + '</small></span>' +
+        '<span><strong>' + tone.label + '</strong><small data-eq-tone-direction="' + tone.id + '">' + escapeHtml(getEqualizerToneHelp(tone, toneValue)) + '</small></span>' +
         '<strong data-eq-tone-value="' + tone.id + '">' + escapeHtml(formatEqualizerGain(toneValue)) + '</strong>' +
-        '<input type="range" min="-6" max="6" step="0.5" value="' + toneValue + '" aria-label="' + tone.label + ': less or more" data-action="equalizer-tone" data-tone="' + tone.id + '" data-tone-indexes="' + tone.indexes.join(",") + '" data-tone-value="' + toneValue + '"' + (state.busy || equalizer.bypassed ? " disabled" : "") + '>' +
+        '<input type="range" min="-6" max="6" step="0.5" value="' + toneValue + '" aria-label="' + tone.label + ': less or more" aria-valuetext="' + escapeHtml(getEqualizerToneAriaValue(tone, toneValue)) + '" data-action="equalizer-tone" data-tone="' + tone.id + '" data-tone-indexes="' + tone.indexes.join(",") + '" data-tone-value="' + toneValue + '"' + (state.busy || equalizer.bypassed ? " disabled" : "") + '>' +
       '</label>';
     }).join("");
     var bands = equalizer.bands.map(function (band, index) {
@@ -847,8 +869,18 @@
         updateEqualizerHeadroom(state.equalizer);
         var toneId = String(target.getAttribute("data-tone") || "");
         var toneValueNode = container.querySelector('[data-eq-tone-value="' + toneId + '"]');
+        var toneDirectionNode = container.querySelector('[data-eq-tone-direction="' + toneId + '"]');
+        var toneGroup = getEqualizerToneGroups().filter(function (tone) {
+          return tone.id === toneId;
+        })[0];
         if (toneValueNode) {
           toneValueNode.textContent = formatEqualizerGain(toneValue);
+        }
+        if (toneGroup) {
+          target.setAttribute("aria-valuetext", getEqualizerToneAriaValue(toneGroup, toneValue));
+          if (toneDirectionNode) {
+            toneDirectionNode.textContent = getEqualizerToneHelp(toneGroup, toneValue);
+          }
         }
         return;
       }
@@ -868,12 +900,17 @@
           var updatedToneValue = getEqualizerToneValue(state.equalizer.bands, tone.indexes);
           var updatedToneLabel = container.querySelector('[data-eq-tone-value="' + tone.id + '"]');
           var updatedToneInput = container.querySelector('[data-action="equalizer-tone"][data-tone="' + tone.id + '"]');
+          var updatedToneDirection = container.querySelector('[data-eq-tone-direction="' + tone.id + '"]');
           if (updatedToneLabel) {
             updatedToneLabel.textContent = formatEqualizerGain(updatedToneValue);
           }
           if (updatedToneInput) {
             updatedToneInput.value = updatedToneValue;
             updatedToneInput.setAttribute("data-tone-value", updatedToneValue);
+            updatedToneInput.setAttribute("aria-valuetext", getEqualizerToneAriaValue(tone, updatedToneValue));
+          }
+          if (updatedToneDirection) {
+            updatedToneDirection.textContent = getEqualizerToneHelp(tone, updatedToneValue);
           }
         });
         return;
