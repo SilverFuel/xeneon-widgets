@@ -1306,6 +1306,23 @@
   overflow: hidden;
 }
 
+@media (min-width: 1281px) {
+  .audio-playback-card:has(.audio-playback-grid--mixer-only) {
+    align-self: stretch;
+    height: 100%;
+  }
+
+  .audio-playback-card:has(.audio-playback-grid--mixer-only) .audio-playback-grid--mixer-only,
+  .audio-playback-card:has(.audio-playback-grid--mixer-only) .audio-playback-sessions {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .audio-playback-card:has(.audio-playback-grid--mixer-only) .audio-playback-sessions {
+    align-content: space-between;
+  }
+}
+
 @media (max-width: 1500px) {
   .audio-command-grid {
     grid-template-columns: minmax(320px, 0.8fr) minmax(480px, 1.2fr);
