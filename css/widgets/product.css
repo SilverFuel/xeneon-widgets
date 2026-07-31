@@ -79,6 +79,26 @@
   letter-spacing: -0.05em;
 }
 
+.product-shell:has(> .auxora-glance-hero) > .inline-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  justify-content: initial;
+}
+
+.product-shell:has(> .auxora-glance-hero) > .inline-actions .inline-button {
+  width: 100%;
+  min-height: 52px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+@media (max-width: 560px) {
+  .product-shell:has(> .auxora-glance-hero) > .inline-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (min-width: 1200px) and (min-height: 600px) {
   .product-shell:has(> .auxora-glance-hero) {
     gap: 8px;
@@ -86,6 +106,14 @@
 
   .product-shell > .auxora-glance-hero {
     padding-block: 10px;
+  }
+
+  .product-shell:has(> .auxora-glance-hero) > .inline-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .product-shell:has(> .auxora-glance-hero) > .inline-actions .inline-button {
+    min-height: 54px;
   }
 
   .auxora-glance-chains {
