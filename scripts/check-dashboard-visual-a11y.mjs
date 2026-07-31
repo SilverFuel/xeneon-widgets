@@ -121,6 +121,12 @@ assert(
 );
 
 assert(
+  /@media\s*\(min-width:\s*961px\)\s*\{[\s\S]*?\.dashboard-native-page--adaptive\s+\.auxora-primary-nav\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/.test(sharedCss)
+    && !/@media\s*\(min-width:\s*961px\)\s*and\s*\(min-height:/.test(sharedCss),
+  "desktop navigation must keep two readable columns at scaled display heights"
+);
+
+assert(
   /\.dashboard-router-stage\s*\{[\s\S]*?width:\s*2560px;[\s\S]*?height:\s*720px;/.test(sharedCss)
     && /@media\s*\(max-width:\s*1800px\)/.test(sharedCss)
     && /@media\s*\(max-width:\s*1280px\)/.test(sharedCss)
