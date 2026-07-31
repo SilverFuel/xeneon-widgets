@@ -94,6 +94,7 @@ const expectedJsAssets = [
 const assetRefs = [...dashboardHtml.matchAll(/(?:href|src)="\.\/([^"?]+)\?v=([^"]+)"/g)]
   .map(match => ({ path: normalizeAssetPath(match[1]), revision: match[2] }));
 const assetPaths = assetRefs.map(ref => ref.path);
+const dashboardCodeAssetPaths = assetPaths.filter(path => /\.(?:css|js)$/.test(path));
 
 for (const expected of [...expectedCssAssets, ...expectedJsAssets]) {
   assert(assetPaths.includes(expected), `dashboard.html must load ${expected}`);
@@ -105,12 +106,18 @@ for (const ref of assetRefs) {
 }
 
 assert(
-  expectedCssAssets.every((asset, index) => assetPaths.indexOf(asset) === index),
+  expectedCssAssets.every((asset, index) => dashboardCodeAssetPaths.indexOf(asset) === index),
   "dashboard CSS asset order must keep shared styles before feature CSS"
 );
 assert(
-  expectedJsAssets.every((asset, index) => assetPaths.indexOf(asset) === expectedCssAssets.length + index),
+  expectedJsAssets.every((asset, index) => dashboardCodeAssetPaths.indexOf(asset) === expectedCssAssets.length + index),
   "dashboard JS asset order must load helpers before split widget renderers"
+);
+
+assert(
+  assetPaths.includes("assets/icons/auxora-mark.svg")
+    && existsSync(resolve(repoRoot, "assets/icons/auxora-mark.svg")),
+  "dashboard must load the Auxora mark without disturbing its code asset order"
 );
 
 assert(
