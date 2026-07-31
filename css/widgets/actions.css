@@ -131,6 +131,11 @@
 }
 
 @media (min-width: 1500px) and (min-height: 600px) {
+  .quick-actions-shell {
+    grid-template-rows: minmax(0, 1fr);
+    align-content: stretch;
+  }
+
   .quick-actions-card .inline-action-grid--compact {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
