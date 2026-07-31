@@ -1323,6 +1323,28 @@
   }
 }
 
+@media (min-width: 1680px) {
+  .audio-playback-card:has(.audio-playback-grid--mixer-only) .audio-playback-sessions {
+    grid-template-rows: minmax(176px, 1fr) auto auto;
+    align-content: stretch;
+  }
+
+  .audio-playback-card:has(.audio-playback-grid--mixer-only) .audio-media-idle {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 18px;
+    padding: 24px;
+    background:
+      radial-gradient(circle at 8% 50%, color-mix(in srgb, var(--audio-accent) 16%, transparent), transparent 32%),
+      color-mix(in srgb, var(--audio-surface-muted) 82%, transparent);
+  }
+
+  .audio-playback-card:has(.audio-playback-grid--mixer-only) .audio-media-idle__icon {
+    width: 72px;
+    height: 72px;
+    font-size: 2rem;
+  }
+}
+
 @media (max-width: 1500px) {
   .audio-command-grid {
     grid-template-columns: minmax(320px, 0.8fr) minmax(480px, 1.2fr);
