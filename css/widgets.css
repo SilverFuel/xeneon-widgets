@@ -3679,3 +3679,11 @@ body.dashboard-native-page--adaptive {
     bottom: 12px;
   }
 }
+
+/* The rail is deliberately narrow, so navigation favors two readable columns
+   over four compressed labels on desktop and companion displays. */
+@media (min-width: 961px) and (min-height: 600px) {
+  .dashboard-native-page--adaptive .auxora-primary-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
