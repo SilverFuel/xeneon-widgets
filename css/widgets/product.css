@@ -178,6 +178,10 @@
     gap: 8px;
   }
 
+  body:has(#dashboard-widget-picker [data-widget-id="home"].is-active) .product-shell > .inline-grid--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .product-shell > .auxora-glance-hero {
     padding-block: 10px;
   }
