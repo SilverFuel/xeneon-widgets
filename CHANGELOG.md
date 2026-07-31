@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Recent UI polish
+
+- Made Audio & Media easier to use with a clearer now-playing layout, simpler sound controls, and plain-language equalizer guidance.
+- Used wide, regular, and compact screens more efficiently across Home, Quick Actions, Audio, Network, System Monitor, Game Mode, and Settings.
+- Removed repeated settings headings and kept Phone Remote and Layout Editor focused on the actions that matter.
+- Added Auxora's official retro icon across the app and Windows shortcuts.
+
 - Began the Auxora transition with adaptive touch layouts for compact, standard, ultrawide, and portrait displays.
 - Replaced the widget-first shell with Home, Scenes, Library, and Settings navigation.
 - Added persisted Work, Gaming, Media, Night, and Home Scenes with manual overrides, automation rules, and per-display assignments.
