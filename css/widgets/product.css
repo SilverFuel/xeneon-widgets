@@ -33,6 +33,63 @@
   position: relative;
 }
 
+@media (min-width: 1281px) {
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-toolbar .inline-title {
+    display: none;
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-empty {
+    display: grid;
+    grid-template-columns: 68px minmax(0, 1fr);
+    align-self: center;
+    justify-self: center;
+    align-items: center;
+    gap: 18px;
+    width: min(100%, 720px);
+    min-height: 168px;
+    padding: 24px 26px;
+    border: 1px dashed var(--dashboard-accent-glow);
+    border-radius: 20px;
+    background:
+      radial-gradient(circle at 8% 50%, var(--dashboard-accent-glow), transparent 42%),
+      rgba(255, 255, 255, 0.035);
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-empty::before {
+    content: "⌁";
+    display: grid;
+    width: 68px;
+    height: 68px;
+    place-items: center;
+    border: 1px solid var(--dashboard-accent-glow);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--dashboard-accent);
+    font-size: 2rem;
+    font-weight: 900;
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-empty strong,
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-empty span {
+    display: block;
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-empty strong {
+    font-size: clamp(1.05rem, 1.4vw, 1.35rem);
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell > .inline-empty span {
+    margin-top: 6px;
+    color: var(--color-text-dim);
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+}
+
 @media (max-width: 1280px) {
   .dashboard-native-page--browser .router-viewer:has(.product-shell) {
     grid-template-rows: max-content minmax(0, 1fr);
