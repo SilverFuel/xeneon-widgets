@@ -34,6 +34,15 @@
 }
 
 @media (min-width: 961px) {
+  body:has(#dashboard-widget-picker [data-widget-id="theme-studio"].is-active) .product-shell {
+    grid-template-rows: minmax(132px, 0.42fr) minmax(0, 1fr);
+    align-content: stretch;
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="theme-studio"].is-active) .product-shell > .inline-toolbar {
+    display: none;
+  }
+
   body:has(#dashboard-widget-picker [data-widget-id="remote"].is-active) .product-shell {
     grid-template-rows: minmax(0, 1fr);
   }
