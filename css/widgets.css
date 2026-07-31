@@ -913,7 +913,7 @@ a.is-touch-pressing,
   overflow: visible;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 1280px) {
   .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell) {
     grid-template-rows: max-content minmax(0, 1fr);
   }
