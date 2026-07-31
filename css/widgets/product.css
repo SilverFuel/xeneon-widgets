@@ -391,6 +391,23 @@
     gap: 8px;
   }
 
+  body:has(#dashboard-widget-picker [data-widget-id="layout-editor"].is-active) .product-shell {
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-content: stretch;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="layout-editor"].is-active) .product-shell > .inline-toolbar {
+    display: none;
+  }
+
+  body:has(#dashboard-widget-picker [data-widget-id="layout-editor"].is-active) .product-layout-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 0;
+    overflow: auto;
+  }
+
   .inline-list--recovery {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 12px;
