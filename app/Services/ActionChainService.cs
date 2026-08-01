@@ -19,10 +19,10 @@ public sealed class ActionChainService
             status = "ready",
             chains = new[]
             {
-                Chain("gaming-night", "Gaming Night", "Gaming Scene, dark mode, and quiet notifications", "scene-gaming"),
-                Chain("focus", "Focus", "Work Scene and quiet notifications", "scene-work"),
-                Chain("movie", "Movie Time", "Media Scene, dark mode, and quiet notifications", "scene-media"),
-                Chain("morning", "Morning Reset", "Home Scene, light mode, and notification banners", "scene-home")
+                Chain("gaming-night", "Gaming Night", "Gaming Mode, dark mode, and quiet notifications", "scene-gaming"),
+                Chain("focus", "Focus", "Work Mode and quiet notifications", "scene-work"),
+                Chain("movie", "Movie Time", "Media Mode, dark mode, and quiet notifications", "scene-media"),
+                Chain("morning", "Morning Reset", "Home Mode, light mode, and notification banners", "scene-home")
             },
             message = "Safe built-in action chains are ready."
         };
@@ -78,7 +78,7 @@ public sealed class ActionChainService
     private void Activate(string sceneId, ICollection<string> steps)
     {
         _sceneService.Activate(new SceneActivationRequest { SceneId = sceneId, ManualOverrideMinutes = 120 });
-        steps.Add($"{sceneId.Replace("scene-", "", StringComparison.OrdinalIgnoreCase)} Scene activated");
+        steps.Add($"{sceneId.Replace("scene-", "", StringComparison.OrdinalIgnoreCase)} Mode activated");
     }
 
     private static object Chain(string id, string name, string description, string sceneId) => new { id, name, description, sceneId };

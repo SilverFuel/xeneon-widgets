@@ -622,3 +622,44 @@
     grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
   }
 }
+
+/* Theme-aware action surfaces. Destructive and confirmation states stay semantic. */
+.inline-action-button,
+.inline-launcher-hit,
+.inline-action-chain,
+.inline-action-history,
+.inline-action-row {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
+}
+
+.inline-action-button:hover:not(:disabled),
+.inline-action-button:focus-visible:not(:disabled),
+.inline-launcher-hit:hover:not(:disabled),
+.inline-launcher-hit:focus-visible:not(:disabled) {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-hover-surface);
+}
+
+.inline-action-button[data-style="toggle"] {
+  border-color: var(--theme-accent-border);
+}
+
+.inline-action-button[data-style="danger"],
+.inline-action-button[data-style="danger"]:hover:not(:disabled),
+.inline-action-button[data-style="danger"]:focus-visible:not(:disabled) {
+  border-color: var(--status-danger-border);
+  background: var(--status-danger-surface);
+  color: var(--status-danger-text);
+}
+
+.inline-action-button[data-confirmation-required="true"],
+.inline-action-button[data-state="confirm"] {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+}
+
+.inline-action-button[data-confirmation-required="true"] .inline-action-button__state {
+  color: var(--status-warning-text);
+  background: var(--status-warning-surface);
+}

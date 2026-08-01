@@ -452,6 +452,7 @@
   function patchStableDom(container, html) {
     var activeNode = document.activeElement && container.contains(document.activeElement) ? document.activeElement : null;
     var formControlStates = [];
+    var detailsStates = [];
     var selection = null;
     var scrollStates = [];
     var fragment;
@@ -477,6 +478,10 @@
       }
     });
 
+    Array.prototype.slice.call(container.querySelectorAll("details[data-preserve-open]")).forEach(function (node) {
+      detailsStates.push({ node: node, open: node.open });
+    });
+
     var range = document.createRange();
     range.selectNodeContents(container);
     fragment = range.createContextualFragment(String(html || "").trim());
@@ -488,6 +493,12 @@
     reconcileStableNode(container, nextContainer, activeNode);
 
     formControlStates.forEach(restoreFormControlState);
+
+    detailsStates.forEach(function (state) {
+      if (state.node.isConnected) {
+        state.node.open = state.open;
+      }
+    });
 
     scrollStates.forEach(function (state) {
       if (state.node.isConnected) {
@@ -687,34 +698,33 @@
   }
 
   function mountPlaceholderWidget(widget, container) {
-    container.innerHTML = '' +
+    patchStableDom(container, '' +
       '<div class="inline-widget-shell">' +
         '<div class="inline-toolbar">' +
           '<div>' +
-            '<div class="eyebrow">Inline migration</div>' +
+            '<div class="eyebrow">Panel unavailable</div>' +
             '<h3 class="inline-title">' + escapeHtml(text(widget.title, widget.id)) + '</h3>' +
-            '<p class="inline-copy">This panel is still being converted to the native inline runtime.</p>' +
+            '<p class="inline-copy">This panel could not be loaded. The rest of Auxora is still available.</p>' +
           '</div>' +
-          statusPill("In Progress", "warn") +
+          statusPill("Unavailable", "danger") +
         '</div>' +
-        '<article class="list-card inline-card">' + emptyState("Panel still moving off iframe", "The remaining widget conversions are being wired into the same dashboard DOM now.") + '</article>' +
-      '</div>';
+        '<article class="list-card inline-card">' + emptyState("Panel renderer unavailable", "Open another panel, then restart Auxora. If this keeps happening, use Recovery to open logs or repair the installed copy.") + '</article>' +
+      '</div>');
 
     return {
       refresh: function () {
         return Promise.resolve();
       },
       destroy: function () {
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
 
   var fallbackProductThemes = [
-    { id: "edge", name: "Edge Neon", accent: "#00e0ff", secondary: "#44f0c2", copy: "Kinetic cyan, green, and amber motion." },
-    { id: "afterburn", name: "Afterburn", accent: "#ff4d8d", secondary: "#f5a623", copy: "Rose and amber stream energy." },
-    { id: "deepcore", name: "Deep Core", accent: "#7a5cff", secondary: "#00e0ff", copy: "Quieter dark control-room contrast." },
-    { id: "verdant", name: "Verdant", accent: "#44f0c2", secondary: "#00e0ff", copy: "Green-forward telemetry glow." }
+    { id: "focus", name: "Focus", accent: "#46bce8", secondary: "#7f9fb3", copy: "Calm charcoal surfaces and restrained cyan." },
+    { id: "gaming", name: "Gaming", accent: "#9a7cff", secondary: "#36c8f0", copy: "Deep black, purple, and cyan performance energy." },
+    { id: "warm", name: "Warm", accent: "#d9a35f", secondary: "#ce7d86", copy: "Muted amber and rose for comfortable sessions." }
   ];
 
   function productThemes(env) {
@@ -734,11 +744,10 @@
 
   function productShell(kicker, title, copy, statusText, statusTone, bodyHtml) {
     return '' +
-      '<div class="inline-widget-shell product-shell">' +
+      '<div class="inline-widget-shell product-shell" aria-label="' + escapeHtml(title) + '">' +
         '<div class="inline-toolbar">' +
           '<div>' +
             '<div class="eyebrow">' + escapeHtml(kicker) + '</div>' +
-            '<h3 class="inline-title">' + escapeHtml(title) + '</h3>' +
             '<p class="inline-copy">' + escapeHtml(copy) + '</p>' +
           '</div>' +
           statusPill(statusText, statusTone) +
@@ -765,7 +774,43 @@
 
   function mountWidget(widget, container, env) {
     var renderer = renderers[widget && widget.id] || mountPlaceholderWidget;
-    return renderer(widget || { id: "unknown", title: "Widget" }, container, env || {});
+    var mountRoot = document.createElement("div");
+    var controller;
+    var destroyed = false;
+
+    mountRoot.className = "inline-widget-mount";
+    mountRoot.setAttribute("data-inline-widget-mount", text(widget && widget.id, "unknown"));
+    container.appendChild(mountRoot);
+
+    try {
+      controller = renderer(widget || { id: "unknown", title: "Widget" }, mountRoot, env || {});
+    } catch (error) {
+      if (mountRoot.parentNode === container) {
+        container.removeChild(mountRoot);
+      }
+      throw error;
+    }
+
+    return {
+      refresh: function () {
+        if (destroyed || !controller || typeof controller.refresh !== "function") {
+          return Promise.resolve();
+        }
+        return controller.refresh();
+      },
+      destroy: function () {
+        if (destroyed) {
+          return;
+        }
+        destroyed = true;
+        if (controller && typeof controller.destroy === "function") {
+          controller.destroy();
+        }
+        if (mountRoot.parentNode === container) {
+          container.removeChild(mountRoot);
+        }
+      }
+    };
   }
 
   var runtime = {

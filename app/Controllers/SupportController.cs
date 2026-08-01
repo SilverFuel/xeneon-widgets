@@ -49,7 +49,7 @@ public sealed class SupportController
             app = new
             {
                 name = "Auxora",
-                version = typeof(SupportController).Assembly.GetName().Version?.ToString() ?? "unknown",
+                version = AppBuildIdentity.Version,
                 dashboardAssetRevision = _dashboardAssetRevision,
                 dashboardUrl = dashboardUri.ToString()
             },
@@ -67,6 +67,7 @@ public sealed class SupportController
         var actions = new List<object>();
         var config = _configStore.Snapshot();
         var display = _configController.GetDisplayDiagnostics(config);
+        var companionDisplayReady = ConfigController.IsCompanionDisplayReady(display);
         var provisioning = _provisioningService.RunStartupProvisioning(forceLauncherScan: true);
         var health = await _telemetryController.BuildHealthPayloadAsync(cancellationToken);
 
@@ -79,7 +80,10 @@ public sealed class SupportController
         actions.Add(new
         {
             id = "display",
-            state = string.Equals(display.Status, "ready", StringComparison.OrdinalIgnoreCase) ? "Ready" : "Needs Setup",
+            state = string.Equals(display.Status, "ready", StringComparison.OrdinalIgnoreCase)
+                && companionDisplayReady
+                    ? "Ready"
+                    : "Needs Setup",
             message = display.Message,
             repairActions = display.RepairActions
         });
@@ -100,17 +104,17 @@ public sealed class SupportController
         actions.Add(new
         {
             id = "rollback",
-            state = BuildRollbackPayload().Configured ? "Ready" : "Optional",
-            message = "Rollback metadata was checked for the current install."
+            state = "Manual only",
+            message = "Automatic rollback is not included in this beta. Keep the previous verified installer."
         });
 
         return new
         {
             ok = true,
             supported = true,
-            status = string.Equals(display.Status, "ready", StringComparison.OrdinalIgnoreCase) ? "ready" : "needs-setup",
+            status = companionDisplayReady ? "ready" : "needs-setup",
             sampledAt = startedAt,
-            message = "Auto repair checked display targeting, runtime health, launcher suggestions, and config state.",
+            message = "Auto repair checked companion-display targeting, runtime health, launcher suggestions, and config state.",
             actions,
             health = SanitizeSupportObject(health, config)
         };
@@ -118,23 +122,12 @@ public sealed class SupportController
 
     public RollbackPayload BuildRollbackPayload()
     {
-        var config = _configStore.Snapshot();
-        var path = config.Dashboard.LastKnownGoodPath;
-        var configured = config.Dashboard.UpdateRollbackEnabled
-            && !string.IsNullOrWhiteSpace(path)
-            && File.Exists(path);
-
         return new RollbackPayload
         {
-            Supported = true,
-            Configured = configured,
-            Status = configured ? "ready" : "unavailable",
-            RollbackEnabled = config.Dashboard.UpdateRollbackEnabled,
-            LastKnownGoodVersion = config.Dashboard.LastKnownGoodVersion,
-            LastKnownGoodPath = configured ? path : "",
-            Message = configured
-                ? "A last-known-good install path is available for rollback."
-                : "Rollback will be available after Auxora records a healthy installed build."
+            Supported = false,
+            Configured = false,
+            Status = "unavailable",
+            Message = "Automatic rollback is not included in this beta. Keep the previous verified installer if you need to return to an earlier build."
         };
     }
 
@@ -154,6 +147,9 @@ public sealed class SupportController
             sanitized = ReplaceIfPresent(sanitized, config.Hue.BridgeIp, "<local-ip>");
             sanitized = ReplaceIfPresent(sanitized, config.UniFi.Host, "<local-ip>");
             sanitized = ReplaceIfPresent(sanitized, config.UniFi.Username, "<unifi-user>");
+            sanitized = ReplaceIfPresent(sanitized, config.Frigate.BaseUrl, "<frigate-endpoint>");
+            sanitized = ReplaceIfPresent(sanitized, config.Frigate.Username, "<frigate-user>");
+            sanitized = ReplaceIfPresent(sanitized, config.Frigate.Password, "<redacted>");
 
             foreach (var launcher in config.Launchers)
             {
@@ -179,9 +175,6 @@ public sealed class SupportController
             supported = rollback.Supported,
             configured = rollback.Configured,
             status = rollback.Status,
-            rollbackEnabled = rollback.RollbackEnabled,
-            lastKnownGoodVersion = rollback.LastKnownGoodVersion,
-            lastKnownGoodPathConfigured = !string.IsNullOrWhiteSpace(rollback.LastKnownGoodPath),
             message = rollback.Message
         };
     }
@@ -354,12 +347,6 @@ public sealed class RollbackPayload
     public bool Configured { get; set; }
 
     public string Status { get; set; } = "";
-
-    public bool RollbackEnabled { get; set; }
-
-    public string LastKnownGoodVersion { get; set; } = "";
-
-    public string LastKnownGoodPath { get; set; } = "";
 
     public string Message { get; set; } = "";
 }

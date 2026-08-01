@@ -18,6 +18,14 @@ on:
         description: "Base64 JSON receipt from the disposable Windows VM lifecycle test"
         required: true
         type: string
+      frigate_qualification_receipt_base64:
+        description: "Base64 secret-free JSON receipt from physical Frigate and camera qualification"
+        required: true
+        type: string
+      display_qualification_receipt_base64:
+        description: "Base64 privacy-safe JSON receipt from physical companion-display qualification"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -144,10 +152,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Failed to download exact candidate artifact '$artifactName'." }
           "tag_sha=$tagSha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Verify manifest and disposable-VM lifecycle receipt
+      - name: Verify manifest and lifecycle, physical Frigate, and physical display receipts
         shell: pwsh
         env:
           LIFECYCLE_RECEIPT_BASE64: ${{ inputs.lifecycle_receipt_base64 }}
+          FRIGATE_QUALIFICATION_RECEIPT_BASE64: ${{ inputs.frigate_qualification_receipt_base64 }}
+          DISPLAY_QUALIFICATION_RECEIPT_BASE64: ${{ inputs.display_qualification_receipt_base64 }}
         run: |
           $version = (& ./scripts/Test-ReleaseVersion.ps1 -ExpectedTag "${{ inputs.tag }}").Trim()
           & ./scripts/Test-ReleaseManifest.ps1 -ReleaseAssetsPath release-assets -ExpectedTag "${{ inputs.tag }}" -ExpectedCommitSha $env:tag_sha
@@ -159,6 +169,22 @@ jobs:
           }
           [IO.File]::WriteAllBytes((Join-Path $PWD "lifecycle-receipt.json"), $receiptBytes)
           & ./scripts/Test-BetaLifecycleReceipt.ps1 -ReceiptPath lifecycle-receipt.json -ReleaseAssetsPath release-assets
+
+          try {
+            $frigateReceiptBytes = [Convert]::FromBase64String($env:FRIGATE_QUALIFICATION_RECEIPT_BASE64)
+          } catch {
+            throw "frigate_qualification_receipt_base64 is not valid base64."
+          }
+          [IO.File]::WriteAllBytes((Join-Path $PWD "frigate-qualification-receipt.json"), $frigateReceiptBytes)
+          & ./scripts/Test-FrigateQualificationReceipt.ps1 -ReceiptPath frigate-qualification-receipt.json -ReleaseAssetsPath release-assets
+
+          try {
+            $displayReceiptBytes = [Convert]::FromBase64String($env:DISPLAY_QUALIFICATION_RECEIPT_BASE64)
+          } catch {
+            throw "display_qualification_receipt_base64 is not valid base64."
+          }
+          [IO.File]::WriteAllBytes((Join-Path $PWD "display-qualification-receipt.json"), $displayReceiptBytes)
+          & ./scripts/Test-DisplayQualificationReceipt.ps1 -ReceiptPath display-qualification-receipt.json -ReleaseAssetsPath release-assets
 
       - name: Publish exact assets without replacing existing bytes
         shell: pwsh

@@ -26,6 +26,8 @@ The app does not currently include analytics, crash upload telemetry, or remote 
 
 Foreground-app tracking is off by default. If the user turns it on in onboarding or Privacy, Auxora checks which desktop app is in the foreground and stores that app's display name, executable path, source, and last-opened time. It retains up to 24 entries in a local recent-app history file. It does not record window titles, keyboard input, screen contents, or time spent in an app, and it does not upload the history. Turning the toggle off clears the retained recent-app history.
 
+Media titles, artist/album details, artwork, source application IDs, and audio-session application labels are also off by default. Audio and playback controls continue to work with generic labels. The user can opt in separately to media details and audio application labels from Privacy & Backup; both settings stay local, round-trip in the credential-free backup, and can be turned off again without disabling the controls. Auxora does not upload this metadata.
+
 Game performance capture may create short-lived local PresentMon CSV files while a game session is active. They are deleted when no longer needed unless the user explicitly enables diagnostic retention; retained files are still age- and size-limited. Reset all app data deletes retained PresentMon files.
 
 ## Local Files

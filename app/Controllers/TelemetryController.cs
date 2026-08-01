@@ -12,11 +12,13 @@ public sealed class TelemetryController
     private readonly CalendarService _calendarService;
     private readonly HueService _hueService;
     private readonly UniFiService _uniFiService;
+    private readonly FrigateService _frigateService;
     private readonly MediaService _mediaService;
     private readonly ClipboardHistoryService _clipboardHistoryService;
     private readonly ProvisioningService _provisioningService;
     private readonly LauncherService _launcherService;
     private readonly SystemActionsService _systemActionsService;
+    private readonly string _dashboardAssetRevision;
 
     public TelemetryController(
         ConfigStore configStore,
@@ -29,11 +31,13 @@ public sealed class TelemetryController
         CalendarService calendarService,
         HueService hueService,
         UniFiService uniFiService,
+        FrigateService frigateService,
         MediaService mediaService,
         ClipboardHistoryService clipboardHistoryService,
         ProvisioningService provisioningService,
         LauncherService launcherService,
-        SystemActionsService systemActionsService)
+        SystemActionsService systemActionsService,
+        string dashboardAssetRevision)
     {
         _configStore = configStore;
         _configController = configController;
@@ -45,11 +49,13 @@ public sealed class TelemetryController
         _calendarService = calendarService;
         _hueService = hueService;
         _uniFiService = uniFiService;
+        _frigateService = frigateService;
         _mediaService = mediaService;
         _clipboardHistoryService = clipboardHistoryService;
         _provisioningService = provisioningService;
         _launcherService = launcherService;
         _systemActionsService = systemActionsService;
+        _dashboardAssetRevision = string.IsNullOrWhiteSpace(dashboardAssetRevision) ? "unknown" : dashboardAssetRevision;
     }
 
     public SystemSnapshot GetSystemSnapshot()
@@ -137,26 +143,29 @@ public sealed class TelemetryController
         return _equalizerApoService.Update(request);
     }
 
-    public async Task<object> BuildHealthPayloadAsync(CancellationToken cancellationToken)
+    public Task<object> BuildHealthPayloadAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var config = _configStore.Snapshot();
         var launchers = _launcherService.GetSnapshot(config);
         var quickActions = _systemActionsService.GetQuickActionsSnapshot();
         var shortcuts = _systemActionsService.GetShortcutsSnapshot();
-        var audio = await _audioService.GetSnapshotAsync(cancellationToken);
-        var calendar = await _calendarService.GetSnapshotAsync(config, cancellationToken);
-        var media = await _mediaService.GetSnapshotAsync(cancellationToken);
-        var hue = await _hueService.GetSnapshotAsync(config, cancellationToken);
-        var clipboard = await _clipboardHistoryService.GetSnapshotAsync(
-            ClipboardPrivacyOptions.FromDashboard(config.Dashboard),
-            cancellationToken);
+        var audio = _audioService.GetCachedSnapshot();
+        var calendar = _calendarService.GetCachedSnapshot(config);
+        var media = _mediaService.GetCachedSnapshot();
+        var hue = _hueService.GetCachedSnapshot(config);
+        var clipboard = _clipboardHistoryService.GetHealthStatus(
+            ClipboardPrivacyOptions.FromDashboard(config.Dashboard));
         var gpuPower = _gpuPowerMonitor.GetSnapshot();
-        var provisioning = _provisioningService.GetSnapshot();
+        var provisioning = ProvisioningSummaryPayload.FromSnapshot(_provisioningService.GetSnapshot());
         var displayDiagnostics = _configController.GetDisplayDiagnostics(config);
+        var displayStatusReady = string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase);
+        var companionDisplayReady = displayStatusReady
+            && ConfigController.IsCompanionDisplayReady(displayDiagnostics);
         var displayItem = CreateSetupItem(
             "display",
-            "Auxora display",
-            string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase) ? "Ready" : "Needs Setup",
+            "Auxora companion display",
+            companionDisplayReady ? "Ready" : "Needs Setup",
             true,
             displayDiagnostics.Message);
 
@@ -239,10 +248,29 @@ public sealed class TelemetryController
                     : string.Equals(uniFi.Status, "checking", StringComparison.OrdinalIgnoreCase)
                         ? CreateSetupItem("unifi", "UniFi Network", "Checking", false, "Auxora is checking for a local UniFi console in the background.")
                         : CreateSetupItem("unifi", "UniFi Network", "Optional", false, "Network Monitor works now. Link UniFi locally when you want gateway detail.");
+        var frigateConnection = _frigateService.GetConnectionStatus(config);
+        var frigateItem = new
+        {
+            id = "frigate",
+            label = "Camera Detection",
+            state = frigateConnection.State,
+            required = false,
+            nextStep = frigateConnection.Message,
+            configured = frigateConnection.Configured,
+            connected = frigateConnection.Connected,
+            authenticated = frigateConnection.Authenticated,
+            sampledAt = frigateConnection.SampledAt
+        };
 
-        return new
+        return Task.FromResult<object>(new
         {
             ok = true,
+            app = new
+            {
+                name = "Auxora",
+                version = AppBuildIdentity.Version,
+                dashboardAssetRevision = _dashboardAssetRevision
+            },
             capabilities = new
             {
                 system = true,
@@ -259,17 +287,20 @@ public sealed class TelemetryController
                 clipboard = true,
                 hue = true,
                 unifi = true,
+                frigate = true,
                 gameActivity = true
             },
             setup = new
             {
-                essentialsReady = string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase),
+                essentialsReady = string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase)
+                    && companionDisplayReady,
                 onboardingCompleted = config.Dashboard.OnboardingCompleted,
                 onboardingCompletedAt = config.Dashboard.OnboardingCompletedAt,
                 onboardingVersion = config.Dashboard.OnboardingVersion,
                 needsAttention = (!string.IsNullOrWhiteSpace(config.Calendar.IcsUrl) && calendar.Status == "error")
                     || (!string.IsNullOrWhiteSpace(config.Hue.BridgeIp) && !hue.Linked)
-                    || !string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase),
+                    || !(string.Equals(displayDiagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase)
+                        && companionDisplayReady),
                 provisioning,
                 display = displayDiagnostics,
                 items = new Dictionary<string, object>
@@ -289,10 +320,11 @@ public sealed class TelemetryController
                     ["media"] = mediaItem,
                     ["clipboard"] = clipboardItem,
                     ["hue"] = hueItem,
-                    ["unifi"] = uniFiItem
+                    ["unifi"] = uniFiItem,
+                    ["frigate"] = frigateItem
                 }
             }
-        };
+        });
     }
 
     private static object CreateSetupItem(string id, string label, string state, bool required, string nextStep)

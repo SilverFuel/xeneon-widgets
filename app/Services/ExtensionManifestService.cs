@@ -42,10 +42,11 @@ public sealed class ExtensionManifestService
             trustedPublisherCount = publishers.Count,
             extensions,
             permissions = AllowedPermissions.OrderBy(value => value).ToArray(),
-            runnableCount = extensions.Count(extension => extension.Runnable),
+            verifiedCount = extensions.Count(extension => extension.Verified),
+            thirdPartyLoadingEnabled = false,
             message = extensions.Count == 0
-                ? "No third-party extensions are installed."
-                : $"{extensions.Count(extension => extension.Runnable)} of {extensions.Count} extensions passed trust checks."
+                ? "No third-party manifests are installed. Third-party loading is disabled in this beta."
+                : $"{extensions.Count(extension => extension.Verified)} of {extensions.Count} manifests passed inspection. Third-party loading is disabled in this beta."
         };
     }
 
@@ -89,12 +90,13 @@ public sealed class ExtensionManifestService
             }
 
             return new ExtensionInspection(manifest.Id ?? "", manifest.Name ?? manifest.Id ?? "Extension", manifest.Version ?? "0.0.0",
-                manifest.PublisherKeyId ?? "", permissions, true, "Trusted and ready", manifestPath);
+                manifest.PublisherKeyId ?? "", permissions, true, false,
+                "Signature, content hash, and permissions verified. Loading is disabled in this beta.", manifestPath);
         }
         catch (Exception error)
         {
             _logger.Warn($"Extension manifest rejected at {manifestPath}: {error.Message}");
-            return new ExtensionInspection("", Path.GetFileName(Path.GetDirectoryName(manifestPath)) ?? "Extension", "", "", [], false, error.Message, manifestPath);
+            return new ExtensionInspection("", Path.GetFileName(Path.GetDirectoryName(manifestPath)) ?? "Extension", "", "", [], false, false, error.Message, manifestPath);
         }
     }
 
@@ -142,4 +144,4 @@ public sealed class ExtensionManifestService
     private sealed class TrustedPublisher { public string? KeyId { get; set; } public string? PublicKeyPem { get; set; } }
 }
 
-public sealed record ExtensionInspection(string Id, string Name, string Version, string PublisherKeyId, List<string> Permissions, bool Runnable, string Message, string ManifestPath);
+public sealed record ExtensionInspection(string Id, string Name, string Version, string PublisherKeyId, List<string> Permissions, bool Verified, bool Loadable, string Message, string ManifestPath);

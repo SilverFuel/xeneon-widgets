@@ -983,7 +983,7 @@
   justify-content: space-between;
   gap: 8px;
   color: var(--color-text-dim);
-  font-size: max(11px, 0.68rem);
+  font-size: max(12px, 0.75rem);
 }
 
 .audio-tone-heading > span:first-child {
@@ -1038,7 +1038,7 @@
 .audio-tone-control small {
   overflow: hidden;
   color: var(--color-text-dim);
-  font-size: max(10px, 0.64rem);
+  font-size: max(12px, 0.75rem);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1102,7 +1102,7 @@
 
 .audio-equalizer-fine-tune > summary small {
   color: var(--color-text-dim);
-  font-size: max(10px, 0.64rem);
+  font-size: max(12px, 0.75rem);
 }
 
 .audio-eq-bands {
@@ -1146,14 +1146,14 @@
 
 .audio-eq-band strong {
   text-align: right;
-  font-size: max(10px, 0.62rem);
+  font-size: max(12px, 0.75rem);
   font-weight: 850;
   white-space: nowrap;
 }
 
 .audio-eq-band span {
   color: var(--color-text);
-  font-size: max(11px, 0.7rem);
+  font-size: max(12px, 0.75rem);
   font-weight: 850;
 }
 
@@ -1178,7 +1178,7 @@
   justify-content: space-between;
   gap: 5px 12px;
   color: var(--color-text-dim);
-  font-size: max(11px, 0.7rem);
+  font-size: max(12px, 0.75rem);
 }
 
 .audio-equalizer-footer > span:first-child {
@@ -1540,14 +1540,18 @@
 
   .dashboard-native-page--adaptive .audio-preset-button,
   .dashboard-native-page--adaptive .audio-equalizer-actions .inline-button {
-    min-height: 44px !important;
+    min-height: 54px !important;
     padding-block: 6px;
   }
 
   .dashboard-native-page--adaptive .audio-master-mute,
   .dashboard-native-page--adaptive .audio-master-row .inline-range,
   .dashboard-native-page--adaptive .audio-media-controls .inline-button {
-    min-height: 44px !important;
+    min-height: 54px !important;
+  }
+
+  .dashboard-native-page--adaptive .audio-master-mute {
+    min-width: 54px;
   }
 
   .audio-equalizer-toolbar {

@@ -302,7 +302,7 @@
         data = payload;
         statusNode.textContent = payload.supported === false ? "Unavailable" : "Ready";
         document.getElementById("current-output").textContent = label(current.name || payload.defaultDeviceName, "Default output");
-        document.getElementById("current-output-copy").textContent = label(current.deviceType || current.id, "Windows default device");
+        document.getElementById("current-output-copy").textContent = label(current.deviceType, "Windows default device");
         document.getElementById("volume-label").textContent = master + "%";
         volume.value = String(master);
 

@@ -29,14 +29,16 @@ public sealed class MonitorControlService
         return new
         {
             supported,
+            primaryExcluded = true,
+            scope = "companion-only",
             status = monitors.Count == 0 ? "unavailable" : supported ? "ready" : "unsupported",
-            source = "Windows DDC/CI",
+            source = "Windows DDC/CI (companion displays only)",
             displays = monitors,
             message = monitors.Count == 0
-                ? "No DDC/CI monitor controls were exposed by Windows."
+                ? "No companion-display DDC/CI controls were exposed by Windows. The primary display is intentionally excluded."
                 : supported
-                    ? "Supported monitor controls are ready."
-                    : "Windows found the display, but it did not advertise supported DDC/CI controls."
+                    ? "Supported companion-display controls are ready. The primary display is intentionally excluded."
+                    : "Windows found a companion display, but it did not advertise supported DDC/CI controls. The primary display is intentionally excluded."
         };
     }
 
@@ -236,6 +238,19 @@ public sealed class MonitorControlService
         {
             try
             {
+                var monitorInfo = new MONITORINFO
+                {
+                    cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFO>()
+                };
+                var monitorInfoAvailable = PInvoke.GetMonitorInfo(monitor, ref monitorInfo);
+                if (!ShouldIncludeLogicalMonitor(monitorInfoAvailable, monitorInfo.dwFlags))
+                {
+                    _logger.Info(monitorInfoAvailable
+                        ? "DDC/CI skipped the Windows primary display."
+                        : "DDC/CI skipped a display because Windows did not confirm that it was non-primary.");
+                    return true;
+                }
+
                 if (!PInvoke.GetNumberOfPhysicalMonitorsFromHMONITOR(monitor, out var count) || count == 0)
                 {
                     return true;
@@ -263,6 +278,12 @@ public sealed class MonitorControlService
             return true;
         }, default);
         return handles;
+    }
+
+    internal static bool ShouldIncludeLogicalMonitor(bool monitorInfoAvailable, uint monitorFlags)
+    {
+        const uint monitorInfoPrimary = 0x00000001;
+        return monitorInfoAvailable && (monitorFlags & monitorInfoPrimary) == 0;
     }
 
     private static void Destroy(IReadOnlyCollection<PhysicalMonitorHandle> monitors)

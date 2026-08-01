@@ -1,6 +1,7 @@
 param(
   [switch]$WhatIf,
-  [switch]$IncludeAssistantWorktrees
+  [switch]$IncludeAssistantWorktrees,
+  [switch]$IncludeLocalBridgeConfig
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,18 +10,23 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $targets = @(
   "app\bin",
   "app\obj",
+  "app\tests\bin",
+  "app\tests\obj",
   "app\dist",
   "app\installer-build",
   "publish",
   "bridge\AudioBridge.dll",
   "bridge\bridge.log",
   "bridge\bridge.stderr.log",
-  "bridge\bridge.stdout.log",
-  "bridge\config.json"
+  "bridge\bridge.stdout.log"
 )
 
 if ($IncludeAssistantWorktrees) {
   $targets += ".claude"
+}
+
+if ($IncludeLocalBridgeConfig) {
+  $targets += "bridge\config.json"
 }
 
 Get-ChildItem -LiteralPath $repoRoot -Filter "tmp-*.png" -File -ErrorAction SilentlyContinue | ForEach-Object {

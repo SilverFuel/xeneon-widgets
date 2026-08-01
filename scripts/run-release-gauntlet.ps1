@@ -8,7 +8,9 @@ param(
   [switch]$AllowGitHubSupportPath,
   [string]$CommercialEvidencePath = "",
   [string]$ReleaseAssetsPath = "",
-  [string]$LifecycleReceiptPath = ""
+  [string]$LifecycleReceiptPath = "",
+  [string]$FrigateQualificationReceiptPath = "",
+  [string]$DisplayQualificationReceiptPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,8 +27,10 @@ if ($RequireSignedInstaller -and [string]::IsNullOrWhiteSpace($CommercialEvidenc
 if (-not [string]::IsNullOrWhiteSpace($CommercialEvidencePath) -and -not $RequireSignedInstaller) {
   throw "Commercial evidence can only be used with -RequireSignedInstaller."
 }
-if ([string]::IsNullOrWhiteSpace($ReleaseAssetsPath) -ne [string]::IsNullOrWhiteSpace($LifecycleReceiptPath)) {
-  throw "ReleaseAssetsPath and LifecycleReceiptPath must be supplied together for a receipt-bound candidate."
+$candidateEvidencePaths = @($ReleaseAssetsPath, $LifecycleReceiptPath, $FrigateQualificationReceiptPath, $DisplayQualificationReceiptPath) |
+  Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+if ($candidateEvidencePaths.Count -ne 0 -and $candidateEvidencePaths.Count -ne 4) {
+  throw "ReleaseAssetsPath, LifecycleReceiptPath, FrigateQualificationReceiptPath, and DisplayQualificationReceiptPath must be supplied together for a receipt-bound candidate."
 }
 
 $allowedSignerThumbprints = @()
@@ -136,7 +140,7 @@ try {
   Invoke-CheckedCommand "powershell" (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\assert-release-ready.ps1") + $readyArgs) "Release readiness gate failed."
 
   if (-not [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
-    Write-Step "Checking immutable release manifest and lifecycle receipt"
+    Write-Step "Checking immutable release manifest and lifecycle, Frigate, and display qualification receipts"
     Invoke-CheckedCommand "powershell" @(
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-ReleaseManifest.ps1",
       "-ReleaseAssetsPath", $ReleaseAssetsPath
@@ -146,6 +150,16 @@ try {
       "-ReceiptPath", $LifecycleReceiptPath,
       "-ReleaseAssetsPath", $ReleaseAssetsPath
     ) "Lifecycle receipt verification failed."
+    Invoke-CheckedCommand "powershell" @(
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-FrigateQualificationReceipt.ps1",
+      "-ReceiptPath", $FrigateQualificationReceiptPath,
+      "-ReleaseAssetsPath", $ReleaseAssetsPath
+    ) "Frigate qualification receipt verification failed."
+    Invoke-CheckedCommand "powershell" @(
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-DisplayQualificationReceipt.ps1",
+      "-ReceiptPath", $DisplayQualificationReceiptPath,
+      "-ReleaseAssetsPath", $ReleaseAssetsPath
+    ) "Display qualification receipt verification failed."
   }
 
   if ($RequireSignedInstaller) {

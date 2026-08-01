@@ -4,11 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Calendar Widget</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/widgets.css">
+  <link rel="stylesheet" href="../css/theme.css?v=20260729-75">
+  <link rel="stylesheet" href="../css/widgets.css?v=20260729-75">
 </head>
 <body class="widget-page">
   <main class="widget-shell">
@@ -20,7 +17,7 @@
           <p class="widget-subtitle">Agenda view for today</p>
         </div>
       </div>
-      <div class="widget-status">Local schedule</div>
+      <div id="calendar-status" class="widget-status" data-tone="warn">Loading</div>
     </header>
     <section class="widget-content split-grid">
       <article class="list-card">
@@ -29,32 +26,78 @@
         <div id="calendar-date" class="metric-detail">Loading date</div>
       </article>
       <article class="list-card">
-        <div id="agenda-list" class="agenda-list"></div>
+        <div id="agenda-list" class="agenda-list"><div class="agenda-item"><div><strong>Loading calendar</strong><span>Checking the configured feed.</span></div><strong>--</strong></div></div>
       </article>
     </section>
   </main>
-  <script src="../js/widget-core.js"></script>
+  <script src="../js/widget-core.js?v=20260729-75"></script>
   <script>
     (function () {
-      var agendaItems = [
-        { time: "09:00", title: "Sprint standup", detail: "Status review" },
-        { time: "11:30", title: "Design sync", detail: "Widget layout pass" },
-        { time: "14:00", title: "Benchmarks", detail: "iFrame performance test" },
-        { time: "16:30", title: "Deploy", detail: "Publish to GitHub Pages" }
-      ];
+      var params = new URLSearchParams(window.location.search);
+      var endpoint = params.get("endpoint") || "/api/calendar";
       var widgetSize = WidgetCore.getWidgetSize();
+
+      function text(value, fallback) {
+        return typeof value === "string" && value.trim() ? value.trim() : fallback;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function setStatus(label, tone) {
+        var node = document.getElementById("calendar-status");
+        node.textContent = label;
+        node.setAttribute("data-tone", tone);
+      }
+
+      function renderAgenda(payload) {
+        payload = payload || {};
+        var entries = Array.isArray(payload.entries) ? payload.entries : [];
+        var itemCount = widgetSize === "small" ? 2 : widgetSize === "medium" ? 3 : 4;
+        var configured = Boolean(payload.configured);
+        var message = text(payload.message, configured ? "No upcoming events." : "Add an ICS feed in Diagnostics.");
+
+        document.getElementById("agenda-list").innerHTML = entries.length
+          ? entries.slice(0, itemCount).map(function (item) {
+              return '<div class="agenda-item"><div><strong>' + escapeHtml(text(item.title, "Calendar event")) + '</strong><span>' + escapeHtml(text(item.detail, "Calendar event")) + '</span></div><strong>' + escapeHtml(text(item.time, "--")) + '</strong></div>';
+            }).join("")
+          : '<div class="agenda-item"><div><strong>' + escapeHtml(configured ? "No upcoming events" : "Calendar setup needed") + '</strong><span>' + escapeHtml(message) + '</span></div><strong>--</strong></div>';
+
+        if (payload.status === "error" || payload.supported === false) {
+          setStatus("Unavailable", "danger");
+        } else if (!configured) {
+          setStatus("Needs setup", "warn");
+        } else if (payload.stale) {
+          setStatus("Stale", "warn");
+        } else {
+          setStatus(entries.length ? "Live" : "Ready", "good");
+        }
+      }
+
       var widget = {
         refreshInterval: 60000,
-        initWidget: function () {
-          var itemCount = widgetSize === "small" ? 2 : widgetSize === "medium" ? 3 : 4;
-          document.getElementById("agenda-list").innerHTML = agendaItems.slice(0, itemCount).map(function (item) {
-            return '<div class="agenda-item"><div><strong>' + item.title + '</strong><span>' + item.detail + '</span></div><strong>' + item.time + '</strong></div>';
-          }).join("");
-        },
-        updateWidget: function () {
+        initWidget: function () {},
+        updateWidget: async function () {
           var now = new Date();
           document.getElementById("calendar-day").textContent = now.toLocaleDateString([], { weekday: "long" });
           document.getElementById("calendar-date").textContent = now.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" });
+
+          try {
+            var response = await fetch(endpoint, { cache: "no-store" });
+            if (!response.ok) {
+              throw new Error("Request failed with status " + response.status);
+            }
+            renderAgenda(await response.json());
+          } catch (error) {
+            setStatus("Unavailable", "danger");
+            document.getElementById("agenda-list").innerHTML = '<div class="agenda-item"><div><strong>Calendar unavailable</strong><span>The local calendar service did not respond.</span></div><strong>--</strong></div>';
+          }
         },
         destroyWidget: function () {
           if (this.__interval) {

@@ -8,14 +8,16 @@ public sealed class LocalDataResetService
     private readonly HostLogger _logger;
     private readonly string _legacyRoamingRoot;
     private readonly string _legacyLocalRoot;
+    private readonly Action? _clearIntegrationRuntimeState;
     private Func<CancellationToken, Task<ResetStepReceipt>>? _clearBrowserDataAsync;
 
     public LocalDataResetService(
         ConfigStore configStore,
         LauncherService launcherService,
         GamePerformanceService gamePerformanceService,
-        HostLogger logger)
-        : this(configStore, launcherService, gamePerformanceService, logger, null, null)
+        HostLogger logger,
+        Action? clearIntegrationRuntimeState = null)
+        : this(configStore, launcherService, gamePerformanceService, logger, null, null, clearIntegrationRuntimeState)
     {
     }
 
@@ -25,12 +27,14 @@ public sealed class LocalDataResetService
         GamePerformanceService gamePerformanceService,
         HostLogger logger,
         string? legacyRoamingRoot,
-        string? legacyLocalRoot)
+        string? legacyLocalRoot,
+        Action? clearIntegrationRuntimeState = null)
     {
         _configStore = configStore;
         _launcherService = launcherService;
         _gamePerformanceService = gamePerformanceService;
         _logger = logger;
+        _clearIntegrationRuntimeState = clearIntegrationRuntimeState;
         _legacyRoamingRoot = legacyRoamingRoot ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             AppPaths.LegacyProductDirectoryName);
@@ -55,6 +59,7 @@ public sealed class LocalDataResetService
             {
                 throw new IOException("Protected integration values remain after reset.");
             }
+            _clearIntegrationRuntimeState?.Invoke();
             return "Reset to beta defaults; the localhost port was retained.";
         });
 

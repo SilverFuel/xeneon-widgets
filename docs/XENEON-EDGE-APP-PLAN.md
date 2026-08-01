@@ -119,7 +119,7 @@ Purpose: Enumerate monitors via Win32 EnumDisplayDevices/EnumDisplaySettings,
          find the one whose EDID or device name contains "XENEON" or matches
          the known resolution 2560x720, and return its screen bounds.
 
-Fallback: If no XENEON EDGE is found, use the primary monitor.
+Fallback: If no XENEON EDGE is found, use another active non-primary companion display. If none exists, remain tray-only and wait for one.
 
 API surface:
   - DisplayManager.FindXenonEdgeBounds() -> Rectangle
@@ -420,7 +420,7 @@ Everything else in `server.mjs` stays exactly as-is:
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
 | WebView2 Runtime not installed (Windows 10) | Medium | Blocks app launch | App checks on startup, prompts download, or bundle Evergreen Bootstrapper |
-| XENEON EDGE not detected by EDID | Low | Wrong monitor | Fallback to resolution match (2560x720), then to primary monitor |
+| XENEON EDGE not detected by EDID | Low | Wrong monitor | Fall back to another active non-primary companion by resolution/aspect score; otherwise remain tray-only. |
 | DPI scaling issues on mixed-DPI setups | Medium | UI too small/large on EDGE | Force per-monitor DPI awareness, test with 100% and 150% scaling |
 | Bridge port conflict (8976 already bound) | Low | Bridge won't start | BridgeManager checks port first, reuses existing bridge |
 | nvidia-smi not in PATH | Medium | No GPU metrics | Graceful null — search `%ProgramFiles%\NVIDIA Corporation\NVSMI\` as fallback |
@@ -449,7 +449,7 @@ Create app/XenonEdgeHost/DisplayManager.cs
 - EnumDisplayMonitors P/Invoke or Screen.AllScreens
 - Find monitor by name containing "XENEON" or resolution 2560x720
 - Return bounds rectangle
-- Fallback to primary monitor
+- Never fall back to the primary monitor; remain tray-only when no companion is eligible
 - Unit testable with mock monitor list
 ```
 
@@ -600,7 +600,7 @@ xeneon-widgets/
 |----------|-----------|
 | Windows 11 + XENEON EDGE | Full support (primary target) |
 | Windows 10 (1809+) + XENEON EDGE | Supported (user installs WebView2 Runtime) |
-| No XENEON EDGE connected | Works on primary monitor (for development/testing) |
+| No XENEON EDGE connected | Uses another active non-primary companion, or remains tray-only if none is available |
 | iCUE iframe (existing workflow) | Still works — bridge serves the same dashboard at same URL |
 | Hosted dashboard (GitHub Pages) | Still works — completely separate from the app |
 

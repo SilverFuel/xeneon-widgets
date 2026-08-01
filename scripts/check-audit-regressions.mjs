@@ -60,11 +60,16 @@ const appVersion = appCsproj.match(/<Version>([^<]+)<\/Version>/)?.[1]?.trim() |
 assert(appVersion, "app/XenonEdgeHost.csproj must define <Version>");
 
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
+const appPaths = readWorkspaceFile("app/Infrastructure/AppPaths.cs");
+const renderedDashboardTest = readWorkspaceFile("scripts/test-rendered-dashboard.mjs");
+const renderedThemeTest = readWorkspaceFile("scripts/test-theme-rendered.mjs");
+const nativeHostTest = readWorkspaceFile("scripts/test-native-host-api.mjs");
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const installScript = readWorkspaceFile("app/install.ps1");
 const installerScript = readWorkspaceFile("app/installer/Install-XenonEdgeHost.ps1");
 const repairScript = readWorkspaceFile("app/repair.ps1");
 const freeBetaReleaseScript = readWorkspaceFile("scripts/prepare-free-beta-release.ps1");
+const workspaceCleanupScript = readWorkspaceFile("scripts/clean-workspace.ps1");
 const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
 const actionController = readWorkspaceFile("app/Controllers/ActionController.cs");
 const staticAssetController = readWorkspaceFile("app/Controllers/StaticAssetController.cs");
@@ -95,6 +100,7 @@ const nativeMethods = readWorkspaceFile("app/NativeMethods.txt");
 const thirdPartyNotices = readWorkspaceFile("THIRD-PARTY-NOTICES.md");
 const packageReferences = readEvaluatedMsbuildItems("PackageReference");
 const contentItems = readEvaluatedMsbuildItems("Content");
+const embeddedResourceItems = readEvaluatedMsbuildItems("EmbeddedResource");
 const endpointGuard = readWorkspaceFile("app/Infrastructure/NetworkEndpointGuard.cs");
 const legacyBridge = readWorkspaceFile("bridge/server.mjs");
 const electronMain = readWorkspaceFile("desktop/electron/src/main.cjs");
@@ -119,9 +125,81 @@ const launcherTargetValidator = readWorkspaceFile("app/Infrastructure/LauncherTa
 const systemActionsService = readWorkspaceFile("app/Services/SystemActionsService.cs");
 const clipboardHistoryService = readWorkspaceFile("app/Services/ClipboardHistoryService.cs");
 const releaseService = readWorkspaceFile("app/Services/ReleaseService.cs");
+const appBuildIdentity = readWorkspaceFile("app/Infrastructure/AppBuildIdentity.cs");
 const hostLogger = readWorkspaceFile("app/Infrastructure/HostLogger.cs");
 const releaseWorkflow = readWorkspaceFile(".github/workflows/release.yml");
 const buildStamp = readWorkspaceFile("build/build-stamp.props");
+
+assert(
+  !/not implemented yet/i.test(apiRouter)
+    && /No matching native endpoint is available for this request\./.test(apiRouter),
+  "unmatched native feature routes must report an unavailable endpoint without exposing internal implementation language"
+);
+
+assert(
+  /AUXORA_ENABLE_TEST_DATA_ROOTS/.test(appPaths)
+    && /AUXORA_TEST_ROAMING_ROOT/.test(appPaths)
+    && /AUXORA_TEST_LOCAL_ROOT/.test(appPaths)
+    && /throw new InvalidOperationException\("Auxora test data roots are enabled/.test(appPaths),
+  "native-host test data roots must be explicit and fail closed when incomplete"
+);
+for (const [name, source] of [["rendered dashboard", renderedDashboardTest], ["rendered themes", renderedThemeTest], ["native-host API", nativeHostTest]]) {
+  assert(
+    /AUXORA_ENABLE_TEST_DATA_ROOTS:\s*"1"/.test(source)
+      && /AUXORA_TEST_ROAMING_ROOT:\s*roaming/.test(source)
+      && /AUXORA_TEST_LOCAL_ROOT:\s*local/.test(source),
+    `${name} test must isolate Auxora data through the production path resolver`
+  );
+}
+assert(
+  /new System\.Threading\.Timer\(_ => SampleUsage\(\), null, TimeSpan\.Zero/.test(systemMetricsService)
+    && !/_started = true;\s*SampleUsage\(\);/.test(systemMetricsService)
+    && /new System\.Threading\.Timer\(_ => SampleThroughput\(\), null, TimeSpan\.Zero/.test(networkMetricsService)
+    && /new System\.Threading\.Timer\(_ => SamplePing\(\), null, TimeSpan\.Zero/.test(networkMetricsService)
+    && !/_started = true;\s*SampleThroughput\(\);\s*SamplePing\(\);/.test(networkMetricsService),
+  "native host startup must queue slow system and network telemetry instead of blocking API readiness"
+);
+assert(
+  /captureChildOutput\(host, join\(local, "Auxora", "logs", "host\.log"\)\)/.test(renderedThemeTest)
+    && /waitForHost\(host, readHostDiagnostics\)/.test(renderedThemeTest),
+  "rendered theme startup failures must preserve actionable native-host diagnostics"
+);
+assert(
+  /\["Ready", "Waiting for display"\]\.includes\(recovery\.status\)/.test(renderedDashboardTest)
+    && /Recovery picker disagreed with its panel/.test(renderedDashboardTest)
+    && /safe no-companion-display state/.test(renderedDashboardTest),
+  "rendered Recovery checks must accept and explain the safe companion-display-absent state"
+);
+assert(
+  /bridgeHydrated === 'true' && button/.test(renderedDashboardTest)
+    && /const deadline = Date\.now\(\) \+ 15000;[\s\S]*data-state/.test(renderedDashboardTest),
+  "rendered destructive-action checks must wait for native hydration and the actual action control"
+);
+assert(
+  /GetHealthStatus\(\s*ClipboardPrivacyOptions\.FromDashboard\(config\.Dashboard\)\)/.test(readWorkspaceFile("app/Controllers/TelemetryController.cs"))
+    && /Health checks never read clipboard contents/.test(clipboardHistoryService)
+    && /Entries\s*=\s*\[\]/.test(clipboardHistoryService),
+  "health checks must report clipboard capability without enumerating private clipboard entries"
+);
+
+const referencedStandaloneWidgets = Array.from(
+  dashboardJs.matchAll(/"\/(widgets\/[A-Za-z0-9._-]+\.html)"/g),
+  match => match[1]
+);
+const shippedStandaloneWidgets = embeddedResourceItems
+  .map(item => String(item.LogicalName || "").replaceAll("\\", "/"))
+  .filter(name => name.startsWith("WebAssets/widgets/"))
+  .map(name => name.slice("WebAssets/".length))
+  .sort();
+const expectedStandaloneWidgets = [...new Set(referencedStandaloneWidgets)].sort();
+assert(
+  JSON.stringify(shippedStandaloneWidgets) === JSON.stringify(expectedStandaloneWidgets),
+  `native host must embed only the dashboard's reachable standalone fallbacks; expected ${expectedStandaloneWidgets.join(", ")}, received ${shippedStandaloneWidgets.join(", ")}`
+);
+for (const relativePath of expectedStandaloneWidgets) {
+  const standaloneSource = readWorkspaceFile(relativePath);
+  assert(!/fonts\.googleapis|fonts\.gstatic/.test(standaloneSource), `${relativePath} must not depend on CSP-blocked remote fonts`);
+}
 
 assert(
   /SessionHeaderName\s*=\s*"X-Xenon-Session"/.test(bridgeManager)
@@ -138,10 +216,12 @@ assert(
 assert(
   /Content-Security-Policy/.test(staticAssetController)
     && /nonce-/.test(staticAssetController)
+    && /AddNonceToInlineScripts/.test(staticAssetController)
+    && /ScriptStartTagPattern/.test(staticAssetController)
     && /X-Content-Type-Options/.test(staticAssetController)
     && /Referrer-Policy/.test(staticAssetController)
     && !/meta name="xenon-session-token"/.test(staticAssetController),
-  "native static HTML must use CSP/security headers and must not inject the session token into a meta tag"
+  "native static HTML must nonce every inline script under CSP/security headers and must not inject the session token into a meta tag"
 );
 
 assert(
@@ -178,15 +258,21 @@ assert(
 assert(
   /<PackageReference\s+Include="Microsoft\.Windows\.CsWin32"/.test(appCsproj)
     && /^GetPhysicalMonitorsFromHMONITOR$/m.test(nativeMethods)
+    && /^GetMonitorInfo$/m.test(nativeMethods)
     && /^GetVCPFeatureAndVCPFeatureReply$/m.test(nativeMethods)
     && /^GetCapabilitiesStringLength$/m.test(nativeMethods)
     && /^CapabilitiesRequestAndCapabilitiesReply$/m.test(nativeMethods)
     && /class\s+SafePhysicalMonitorHandle\s*:\s*SafeHandleZeroOrMinusOneIsInvalid[\s\S]*?override\s+bool\s+ReleaseHandle\s*\(\s*\)\s*\{\s*return\s+PInvoke\.DestroyPhysicalMonitor\s*\(\s*\(HANDLE\)handle\s*\)\s*;\s*\}/.test(monitorControlService)
     && /MaxPhysicalMonitorsPerLogicalDisplay/.test(monitorControlService)
+    && /PInvoke\.GetMonitorInfo\(monitor,\s*ref monitorInfo\)/.test(monitorControlService)
+    && /ShouldIncludeLogicalMonitor\(monitorInfoAvailable,\s*monitorInfo\.dwFlags\)/.test(monitorControlService)
+    && /primaryExcluded\s*=\s*true/.test(monitorControlService)
+    && /scope\s*=\s*"companion-only"/.test(monitorControlService)
+    && /primary display is intentionally excluded/.test(monitorControlService)
     && /ParseVcpCapabilities/.test(monitorControlService)
     && /ScalePercentage\(request\.Value,\s*reading\.Maximum\)/.test(monitorControlService)
     && !/\[\s*DllImport(?:Attribute)?\s*\(/.test(monitorControlService),
-  "monitor controls must use generated CsWin32 bindings and owned physical-monitor handles"
+  "monitor controls must use generated bindings, owned handles, and fail-closed companion-only filtering"
 );
 
 const noticesPath = normalize(resolve(process.cwd(), "THIRD-PARTY-NOTICES.md"));
@@ -386,6 +472,30 @@ assert(
 );
 
 assert(
+  /downloadAllowed\s*=\s*updateAvailable\s*&&\s*versionRelation\s*==\s*"newer"/.test(releaseService)
+    && /HideDownloadLocations/.test(releaseService)
+    && /installerUrl\s*=\s*downloadAllowed/.test(releaseService)
+    && /state\.downloadAllowed/.test(productWidget)
+    && /canOfferInstaller\s*=\s*state\.checked\s*&&\s*state\.downloadAllowed/.test(productWidget),
+  "older, current, or uncomparable release feeds must not expose download locations through the native API or update UI"
+);
+
+assert(
+  /AssemblyInformationalVersionAttribute/.test(appBuildIdentity)
+    && /NormalizeReleaseChannel/.test(appBuildIdentity)
+    && /AppBuildIdentity\.Version/.test(releaseService)
+    && /AppBuildIdentity\.NormalizeReleaseChannel/.test(releaseService)
+    && /AppBuildIdentity\.NormalizeReleaseChannel/.test(configStore)
+    && /AppBuildIdentity\.Version/.test(telemetryController)
+    && /AppBuildIdentity\.Version/.test(supportController)
+    && /bridgeApp/.test(dashboardJs)
+    && /normalizeReleaseChannelForVersion/.test(dashboardJs)
+    && /availableChannels/.test(productWidget)
+    && /isPrereleaseBuild/.test(productWidget),
+  "release health, configuration, feed checks, and update UI must share semantic build identity and prerelease channel policy"
+);
+
+assert(
   /SupportController/.test(supportController)
     && /BuildSupportBundleAsync/.test(supportController)
     && /RunAutoRepairAsync/.test(supportController)
@@ -431,11 +541,30 @@ assert(
 );
 
 assert(
+  /"app\\tests\\bin"/.test(workspaceCleanupScript)
+    && /"app\\tests\\obj"/.test(workspaceCleanupScript)
+    && /\[switch\]\$IncludeLocalBridgeConfig/.test(workspaceCleanupScript)
+    && /if \(\$IncludeLocalBridgeConfig\) \{[\s\S]*?\$targets \+= "bridge\\config\.json"/.test(workspaceCleanupScript),
+  "workspace cleanup must remove generated test output while preserving local bridge configuration by default"
+);
+
+assert(
   buildStamp.includes(`<XenonAssetRevision>${currentAssetRevision}</XenonAssetRevision>`)
     && buildStamp.includes(`<XenonInformationalVersion>${assetRevisionPayload.informationalVersion}</XenonInformationalVersion>`)
     && appCsproj.includes("$(XenonInformationalVersion)")
     && assetRevisionPayload.informationalVersion === `${appVersion}+${currentAssetRevision.slice(0, 8)}`,
   "native informational version and asset revision must share build/build-stamp.props"
+);
+
+assert(
+  /const hostPort = await reserveLocalPort\(\);[\s\S]*?baseUrl = `http:\/\/127\.0\.0\.1:\$\{hostPort\}`;[\s\S]*?writeFileSync\(join\(configDirectory, "config\.json"\), JSON\.stringify\(\{ port: hostPort \}\)\);/.test(renderedDashboardTest)
+    && /const hostPort = await reserveLocalPort\(\);[\s\S]*?baseUrl = `http:\/\/127\.0\.0\.1:\$\{hostPort\}`;[\s\S]*?writeFileSync\(join\(configDirectory, "config\.json"\), JSON\.stringify\(\{ port: hostPort \}\)\);/.test(renderedThemeTest)
+    && /const hostPort = await reserveLocalPort\(\);[\s\S]*?hostUrl = `http:\/\/127\.0\.0\.1:\$\{hostPort\}`;[\s\S]*?writeFileSync\(join\(configDirectory, "config\.json"\), JSON\.stringify\(\{ port: hostPort \}\)\);/.test(nativeHostTest)
+    && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(renderedDashboardTest)
+    && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(renderedThemeTest)
+    && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(nativeHostTest)
+    && !/const (?:baseUrl|hostUrl) = "http:\/\/127\.0\.0\.1:8976"/.test(renderedDashboardTest + renderedThemeTest + nativeHostTest),
+  "isolated host tests must use private port and instance identities instead of colliding with installed Auxora"
 );
 
 assert(
@@ -503,7 +632,7 @@ assert(
 assert(
   /Interlocked\.Exchange\(ref _usageSampling,\s*1\)/.test(systemMetricsService)
     && /Interlocked\.Exchange\(ref _temperatureSampling,\s*1\)/.test(systemMetricsService)
-    && /_usageTimer[\s\S]*TimeSpan\.FromSeconds\(3\),\s*TimeSpan\.FromSeconds\(3\)/.test(systemMetricsService)
+    && /_usageTimer[\s\S]*TimeSpan\.Zero,\s*TimeSpan\.FromSeconds\(3\)/.test(systemMetricsService)
     && !/_usageTimer[\s\S]*TimeSpan\.FromSeconds\(2\),\s*TimeSpan\.FromSeconds\(2\)/.test(systemMetricsService),
   "native system metrics timers must guard against overlapping samples and avoid 2s WMI usage polling"
 );
@@ -611,8 +740,13 @@ assert(
     && /Interlocked\.Exchange\(ref _pingSampling,\s*1\)/.test(networkMetricsService)
     && /ResolveHealthTarget/.test(networkMetricsService)
     && /ResolvePingDelay/.test(networkMetricsService)
+    && /GetBestInterface/.test(networkMetricsService)
+    && /SelectPrimaryInterfaceId/.test(networkMetricsService)
+    && /candidate\.Ipv4Index == bestRouteInterfaceIndex\.Value/.test(networkMetricsService)
+    && /OrderByDescending\(candidate => candidate\.HasIpv4Gateway\)/.test(networkMetricsService)
+    && !/interfaces\s*\.OrderByDescending\(network => network\.Speed\)/.test(networkMetricsService)
     && !/SendPingAsync\("1\.1\.1\.1"/.test(networkMetricsService),
-  "network health checks must be configurable, prefer local targets, and guard against overlapping ping samples"
+  "network metrics must follow the Windows route instead of the fastest virtual adapter, keep a gateway fallback, and guard configurable health probes"
 );
 
 assert(
@@ -745,9 +879,18 @@ assert(
     && unhandledRejectionHandler
     && /reportBackgroundDashboardError/.test(unhandledRejectionHandler[0])
     && !/reportFatalDashboardError/.test(unhandledRejectionHandler[0])
-    && /scheduleFatalDashboardReload/.test(dashboardJs)
-    && /window\.location\.reload/.test(dashboardJs),
-  "dashboard background promise failures must not replace the whole UI, while fatal panels self-heal"
+    && /window\.addEventListener\("error"[\s\S]+reportBackgroundDashboardError/.test(dashboardJs)
+    && /function\s+settingsContainsActiveControl/.test(dashboardJs)
+    && /settingsContainsActiveControl\(\)[\s\S]+pendingSettingsWidgetId/.test(dashboardJs)
+    && /settingsNode\.addEventListener\("focusout",\s*schedulePendingSettingsRender\)/.test(dashboardJs)
+    && !/scheduleFatalDashboardReload/.test(dashboardJs)
+    && !/window\.location\.reload/.test(dashboardJs),
+  "dashboard background failures and contained widget crashes must not create a full-page reload loop"
+);
+
+assert(
+  /function\s+mountAuxoraHomeWidget[\s\S]+function\s+redraw\(\)[\s\S]+var\s+chains\s*=\s*state\.chains[\s\S]+chains\.map/.test(productWidget),
+  "Auxora Home must derive action chains inside redraw before rendering One-tap setups"
 );
 
 assert(
@@ -826,7 +969,8 @@ assert(
     && /runtime\.registerRenderer\("network",\s*mountNetworkWidget\)/.test(networkWidget)
     && /runtime\.registerRenderer\("audio",\s*mountAudioWidget\)/.test(audioWidget)
     && /function\s+normalizeGpuPowerPayload/.test(systemWidget)
-    && /function\s+formatMemoryMb/.test(systemWidget)
+    && /function\s+renderSystemToolsPanel/.test(systemWidget)
+    && !/topProcesses|Process ID|PID /.test(systemWidget)
     && /runtime\.registerHelpers/.test(networkWidget)
     && /runtime\.registerHelpers/.test(audioWidget)
     && !/mountSystemWidget/.test(inlineWidgets)
@@ -861,6 +1005,10 @@ assert(
     && /inline-action-grid--compact/.test(actionsWidget)
     && /data-confirmation-required="true"/.test(actionsWidget)
     && /Tap once to confirm/.test(actionsWidget)
+    && /Tap again within 8 seconds to run/.test(actionsWidget)
+    && /CLIENT_CONFIRMATION_WINDOW_MS = 8000/.test(actionsWidget)
+    && (actionsWidget.match(/function armConfirmation\(actionId\)/g) || []).length === 2
+    && /requiresConfirmation \? "Two-step"/.test(actionsWidget)
     && /system-shortcuts-unsupported/.test(actionsWidget)
     && /Only controls this PC reports as working are tappable/.test(actionsWidget)
     && /Unsupported controls are reduced to a small note/.test(actionsWidget)
@@ -908,6 +1056,15 @@ assert(
     && /runtime\.registerRenderer\("updates",\s*mountUpdatesWidget\)/.test(productWidget)
     && /runtime\.registerRenderer\("streaming",\s*mountStreamingWidget\)/.test(productWidget)
     && /runtime\.registerRenderer\("marketplace",\s*mountMarketplaceWidget\)/.test(productWidget)
+    && /Third-party loading is disabled in this beta/.test(productWidget)
+    && /Verified manifest/.test(productWidget)
+    && !/extension\.runnable|>Runnable<|Trust enforced|Signed extensions/.test(productWidget + readWorkspaceFile("js/dashboard.js"))
+    && /state\.trusted = trust\.trusted === true && state\.verificationStatus === "verified"/.test(productWidget)
+    && /Auxora has not verified the downloaded bytes/.test(productWidget)
+    && !/trustReady|hashStatus === "available" && state\.signatureStatus === "available"/.test(productWidget)
+    && /canOfferInstaller = state\.checked && state\.downloadAllowed && state\.versionRelation === "newer" && state\.updateAvailable && state\.trusted/.test(productWidget)
+    && /Downgrade links are hidden/.test(productWidget)
+    && !/\(state\.downloadUrl \? '<a class="inline-button"/.test(productWidget)
     && /runtime\.registerRenderer\("installer",\s*mountInstallerWidget\)/.test(productWidget)
     && /runtime\.registerRenderer\("privacy",\s*mountPrivacyWidget\)/.test(productWidget)
     && !/mountThemeStudioWidget/.test(inlineWidgets)

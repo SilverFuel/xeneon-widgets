@@ -97,12 +97,16 @@ assert(
   /LaunchOptions = AppLaunchOptions\.Parse\(args\)/.test(program)
     && /Program\.LaunchOptions\.SafeMode/.test(mainWindow)
     && /ignoreSavedPreference:\s*safeMode/.test(mainWindow)
-    && /preferPrimary:\s*safeMode/.test(mainWindow)
     && /saveSelection:\s*saveSelection && !safeMode/.test(mainWindow)
+    && /\.Where\(display => !display\.IsPrimary\)/.test(mainWindow)
+    && /if\s*\(targetDisplay\.IsPrimary\)[\s\S]+refused to show its window/.test(mainWindow)
+    && /EnterCompanionDisplayWaitingState[\s\S]+SwHide/.test(mainWindow)
     && /ListDisplayCandidates\(bool ignoreSavedPreference = false\)/.test(bridgeManager)
-    && /bool preferPrimary = false/.test(bridgeManager)
-    && /FirstOrDefault\(display => display\.IsPrimary\)/.test(bridgeManager),
-  "host Safe Mode must ignore saved display preference, avoid saving a new target, and choose the primary display"
+    && !/\bpreferPrimary\b/.test(mainWindow)
+    && !/\bpreferPrimary\b/.test(bridgeManager)
+    && /available companion display/i.test(safeModeLaunch)
+    && !/on the primary display/i.test(safeModeLaunch),
+  "host Safe Mode must ignore a broken saved preference while remaining hidden until a non-primary companion display is available"
 );
 
 assert(

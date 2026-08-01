@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 
 namespace XenonEdgeHost;
@@ -64,7 +63,15 @@ public sealed class ReleaseService
                     || asset.Name.Contains("darwin", StringComparison.OrdinalIgnoreCase)));
             var latestVersion = TextOr(GetString(root, "tag_name"), GetString(root, "name"));
             var trust = BuildReleaseTrust(windowsAsset);
-            var versionComparisonKnown = TryIsVersionNewer(latestVersion, currentVersion, out var updateAvailable);
+            var versionComparisonKnown = TryCompareReleaseVersions(latestVersion, currentVersion, out var versionComparison);
+            var updateAvailable = versionComparisonKnown && versionComparison > 0;
+            var versionRelation = versionComparisonKnown
+                ? versionComparison > 0 ? "newer" : versionComparison < 0 ? "older" : "current"
+                : "unknown";
+            var downloadAllowed = updateAvailable && versionRelation == "newer";
+            var exposedAssets = downloadAllowed
+                ? assets
+                : assets.Select(HideDownloadLocations).ToList();
 
             return new
             {
@@ -76,10 +83,12 @@ public sealed class ReleaseService
                 latestVersion,
                 updateAvailable,
                 versionComparisonKnown,
+                versionRelation,
+                downloadAllowed,
                 htmlUrl = TextOr(GetString(root, "html_url"), ReleasesUrl),
-                installerUrl = windowsAsset?.DownloadUrl ?? "",
-                macUrl = macAsset?.DownloadUrl ?? "",
-                assets,
+                installerUrl = downloadAllowed ? windowsAsset?.DownloadUrl ?? "" : "",
+                macUrl = downloadAllowed ? macAsset?.DownloadUrl ?? "" : "",
+                assets = exposedAssets,
                 trust,
                 hashStatus = windowsAsset?.HashStatus ?? "missing",
                 signatureStatus = windowsAsset?.SignatureStatus ?? "missing",
@@ -112,6 +121,8 @@ public sealed class ReleaseService
             latestVersion = "",
             updateAvailable = false,
             versionComparisonKnown = false,
+            versionRelation = "unknown",
+            downloadAllowed = false,
             htmlUrl = ReleasesUrl,
             installerUrl = "",
             macUrl = "",
@@ -121,6 +132,7 @@ public sealed class ReleaseService
                 installer = "missing",
                 hashStatus = "missing",
                 signatureStatus = "missing",
+                verificationStatus = "missing",
                 trusted = false
             },
             hashStatus = "missing",
@@ -133,21 +145,7 @@ public sealed class ReleaseService
 
     private static string NormalizeChannel(string? channel, string currentVersion)
     {
-        var value = channel?.Trim().ToLowerInvariant() ?? "";
-        if (TryParseReleaseVersion(currentVersion, out var current) && current.IsPrerelease)
-        {
-            if (current.PrereleaseIdentifiers.Any(identifier => identifier.Contains("nightly", StringComparison.OrdinalIgnoreCase)))
-            {
-                return "nightly";
-            }
-
-            if (value != "nightly")
-            {
-                return "beta";
-            }
-        }
-
-        return value is "beta" or "nightly" ? value : "stable";
+        return AppBuildIdentity.NormalizeReleaseChannel(channel, currentVersion);
     }
 
     private static string GetReleaseApiUrl(string channel)
@@ -210,24 +208,18 @@ public sealed class ReleaseService
 
     private static string GetCurrentVersion()
     {
-        var informationalVersion = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        if (!string.IsNullOrWhiteSpace(informationalVersion))
-        {
-            return informationalVersion.Split('+')[0];
-        }
-
-        return typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        return AppBuildIdentity.Version;
     }
 
-    private static bool TryIsVersionNewer(string latestVersion, string currentVersion, out bool updateAvailable)
+    private static bool TryCompareReleaseVersions(string latestVersion, string currentVersion, out int comparison)
     {
-        updateAvailable = false;
+        comparison = 0;
         if (!TryParseReleaseVersion(latestVersion, out var latest) || !TryParseReleaseVersion(currentVersion, out var current))
         {
             return false;
         }
 
-        updateAvailable = latest > current;
+        comparison = latest.CompareTo(current);
         return true;
     }
 
@@ -323,6 +315,16 @@ public sealed class ReleaseService
             SignatureUrl = signatureAsset?.DownloadUrl ?? "",
             HashStatus = hashAsset is null ? "missing" : "available",
             SignatureStatus = signatureAsset is null ? "missing" : "available"
+        };
+    }
+
+    private static ReleaseAsset HideDownloadLocations(ReleaseAsset asset)
+    {
+        return asset with
+        {
+            DownloadUrl = "",
+            Sha256Url = "",
+            SignatureUrl = ""
         };
     }
 

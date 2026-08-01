@@ -78,6 +78,39 @@ public sealed class CalendarService
         }
     }
 
+    public CalendarSnapshot GetCachedSnapshot(AppConfig config)
+    {
+        var icsUrl = config.Calendar.IcsUrl?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(icsUrl))
+        {
+            return CalendarSnapshot.CreateSetup();
+        }
+
+        lock (_sync)
+        {
+            if (_snapshot.SampledAt is null || !string.Equals(_cachedUrl, icsUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                return new CalendarSnapshot
+                {
+                    Supported = true,
+                    Configured = true,
+                    Status = "checking",
+                    Message = "Calendar status will refresh in the Calendar panel."
+                };
+            }
+
+            var clone = _snapshot.Clone();
+            var sampledAt = clone.SampledAt;
+            clone.Stale = sampledAt is null || DateTimeOffset.UtcNow - sampledAt.Value > TimeSpan.FromMinutes(15);
+            if (clone.Status == "live" && clone.Stale)
+            {
+                clone.Status = "stale";
+            }
+
+            return clone;
+        }
+    }
+
     private async Task RefreshAsync(string icsUrl, CancellationToken cancellationToken)
     {
         try

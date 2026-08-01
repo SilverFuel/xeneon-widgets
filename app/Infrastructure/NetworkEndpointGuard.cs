@@ -35,6 +35,38 @@ public static class NetworkEndpointGuard
         return FormatAuthority(uri.Host, uri.Port, uri.IsDefaultPort);
     }
 
+    public static string NormalizeLocalHttpBaseUrl(string? input, string label)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return "";
+        }
+
+        var uri = ParseHttpUri(input, "http", label);
+        if (!IsLocalOrPrivateHost(uri.Host))
+        {
+            throw new InvalidOperationException($"{label} must be a local/private IP address or local hostname.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(uri.UserInfo))
+        {
+            throw new InvalidOperationException($"{label} must not include credentials in the URL.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(uri.Query) || !string.IsNullOrWhiteSpace(uri.Fragment))
+        {
+            throw new InvalidOperationException($"{label} must not include a query string or fragment.");
+        }
+
+        var builder = new UriBuilder(uri)
+        {
+            Path = uri.AbsolutePath.TrimEnd('/') + "/",
+            Query = "",
+            Fragment = ""
+        };
+        return builder.Uri.ToString();
+    }
+
     public static string NormalizeRemoteHttpUrl(string? input, string label)
     {
         if (string.IsNullOrWhiteSpace(input))
@@ -113,6 +145,65 @@ public static class NetworkEndpointGuard
             cancellationToken,
             resolver: null,
             ConnectSocketAsync);
+    }
+
+    internal static async ValueTask<Stream> ConnectLocalHttpAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        return await ConnectLocalHttpHostAsync(
+            context.DnsEndPoint.Host,
+            context.DnsEndPoint.Port,
+            cancellationToken,
+            resolver: null,
+            ConnectSocketAsync);
+    }
+
+    internal static async ValueTask<Stream> ConnectLocalHttpHostAsync(
+        string host,
+        int port,
+        CancellationToken cancellationToken,
+        Func<string, CancellationToken, Task<IPAddress[]>>? resolver,
+        Func<IPAddress, int, CancellationToken, ValueTask<Stream>> connector)
+    {
+        IPAddress[] addresses;
+        if (IPAddress.TryParse(NormalizeHostName(host), out var literal))
+        {
+            addresses = [literal];
+        }
+        else
+        {
+            addresses = await (resolver ?? Dns.GetHostAddressesAsync)(host, cancellationToken);
+        }
+
+        if (addresses.Length == 0)
+        {
+            throw new InvalidOperationException("Frigate destination did not resolve to an IP address.");
+        }
+
+        if (addresses.Any(address => !IsLocalOrPrivateAddress(address)))
+        {
+            throw new InvalidOperationException("Frigate destination resolved outside the local/private network.");
+        }
+
+        Exception? lastError = null;
+        foreach (var address in addresses)
+        {
+            try
+            {
+                return await connector(address, port, cancellationToken);
+            }
+            catch (Exception error) when (error is SocketException or OperationCanceledException)
+            {
+                lastError = error;
+                if (error is OperationCanceledException)
+                {
+                    throw;
+                }
+            }
+        }
+
+        throw new HttpRequestException("Frigate destination could not be reached.", lastError);
     }
 
     internal static async ValueTask<Stream> ConnectPublicHttpsHostAsync(
