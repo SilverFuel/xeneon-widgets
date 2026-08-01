@@ -5,17 +5,20 @@ public sealed class ConfigController
     private readonly ConfigStore _configStore;
     private readonly ProvisioningService _provisioningService;
     private readonly LauncherService? _launcherService;
+    private readonly Action? _clearFrigateRuntimeState;
 
     public event Action? DisplayPreferenceChanged;
 
     public ConfigController(
         ConfigStore configStore,
         ProvisioningService provisioningService,
-        LauncherService? launcherService = null)
+        LauncherService? launcherService = null,
+        Action? clearFrigateRuntimeState = null)
     {
         _configStore = configStore;
         _provisioningService = provisioningService;
         _launcherService = launcherService;
+        _clearFrigateRuntimeState = clearFrigateRuntimeState;
     }
 
     public object GetSnapshot()
@@ -24,7 +27,7 @@ public sealed class ConfigController
         return new
         {
             port = config.Port,
-            provisioning = _provisioningService.GetSnapshot(),
+            provisioning = ProvisioningSummaryPayload.FromSnapshot(_provisioningService.GetSnapshot()),
             display = GetDisplayDiagnostics(config),
             weather = new
             {
@@ -79,6 +82,20 @@ public sealed class ConfigController
                 localOnly = true,
                 secureStorage = "Windows DPAPI"
             },
+            frigate = new
+            {
+                configured = !string.IsNullOrWhiteSpace(config.Frigate.BaseUrl),
+                baseUrl = config.Frigate.BaseUrl,
+                camera = config.Frigate.Camera,
+                username = config.Frigate.Username,
+                authenticationConfigured = !string.IsNullOrWhiteSpace(config.Frigate.Username)
+                    && !string.IsNullOrWhiteSpace(config.Frigate.Password),
+                endpoint = "/api/frigate",
+                configEndpoint = "/api/config/frigate",
+                snapshotEndpoint = "/api/frigate/snapshot",
+                localOnly = true,
+                secureStorage = "Windows DPAPI"
+            },
             dashboard = new
             {
                 autoProvisioningEnabled = config.Dashboard.AutoProvisioningEnabled,
@@ -96,10 +113,13 @@ public sealed class ConfigController
                 performanceBudget = config.Dashboard.PerformanceBudget,
                 gameModeAutoTune = config.Dashboard.GameModeAutoTune,
                 themeReadability = config.Dashboard.ThemeReadability,
+                themeId = config.Dashboard.ThemeId,
+                accentMode = config.Dashboard.AccentMode,
+                customAccentColor = config.Dashboard.CustomAccentColor,
+                themeVariant = config.Dashboard.ThemeVariant,
+                animationIntensity = config.Dashboard.AnimationIntensity,
+                dashboardOpacity = config.Dashboard.DashboardOpacity,
                 releaseChannel = config.Dashboard.ReleaseChannel,
-                updateRollbackEnabled = config.Dashboard.UpdateRollbackEnabled,
-                lastKnownGoodVersion = config.Dashboard.LastKnownGoodVersion,
-                lastKnownGoodPath = string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath) ? "" : "<local-app-path>",
                 clipboardHidePreviews = config.Dashboard.ClipboardHidePreviews,
                 clipboardWidgetPaused = config.Dashboard.ClipboardWidgetPaused,
                 clipboardExcludeFromDiagnostics = config.Dashboard.ClipboardExcludeFromDiagnostics,
@@ -113,6 +133,8 @@ public sealed class ConfigController
                 defaultSceneId = config.Scenes.DefaultSceneId,
                 automationEnabled = config.Scenes.AutomationEnabled,
                 manualOverrideUntil = config.Scenes.ManualOverrideUntil,
+                themeVariant = config.Scenes.ThemeVariant,
+                variantOverrideUntil = config.Scenes.VariantOverrideUntil,
                 lastActivationReason = config.Scenes.LastActivationReason,
                 profiles = config.Scenes.Profiles
             }
@@ -169,6 +191,18 @@ public sealed class ConfigController
                 localOnly = true,
                 secureStorage = "Windows DPAPI"
             },
+            frigate = new
+            {
+                configured = !string.IsNullOrWhiteSpace(config.Frigate.BaseUrl),
+                hostConfigured = !string.IsNullOrWhiteSpace(config.Frigate.BaseUrl),
+                cameraConfigured = !string.IsNullOrWhiteSpace(config.Frigate.Camera),
+                usernameConfigured = !string.IsNullOrWhiteSpace(config.Frigate.Username),
+                authenticationConfigured = !string.IsNullOrWhiteSpace(config.Frigate.Username)
+                    && !string.IsNullOrWhiteSpace(config.Frigate.Password),
+                endpoint = "/api/frigate",
+                localOnly = true,
+                secureStorage = "Windows DPAPI"
+            },
             dashboard = new
             {
                 autoProvisioningEnabled = config.Dashboard.AutoProvisioningEnabled,
@@ -183,9 +217,12 @@ public sealed class ConfigController
                 performanceBudget = config.Dashboard.PerformanceBudget,
                 gameModeAutoTune = config.Dashboard.GameModeAutoTune,
                 themeReadability = config.Dashboard.ThemeReadability,
+                themeId = config.Dashboard.ThemeId,
+                accentMode = config.Dashboard.AccentMode,
+                themeVariant = config.Dashboard.ThemeVariant,
+                animationIntensity = config.Dashboard.AnimationIntensity,
+                dashboardOpacity = config.Dashboard.DashboardOpacity,
                 releaseChannel = config.Dashboard.ReleaseChannel,
-                updateRollbackEnabled = config.Dashboard.UpdateRollbackEnabled,
-                lastKnownGoodConfigured = !string.IsNullOrWhiteSpace(config.Dashboard.LastKnownGoodPath),
                 clipboard = new
                 {
                     previewsHidden = config.Dashboard.ClipboardHidePreviews,
@@ -201,6 +238,13 @@ public sealed class ConfigController
 
     public object UpdateDashboard(DashboardConfigRequest payload)
     {
+        var displayPreferenceRequested = payload.PreferredDisplayId is not null;
+        var clearDisplayPreference = displayPreferenceRequested
+            && string.IsNullOrWhiteSpace(payload.PreferredDisplayId);
+        var selectedCompanionDisplay = displayPreferenceRequested && !clearDisplayPreference
+            ? DisplayManager.ResolveCompanionDisplay(payload.PreferredDisplayId)
+            : null;
+
         _configStore.Update(current =>
         {
             if (payload.OnboardingVersion is > 0)
@@ -234,15 +278,13 @@ public sealed class ConfigController
                 current.Dashboard.ForegroundAppTrackingEnabled = payload.ForegroundAppTrackingEnabled.Value;
             }
 
-            if (payload.PreferredDisplayId is not null)
+            if (displayPreferenceRequested)
             {
-                current.Dashboard.PreferredDisplayId = payload.PreferredDisplayId.Trim();
-                current.Dashboard.DisplaySelectedAt = DateTime.UtcNow.ToString("O");
-            }
-
-            if (payload.PreferredDisplayDeviceName is not null)
-            {
-                current.Dashboard.PreferredDisplayDeviceName = payload.PreferredDisplayDeviceName.Trim();
+                current.Dashboard.PreferredDisplayId = selectedCompanionDisplay?.StableId ?? "";
+                current.Dashboard.PreferredDisplayDeviceName = selectedCompanionDisplay?.DeviceName ?? "";
+                current.Dashboard.DisplaySelectedAt = selectedCompanionDisplay is null
+                    ? ""
+                    : DateTime.UtcNow.ToString("O");
             }
 
             if (payload.PerformanceBudget is not null)
@@ -260,14 +302,39 @@ public sealed class ConfigController
                 current.Dashboard.ThemeReadability = payload.ThemeReadability.Trim();
             }
 
+            if (payload.ThemeId is not null)
+            {
+                current.Dashboard.ThemeId = payload.ThemeId.Trim();
+            }
+
+            if (payload.AccentMode is not null)
+            {
+                current.Dashboard.AccentMode = payload.AccentMode.Trim();
+            }
+
+            if (payload.CustomAccentColor is not null)
+            {
+                current.Dashboard.CustomAccentColor = payload.CustomAccentColor.Trim();
+            }
+
+            if (payload.ThemeVariant is not null)
+            {
+                current.Dashboard.ThemeVariant = payload.ThemeVariant.Trim();
+            }
+
+            if (payload.AnimationIntensity.HasValue)
+            {
+                current.Dashboard.AnimationIntensity = payload.AnimationIntensity.Value;
+            }
+
+            if (payload.DashboardOpacity.HasValue)
+            {
+                current.Dashboard.DashboardOpacity = payload.DashboardOpacity.Value;
+            }
+
             if (payload.ReleaseChannel is not null)
             {
                 current.Dashboard.ReleaseChannel = payload.ReleaseChannel.Trim();
-            }
-
-            if (payload.UpdateRollbackEnabled.HasValue)
-            {
-                current.Dashboard.UpdateRollbackEnabled = payload.UpdateRollbackEnabled.Value;
             }
 
             if (payload.ClipboardHidePreviews.HasValue)
@@ -308,6 +375,11 @@ public sealed class ConfigController
             _launcherService?.ClearRecentHistory();
         }
 
+        if (displayPreferenceRequested)
+        {
+            DisplayPreferenceChanged?.Invoke();
+        }
+
         return GetSnapshot();
     }
 
@@ -330,7 +402,6 @@ public sealed class ConfigController
                 : "metric";
             return current;
         });
-
         return GetSnapshot();
     }
 
@@ -342,6 +413,75 @@ public sealed class ConfigController
             current.Calendar.IcsUrl = normalizedIcsUrl;
             return current;
         });
+
+        return GetSnapshot();
+    }
+
+    public object UpdateFrigate(FrigateConfigRequest payload)
+    {
+        var normalizedBaseUrl = NetworkEndpointGuard.NormalizeLocalHttpBaseUrl(payload.BaseUrl, "Frigate address");
+        var requestedCamera = payload.Camera?.Trim() ?? "";
+        var normalizedCamera = ConfigStore.NormalizeFrigateCamera(requestedCamera);
+        if (!string.IsNullOrWhiteSpace(requestedCamera) && string.IsNullOrWhiteSpace(normalizedCamera))
+        {
+            throw new InvalidOperationException("Frigate camera names may contain only letters, numbers, hyphens, and underscores.");
+        }
+
+        var existing = _configStore.Snapshot().Frigate;
+        var requestedUsername = payload.Username is null ? existing.Username : payload.Username.Trim();
+        var normalizedUsername = ConfigStore.NormalizeFrigateUsername(requestedUsername);
+        if (!string.IsNullOrWhiteSpace(requestedUsername) && string.IsNullOrWhiteSpace(normalizedUsername))
+        {
+            throw new InvalidOperationException("Frigate usernames must be 128 characters or fewer and cannot contain control characters.");
+        }
+
+        var suppliedPassword = payload.Password?.Trim() ?? "";
+        if (suppliedPassword.Length > 512)
+        {
+            throw new InvalidOperationException("Frigate passwords must be 512 characters or fewer.");
+        }
+
+        var removing = string.IsNullOrWhiteSpace(normalizedBaseUrl);
+        var endpointChanged = !string.Equals(existing.BaseUrl, normalizedBaseUrl, StringComparison.OrdinalIgnoreCase);
+        var usernameChanged = !string.Equals(existing.Username, normalizedUsername, StringComparison.Ordinal);
+        string password;
+        if (removing || string.IsNullOrWhiteSpace(normalizedUsername))
+        {
+            if (!removing && !string.IsNullOrWhiteSpace(suppliedPassword))
+            {
+                throw new InvalidOperationException("Enter a Frigate username with the password.");
+            }
+
+            normalizedUsername = "";
+            password = "";
+        }
+        else if (!string.IsNullOrWhiteSpace(suppliedPassword))
+        {
+            password = suppliedPassword;
+        }
+        else if (!endpointChanged && !usernameChanged && !string.IsNullOrWhiteSpace(existing.Password))
+        {
+            password = existing.Password;
+        }
+        else
+        {
+            throw new InvalidOperationException("Enter the Frigate password when enabling authentication or changing its address or username.");
+        }
+
+        if (!removing)
+        {
+            FrigateService.ValidateAuthenticationTransport(new Uri(normalizedBaseUrl, UriKind.Absolute), normalizedUsername, password);
+        }
+
+        _configStore.Update(current =>
+        {
+            current.Frigate.BaseUrl = normalizedBaseUrl;
+            current.Frigate.Camera = string.IsNullOrWhiteSpace(normalizedBaseUrl) ? "" : normalizedCamera;
+            current.Frigate.Username = removing ? "" : normalizedUsername;
+            current.Frigate.Password = removing ? "" : password;
+            return current;
+        });
+        _clearFrigateRuntimeState?.Invoke();
 
         return GetSnapshot();
     }
@@ -365,21 +505,11 @@ public sealed class ConfigController
 
     public DisplayDiagnosticsSnapshot SetDisplayPreference(DisplayPreferenceRequest payload)
     {
-        var displayId = payload.DisplayId?.Trim() ?? "";
-        var diagnostics = GetDisplayDiagnostics();
-        var selected = diagnostics.Displays.FirstOrDefault(display =>
-            string.Equals(display.Id, displayId, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(display.DeviceName, displayId, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(display.DeviceId, displayId, StringComparison.OrdinalIgnoreCase));
-
-        if (selected is null)
-        {
-            throw new InvalidOperationException("Display candidate not found.");
-        }
+        var selected = DisplayManager.ResolveCompanionDisplay(payload.DisplayId);
 
         _configStore.Update(current =>
         {
-            current.Dashboard.PreferredDisplayId = selected.Id;
+            current.Dashboard.PreferredDisplayId = selected.StableId;
             current.Dashboard.PreferredDisplayDeviceName = selected.DeviceName;
             current.Dashboard.DisplaySelectedAt = DateTime.UtcNow.ToString("O");
             return current;
@@ -388,6 +518,25 @@ public sealed class ConfigController
         DisplayPreferenceChanged?.Invoke();
 
         return GetDisplayDiagnostics();
+    }
+
+    public static bool IsCompanionDisplayReady(DisplayDiagnosticsSnapshot diagnostics)
+    {
+        ArgumentNullException.ThrowIfNull(diagnostics);
+
+        if (!string.Equals(diagnostics.Status, "ready", StringComparison.OrdinalIgnoreCase)
+            || diagnostics.CompanionDisplayCount < 1
+            || string.IsNullOrWhiteSpace(diagnostics.SelectedDisplayId))
+        {
+            return false;
+        }
+
+        var selectedDisplayId = diagnostics.SelectedDisplayId.Trim();
+        return diagnostics.Displays.Any(display =>
+            !display.Primary
+            && (string.Equals(display.Id, selectedDisplayId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(display.DeviceName, selectedDisplayId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(display.DeviceId, selectedDisplayId, StringComparison.OrdinalIgnoreCase)));
     }
 
     public void ResetLocalData()
@@ -401,13 +550,19 @@ public sealed class ConfigController
         return new
         {
             product = "Auxora",
-            schemaVersion = 1,
+            schemaVersion = 2,
             exportedAt = DateTimeOffset.UtcNow,
             dashboard = new PortableDashboardConfig
             {
                 PerformanceBudget = config.Dashboard.PerformanceBudget,
                 GameModeAutoTune = config.Dashboard.GameModeAutoTune,
                 ThemeReadability = config.Dashboard.ThemeReadability,
+                ThemeId = config.Dashboard.ThemeId,
+                AccentMode = config.Dashboard.AccentMode,
+                CustomAccentColor = config.Dashboard.CustomAccentColor,
+                ThemeVariant = config.Dashboard.ThemeVariant,
+                AnimationIntensity = config.Dashboard.AnimationIntensity,
+                DashboardOpacity = config.Dashboard.DashboardOpacity,
                 ReleaseChannel = config.Dashboard.ReleaseChannel,
                 MediaMetadataVisible = config.Dashboard.MediaMetadataVisible,
                 AudioSessionLabelsVisible = config.Dashboard.AudioSessionLabelsVisible
@@ -419,7 +574,7 @@ public sealed class ConfigController
 
     public object RestorePortableBackup(PortableBackupRequest backup)
     {
-        if (backup.SchemaVersion != 1 || backup.Scenes is null)
+        if (backup.SchemaVersion is < 1 or > 2 || backup.Scenes is null)
         {
             throw new InvalidOperationException("Unsupported or incomplete Auxora backup.");
         }
@@ -432,6 +587,12 @@ public sealed class ConfigController
                 config.Dashboard.PerformanceBudget = backup.Dashboard.PerformanceBudget ?? config.Dashboard.PerformanceBudget;
                 config.Dashboard.GameModeAutoTune = backup.Dashboard.GameModeAutoTune ?? config.Dashboard.GameModeAutoTune;
                 config.Dashboard.ThemeReadability = backup.Dashboard.ThemeReadability ?? config.Dashboard.ThemeReadability;
+                config.Dashboard.ThemeId = backup.Dashboard.ThemeId ?? config.Dashboard.ThemeId;
+                config.Dashboard.AccentMode = backup.Dashboard.AccentMode ?? config.Dashboard.AccentMode;
+                config.Dashboard.CustomAccentColor = backup.Dashboard.CustomAccentColor ?? config.Dashboard.CustomAccentColor;
+                config.Dashboard.ThemeVariant = backup.Dashboard.ThemeVariant ?? config.Dashboard.ThemeVariant;
+                config.Dashboard.AnimationIntensity = backup.Dashboard.AnimationIntensity ?? config.Dashboard.AnimationIntensity;
+                config.Dashboard.DashboardOpacity = backup.Dashboard.DashboardOpacity ?? config.Dashboard.DashboardOpacity;
                 config.Dashboard.ReleaseChannel = backup.Dashboard.ReleaseChannel ?? config.Dashboard.ReleaseChannel;
                 config.Dashboard.MediaMetadataVisible = backup.Dashboard.MediaMetadataVisible ?? config.Dashboard.MediaMetadataVisible;
                 config.Dashboard.AudioSessionLabelsVisible = backup.Dashboard.AudioSessionLabelsVisible ?? config.Dashboard.AudioSessionLabelsVisible;

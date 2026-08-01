@@ -316,10 +316,10 @@
 
   function getEqualizerToneGroups() {
     return [
-      { id: "bass", label: "Bass", help: "Thump and warmth", indexes: [0, 1, 2, 3] },
-      { id: "voices", label: "Voices", help: "Speech and singing", indexes: [4, 5, 6] },
-      { id: "detail", label: "Clarity", help: "Instruments and detail", indexes: [7, 8] },
-      { id: "highs", label: "Highs", help: "Sparkle and air", indexes: [9] }
+      { id: "bass", label: "Bass", range: "31–250 Hz", help: "Thump and warmth", indexes: [0, 1, 2, 3] },
+      { id: "voices", label: "Voices", range: "500 Hz–2 kHz", help: "Speech and singing", indexes: [4, 5, 6] },
+      { id: "detail", label: "Clarity", range: "4–8 kHz", help: "Instruments and detail", indexes: [7, 8] },
+      { id: "highs", label: "Highs", range: "16 kHz", help: "Sparkle and air", indexes: [9] }
     ];
   }
 
@@ -336,7 +336,9 @@
   }
 
   function getEqualizerToneHelp(tone, gain) {
-    return String(tone && tone.help || "") + " · " + getEqualizerToneDirection(tone, gain);
+    return [tone && tone.range, tone && tone.help, getEqualizerToneDirection(tone, gain)]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   function getEqualizerToneAriaValue(tone, gain) {
@@ -865,21 +867,25 @@
           }
         });
 
-        target.setAttribute("data-tone-value", toneValue);
-        updateEqualizerHeadroom(state.equalizer);
         var toneId = String(target.getAttribute("data-tone") || "");
-        var toneValueNode = container.querySelector('[data-eq-tone-value="' + toneId + '"]');
-        var toneDirectionNode = container.querySelector('[data-eq-tone-direction="' + toneId + '"]');
         var toneGroup = getEqualizerToneGroups().filter(function (tone) {
           return tone.id === toneId;
         })[0];
+        var effectiveToneValue = toneGroup
+          ? getEqualizerToneValue(state.equalizer.bands, toneGroup.indexes)
+          : toneValue;
+        target.value = effectiveToneValue;
+        target.setAttribute("data-tone-value", effectiveToneValue);
+        updateEqualizerHeadroom(state.equalizer);
+        var toneValueNode = container.querySelector('[data-eq-tone-value="' + toneId + '"]');
+        var toneDirectionNode = container.querySelector('[data-eq-tone-direction="' + toneId + '"]');
         if (toneValueNode) {
-          toneValueNode.textContent = formatEqualizerGain(toneValue);
+          toneValueNode.textContent = formatEqualizerGain(effectiveToneValue);
         }
         if (toneGroup) {
-          target.setAttribute("aria-valuetext", getEqualizerToneAriaValue(toneGroup, toneValue));
+          target.setAttribute("aria-valuetext", getEqualizerToneAriaValue(toneGroup, effectiveToneValue));
           if (toneDirectionNode) {
-            toneDirectionNode.textContent = getEqualizerToneHelp(toneGroup, toneValue);
+            toneDirectionNode.textContent = getEqualizerToneHelp(toneGroup, effectiveToneValue);
           }
         }
         return;

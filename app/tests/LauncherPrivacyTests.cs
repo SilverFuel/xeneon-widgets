@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using System.Text.Json;
 
 namespace XenonEdgeHost.Tests;
 
@@ -127,6 +128,51 @@ public sealed class LauncherPrivacyTests
             Assert.That(_configStore.Snapshot().Dashboard.ForegroundAppTrackingEnabled, Is.False);
             Assert.That(File.Exists(recentPath), Is.False);
             Assert.That(service.GetSnapshot(_configStore.Snapshot()).Entries, Is.Empty);
+        }));
+    }
+
+    [Test]
+    public void ProvisioningPublicPayloads_OmitPrivateLauncherExecutionDetails()
+    {
+        var privatePath = Path.Combine(_root, "Browser", "private-profile", "browser.exe");
+        var snapshot = new ProvisioningSnapshot
+        {
+            Supported = true,
+            Configured = true,
+            Status = "live",
+            LauncherCount = 1,
+            SuggestedLaunchers =
+            [
+                new ProvisioningLauncherSuggestionPayload
+                {
+                    Id = "browser-private",
+                    DisplayName = "Private Browser",
+                    Source = "Start Menu",
+                    ExecutablePath = privatePath,
+                    IconPath = privatePath,
+                    Arguments = "--profile-directory=Private https://private.example.test",
+                    Reason = "Trusted Start Menu shortcut",
+                    Selected = true
+                }
+            ]
+        };
+
+        var summaryJson = JsonSerializer.Serialize(ProvisioningSummaryPayload.FromSnapshot(snapshot));
+        var publicJson = JsonSerializer.Serialize(ProvisioningPublicSnapshot.FromSnapshot(snapshot));
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(summaryJson, Does.Not.Contain("SuggestedLaunchers"));
+            Assert.That(summaryJson, Does.Not.Contain(privatePath));
+            Assert.That(publicJson, Does.Contain("Private Browser"));
+            Assert.That(publicJson, Does.Contain("Start Menu"));
+            Assert.That(publicJson, Does.Not.Contain("ExecutablePath"));
+            Assert.That(publicJson, Does.Not.Contain("IconPath"));
+            Assert.That(publicJson, Does.Not.Contain("Arguments"));
+            Assert.That(publicJson, Does.Not.Contain("Reason"));
+            Assert.That(publicJson, Does.Not.Contain("Selected"));
+            Assert.That(publicJson, Does.Not.Contain(privatePath));
+            Assert.That(publicJson, Does.Not.Contain("private.example.test"));
         }));
     }
 }

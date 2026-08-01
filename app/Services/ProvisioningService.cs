@@ -732,6 +732,95 @@ public sealed class ProvisioningSnapshot
     }
 }
 
+public class ProvisioningSummaryPayload
+{
+    public bool Supported { get; set; }
+
+    public bool Configured { get; set; }
+
+    public string Status { get; set; } = "pending";
+
+    public DateTimeOffset? SampledAt { get; set; }
+
+    public bool Stale { get; set; }
+
+    public string Source { get; set; } = "native startup scan";
+
+    public string Message { get; set; } = "Auxora is preparing this PC automatically.";
+
+    public bool AutoCompleted { get; set; }
+
+    public int LauncherCount { get; set; }
+
+    public int DetectedLauncherCount { get; set; }
+
+    public int SteamGameCount { get; set; }
+
+    public List<ProvisioningActionPayload> Actions { get; set; } = [];
+
+    public List<ProvisioningPermissionPayload> PermissionNeeded { get; set; } = [];
+
+    public static ProvisioningSummaryPayload FromSnapshot(ProvisioningSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return CopySummary(snapshot, new ProvisioningSummaryPayload());
+    }
+
+    protected static T CopySummary<T>(ProvisioningSnapshot snapshot, T payload)
+        where T : ProvisioningSummaryPayload
+    {
+        payload.Supported = snapshot.Supported;
+        payload.Configured = snapshot.Configured;
+        payload.Status = snapshot.Status;
+        payload.SampledAt = snapshot.SampledAt;
+        payload.Stale = snapshot.Stale;
+        payload.Source = snapshot.Source;
+        payload.Message = snapshot.Message;
+        payload.AutoCompleted = snapshot.AutoCompleted;
+        payload.LauncherCount = snapshot.LauncherCount;
+        payload.DetectedLauncherCount = snapshot.DetectedLauncherCount;
+        payload.SteamGameCount = snapshot.SteamGameCount;
+        payload.Actions = snapshot.Actions.Select(action => action.Clone()).ToList();
+        payload.PermissionNeeded = snapshot.PermissionNeeded.Select(permission => permission.Clone()).ToList();
+        return payload;
+    }
+}
+
+public sealed class ProvisioningPublicSnapshot : ProvisioningSummaryPayload
+{
+    public List<ProvisioningLauncherSuggestionSummaryPayload> SuggestedLaunchers { get; set; } = [];
+
+    public static new ProvisioningPublicSnapshot FromSnapshot(ProvisioningSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var payload = CopySummary(snapshot, new ProvisioningPublicSnapshot());
+        payload.SuggestedLaunchers = snapshot.SuggestedLaunchers
+            .Select(ProvisioningLauncherSuggestionSummaryPayload.FromSuggestion)
+            .ToList();
+        return payload;
+    }
+}
+
+public sealed class ProvisioningLauncherSuggestionSummaryPayload
+{
+    public string Id { get; set; } = "";
+
+    public string DisplayName { get; set; } = "";
+
+    public string Source { get; set; } = "";
+
+    public static ProvisioningLauncherSuggestionSummaryPayload FromSuggestion(ProvisioningLauncherSuggestionPayload suggestion)
+    {
+        ArgumentNullException.ThrowIfNull(suggestion);
+        return new ProvisioningLauncherSuggestionSummaryPayload
+        {
+            Id = suggestion.Id,
+            DisplayName = suggestion.DisplayName,
+            Source = suggestion.Source
+        };
+    }
+}
+
 public sealed class ProvisioningLauncherSuggestionPayload
 {
     public string Id { get; set; } = "";

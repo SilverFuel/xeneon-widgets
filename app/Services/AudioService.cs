@@ -25,6 +25,11 @@ public sealed class AudioService
             RefreshSnapshot();
         }
 
+        return Task.FromResult(GetCachedSnapshot());
+    }
+
+    public AudioSnapshotPayload GetCachedSnapshot()
+    {
         lock (_sync)
         {
             var clone = _snapshot.Clone();
@@ -34,7 +39,7 @@ public sealed class AudioService
                 clone.Status = "stale";
             }
 
-            return Task.FromResult(clone);
+            return clone;
         }
     }
 

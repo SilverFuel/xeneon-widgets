@@ -21,7 +21,7 @@ The installer handles this automatically:
 
 The Start Menu folder also includes clearly labeled recovery shortcuts:
 
-- `Auxora Recovery (Safe Mode)` stops any running host process, disables auto-start, ignores saved display placement, and opens on the primary monitor.
+- `Auxora Recovery (Safe Mode)` stops any running host process, disables auto-start, ignores saved display placement, and opens only on an active non-primary companion display. If none is active, it remains tray-only.
 - `Repair Auxora` restores Start Menu/Desktop shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
 
 Before publication, the exact manifest-bound installer must complete the disposable-VM lifecycle receipt: install, live `/api/health`, process restart, reboot/autostart, previous-beta upgrade, repair, normal uninstall, and remove-all-data.

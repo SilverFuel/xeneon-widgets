@@ -482,19 +482,30 @@
       }
 
       function mountWidget(widget) {
-        var intervalId = 0;
+        var timeoutId = 0;
         var busy = false;
+        var destroyed = false;
+
+        function schedule() {
+          window.clearTimeout(timeoutId);
+          if (destroyed || !widget.refreshInterval || (typeof widget.shouldPause === "function" && widget.shouldPause())) {
+            return;
+          }
+          timeoutId = window.setTimeout(tick, widget.refreshInterval);
+        }
 
         function tick() {
-          if (busy) {
+          if (busy || destroyed) {
             return;
           }
           busy = true;
           Promise.resolve(widget.updateWidget()).then(function () {
             busy = false;
+            schedule();
           }, function (error) {
             busy = false;
             console.warn(error);
+            schedule();
           });
         }
 
@@ -504,12 +515,9 @@
 
         tick();
 
-        if (widget.refreshInterval) {
-          intervalId = window.setInterval(tick, widget.refreshInterval);
-        }
-
         window.addEventListener("beforeunload", function () {
-          window.clearInterval(intervalId);
+          destroyed = true;
+          window.clearTimeout(timeoutId);
           if (typeof widget.destroyWidget === "function") {
             widget.destroyWidget();
           }
@@ -519,8 +527,12 @@
       function normalizeData(raw) {
         var data = raw || {};
         var alerts = data.alerts || [];
+        var configured = data.configured !== false && (!!getParam("endpoint", "") || !!data.configured);
         return {
-          hasLiveData: !!(Object.keys(data).length || alerts.length),
+          configured: configured,
+          hasLiveData: configured && (data.status === "live" || alerts.length > 0),
+          status: data.status || (configured ? "checking" : "setup"),
+          message: data.message || "",
           source: data.source || (getParam("endpoint", "") ? "Frigate API" : "Needs setup"),
           camera: data.camera || getParam("camera", "Driveway"),
           snapshotUrl: data.snapshotUrl || getParam("snapshot", ""),
@@ -554,7 +566,10 @@
         return "danger";
       }
 
+      var lastData = null;
+
       function render(data, error) {
+        lastData = data;
         var last = data.lastDetection;
         var alertCount = data.alerts.length;
         var topTone = error ? "danger" : !data.hasLiveData ? "warn" : alertCount ? toneForScore(Number(last && last.score || 0.8)) : "good";
@@ -562,13 +577,13 @@
           ? appendCacheBuster(data.snapshotUrl)
           : buildSnapshot(data.camera, last ? last.label : "No detections", last ? last.zone : "standby", last ? formatAgo(last.time) : "Standby");
 
-        document.getElementById("frigate-status").textContent = error ? "Unavailable" : data.source;
+        document.getElementById("frigate-status").textContent = error ? "Unavailable" : data.configured ? data.source : "Needs setup";
         document.getElementById("frigate-status").setAttribute("data-tone", topTone);
         document.getElementById("snapshot-camera").textContent = last ? last.camera : data.camera;
         document.getElementById("snapshot-image").src = snapshot;
-        document.getElementById("snapshot-badge").textContent = alertCount ? alertCount + " active" : "Calm";
+        document.getElementById("snapshot-badge").textContent = alertCount ? alertCount + " recent" : "Calm";
         document.getElementById("snapshot-badge").setAttribute("data-tone", topTone);
-        document.getElementById("alert-badge").textContent = alertCount ? alertCount + " alerts" : "No alerts";
+        document.getElementById("alert-badge").textContent = alertCount ? alertCount + " detections" : "No detections";
         document.getElementById("alert-badge").setAttribute("data-tone", topTone);
         document.getElementById("overlay-title").textContent = last ? last.label + " on " + last.camera : "No detections";
         document.getElementById("overlay-detail").textContent = last ? last.zone + " • " + formatAgo(last.time) : "Waiting for object events";
@@ -577,12 +592,15 @@
 
         document.getElementById("summary-strip").innerHTML = [
           '<div class="summary-chip"><strong>' + data.counts.lastHour + '</strong><span>Last hour</span></div>',
-          '<div class="summary-chip"><strong>' + data.counts.activeCameras + '</strong><span>Active cameras</span></div>',
+          '<div class="summary-chip"><strong>' + data.counts.activeCameras + '</strong><span>Seen cameras</span></div>',
           '<div class="summary-chip"><strong>' + escapeHtml(last ? last.label : "None") + '</strong><span>Latest object</span></div>'
         ].join("");
 
         if (!data.alerts.length) {
-          document.getElementById("alert-list").innerHTML = '<div class="empty-state">' + (data.hasLiveData ? "No motion or object alerts right now." : "Camera alerts will light up after the native connector is added.") + '</div>';
+          var emptyCopy = error
+            ? (error.message || "Frigate is unavailable.")
+            : data.message || (data.configured ? "No recent object detections." : "Add a local Frigate address in Diagnostics to enable Camera Detection.");
+          document.getElementById("alert-list").innerHTML = '<div class="empty-state">' + escapeHtml(emptyCopy) + '</div>';
           return;
         }
 
@@ -603,7 +621,10 @@
       }
 
       var widget = {
-        refreshInterval: getParam("endpoint", "") ? Math.max(3000, getNumberParam("refresh", 5000)) : 0,
+        refreshInterval: getParam("endpoint", "") ? Math.max(30000, getNumberParam("refresh", 30000)) : 0,
+        shouldPause: function () {
+          return Boolean(lastData && !lastData.configured);
+        },
         initWidget: function () {},
         updateWidget: function () {
           var payload = getJsonParam("payload", null);

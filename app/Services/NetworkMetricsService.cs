@@ -1,4 +1,6 @@
 using System.Net.NetworkInformation;
+using System.Net;
+using System.Runtime.InteropServices;
 
 namespace XenonEdgeHost;
 
@@ -12,6 +14,7 @@ public sealed class NetworkMetricsService : IDisposable
     private NetworkSnapshot _snapshot = new();
     private long _lastBytesReceived;
     private long _lastBytesSent;
+    private string _lastInterfaceId = "";
     private DateTimeOffset _lastSampleTime = DateTimeOffset.MinValue;
     private DateTimeOffset _nextPingAt = DateTimeOffset.MinValue;
     private int _pingSampling;
@@ -32,10 +35,11 @@ public sealed class NetworkMetricsService : IDisposable
         }
 
         _started = true;
-        SampleThroughput();
-        SamplePing();
-        _throughputTimer = new System.Threading.Timer(_ => SampleThroughput(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
-        _pingTimer = new System.Threading.Timer(_ => SamplePing(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        // Interface discovery and gateway probes are telemetry work, not startup
+        // prerequisites. Run the first samples on the timer queue so the local API
+        // becomes healthy even when Windows networking is slow to answer.
+        _throughputTimer = new System.Threading.Timer(_ => SampleThroughput(), null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+        _pingTimer = new System.Threading.Timer(_ => SamplePing(), null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
         _logger.Info("Native network metrics service started.");
     }
 
@@ -79,16 +83,16 @@ public sealed class NetworkMetricsService : IDisposable
                                   && network.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
                 .ToList();
 
+            var primaryInterface = SelectPrimaryInterface(interfaces);
             var totalBytesReceived = 0L;
             var totalBytesSent = 0L;
-
-            foreach (var network in interfaces)
+            if (primaryInterface is not null)
             {
                 try
                 {
-                    var statistics = network.GetIPv4Statistics();
-                    totalBytesReceived += statistics.BytesReceived;
-                    totalBytesSent += statistics.BytesSent;
+                    var statistics = primaryInterface.GetIPv4Statistics();
+                    totalBytesReceived = statistics.BytesReceived;
+                    totalBytesSent = statistics.BytesSent;
                 }
                 catch
                 {
@@ -99,20 +103,19 @@ public sealed class NetworkMetricsService : IDisposable
             var elapsedSeconds = _lastSampleTime == DateTimeOffset.MinValue
                 ? 0
                 : Math.Max(0.001, (now - _lastSampleTime).TotalSeconds);
-            var deltaReceived = _lastSampleTime == DateTimeOffset.MinValue
+            var interfaceChanged = !string.Equals(_lastInterfaceId, primaryInterface?.Id, StringComparison.Ordinal);
+            var deltaReceived = _lastSampleTime == DateTimeOffset.MinValue || interfaceChanged
                 ? 0
                 : Math.Max(0, totalBytesReceived - _lastBytesReceived);
-            var deltaSent = _lastSampleTime == DateTimeOffset.MinValue
+            var deltaSent = _lastSampleTime == DateTimeOffset.MinValue || interfaceChanged
                 ? 0
                 : Math.Max(0, totalBytesSent - _lastBytesSent);
 
             _lastBytesReceived = totalBytesReceived;
             _lastBytesSent = totalBytesSent;
+            _lastInterfaceId = primaryInterface?.Id ?? "";
             _lastSampleTime = now;
 
-            var primaryInterface = interfaces
-                .OrderByDescending(network => network.Speed)
-                .FirstOrDefault();
             var type = MapNetworkType(primaryInterface);
             var details = ReadInterfaceDetails(primaryInterface);
             var healthTarget = ResolveHealthTarget(details);
@@ -232,6 +235,84 @@ public sealed class NetworkMetricsService : IDisposable
 
         return TimeSpan.FromSeconds(Math.Min(60, 5 * Math.Pow(2, _pingFailureCount)));
     }
+
+    private static NetworkInterface? SelectPrimaryInterface(IReadOnlyList<NetworkInterface> interfaces)
+    {
+        var candidates = interfaces
+            .Select(CreateSelectionCandidate)
+            .Where(candidate => candidate is not null)
+            .Cast<NetworkAdapterCandidate>()
+            .ToList();
+        var selectedId = SelectPrimaryInterfaceId(candidates, TryGetBestInterfaceIndex());
+        return selectedId is null
+            ? null
+            : interfaces.FirstOrDefault(network => string.Equals(network.Id, selectedId, StringComparison.Ordinal));
+    }
+
+    private static NetworkAdapterCandidate? CreateSelectionCandidate(NetworkInterface network)
+    {
+        try
+        {
+            var properties = network.GetIPProperties();
+            var ipv4Properties = properties.GetIPv4Properties();
+            return new NetworkAdapterCandidate(
+                network.Id,
+                ipv4Properties?.Index,
+                properties.UnicastAddresses.Any(address => address.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork),
+                properties.GatewayAddresses.Any(address => address.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                                                           && !address.Address.Equals(IPAddress.Any)),
+                network.Speed);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static string? SelectPrimaryInterfaceId(
+        IReadOnlyList<NetworkAdapterCandidate> candidates,
+        int? bestRouteInterfaceIndex)
+    {
+        var usable = candidates.Where(candidate => candidate.HasIpv4Address).ToList();
+        if (bestRouteInterfaceIndex.HasValue)
+        {
+            var routed = usable.FirstOrDefault(candidate => candidate.Ipv4Index == bestRouteInterfaceIndex.Value);
+            if (routed is not null)
+            {
+                return routed.Id;
+            }
+        }
+
+        return usable
+            .OrderByDescending(candidate => candidate.HasIpv4Gateway)
+            .ThenByDescending(candidate => candidate.Speed)
+            .ThenBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .Select(candidate => candidate.Id)
+            .FirstOrDefault();
+    }
+
+    private static int? TryGetBestInterfaceIndex()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        try
+        {
+            var destination = BitConverter.ToUInt32(IPAddress.Parse("1.1.1.1").GetAddressBytes(), 0);
+            return GetBestInterface(destination, out var interfaceIndex) == 0
+                ? checked((int)interfaceIndex)
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern uint GetBestInterface(uint destinationAddress, out uint bestInterfaceIndex);
 
     private static string MapNetworkType(NetworkInterface? networkInterface)
     {
@@ -366,6 +447,13 @@ public sealed class NetworkSnapshot
 }
 
 internal sealed record NetworkHealthTarget(string Target, string Source);
+
+internal sealed record NetworkAdapterCandidate(
+    string Id,
+    int? Ipv4Index,
+    bool HasIpv4Address,
+    bool HasIpv4Gateway,
+    long Speed);
 
 internal sealed class NetworkInterfaceDetails
 {

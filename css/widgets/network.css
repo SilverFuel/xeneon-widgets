@@ -98,14 +98,14 @@
 .network-quality-score span,
 .network-pill span {
   color: var(--color-text-dim);
-  font-size: 0.68rem;
+  font-size: max(12px, 0.75rem);
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .network-quality-score strong {
-  color: var(--color-accent);
+  color: var(--status-success-text);
   font-size: 4.8rem;
   font-weight: 900;
   line-height: 0.92;
@@ -164,7 +164,7 @@
 }
 
 .network-pill[data-tone="good"] strong {
-  color: var(--color-accent);
+  color: var(--status-success-text);
 }
 
 .network-pill[data-tone="warn"] strong {
@@ -327,4 +327,40 @@
 .network-compact-list .inline-list-item {
   padding: 8px 9px;
   border-radius: 8px;
+}
+
+.network-quality-card,
+.network-pill {
+  border-color: var(--status-success-border);
+  background: var(--status-success-surface);
+}
+
+.network-quality-card[data-tone="warn"],
+.network-pill[data-tone="warn"],
+.network-unifi-card[data-link-state="review"],
+.network-certificate-review {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+}
+
+.network-quality-card[data-tone="danger"],
+.network-pill[data-tone="danger"] {
+  border-color: var(--status-danger-border);
+  background: var(--status-danger-surface);
+}
+
+.network-pill[data-tone="warn"] strong,
+.network-certificate-review strong {
+  color: var(--status-warning-text);
+}
+
+.network-pill[data-tone="danger"] strong,
+.network-form-message[data-tone="danger"] {
+  color: var(--status-danger-text);
+}
+
+.network-unifi-card,
+.network-list-card {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
 }

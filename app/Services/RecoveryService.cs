@@ -30,16 +30,20 @@ public sealed class RecoveryService
         var repairScript = GetInstalledScriptPath("repair.ps1");
         var safeModeScript = GetInstalledScriptPath("Launch-XenonSafeMode.ps1");
         var logDirectory = Path.GetDirectoryName(_logger.LogPath) ?? "";
+        var display = DisplayManager.BuildDiagnostics();
+        var waitingForCompanion = display.CompanionDisplayCount == 0;
 
         return new RecoverySnapshot
         {
-            Status = "ready",
-            Message = "Customer recovery actions use the installed Auxora support files when they are available.",
+            Status = waitingForCompanion ? "waiting-for-companion-display" : "ready",
+            Message = waitingForCompanion
+                ? "Auxora is staying hidden because no companion display is active. Connect or extend a non-primary display, then choose Show Auxora Display from the tray."
+                : "Recovery actions use the installed Auxora support files when they are available.",
             Actions =
             [
                 RecoveryAction.CreateAvailable("retry", "Retry", "Reload the dashboard in this window."),
                 RecoveryAction.FromPath("repair", "Repair", "Run the installed per-user repair script.", repairScript),
-                RecoveryAction.FromPath("safe-mode", "Restart in Safe Mode", "Restart Auxora on the primary display with saved display selection ignored.", safeModeScript),
+                RecoveryAction.FromPath("safe-mode", "Restart in Safe Mode", "Restart Auxora on an available companion display with saved display selection ignored.", safeModeScript),
                 RecoveryAction.FromPath("open-logs", "Open Logs", "Open the local Auxora log folder.", Directory.Exists(logDirectory) ? logDirectory : null),
                 RecoveryAction.CreateAvailable("quit", "Quit", "Close Auxora completely.")
             ]

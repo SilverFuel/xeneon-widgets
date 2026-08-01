@@ -401,8 +401,8 @@
     <header class="header">
       <div>
         <p class="eyebrow">Diagnostics</p>
-        <h1>Auto setup & diagnostics</h1>
-        <p class="subtitle">Auxora scans this PC, prepares safe defaults, and only asks for permissions it cannot infer.</p>
+        <h1>Diagnostics</h1>
+        <p class="subtitle">Review automatic checks, companion-display targeting, and optional local connections.</p>
       </div>
       <div id="guide-status" class="status tone-warn">Loading</div>
     </header>
@@ -417,24 +417,13 @@
               <p class="eyebrow">Essentials</p>
               <h2>Detected automatically</h2>
             </div>
-            <button id="finish-setup" class="button is-primary" type="button" disabled>Auto ready</button>
+            <div id="finish-setup-slot"></div>
           </div>
 
           <div id="guide-essentials" class="row-list"></div>
 
           <div class="panel-footer">
-            <div class="snippet-card">
-              <div>
-                <p class="section-kicker">Display URL</p>
-                <h3>Open on the EDGE</h3>
-              </div>
-              <pre id="guide-iframe-snippet" class="snippet-box"></pre>
-              <div class="actions">
-                <button id="guide-copy-button" class="button is-primary" type="button">Copy embed</button>
-                <button id="guide-copy-url-button" class="button" type="button">Copy URL</button>
-              </div>
-              <p id="guide-finish-copy" class="compact-note">Finish setup hides this panel from the main picker, but Diagnostics still stays available later.</p>
-            </div>
+            <p id="guide-finish-copy" class="compact-note">Diagnostics stays available whenever you need to review or repair this display.</p>
           </div>
         </section>
       </div>
@@ -454,13 +443,12 @@
 
         <section id="guide-integrations-panel" class="panel is-hidden" aria-hidden="true">
           <div id="guide-integrations" class="optional-list"></div>
-          <a id="guide-open-advanced" class="button is-hidden" href="#"></a>
         </section>
       </div>
     </section>
   </main>
 
-  <script src="../js/widget-core.js?v=20260729-75"></script>
+  <script src="../js/widget-core.js?v=20260731-99"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
@@ -468,17 +456,18 @@
       var configEndpoint = params.get("configEndpoint") || "/api/config";
       var dashboardConfigEndpoint = params.get("dashboardConfigEndpoint") || "/api/config/dashboard";
       var weatherConfigEndpoint = params.get("weatherConfigEndpoint") || "/api/config/weather";
+      var frigateConfigEndpoint = params.get("frigateConfigEndpoint") || "/api/config/frigate";
+      var frigateTestEndpoint = params.get("frigateTestEndpoint") || "/api/frigate/test";
       var hueEndpoint = params.get("hueEndpoint") || "/api/hue";
       var hueLinkEndpoint = params.get("hueLinkEndpoint") || "/api/hue/link";
-      var dashboardUrl = params.get("dashboardUrl") || window.location.href;
-      var advancedUrl = dashboardUrl + (dashboardUrl.indexOf("?") === -1 ? "?" : "&") + "advanced=1";
       var showAdvanced = params.get("advanced") === "1";
       var onboardingVersion = Number(params.get("onboardingVersion") || 1);
       var settingsStorageKey = "xeneon-dashboard-settings";
       var defaultDashboardSettings = {};
       var expandedSections = {
         weather: false,
-        hue: false
+        hue: false,
+        frigate: false
       };
       var integrationSchemas = [];
 
@@ -525,15 +514,6 @@
         }
       }
 
-      function renderSnippets() {
-        var iframeSnippet = '<iframe src="' + dashboardUrl + '" width="2560" height="720" loading="eager" scrolling="no" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border:0;overflow:hidden;background:#0b0f14;"></iframe>';
-        document.getElementById("guide-iframe-snippet").textContent = iframeSnippet;
-        var advancedLink = document.getElementById("guide-open-advanced");
-        if (advancedLink) {
-          advancedLink.href = advancedUrl;
-        }
-      }
-
       function countState(items, state) {
         return items.filter(function (item) {
           return item && item.state === state;
@@ -542,7 +522,7 @@
 
       function renderOverview(setup) {
         var essentials = [setup.items.bridge, setup.items.display, setup.items.provisioning, setup.items.system, setup.items.network].filter(Boolean);
-        var optional = [setup.items.weather, setup.items.hue, setup.items.calendar, setup.items.unifi].filter(Boolean);
+        var optional = [setup.items.weather, setup.items.hue, setup.items.calendar, setup.items.unifi, setup.items.frigate].filter(Boolean);
         var autoDetected = [setup.items.unifi].filter(function (item) {
           return item && (item.state === "Detected" || item.state === "Ready" || item.state === "Built in");
         }).length;
@@ -639,6 +619,39 @@
                 '</div>' +
                 '<p id="hue-message" class="detail">' + escapeHtml(hueSnapshot.message || "Press the physical button on the Hue bridge before linking.") + '</p>' +
               '</form>'
+          },
+          {
+            id: "frigate",
+            item: setup.items.frigate || {
+              label: "Camera Detection",
+              state: (config.frigate && config.frigate.configured) ? "Configured" : "Optional",
+              nextStep: "Add a local Frigate address only if you want object-detection events."
+            },
+            body: '' +
+              '<form id="frigate-form" class="form">' +
+                '<div class="form-row">' +
+                  '<div class="field">' +
+                    '<label for="frigate-base-url">Local Frigate address</label>' +
+                    '<input id="frigate-base-url" type="url" placeholder="http://192.168.1.50:5000/" value="' + escapeHtml((config.frigate && config.frigate.baseUrl) || "") + '">' +
+                  '</div>' +
+                  '<div class="field">' +
+                    '<label for="frigate-camera">Camera filter</label>' +
+                    '<input id="frigate-camera" type="text" placeholder="Optional, for example driveway" value="' + escapeHtml((config.frigate && config.frigate.camera) || "") + '">' +
+                  '</div>' +
+                  '<div class="field">' +
+                    '<label for="frigate-username">Username</label>' +
+                    '<input id="frigate-username" type="text" autocomplete="username" placeholder="Optional for port 8971" value="' + escapeHtml((config.frigate && config.frigate.username) || "") + '">' +
+                  '</div>' +
+                  '<div class="field">' +
+                    '<label for="frigate-password">Password</label>' +
+                    '<input id="frigate-password" type="password" autocomplete="current-password" placeholder="' + ((config.frigate && config.frigate.authenticationConfigured) ? "Saved — leave blank to keep" : "Optional Frigate password") + '">' +
+                  '</div>' +
+                '</div>' +
+                '<p class="detail">Use an HTTPS address with credentials for Frigate\'s authenticated port 8971, or leave both blank for a trusted internal port. Passwords are protected by Windows, and HTTPS certificates must be trusted by Windows. Clear the address and save to remove Camera Detection.</p>' +
+                '<div class="actions">' +
+                  '<button class="button is-primary" type="submit">Save camera detection</button>' +
+                '</div>' +
+              '</form>'
           }
         ];
 
@@ -646,7 +659,9 @@
           var expanded = shouldExpandSection(entry.id, entry.item.state);
           var detail = entry.id === "weather"
             ? weatherDetail(config, entry.item)
-            : hueDetail(hueSnapshot, entry.item);
+            : entry.id === "hue"
+              ? hueDetail(hueSnapshot, entry.item)
+              : entry.item.nextStep;
           return '' +
             '<div class="optional-card">' +
               '<button class="row-head" type="button" data-expand="' + entry.id + '">' +
@@ -678,6 +693,7 @@
 
         var weatherForm = document.getElementById("weather-form");
         var hueForm = document.getElementById("hue-form");
+        var frigateForm = document.getElementById("frigate-form");
 
         if (weatherForm) {
           weatherForm.addEventListener("submit", saveWeather);
@@ -685,6 +701,10 @@
 
         if (hueForm) {
           hueForm.addEventListener("submit", linkHue);
+        }
+
+        if (frigateForm) {
+          frigateForm.addEventListener("submit", saveFrigate);
         }
       }
 
@@ -778,23 +798,31 @@
       }
 
       function renderCompletion(setup) {
-        var finishButton = document.getElementById("finish-setup");
+        var finishSlot = document.getElementById("finish-setup-slot");
         var finishCopy = document.getElementById("guide-finish-copy");
 
+        finishSlot.textContent = "";
+
         if (setup.onboardingCompleted) {
-          finishButton.disabled = true;
-          finishButton.textContent = "Auto ready";
           finishCopy.textContent = setup.onboardingCompletedAt
             ? "Auto setup completed on " + new Date(setup.onboardingCompletedAt).toLocaleString() + ". Diagnostics stays available if anything breaks."
             : "Auto setup completed. Diagnostics stays available if anything breaks.";
           return;
         }
 
+        if (!setup.essentialsReady) {
+          finishCopy.textContent = "Auxora is still checking the local app service, System Monitor, and Network Monitor.";
+          return;
+        }
+
+        var finishButton = document.createElement("button");
+        finishButton.id = "finish-setup";
+        finishButton.className = "button is-primary";
+        finishButton.type = "button";
         finishButton.textContent = "Finish manually";
-        finishButton.disabled = !setup.essentialsReady;
-        finishCopy.textContent = setup.essentialsReady
-          ? "Auxora normally completes this automatically. Use this only if diagnostics says auto setup is still pending."
-          : "Auxora is still checking the local app service, System Monitor, and Network Monitor.";
+        finishButton.addEventListener("click", finishSetup);
+        finishSlot.appendChild(finishButton);
+        finishCopy.textContent = "Auxora normally completes setup automatically. Use this only if Diagnostics still says setup is pending.";
       }
 
       async function refreshGuide() {
@@ -811,7 +839,6 @@
           var hue = results[2];
           var setup = health.setup;
 
-          renderSnippets();
           renderOverview(setup);
           renderEssentials(setup);
           renderOptional(config, hue, setup);
@@ -878,6 +905,41 @@
         notifyParent("hue");
       }
 
+      async function saveFrigate(event) {
+        event.preventDefault();
+        var saved = false;
+        var connection = null;
+        var payload = {
+          baseUrl: document.getElementById("frigate-base-url").value,
+          camera: document.getElementById("frigate-camera").value,
+          username: document.getElementById("frigate-username").value,
+          password: document.getElementById("frigate-password").value
+        };
+
+        setGuideStatus("Saving", "Optional");
+        try {
+          await fetchJson(frigateConfigEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          saved = true;
+          connection = payload.baseUrl.trim()
+            ? await fetchJson(frigateTestEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}"
+              })
+            : { configured: false, connected: false, state: "Optional" };
+          expandedSections.frigate = true;
+          await refreshGuide();
+          setGuideStatus(connection.connected ? "Camera connected" : connection.state, connection.state);
+          notifyParent("frigate");
+        } catch (error) {
+          setGuideStatus(saved ? "Saved; test failed" : "Needs Setup", "Needs Setup");
+        }
+      }
+
       async function finishSetup() {
         setGuideStatus("Saving", "Optional");
         try {
@@ -896,26 +958,9 @@
         }
       }
 
-      async function copyText(text) {
-        try {
-          await navigator.clipboard.writeText(text);
-          setGuideStatus("Copied", "Ready");
-        } catch (error) {
-          setGuideStatus("Copy failed", "Needs Setup");
-        }
-      }
-
       var widget = {
         refreshInterval: 30000,
-        initWidget: function () {
-          document.getElementById("finish-setup").addEventListener("click", finishSetup);
-          document.getElementById("guide-copy-button").addEventListener("click", function () {
-            copyText(document.getElementById("guide-iframe-snippet").textContent);
-          });
-          document.getElementById("guide-copy-url-button").addEventListener("click", function () {
-            copyText(dashboardUrl);
-          });
-        },
+        initWidget: function () {},
         updateWidget: function () {
           return refreshGuide();
         },

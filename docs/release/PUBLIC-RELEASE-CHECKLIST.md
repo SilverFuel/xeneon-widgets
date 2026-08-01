@@ -11,6 +11,8 @@ Use this before publishing a free beta, paid release, or public download.
 powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<installer>.exe -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall -RemoveLocalData
 ```
 
+- A publication-bound run must also supply `-ReleaseAssetsPath`, `-LifecycleReceiptPath`, `-FrigateQualificationReceiptPath`, and `-DisplayQualificationReceiptPath` together. The gauntlet rejects partial evidence.
+
 ## Free Public Beta Must Do
 
 - Keep `support.html` and `refund-policy.html` bundled in the app and reachable through the documented support path; they are not extra release assets.
@@ -19,8 +21,11 @@ powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<insta
 - Publish no macOS assets; the beta workflow is Windows-only.
 - Clearly publish GitHub Issues and Security Advisories as the support path.
 - Run `npm run release:ready` and resolve every blocker.
+- Treat `npm run release:free-beta` as a verifier, not a local-build shortcut: pass the immutable release asset directory plus all exact-candidate receipt paths. It fails closed when any are missing.
 - Confirm the product name and legal disclaimer keep the app independent from CORSAIR.
 - Require the exact manifest-bound installer to pass install, live `/api/health`, process restart, reboot/autostart, previous-beta upgrade, repair, normal uninstall, and remove-all-data on a disposable Windows VM.
+- Require the same manifest-bound installer to pass `docs/release/FRIGATE-CERTIFICATION.md` against a physical Frigate server and real camera on the target LAN. Verify the secret-free receipt with `scripts/Test-FrigateQualificationReceipt.ps1`.
+- Require the same manifest-bound installer to pass `docs/release/DISPLAY-CERTIFICATION.md` on a physical Windows machine and physical touch companion display. Verify the privacy-safe receipt with `scripts/Test-DisplayQualificationReceipt.ps1`.
 - Confirm Reset all app data removes local settings and protected secrets for the current user.
 - Confirm the Start Menu uninstall cleanup shortcut removes local app data when selected and does not ask extra questions.
 - Confirm the in-app Updates panel can read the GitHub Releases feed and expose the latest installer download.
@@ -53,3 +58,5 @@ powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<insta
 - Setup requires JSON endpoint copying for normal users.
 - The app cannot open from the Start Menu or Applications folder after reboot.
 - The support, license, reset, or update paths are missing from the customer build.
+- Camera Detection has no verified exact-candidate receipt from a physical Frigate server and real camera.
+- Companion-display behavior has no verified exact-candidate receipt covering primary-display exclusion, taskbar hiding, hot-plug recovery, role switching, scaling, touch, keyboard, and screen-reader behavior.

@@ -10,11 +10,92 @@
 - Added Auxora's official retro icon across the app and Windows shortcuts.
 
 - Began the Auxora transition with adaptive touch layouts for compact, standard, ultrawide, and portrait displays.
-- Replaced the widget-first shell with Home, Scenes, Library, and Settings navigation.
-- Added persisted Work, Gaming, Media, Night, and Home Scenes with manual overrides, automation rules, and per-display assignments.
-- Added Smart Glance, quick controls, safe one-tap action chains, DDC/CI monitor controls, and a temporary local phone remote.
-- Added signed extension inspection, permission allowlisting, and credential-free Scene backup and restore.
+- Replaced the widget-first shell with Home, Modes, Apps & Controls, and Settings navigation.
+- Added persisted Work, Gaming, Media, and Home Modes with manual overrides, automation rules, and per-display assignments; Night remains a separate display variant.
+- Added Smart Glance, quick controls, safe one-tap action chains, and DDC/CI monitor controls. Phone Remote is not included in this beta.
+- Displayed the verified `CRXED00` companion as XENEON EDGE when Windows supplies only the generic PnP label, while preserving specific Windows names and the hardware-backed stable display identity.
+- Added inspection-only signed manifest checks, permission allowlisting, and credential-free Mode backup and restore. Third-party loading remains disabled.
 - Added rollback-safe migration from existing XENEON settings, protected secrets, installation, and shortcuts.
+- Fixed dashboard runtime failures and refresh flicker caused by replacing live form controls during settings reconciliation.
+- Made Diagnostics local-data reset confirmation expire after eight seconds, cancel when another action takes ownership, and retain its warning while background refreshes finish.
+- Made Touch Lock a real input lock: navigation, panels, quick controls, scrolling, keyboard activation, and destructive controls are inert behind a transparent full-surface guard until the persistent Unlock Touch control is used; locking also closes Quick controls, survives reload, and restores focus safely when unlocked.
+- Resolved perpetual feature-rail loading states without requiring panel activation: Recovery now performs one lightweight readiness check after bridge hydration, while Display Controls reports the truthful surface state `Available` and defers potentially slow DDC/CI hardware discovery until the panel is opened.
+- Stopped short optional-integration cards in Diagnostics from stretching to the full Camera Detection form height, removing the large opaque empty panel beside Camera setup while preserving natural card sizes at every responsive column count.
+- Hardened rendered UI validation for Microsoft Edge's launcher-to-browser process handoff so the real headless browser is closed through its debugging endpoint and isolated test profiles no longer leak into later release checks.
+- Fixed the native Content Security Policy for every shipped standalone fallback by applying the response nonce to each inline runtime script; fallback pages now execute instead of remaining on their initial Loading state.
+- Aligned standalone Diagnostics with the main product by removing obsolete `Auto setup & diagnostics` / disabled `Auto ready` UI and rendering manual completion only when it is actionable.
+- Made the standalone Calendar, Network, and System Monitor use Auxora's native local services by default instead of fake meetings, browser estimates, or empty bridge placeholders.
+- Removed the standalone Diagnostics developer embed/URL controls, stopped Audio from exposing raw Windows device identifiers, and raised Philips Hue actions to the 44-pixel touch minimum.
+- Removed remote-font dependencies from shipped fallback pages and added an exact 2560×720 rendered audit for all eight fallback surfaces, including terminal-state, overflow, CSP, and product-truth assertions.
+- Raised every Layout Editor inline action to the 44×44 touch minimum and increased undersized System Monitor, Audio & Media, and Network supporting labels to a 12-pixel readability floor.
+- Expanded the rendered release gate to open and inspect every visible registered product surface at exact 2560×720 for terminal status, touch-target size, text size, accessible naming, clipping, overflow, duplicate titles, and runtime failures.
+- Made Calendar, Weather, Clipboard History, and Philips Hue discoverable in Apps & Controls before configuration while keeping unconfigured integrations out of ordinary Home Mode layouts and keeping the Hue quick shortcut hidden until a bridge is linked.
+- Added direct Weather and Calendar Diagnostics handoffs, generalized optional-section reveal/scroll/focus behavior, and added Clipboard History to Layout Editor without exposing clipboard previews by default.
+- Added Windows High Contrast support across every product surface: decorative glow layers are removed, controls retain system-color boundaries and selected states, keyboard focus uses the system highlight, Game Mode launch cards and Camera Detection actions remain visible, and Theme Studio no longer opts its color input out of forced colors.
+- Eliminated the remaining interactive dashboard `innerHTML` setter paths, deferred Theme Studio redraws until focused controls finish blur cleanup, and fixed Custom accent enabling without replacing the active control.
+- Minimized provisioning data returned by health, config, scan, and launcher-review APIs so local executable paths, icon paths, browser arguments, profile names, and suggestion internals are never sent to dashboard surfaces that do not need them.
+- Added the native session token explicitly to background dashboard mutations so periodic Scene evaluation remains authorized instead of producing a rejected-request loop every few seconds.
+- Removed Diagnostics' contradictory disabled `Auto ready` button while the product still needed a companion display; setup completion now appears only when it is actionable, and the nested readiness panel no longer repeats the Diagnostics page name.
+- Kept the setup and repair surface consistently named Diagnostics before and after onboarding instead of changing from Auto Setup after selection.
+- Replaced internal inline-migration and not-implemented fallback messages with a truthful unavailable-panel recovery state, and added a release gate proving every shipped surface—including Camera Detection—has a registered renderer.
+- Updated the Electron packaging lockfile to patched `brace-expansion` releases after a new high-severity denial-of-service advisory; root npm, Electron npm, and NuGet audits now report zero known vulnerabilities.
+- Removed the last live settings-panel `innerHTML` rewrite and added re-entrant focus/blur protection so changing or leaving a focused option cannot collapse the dashboard.
+- Stopped mouse and programmatic scrolling from swallowing the next click; touch-drag suppression now applies only while a real touch gesture is active.
+- Removed the redundant opaque Diagnostics rail card, made the top status report `Needs Setup` truthfully, and shortened the selected-panel label so it remains readable on the companion display.
+- Fixed installed-screen status and accessibility gaps: Recovery now leaves the loading state, Layout and Mode actions have unique spoken names, and Updates describes only the channels and behavior this beta actually supports.
+- Enforced companion-display-only placement with borderless, taskbar-free recovery across launch and display changes.
+- Reworked themes into Focus, Gaming, and Warm with Night as a separate low-light variant.
+- Added optional authenticated Camera Detection through a local-only Frigate proxy with protected credentials, save-and-test status, event freshness, camera filtering, and snapshot controls.
+- Hardened Camera Detection so Auxora locally enforces the selected camera and one-hour window, rejects empty-token logins, and prevents snapshot IDs from bypassing the active camera filter.
+- Corrected Streaming to describe itself as a local OBS reachability preview, reject non-loopback WebSocket addresses, and save and probe the submitted endpoint as one explicit action.
+- Completed portable Privacy backup for layouts, Modes, card sizes, readability, performance, and built-in pack selection; malformed client settings now fail before native restore and stale diagnostics cannot overwrite the result.
+- Added explicit, default-off Privacy controls for local media titles/artwork and audio application labels so users can enable useful Audio & Media detail without weakening the safe default.
+- Added a zero-cost local Album Carousel to Audio & Media: it uses Windows now-playing artwork, keeps at most seven observed tracks in memory, supports touch and keyboard browsing, and never calls Apple or another cloud service.
+- Turned observed music into individual artwork cards with title and artist captions, accessible 44-pixel delete controls, and an in-memory dismissal guard so a deleted card does not reappear on the next media refresh.
+- Fixed broken Apple Music artwork when Windows reports multiple JPEG MIME aliases, added file-signature MIME detection plus an image-error fallback, enlarged the single-card presentation, and removed placeholder album text from missing metadata.
+- Added a distance-readable 2560x720 companion-display control system with 54-pixel minimum targets, 15-pixel control labels, larger slider handles, stronger selected states, and roomier action spacing while leaving phone and short-panel layouts compact.
+- Made Camera Detection discoverable before configuration, labeled its unconfigured state as Setup, added a direct Diagnostics handoff, and fixed deep links highlighting the wrong primary navigation destination after startup.
+- Completed the Camera Detection handoff so its setup action expands optional Diagnostics, scrolls the camera card into view, and focuses the Frigate address instead of landing on a collapsed extras section.
+- Fixed Theme Studio's focused-control redraw so changing theme, Night, readability, or performance settings cannot collapse the dashboard with an `innerHTML`/blur runtime error.
+- Extended focus-safe redraws to every live panel and dynamic dashboard control; unsaved Streaming, Privacy, and Camera Detection drafts now survive refresh actions even after focus moves to the action button.
+- Isolated every mounted panel so a late response from a panel that was already closed cannot overwrite the newly selected view; stable form identity now also survives reordered radio, checkbox, and select options.
+- Made Camera Detection report connection loss as cached data, distinguish setup/connection waiting from a fresh sample, serialize manual and automatic refreshes, and reduce background polling to every 30 seconds.
+- Stopped every automatic Camera Detection refresh while Frigate is unconfigured, while keeping the visible Refresh action immediate for deliberate retries.
+- Removed duplicate spoken control names by renaming the dashboard settings-drawer action to Panel options and giving each private Audio session unique mute and volume labels.
+- Removed a reintroduced System Monitor top-app list and its native process enumeration; overall telemetry stays live, while Task Manager remains the explicit path to application-level detail.
+- Fixed Network Monitor choosing a faster Hyper-V/virtual adapter over the interface Windows actually routes through; throughput now follows the routed adapter, and local-router response is no longer mislabeled as internet game readiness.
+- Corrected Home's network summary to identify a local router or DNS probe instead of implying general internet responsiveness.
+- Made destructive Quick Actions and System Shortcuts start as clearly labeled two-step controls, require a second tap within eight seconds, and automatically disarm when that window expires.
+- Made Display Controls show a real capability scan instead of a premature no-controls result, and replaced Mode brightness claims with the motion level Auxora actually applies.
+- Removed the unusable automatic-rollback claim and action from Updates; this beta now states that rollback is manual and requires keeping the previous verified installer.
+- Corrected optional Diagnostics wording so discoverable Camera Detection is not described as hidden.
+- Stopped a recovered startup navigation from firing its already-scheduled retry and visibly reloading the dashboard two seconds after it had opened successfully.
+- Kept companion-display recovery running at a low frequency until a late or missed Windows display event becomes usable instead of leaving Auxora hidden after the first 30 seconds.
+- Added `Move Auxora Display...` to the tray: it temporarily unlocks a windowed picker constrained to non-primary displays, then snaps Auxora back to its saved taskbar-free fullscreen placement.
+- Canceled timed-out Windows media-session reads and suppressed duplicate timeout reports so one stuck media query cannot create a repeating refresh-warning loop.
+- Decoupled `/api/health` from live Audio, Calendar, Media, and Hue probes so a slow optional integration cannot make a running Local Bridge appear unavailable.
+- Recognized the XENEON EDGE by its `CRXED00` hardware ID even when Windows calls it `Generic PnP Monitor`, and made Diagnostics reject 1280×1024 or other non-native modes with a 2560×720/60 Hz repair instruction.
+- Reapplied Auxora's tool-window and topmost policy after entering fullscreen so a companion taskbar cannot return above the dashboard after a resolution or topology change.
+- Gave every panel-picker button a stable identity so a live status refresh cannot repurpose the Diagnostics button as Recovery between scrolling and clicking.
+- Kept Diagnostics visible after setup is healthy and made its rendered test compare the chrome with the live Ready/Needs Setup state instead of assuming a missing companion display.
+- Reasserted the locked window's topmost z-order after fullscreen and move-mode transitions settle, preventing Windows from raising the companion taskbar over the restored dashboard.
+- Reduced periodic UI work by retaining Home's current sample during background refreshes and skipping panel or media-strip DOM updates when the returned content is unchanged.
+- Removed obsolete automatic-rollback settings and fake last-known-good executable metadata from configuration, support data, display selection, and the native API.
+- Replaced remaining internal customer/release wording in Theme Studio and Recovery with direct user-facing copy.
+- Bound every asynchronous panel status/error callback to the widget generation that started it, so a late Camera or Display response cannot relabel, redraw, or crash the next panel; background status changes now update only their own selector label and cannot swallow a tap.
+- Stopped a successful blank or intermediate WebView navigation from canceling dashboard recovery; Auxora now accepts only the tracked dashboard navigation as loaded, and launched-host validation requires the embedded page itself to request live configuration.
+- Restricted DDC/CI discovery and commands to confirmed non-primary companion displays, made the primary-display exclusion explicit in the API and UI, and added terminal capability status plus monitor-specific accessible names.
+- Hardened update checks so older, current, uncomparable, or unverified releases cannot expose an installer action or downgrade download location.
+- Coalesced simultaneous expired Frigate requests behind one authentication renewal so Camera Detection cannot produce duplicate login bursts during event and snapshot recovery.
+- Added visible, announced save/test feedback beside the Camera Detection form, canceled duplicate form submissions before the browser can reload, and kept post-test Diagnostics refresh failures distinct from failed camera tests.
+- Corrected Calendar's standalone fallback path and limited the native build to the eight fallback panels the dashboard can actually reach, excluding contradictory legacy pages from the installed product.
+- Prevented native rendered tests from touching the real Auxora profile by requiring explicit, fail-closed test data roots and verifying the isolated config and log paths in every launched-host suite.
+- Fixed primary navigation labels clipping at supported companion-display sizes and removed the redundant Theme dropdown so Focus, Gaming, and Warm have one clear selector.
+- Completed custom Mode management with editable name, Theme, spacing, performance, and motion settings plus an expiring two-step delete flow that safely restores the default Mode.
+- Cleared Camera Detection tokens, cached events, and connection receipts from memory when its configuration is changed, removed, or reset, including protection against stale in-flight responses restoring cleared state.
+- Simplified unconfigured Camera Detection to one focused setup card instead of zero-value metrics and an empty snapshot, and made configuration changes immediately cancel requests using the previous credentials without waiting for their network timeout.
+- Kept slow hardware and network telemetry off the native startup path, made rendered startup probes non-destructive, and stopped routine health checks from enumerating private clipboard entries.
+- Made Recovery testing and status truthful when no companion display is active: Auxora remains hidden, reports Waiting for display, and offers recovery actions instead of claiming Ready or opening on the primary screen.
 
 - Improved first-run setup and diagnostics so readiness states are clearer and optional panels stay out of the way until needed.
 - Improved dashboard recovery when Windows display changes or the embedded browser needs to reload.
@@ -32,7 +113,7 @@
 - Hid product/admin panels from the normal dashboard picker so the app opens to the daily-use controls.
 - Removed the advanced setup shortcut and planned-connector cards from first-run setup.
 - Replaced the old standalone Audio fallback page with a compact quick-control panel.
-- Hid empty App Launcher and Clipboard History from the default picker to keep the dashboard cleaner and more private.
+- Hid the empty App Launcher from the default picker and kept Clipboard History previews private by default.
 - Treated invalid 0 C hardware temperature readings as unavailable instead of showing bad telemetry.
 - Removed the visible Profiles widget, Game Mode profile picker, and Game Mode on/off toggle so the gaming flow is just theme plus launch.
 - Removed disk activity from System Monitor and stopped sampling the disk performance counter.

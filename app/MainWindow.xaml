@@ -61,13 +61,13 @@
 
                     <StackPanel Grid.Row="0" Spacing="8">
                         <TextBlock
-                            Text="Choose where Auxora should live"
+                            Text="Choose an Auxora companion display"
                             Foreground="#FFF5F8FA"
                             FontSize="30"
                             FontWeight="SemiBold"
                             TextWrapping="WrapWholeWords" />
                         <TextBlock
-                            Text="Tap the display you want to use. Auxora will move there immediately and remember your choice."
+                            Text="Auxora never uses your Windows primary display. Choose an available companion display and Auxora will remember it."
                             Foreground="#FFB8C7D1"
                             FontSize="16"
                             TextWrapping="WrapWholeWords" />

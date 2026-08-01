@@ -10,7 +10,7 @@ Auxora is the adaptive successor to XENEON Edge Host. Version 0.3.x remains a fr
 - support is handled through GitHub Issues and GitHub Security Advisories for now
 - this is independent software, not an official CORSAIR product
 
-Auxora is a native Windows companion dashboard for landscape, ultrawide, and portrait touch displays. It combines adaptive Scenes, system telemetry, network stats, audio routing, media controls, weather, calendar, lighting, recent apps, and optional home-lab panels.
+Auxora is a native Windows companion dashboard for landscape, ultrawide, and portrait touch displays. It combines adaptive Modes, system telemetry, network stats, audio routing, media controls, weather, calendar, lighting, recent apps, optional Frigate camera detection, and home-lab panels.
 
 The primary product is the native Windows host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only. A macOS beta host lives in `desktop/electron` because the Windows app uses WinUI 3 and WebView2, which do not run on macOS.
 
@@ -42,14 +42,14 @@ On first launch, Auxora scans the PC and prepares the normal dashboard automatic
 - builds the recent-app dock from safe Start Menu shortcuts, Steam games, and live app activity
 - marks the core dashboard ready without asking the user to finish setup manually
 
-Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, Philips Hue needs the bridge link button, and UniFi needs local console credentials if you want client and AP detail.
+Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, Philips Hue needs the bridge link button, UniFi needs local console credentials if you want client and AP detail, and Camera Detection needs the address of a Frigate server on the local/private network.
 
 Uninstall is also meant to be hands-free:
 
 - Windows Settings > Apps > Installed apps > Auxora removes the app, shortcuts, auto-start, and uninstall entry.
 - Start Menu > Auxora > Uninstall Auxora does the same thing.
 - Start Menu > Auxora > Remove Auxora and Local Data also removes `%APPDATA%\Auxora`, `%LOCALAPPDATA%\Auxora`, and legacy XENEON data left for rollback.
-- Start Menu > Auxora > Auxora Recovery (Safe Mode) disables auto-start, ignores saved display placement, and opens on the primary monitor.
+- Start Menu > Auxora > Auxora Recovery (Safe Mode) disables auto-start, ignores saved display placement, and opens only on an active companion display. If no companion display is active, Auxora remains tray-only.
 - Start Menu > Auxora > Repair Auxora restores shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
 
 Plain-language install/uninstall notes live in [docs/release/WINDOWS-INSTALL-UNINSTALL.md](docs/release/WINDOWS-INSTALL-UNINSTALL.md).
@@ -60,26 +60,30 @@ Auxora now includes:
 
 - automatic first-run provisioning with diagnostics and repair
 - normal setup that hides advanced connector plumbing
-- adaptive Work, Gaming, Media, Night, and Home Scenes with manual and automatic switching
-- Home, Scenes, Library, and Settings navigation
+- adaptive Work, Gaming, Media, and Home Modes with manual and automatic switching; Night remains a separate display variant
+- Home, Modes, Apps & Controls, and Settings navigation
 - responsive compact, standard, ultrawide, and portrait layouts
 - Smart Glance briefing and meaningful local alerts
-- temporary token-protected local phone remote
-- DDC/CI monitor controls when supported
-- safe one-tap action chains and per-display Scene assignments
-- signed extension inspection with declared permissions
-- credential-free Scene and presentation backup/restore
+- an explicit Phone Remote unavailable state; this beta opens no phone-control listener
+- Companion-only DDC/CI monitor controls when supported; the Windows primary display is excluded from discovery and commands
+- safe one-tap action chains and per-display Mode assignments
+- inspection-only signed manifest checks with declared permissions; third-party loading is disabled
+- credential-free Mode and presentation backup/restore
+- privacy-first media controls with optional local titles, artwork, and audio application labels
 - Theme Studio with accent, opacity, and animation controls
 - drag-and-drop layout ordering
 - release channel and local-hosted GitHub release checks
-- OBS/streaming panel foundation
+- local-only OBS reachability and streaming-layout preview; this beta sends no OBS commands
 - Game Mode profile and launcher handoff
-- marketplace-style widget packs
+- built-in widget packs for local dashboard layouts
+- directly discoverable, optional local Frigate object detections and event snapshots with an in-panel setup path
 - installer readiness panel
 - local-first privacy and trust screen
 - app data reset from setup/privacy and from the uninstall cleanup shortcut
 
-The update and streaming panels remain beta foundations. Signed extension verification is implemented, but no third-party publisher is trusted by default. Before charging customers, sign the Windows release, complete authenticated OBS commands, and test the installer on clean hardware.
+The update and streaming panels remain beta foundations. Streaming accepts only loopback OBS WebSocket addresses and checks reachability; it does not authenticate to OBS or send commands. Signed manifest inspection is implemented, but third-party code loading and execution are disabled in this beta even if a manifest passes inspection. Phone Remote is also not included. Before charging customers, sign the Windows release, complete authenticated OBS commands, and test the installer on clean hardware.
+
+Privacy & Backup exports Modes plus portable presentation settings such as theme, readability, layout order, pinned and hidden panels, card sizes, per-Mode layouts, and built-in pack selection. Credentials, integration and OBS endpoints, weather location, launcher paths, display identifiers, and logs remain excluded. Restore validates the browser-side presentation fields before changing native configuration and keeps the newest user-action result visible when diagnostics refresh in the background.
 
 ## Install From Source
 
@@ -94,9 +98,24 @@ The native host:
 
 - runs full-screen on the selected Windows display
 - serves the dashboard locally on `http://127.0.0.1:8976/`
-- owns system, network, UniFi detection, audio, calendar, media, weather, and Hue APIs directly
-- stores Weather and Hue keys with Windows per-user protection instead of plain dashboard config
+- owns system, network, UniFi detection, Frigate events and snapshots, audio, calendar, media, weather, and Hue APIs directly
+- stores Weather, Hue, UniFi, and Frigate secrets with Windows per-user protection instead of plain dashboard config
 - does not require Node.js for the normal app path
+
+## Camera Detection
+
+Camera Detection is optional but remains visible as Setup in Apps & Controls before configuration. Open the panel and choose **Set up Camera Detection** to reveal its Diagnostics form, scroll it into view, and focus the Frigate address field. Enter the base address of a Frigate server on the local/private network and, optionally, a camera name such as `driveway`. For Frigate's authenticated port `8971`, use an HTTPS address and enter a Frigate username and password; Auxora logs in through `/api/login`, keeps the issued token in memory, retries authentication once after an HTTP 401, and protects the saved password with Windows DPAPI. Authenticated non-loopback HTTP is rejected so credentials cannot cross the LAN in plaintext. Leave both credential fields blank when using a trusted internal unauthenticated endpoint such as port `5000`. HTTPS certificates must already be trusted by Windows—Auxora never disables certificate validation.
+
+Auxora reads recent object events and displays the latest available event snapshot through its localhost API. It independently enforces the configured camera and one-hour event window even if the upstream server ignores those query filters, and it only proxies snapshots belonging to the current filtered results. Public destinations, redirects, proxy routing, credentials embedded in URLs, invalid or out-of-filter event identifiers, incomplete or empty-token authentication, and untrusted TLS certificates are rejected.
+
+Saving Camera Detection from Diagnostics immediately tests the configured event API. Auxora reports **Ready** only after Frigate accepts the request, keeps saved settings when the server is temporarily unavailable, and reports **Needs Setup** with a retryable connection message when authentication or connectivity fails.
+
+Local endpoints:
+
+```text
+http://127.0.0.1:8976/api/frigate
+http://127.0.0.1:8976/api/frigate/snapshot?id=<event-id>
+```
 
 ## Network And UniFi
 

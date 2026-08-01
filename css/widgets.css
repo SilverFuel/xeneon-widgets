@@ -45,6 +45,10 @@ input[type="range"],
   will-change: scroll-position;
 }
 
+.inline-widget-mount {
+  display: contents;
+}
+
 html.is-touch-input button,
 html.is-touch-input a[href],
 html.is-touch-input [role="button"],
@@ -643,30 +647,20 @@ a.is-touch-pressing,
   --dashboard-surface-opacity: 1;
   --dashboard-widget-opacity: 1;
   --dashboard-aura-opacity: 1;
-  --dashboard-accent: #43ff9d;
-  --dashboard-secondary: #95ff5f;
-  --dashboard-warm: #ff9d2e;
-  --dashboard-accent-glow: rgba(67, 255, 157, 0.13);
-  --dashboard-secondary-glow: rgba(149, 255, 95, 0.1);
-  --dashboard-warm-glow: rgba(255, 157, 46, 0.14);
-  --dashboard-visor-glass: rgba(16, 49, 32, 0.28);
-  --dashboard-visor-rim: rgba(255, 139, 34, 0.44);
-  --dashboard-theme-bg: #07100a;
   display: grid;
   place-items: center;
   min-height: 100vh;
   padding: 0;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 50% 50%, rgba(67, 255, 157, 0.1), transparent 52%),
-    linear-gradient(110deg, var(--dashboard-accent-glow), transparent 30%),
-    linear-gradient(290deg, var(--dashboard-warm-glow), transparent 34%),
-    linear-gradient(180deg, rgba(4, 16, 9, 0), rgba(5, 9, 7, 0.76)),
-    rgba(11, 15, 20, calc(0.94 * var(--dashboard-surface-opacity)));
+    radial-gradient(ellipse at 50% 50%, var(--theme-ambient-primary), transparent 58%),
+    linear-gradient(110deg, var(--theme-ambient-primary), transparent 34%),
+    linear-gradient(290deg, var(--theme-ambient-secondary), transparent 38%),
+    var(--theme-page);
 }
 
 .dashboard-native-page--perf {
-  background: #0b0f14;
+  background: var(--theme-page);
 }
 
 .dashboard-native-page--browser {
@@ -681,9 +675,9 @@ a.is-touch-pressing,
   overflow: hidden;
   isolation: isolate;
   background:
-    radial-gradient(ellipse 86% 72% at 50% 52%, rgba(67, 255, 157, 0.11), transparent 64%),
-    linear-gradient(90deg, rgba(255, 139, 34, 0.13), transparent 18%, var(--dashboard-secondary-glow) 58%, transparent 82%, rgba(255, 139, 34, 0.14)),
-    var(--dashboard-theme-bg);
+    radial-gradient(ellipse 86% 72% at 50% 52%, var(--theme-ambient-primary), transparent 66%),
+    linear-gradient(90deg, var(--theme-ambient-rim), transparent 18%, var(--theme-ambient-secondary) 58%, transparent 82%, var(--theme-ambient-rim)),
+    var(--theme-page);
 }
 
 .dashboard-ambient-canvas,
@@ -697,18 +691,17 @@ a.is-touch-pressing,
 
 .dashboard-ambient-canvas {
   z-index: 0;
-  opacity: calc(0.82 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
+  opacity: calc(0.82 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity) * var(--theme-motion-scale));
   mix-blend-mode: screen;
 }
 
 .dashboard-ambient-layer {
   z-index: 1;
-  opacity: calc(0.46 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
+  opacity: calc(0.46 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity) * var(--theme-motion-scale));
   background:
-    radial-gradient(ellipse 96% 76% at 50% 52%, transparent 0 54%, rgba(255, 139, 34, 0.12) 66%, rgba(255, 157, 46, 0.34) 82%, rgba(0, 0, 0, 0.68) 100%),
-    radial-gradient(ellipse 48% 34% at 50% 48%, rgba(67, 255, 157, 0.13), transparent 72%),
-    linear-gradient(90deg, rgba(255, 139, 34, 0.3), transparent 12%, transparent 88%, rgba(255, 139, 34, 0.3)),
-    linear-gradient(180deg, rgba(255, 183, 71, 0.16), transparent 14%, transparent 86%, rgba(255, 117, 28, 0.2));
+    radial-gradient(ellipse 96% 76% at 50% 52%, transparent 0 58%, var(--theme-ambient-rim) 80%, var(--theme-vignette) 100%),
+    radial-gradient(ellipse 48% 34% at 50% 48%, var(--theme-ambient-primary), transparent 72%),
+    linear-gradient(90deg, var(--theme-ambient-rim), transparent 12%, transparent 88%, var(--theme-ambient-rim));
   -webkit-mask-image: radial-gradient(ellipse 98% 84% at 50% 52%, transparent 0 58%, rgba(0, 0, 0, 0.55) 72%, #000 100%);
   mask-image: radial-gradient(ellipse 98% 84% at 50% 52%, transparent 0 58%, rgba(0, 0, 0, 0.55) 72%, #000 100%);
   animation: dashboard-visor-breathe 7s ease-in-out infinite;
@@ -732,12 +725,11 @@ a.is-touch-pressing,
   z-index: 1;
   inset: 0;
   background:
-    radial-gradient(ellipse 94% 72% at 50% 50%, transparent 0 55%, rgba(255, 139, 34, 0.16) 66%, rgba(255, 170, 56, 0.42) 82%, rgba(0, 0, 0, 0.7) 100%),
-    linear-gradient(90deg, rgba(255, 128, 28, 0.5), transparent 7%, transparent 93%, rgba(255, 128, 28, 0.5)),
-    linear-gradient(180deg, rgba(255, 183, 71, 0.28), transparent 11%, transparent 89%, rgba(255, 113, 24, 0.28));
+    radial-gradient(ellipse 94% 72% at 50% 50%, transparent 0 58%, var(--theme-ambient-rim) 82%, var(--theme-vignette) 100%),
+    linear-gradient(90deg, var(--theme-ambient-rim), transparent 8%, transparent 92%, var(--theme-ambient-rim));
   box-shadow:
-    inset 0 0 54px rgba(255, 139, 34, 0.16),
-    inset 0 0 120px rgba(0, 0, 0, 0.62);
+    inset 0 0 54px var(--theme-ambient-rim),
+    inset 0 0 120px var(--theme-vignette);
   opacity: calc(0.54 * var(--dashboard-aura-opacity) * var(--dashboard-surface-opacity));
   animation: dashboard-visor-breathe 7s ease-in-out infinite;
 }
@@ -746,13 +738,12 @@ a.is-touch-pressing,
   z-index: 4;
   inset: 0;
   background:
-    radial-gradient(ellipse 90% 70% at 50% 52%, transparent 0 62%, rgba(255, 139, 34, 0.18) 80%, rgba(0, 0, 0, 0.64) 100%),
-    linear-gradient(90deg, rgba(255, 139, 34, 0.3), transparent 5%, transparent 95%, rgba(255, 139, 34, 0.3)),
-    linear-gradient(180deg, rgba(255, 183, 71, 0.16), transparent 8%, transparent 92%, rgba(255, 117, 28, 0.18));
+    radial-gradient(ellipse 90% 70% at 50% 52%, transparent 0 64%, var(--theme-ambient-rim) 82%, var(--theme-vignette) 100%),
+    linear-gradient(90deg, var(--theme-ambient-rim), transparent 6%, transparent 94%, var(--theme-ambient-rim));
   -webkit-mask-image: radial-gradient(ellipse 82% 62% at 50% 52%, transparent 0 62%, rgba(0, 0, 0, 0.7) 78%, #000 100%);
   mask-image: radial-gradient(ellipse 82% 62% at 50% 52%, transparent 0 62%, rgba(0, 0, 0, 0.7) 78%, #000 100%);
-  box-shadow: inset 0 0 72px rgba(0, 0, 0, 0.36), inset 0 0 90px rgba(255, 139, 34, 0.1);
-  opacity: 0.42;
+  box-shadow: inset 0 0 72px var(--theme-vignette);
+  opacity: calc(0.28 * var(--theme-glow-intensity) * var(--theme-night-glow));
 }
 
 .dashboard-native-page--readability-clean .dashboard-ambient-canvas,
@@ -761,13 +752,6 @@ a.is-touch-pressing,
 .dashboard-native-page--readability-clean .dashboard-stage-shell::after {
   opacity: 0.06;
   animation: none;
-}
-
-.dashboard-native-page--readability-high-contrast {
-  --color-text: #f8fbff;
-  --color-text-dim: #c8d4df;
-  --color-border: rgba(255, 255, 255, 0.18);
-  --dashboard-theme-bg: #050a08;
 }
 
 .dashboard-native-page--readability-high-contrast .dashboard-ambient-canvas,
@@ -809,12 +793,15 @@ a.is-touch-pressing,
   filter: saturate(1.45) hue-rotate(-18deg);
 }
 
-.dashboard-native-page[data-scene="scene-night"] .dashboard-ambient-layer {
-  filter: saturate(0.72) sepia(0.18);
-  opacity: 0.42;
+.dashboard-native-page[data-scene="scene-night"] .dashboard-ambient-layer,
+:root[data-theme-variant="night"] .dashboard-ambient-layer {
+  filter: saturate(0.74) brightness(var(--theme-night-brightness));
+  opacity: calc(0.18 * var(--theme-night-glow));
+  animation: none;
 }
 
-.dashboard-native-page[data-scene="scene-night"] .dashboard-ambient-canvas {
+.dashboard-native-page[data-scene="scene-night"] .dashboard-ambient-canvas,
+:root[data-theme-variant="night"] .dashboard-ambient-canvas {
   display: none;
 }
 
@@ -850,6 +837,7 @@ a.is-touch-pressing,
 
 .dashboard-native-page--layout-portrait .router-rail,
 .dashboard-native-page--layout-compact .router-rail {
+  grid-template-rows: auto auto auto;
   padding: 8px;
   border-radius: 14px;
   overflow: visible;
@@ -857,7 +845,58 @@ a.is-touch-pressing,
 
 .dashboard-native-page--layout-portrait .router-rail__lower,
 .dashboard-native-page--layout-compact .router-rail__lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, min(220px, 36vw));
+  grid-template-rows: minmax(54px, auto);
+  align-items: stretch;
+  min-width: 0;
+  overflow: visible;
+}
+
+.dashboard-native-page--layout-portrait .router-picker,
+.dashboard-native-page--layout-compact .router-picker {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 0 4px;
+  scroll-snap-type: x proximity;
+  scrollbar-gutter: auto;
+  touch-action: pan-x;
+}
+
+.dashboard-native-page--layout-portrait .router-picker__category,
+.dashboard-native-page--layout-compact .router-picker__category {
+  display: contents;
+}
+
+.dashboard-native-page--layout-portrait .router-picker__category > span,
+.dashboard-native-page--layout-compact .router-picker__category > span {
   display: none;
+}
+
+.dashboard-native-page--layout-portrait .router-picker__button,
+.dashboard-native-page--layout-compact .router-picker__button {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 150px;
+  min-height: 44px;
+  scroll-snap-align: start;
+}
+
+.dashboard-native-page--layout-portrait .router-settings,
+.dashboard-native-page--layout-compact .router-settings {
+  min-width: 0;
+}
+
+.dashboard-native-page--layout-portrait .router-settings:not(.is-collapsed),
+.dashboard-native-page--layout-compact .router-settings:not(.is-collapsed) {
+  position: fixed;
+  z-index: 45;
+  inset: 8px;
+  width: auto;
+  max-height: calc(100dvh - 16px);
 }
 
 .dashboard-native-page--layout-portrait .auxora-shell-head,
@@ -1217,14 +1256,33 @@ a.is-touch-pressing,
 }
 
 .auxora-quick-toggle {
-  position: fixed;
-  z-index: 20;
-  right: 18px;
-  bottom: 16px;
+  position: static;
+  z-index: auto;
   min-width: 132px;
   border-color: rgba(0, 224, 255, 0.34);
   background: rgba(7, 18, 24, 0.94);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+}
+
+.router-viewer__header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.auxora-quick-scrim {
+  position: fixed;
+  z-index: 29;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(2px);
+}
+
+.auxora-quick-scrim.is-hidden {
+  display: none;
 }
 
 .auxora-quick-drawer {
@@ -1335,7 +1393,7 @@ a.is-touch-pressing,
 }
 
 .router-status-stack {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
 }
 
 .router-status-stack .widget-status {
@@ -1417,7 +1475,11 @@ a.is-touch-pressing,
 .router-settings.is-collapsed {
   grid-template-rows: auto;
   gap: 0;
-  padding-block: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 
 .router-settings.is-collapsed .router-settings__body,
@@ -1842,9 +1904,20 @@ input[type="range"]:focus-visible {
   font-weight: 800;
 }
 
+.dashboard-touch-lock-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: transparent;
+  cursor: not-allowed;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
 .dashboard-native-page--browser .dashboard-now-strip,
 .dashboard-native-page--browser .dashboard-touch-feedback,
-.dashboard-native-page--browser .dashboard-touch-unlock {
+.dashboard-native-page--browser .dashboard-touch-unlock,
+.dashboard-native-page--browser .dashboard-touch-lock-scrim {
   position: fixed;
 }
 
@@ -2021,7 +2094,8 @@ input[type="range"]:focus-visible {
   border: 0;
   background: transparent;
   color-scheme: dark;
-  opacity: var(--dashboard-widget-opacity);
+  /* Surface opacity must never fade embedded text or controls. */
+  opacity: 1;
   transition: opacity 160ms ease;
 }
 
@@ -2434,6 +2508,10 @@ input[type="range"]:focus-visible {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.setup-optional-grid {
+  align-items: start;
+}
+
 .inline-card {
   display: grid;
   gap: 12px;
@@ -2544,6 +2622,7 @@ input[type="range"]:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 44px;
   min-height: 42px;
   padding: 8px 12px;
   border: 0;
@@ -3616,12 +3695,12 @@ body.dashboard-native-page--adaptive {
   }
 
   .dashboard-native-page--adaptive .auxora-primary-nav button {
-    min-height: 36px;
+    min-height: 44px;
     padding-block: 5px;
   }
 
   .dashboard-native-page--adaptive .router-diagnostics {
-    min-height: 36px;
+    min-height: 44px;
     grid-template-columns: auto auto minmax(0, 1fr);
     align-items: center;
     gap: 10px;
@@ -3674,9 +3753,1049 @@ body.dashboard-native-page--adaptive {
     line-height: 1.2;
   }
 
-  .dashboard-native-page--adaptive .auxora-quick-toggle {
-    right: 12px;
-    bottom: 12px;
+  .dashboard-native-page--adaptive .router-viewer__header-actions {
+    gap: 6px;
+  }
+}
+
+/* Semantic theme layer. This intentionally wins over the legacy component palette above. */
+.widget-shell,
+.dash-card {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-panel-radius);
+  background:
+    linear-gradient(180deg, rgba(var(--theme-surface-primary-rgb), 0.97), rgba(var(--theme-surface-secondary-rgb), 0.99));
+  box-shadow: var(--theme-panel-shadow);
+}
+
+.widget-shell::after {
+  background: linear-gradient(120deg, var(--theme-inner-highlight), transparent 34%);
+}
+
+.metric-card,
+.list-card,
+.forecast-card,
+.dash-stat,
+.dash-mini-list__item,
+.hosted-weather-current,
+.hosted-weather-forecast,
+.hosted-weather-forecast__item,
+.landing-sell-grid div,
+.inline-card,
+.inline-list-item,
+.inline-form,
+.inline-toolbar {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
+}
+
+.widget-status,
+.control-button,
+.button-secondary,
+.widget-link,
+.router-settings__button,
+.auxora-primary-nav button,
+.auxora-quick-drawer button,
+.auxora-quick-toggle {
+  background: var(--theme-hover-surface);
+  color: var(--theme-text);
+}
+
+.widget-status[data-tone="good"],
+.router-picker__meta[data-state="ready"] {
+  color: var(--status-success-text);
+  border-color: var(--status-success-border);
+  background: var(--status-success-surface);
+}
+
+.widget-status[data-tone="warn"],
+.router-picker__meta[data-state="needs-setup"],
+.dash-warning {
+  color: var(--status-warning-text);
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+}
+
+.widget-status[data-tone="danger"] {
+  color: var(--status-danger-text);
+  border-color: var(--status-danger-border);
+  background: var(--status-danger-surface);
+}
+
+.widget-status[data-tone="muted"] {
+  color: var(--theme-text-muted);
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
+}
+
+.bar,
+.progress-track,
+.router-settings__slider::-webkit-slider-runnable-track,
+.router-settings__slider::-moz-range-track,
+.inline-range::-webkit-slider-runnable-track,
+.inline-range::-moz-range-track {
+  background: var(--theme-hover-surface);
+}
+
+.bar > span,
+.progress-track > span,
+.control-button.is-primary,
+.button,
+.router-settings__button.is-primary,
+.inline-button.is-primary {
+  background: linear-gradient(90deg, var(--theme-accent), var(--theme-accent-secondary));
+  color: var(--theme-on-accent);
+}
+
+.hero-card,
+.widget-list-card,
+.hosted-empty-state {
+  border-color: var(--theme-border);
+  background:
+    linear-gradient(135deg, var(--theme-ambient-primary), transparent 36%),
+    linear-gradient(320deg, var(--theme-ambient-secondary), transparent 42%),
+    linear-gradient(180deg, var(--theme-surface-primary), var(--theme-surface-secondary));
+  box-shadow: var(--theme-panel-shadow);
+}
+
+.landing-page--product .hero-card::after,
+.landing-page--product .widget-list-card::after {
+  background:
+    linear-gradient(90deg, var(--theme-inner-highlight), transparent 22%, transparent 78%, var(--theme-ambient-secondary)),
+    repeating-linear-gradient(90deg, transparent 0 68px, var(--theme-surface-muted) 69px, transparent 72px);
+}
+
+.landing-signal span {
+  background: linear-gradient(180deg, var(--theme-accent), var(--theme-accent-secondary));
+  box-shadow: 0 0 calc(20px * var(--theme-glow-intensity)) var(--theme-accent-glow);
+}
+
+.router-rail,
+.router-viewer {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-panel-radius);
+  background:
+    linear-gradient(135deg, var(--theme-ambient-primary), transparent 38%),
+    linear-gradient(315deg, var(--theme-ambient-secondary), transparent 42%),
+    rgba(var(--theme-surface-primary-rgb), var(--dashboard-surface-opacity));
+  box-shadow: var(--theme-panel-shadow);
+  backdrop-filter: blur(var(--theme-panel-blur)) saturate(1.04);
+}
+
+.router-rail::before,
+.router-viewer::before {
+  background: linear-gradient(90deg, var(--theme-ambient-primary), transparent 30%, transparent 70%, var(--theme-ambient-secondary));
+  opacity: calc(0.16 * var(--theme-glow-intensity) * var(--theme-night-glow));
+}
+
+.router-rail::after,
+.router-viewer::after {
+  border-color: transparent;
+}
+
+.dashboard-native-page--perf .router-rail,
+.dashboard-native-page--perf .router-viewer,
+.dashboard-native-page--perf .router-settings,
+.dashboard-native-page--perf .metric-card,
+.dashboard-native-page--perf .list-card,
+.dashboard-native-page--perf .router-viewer__frame-shell {
+  background: var(--theme-surface-secondary);
+}
+
+.auxora-brand__mark {
+  color: var(--theme-on-accent);
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent-secondary));
+  box-shadow: 0 0 calc(24px * var(--theme-glow-intensity)) var(--theme-accent-glow);
+}
+
+.auxora-primary-nav button,
+.auxora-quick-drawer button,
+.auxora-quick-toggle,
+.router-settings__button,
+.inline-button,
+.control-button,
+.button {
+  min-height: 44px;
+  border-color: var(--theme-border);
+  transition-duration: var(--theme-motion-duration);
+}
+
+.auxora-primary-nav button {
+  min-height: 48px;
+}
+
+.auxora-primary-nav button:hover,
+.auxora-quick-drawer button:hover,
+.router-settings__button:hover,
+.inline-button:hover,
+.control-button:hover {
+  border-color: var(--theme-border-strong);
+  background: var(--theme-hover-surface);
+}
+
+.auxora-primary-nav button:active,
+.auxora-quick-drawer button:active,
+.router-settings__button:active,
+.inline-button:active,
+.control-button:active {
+  background: var(--theme-pressed-surface);
+}
+
+.auxora-primary-nav button[aria-pressed="true"],
+.auxora-quick-scenes button.is-active {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-selected-surface);
+  color: var(--theme-text);
+  box-shadow: inset 0 -2px 0 var(--theme-accent);
+}
+
+.auxora-quick-toggle,
+.auxora-quick-drawer {
+  border-color: var(--theme-accent-border);
+  background: rgba(var(--theme-surface-elevated-rgb), 0.97);
+  box-shadow: var(--theme-panel-shadow);
+  backdrop-filter: blur(var(--theme-panel-blur));
+}
+
+.auxora-quick-toggle {
+  min-height: 48px;
+}
+
+.router-settings:not(.is-collapsed) {
+  border-color: var(--theme-border);
+  background: rgba(var(--theme-surface-secondary-rgb), var(--dashboard-surface-opacity));
+}
+
+.router-settings.is-collapsed {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.router-settings__field input,
+.router-settings__field select,
+.router-settings__select {
+  min-height: 44px;
+  border-color: var(--theme-border);
+  background: rgba(var(--theme-surface-secondary-rgb), 0.96);
+  color: var(--theme-text);
+}
+
+.router-settings__field input:focus,
+.router-settings__field select:focus {
+  border-color: var(--theme-accent-border);
+  box-shadow: 0 0 0 2px var(--theme-accent-soft);
+}
+
+.router-settings__global-value,
+.router-settings__button--ghost.is-active {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-selected-surface);
+}
+
+.router-settings__button--ghost {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
+}
+
+.router-settings__button--ghost[data-tone="good"],
+.router-diagnostics[data-state="ready"] {
+  border-color: var(--status-success-border);
+  background: var(--status-success-surface);
+}
+
+.router-settings__button--ghost[data-tone="warn"],
+.router-diagnostics {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+}
+
+.router-diagnostics.is-active {
+  box-shadow: inset 0 0 0 1px var(--theme-accent-border);
+}
+
+.router-settings__slider::-webkit-slider-thumb,
+.router-settings__slider::-moz-range-thumb,
+.inline-range::-webkit-slider-thumb,
+.inline-range::-moz-range-thumb {
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent-secondary));
+  box-shadow: 0 0 0 3px var(--theme-accent-soft);
+}
+
+.router-picker__button {
+  min-height: 54px;
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
+}
+
+.router-picker__button::before {
+  background: var(--theme-accent);
+}
+
+.router-picker__button:hover {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-hover-surface);
+  box-shadow: none;
+}
+
+.router-picker__button.is-active {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-selected-surface);
+  box-shadow: inset 0 0 0 1px var(--theme-accent-soft);
+}
+
+.router-picker__button.is-active .router-picker__meta {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-accent-soft);
+}
+
+.router-viewer__frame-shell {
+  border-color: var(--theme-border);
+  background:
+    linear-gradient(125deg, var(--theme-ambient-primary), transparent 34%),
+    rgba(var(--theme-surface-secondary-rgb), var(--dashboard-surface-opacity));
+}
+
+.router-viewer__frame-shell::after {
+  background: radial-gradient(ellipse 90% 76% at 50% 52%, transparent 68%, var(--theme-ambient-rim) 100%);
+  opacity: calc(0.14 * var(--theme-glow-intensity) * var(--theme-night-glow));
+}
+
+.router-viewer__frame {
+  opacity: 1;
+}
+
+.dashboard-launcher-dock {
+  border-color: var(--theme-accent-border);
+  background:
+    linear-gradient(90deg, var(--theme-accent-soft), transparent 42%),
+    rgba(var(--theme-surface-elevated-rgb), 0.96);
+  box-shadow: var(--theme-panel-shadow);
+  backdrop-filter: blur(var(--theme-panel-blur));
+}
+
+.dashboard-launcher-dock__head,
+.dashboard-launcher-dock__more,
+.dashboard-launcher-dock__app,
+.dashboard-launcher-dock__toggle {
+  min-height: 48px;
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
+}
+
+.dashboard-launcher-dock__app.is-active,
+.dashboard-launcher-dock__toggle.is-active {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-selected-surface);
+}
+
+.dashboard-now-strip,
+.dashboard-touch-unlock {
+  border-color: var(--theme-border-strong);
+  background:
+    linear-gradient(135deg, var(--theme-accent-soft), var(--theme-surface-muted)),
+    rgba(var(--theme-surface-elevated-rgb), 0.97);
+  box-shadow: var(--theme-panel-shadow);
+}
+
+.dashboard-now-strip__label {
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent);
+}
+
+.dashboard-touch-feedback {
+  border-color: var(--theme-accent-border);
+  background: rgba(var(--theme-surface-elevated-rgb), 0.97);
+  box-shadow: var(--theme-panel-shadow);
+}
+
+.dashboard-native-page--touch-locked .router-inline-widget {
+  padding-bottom: 88px;
+}
+
+.dashboard-native-page--launcher-dock .router-inline-widget {
+  inset-block-start: 104px;
+}
+
+.dashboard-native-page--launcher-dock-expanded .router-inline-widget {
+  inset-block-start: 176px;
+}
+
+.router-picker__button:focus-visible,
+.router-settings__button:focus-visible,
+.router-diagnostics:focus-visible,
+.dashboard-now-strip:focus-visible,
+.dashboard-touch-unlock:focus-visible,
+.inline-button:focus-visible,
+.control-button:focus-visible,
+.button:focus-visible,
+.widget-link:focus-visible,
+.inline-range:focus-visible,
+.router-settings__slider:focus-visible,
+input[type="range"]:focus-visible {
+  outline-color: var(--theme-focus-ring);
+}
+
+.xn-slider {
+  --xn-slider-track-bg: var(--theme-surface-secondary);
+  --xn-slider-track-border: var(--theme-border-strong);
+  --xn-slider-fill-a: var(--theme-accent);
+  --xn-slider-fill-b: var(--theme-accent-secondary);
+  --xn-slider-glow: var(--theme-accent-glow);
+  --xn-slider-thumb: var(--theme-text);
+}
+
+.xn-slider::-webkit-slider-runnable-track,
+.xn-slider::-moz-range-track {
+  background-image:
+    linear-gradient(90deg, transparent 0%, var(--theme-inner-highlight) 48%, var(--theme-accent-soft) 62%, transparent 76%),
+    repeating-linear-gradient(45deg, var(--theme-inner-highlight) 0 4px, transparent 4px 8px),
+    linear-gradient(90deg, var(--xn-slider-fill-a) 0%, var(--xn-slider-fill-b) var(--xn-fill), var(--xn-slider-track-bg) var(--xn-fill), var(--xn-slider-track-bg) 100%);
+  box-shadow: inset 0 1px 2px var(--theme-inner-highlight), inset 0 -2px 4px var(--theme-vignette);
+}
+
+.xn-slider::-webkit-slider-thumb,
+.xn-slider::-moz-range-thumb,
+.xn-slider.is-hot::-webkit-slider-thumb,
+.xn-slider.is-hot::-moz-range-thumb {
+  box-shadow:
+    0 0 0 4px var(--theme-accent-soft),
+    0 4px 12px var(--theme-vignette),
+    0 0 calc(12px * var(--xn-heat) * var(--theme-glow-intensity)) var(--xn-slider-glow);
+}
+
+:root[data-theme-variant="night"] .dashboard-stage-shell::after {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme-variant="night"] .dashboard-stage-shell::before,
+:root[data-theme-variant="night"] .dashboard-ambient-layer,
+:root[data-theme-variant="night"] .landing-signal span,
+:root[data-theme-variant="night"] .xn-slider::-webkit-slider-runnable-track,
+:root[data-theme-variant="night"] .xn-slider::-moz-range-track,
+.dashboard-native-page--motion-off .landing-signal span,
+.dashboard-native-page--motion-off .xn-slider::-webkit-slider-runnable-track,
+.dashboard-native-page--motion-off .xn-slider::-moz-range-track {
+  animation: none;
+}
+
+:root[data-theme-variant="night"] button,
+:root[data-theme-variant="night"] a,
+:root[data-theme-variant="night"] input,
+:root[data-theme-variant="night"] .dashboard-touch-feedback,
+.dashboard-native-page--motion-off button,
+.dashboard-native-page--motion-off a,
+.dashboard-native-page--motion-off input,
+.dashboard-native-page--motion-off .dashboard-touch-feedback {
+  transition-duration: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-ambient-layer,
+  .dashboard-stage-shell::before,
+  .landing-signal span,
+  .xn-slider::-webkit-slider-runnable-track,
+  .xn-slider::-moz-range-track {
+    animation: none;
+  }
+
+  button,
+  a,
+  input,
+  .dashboard-touch-feedback {
+    scroll-behavior: auto;
+    transition-duration: 0ms;
+  }
+}
+
+@media (forced-colors: active) {
+  .dashboard-ambient-canvas,
+  .dashboard-ambient-layer {
+    display: none;
+  }
+
+  .dashboard-stage-shell::before,
+  .dashboard-stage-shell::after,
+  .router-diagnostics::after,
+  .router-viewer__frame-shell::before {
+    content: none;
+    animation: none;
+  }
+
+  body.dashboard-native-page :where(
+    .dashboard-stage-shell,
+    .auxora-command-rail,
+    .router-viewer,
+    .router-viewer__frame-shell,
+    .inline-widget-shell,
+    .inline-card,
+    .metric-card
+  ) {
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  body.dashboard-native-page :where(
+    .inline-button,
+    .control-button,
+    .button,
+    .widget-link,
+    .router-settings__button,
+    .dashboard-launcher-dock__app,
+    .dashboard-launcher-dock__more,
+    .game-mode-steam-launch,
+    .auxora-quick-drawer button
+  ) {
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+    box-shadow: none;
+  }
+
+  body.dashboard-native-page :where(
+    [aria-pressed="true"],
+    .is-active,
+    .is-selected,
+    .inline-button.is-primary
+  ) {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  body.dashboard-native-page :where(
+    button,
+    a[href],
+    input,
+    select,
+    textarea
+  ):focus-visible {
+    outline: 3px solid Highlight;
+    outline-offset: 3px;
+  }
+
+  body.dashboard-native-page .product-color-input {
+    forced-color-adjust: auto;
+  }
+}
+
+@media (max-height: 479px) and (orientation: landscape) {
+  .dashboard-native-page--adaptive .auxora-primary-nav button,
+  .dashboard-native-page--adaptive .router-diagnostics {
+    min-height: 44px;
+  }
+
+  .dashboard-native-page--adaptive .auxora-primary-nav button {
+    padding-block: 4px;
+  }
+}
+
+/* The browser preview class must not turn the adaptive viewer header into a
+   stretched half-height row, especially in portrait layouts. */
+.dashboard-native-page--adaptive.dashboard-native-page--browser .router-viewer {
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+/* Now Playing is a real dashboard grid row. It never floats over widget cards. */
+.dashboard-native-page--adaptive.dashboard-native-page--now-strip-visible .dashboard-router-stage {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.dashboard-native-page--adaptive.dashboard-native-page--now-strip-visible .router-rail {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.dashboard-native-page--adaptive.dashboard-native-page--now-strip-visible .router-viewer {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.dashboard-native-page--adaptive.dashboard-native-page--now-strip-visible .dashboard-now-strip,
+.dashboard-native-page--adaptive.dashboard-native-page--browser.dashboard-native-page--now-strip-visible .dashboard-now-strip {
+  position: relative;
+  inset: auto;
+  grid-column: 2;
+  grid-row: 2;
+  align-self: end;
+  justify-self: center;
+  width: min(760px, 100%);
+  margin: 0;
+  transform: none;
+}
+
+.dashboard-native-page--adaptive.dashboard-native-page--now-strip-visible .router-inline-widget,
+.dashboard-native-page--adaptive.dashboard-native-page--browser.dashboard-native-page--now-strip-visible .router-inline-widget {
+  padding-bottom: 18px;
+}
+
+.dashboard-native-page--adaptive.dashboard-native-page--layout-portrait.dashboard-native-page--now-strip-visible .dashboard-router-stage,
+.dashboard-native-page--adaptive.dashboard-native-page--layout-compact.dashboard-native-page--now-strip-visible .dashboard-router-stage {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.dashboard-native-page--adaptive.dashboard-native-page--layout-portrait.dashboard-native-page--now-strip-visible .router-rail,
+.dashboard-native-page--adaptive.dashboard-native-page--layout-compact.dashboard-native-page--now-strip-visible .router-rail {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.dashboard-native-page--adaptive.dashboard-native-page--layout-portrait.dashboard-native-page--now-strip-visible .router-viewer,
+.dashboard-native-page--adaptive.dashboard-native-page--layout-compact.dashboard-native-page--now-strip-visible .router-viewer {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.dashboard-native-page--adaptive.dashboard-native-page--layout-portrait.dashboard-native-page--now-strip-visible .dashboard-now-strip,
+.dashboard-native-page--adaptive.dashboard-native-page--layout-compact.dashboard-native-page--now-strip-visible .dashboard-now-strip {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+/* Keep the longest navigation label on one line without shrinking its target. */
+.auxora-primary-nav button[data-destination="library"] {
+  white-space: normal;
+  line-height: 1.05;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-size: clamp(0.64rem, 0.8vw, 0.76rem);
+}
+
+.auxora-primary-nav {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  grid-template-columns:
+    minmax(44px, 0.85fr)
+    minmax(44px, 0.95fr)
+    minmax(72px, 1.25fr)
+    minmax(54px, 1.15fr);
+}
+
+.auxora-primary-nav button {
+  min-width: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1800px) {
+  .auxora-primary-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .auxora-primary-nav button[data-destination="library"] {
+    min-height: 48px;
+  }
+}
+
+/* One outer panel and low-contrast inner surfaces provide enough hierarchy. */
+.dashboard-native-page--adaptive .router-viewer__frame-shell {
+  border: 0;
+  border-radius: calc(var(--theme-panel-radius) - 4px);
+  background: transparent;
+}
+
+.dashboard-native-page--adaptive .router-viewer__frame-shell::after {
+  display: none;
+}
+
+.dashboard-native-page--adaptive .inline-widget-shell,
+.dashboard-native-page--adaptive .router-inline-card,
+.dashboard-native-page--adaptive .inline-card,
+.dashboard-native-page--adaptive .inline-kpi,
+.dashboard-native-page--adaptive .inline-list-item,
+.dashboard-native-page--adaptive .inline-field {
+  box-shadow: none;
+}
+
+.dashboard-native-page--adaptive .router-inline-card,
+.dashboard-native-page--adaptive .inline-card {
+  border-color: transparent;
+}
+
+/* Subdue inner scrolling chrome so it does not compete with content. */
+.router-picker,
+.router-inline-widget,
+.inline-list,
+.launcher-grid--compact,
+.game-mode-steam-dock {
+  scrollbar-color: var(--theme-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.router-picker::-webkit-scrollbar,
+.router-inline-widget::-webkit-scrollbar,
+.inline-list::-webkit-scrollbar,
+.launcher-grid--compact::-webkit-scrollbar,
+.game-mode-steam-dock::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.router-picker::-webkit-scrollbar-track,
+.router-inline-widget::-webkit-scrollbar-track,
+.inline-list::-webkit-scrollbar-track,
+.launcher-grid--compact::-webkit-scrollbar-track,
+.game-mode-steam-dock::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.router-picker::-webkit-scrollbar-thumb,
+.router-inline-widget::-webkit-scrollbar-thumb,
+.inline-list::-webkit-scrollbar-thumb,
+.launcher-grid--compact::-webkit-scrollbar-thumb,
+.game-mode-steam-dock::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--theme-border-strong);
+}
+
+/* Product-wide touch and readability contracts. Component styles may change
+   appearance, but they must not shrink the effective companion-display target. */
+body.dashboard-native-page :is(.inline-input, .inline-select, .inline-range) {
+  min-block-size: 44px;
+}
+
+body.dashboard-native-page :is(.inline-field--checkbox, .setup-launcher-suggestion) {
+  min-block-size: 44px;
+}
+
+body.dashboard-native-page .inline-field--checkbox {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+body.dashboard-native-page :where(
+  .auxora-brand small,
+  .auxora-primary-nav button,
+  .auxora-quick-toggle,
+  .auxora-quick-drawer button,
+  .router-diagnostics__state,
+  .router-diagnostics__copy,
+  .router-picker__category > span,
+  .router-picker__meta,
+  .router-settings__copy,
+  .router-settings__button,
+  .router-viewer__copy,
+  .widget-status,
+  .eyebrow,
+  .metric-label,
+  .router-inline-copy,
+  .inline-list-copy,
+  .inline-list-meta,
+  .inline-field > span,
+  .inline-button,
+  .dashboard-now-strip small,
+  .dashboard-now-strip__label
+) {
+  font-size: max(12px, 0.75rem);
+}
+
+body.dashboard-native-page :where(
+  .auxora-primary-nav button,
+  .auxora-quick-toggle,
+  .auxora-quick-drawer button,
+  .router-picker__button,
+  .router-settings__button,
+  .router-diagnostics,
+  .dashboard-now-strip,
+  .dashboard-touch-unlock,
+  .inline-button,
+  .control-button,
+  .button,
+  .widget-link,
+  .inline-input,
+  .inline-select,
+  .inline-range,
+  .router-settings__slider
+):focus-visible {
+  outline: 3px solid var(--theme-focus-ring);
+  outline-offset: 3px;
+}
+
+.auxora-quick-drawer[role="dialog"] {
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Dense settings metadata must remain readable on the mini display. */
+body.dashboard-native-page :where(.router-settings__field-help, .router-settings__note) {
+  font-size: max(12px, 0.75rem);
+}
+
+@media (max-width: 720px) {
+  .router-viewer__header {
+    align-items: flex-start;
+  }
+
+  .router-viewer__header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .auxora-quick-toggle {
+    min-width: 0;
+  }
+
+  .auxora-quick-drawer {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+  }
+}
+
+/* Exhaustive UI remediation: stable header chrome and panel-local recovery. */
+.router-viewer__header-actions {
+  flex-wrap: wrap;
+}
+
+.router-viewer__header-actions .dashboard-now-strip {
+  position: static;
+  inset: auto;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: auto;
+  max-width: min(720px, 100%);
+  margin: 0;
+  transform: none;
+}
+
+.router-viewer__header-actions .dashboard-now-strip.is-hidden {
+  display: none;
+}
+
+.dashboard-now-strip__open {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 1px 8px;
+  min-width: 190px;
+  min-height: 44px;
+  padding: 6px 10px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+
+.dashboard-now-strip__open .dashboard-now-strip__label {
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.dashboard-now-strip > button:not(.dashboard-now-strip__open) {
+  min-width: 56px;
+  min-height: 44px;
+}
+
+.router-viewer__widget-error {
+  z-index: 8;
+}
+
+.auxora-quick-night {
+  display: grid;
+  grid-template-columns: auto repeat(3, minmax(88px, 1fr));
+  align-items: center;
+  gap: 8px;
+}
+
+.router-picker__button--wide {
+  grid-column: span 2;
+}
+
+.router-picker__button--compact {
+  min-height: 44px;
+}
+
+.router-inline-widget[data-card-size="compact"] > .inline-widget-shell,
+.router-inline-widget[data-card-size="compact"] > .inline-widget-mount > .inline-widget-shell {
+  width: min(100%, 1040px);
+  margin-inline: auto;
+}
+
+.router-inline-widget[data-card-size="standard"] > .inline-widget-shell,
+.router-inline-widget[data-card-size="standard"] > .inline-widget-mount > .inline-widget-shell {
+  width: min(100%, 1680px);
+  margin-inline: auto;
+}
+
+.router-inline-widget[data-card-size="wide"] > .inline-widget-shell,
+.router-inline-widget[data-card-size="wide"] > .inline-widget-mount > .inline-widget-shell {
+  width: 100%;
+}
+
+.recovery-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 720px;
+}
+
+@media (max-width: 900px), (max-height: 479px) {
+  .router-viewer__header-actions .dashboard-now-strip {
+    max-width: 100%;
+  }
+
+  .dashboard-now-strip__open {
+    min-width: 150px;
+  }
+
+  .auxora-quick-night {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* The 2560x720 companion sits farther away than a desktop monitor. Give its
+   controls a distance-readable floor without inflating phones or short panels. */
+@media (min-width: 1800px) and (min-height: 600px) {
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    button,
+    [role="button"],
+    a.inline-button,
+    a.widget-link,
+    input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ) {
+    min-inline-size: 54px;
+    min-block-size: 54px;
+    font-size: max(15px, 0.9375rem);
+    line-height: 1.2;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    button,
+    [role="button"],
+    a.inline-button,
+    a.widget-link
+  ) :where(strong, span, small) {
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    .auxora-primary-nav button,
+    .auxora-quick-toggle,
+    .auxora-quick-drawer button,
+    .router-settings__button,
+    .inline-button,
+    .control-button,
+    .button,
+    .widget-link
+  ) {
+    min-block-size: 56px;
+    padding: 10px 16px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage .auxora-primary-nav button {
+    min-block-size: 60px;
+    padding-inline: 8px;
+    font-size: max(16px, 1rem);
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    .inline-field--checkbox,
+    .setup-launcher-suggestion
+  ) {
+    min-block-size: 54px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    input[type="checkbox"],
+    input[type="radio"]
+  ) {
+    inline-size: 24px;
+    block-size: 24px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    input[type="range"],
+    .inline-range,
+    .router-settings__slider
+  ) {
+    min-block-size: 54px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    input[type="range"],
+    .inline-range,
+    .router-settings__slider
+  )::-webkit-slider-runnable-track {
+    height: 12px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    input[type="range"],
+    .inline-range,
+    .router-settings__slider
+  )::-webkit-slider-thumb {
+    width: 32px;
+    height: 32px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    input[type="range"],
+    .inline-range,
+    .router-settings__slider
+  )::-moz-range-track {
+    height: 12px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    input[type="range"],
+    .inline-range,
+    .router-settings__slider
+  )::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    .auxora-brand small,
+    .router-diagnostics__state,
+    .router-diagnostics__copy,
+    .router-picker__category > span,
+    .router-picker__meta,
+    .router-settings__copy,
+    .router-settings__field-help,
+    .router-settings__note,
+    .router-viewer__copy,
+    .widget-status,
+    .eyebrow,
+    .metric-label,
+    .router-inline-copy,
+    .inline-list-copy,
+    .inline-list-meta,
+    .inline-field > span,
+    .dashboard-now-strip small,
+    .dashboard-now-strip__label
+  ) {
+    font-size: max(14px, 0.875rem);
+    line-height: 1.35;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    .inline-actions,
+    .router-viewer__header-actions,
+    .router-settings__header-actions
+  ) {
+    gap: 12px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
+    button[aria-pressed="true"],
+    button[aria-current="page"],
+    button.is-active
+  ) {
+    box-shadow: inset 0 -3px 0 var(--theme-accent);
   }
 }
 

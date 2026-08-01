@@ -13,50 +13,138 @@ public static class DisplayManager
 
         if (displays.Count == 0)
         {
-            throw new InvalidOperationException("No displays were detected.");
+            throw new InvalidOperationException(
+                "No active companion display is available. Auxora will wait rather than open on the Windows primary display.");
         }
 
-        return displays[0];
+        return displays.First();
     }
 
     public static List<DisplayTarget> ListDisplays(string? preferredDisplayId = null)
     {
-        return EnumerateDisplays()
+        return ListCompanionDisplays(EnumerateDisplays(), preferredDisplayId);
+    }
+
+    public static List<DisplayTarget> ListCompanionDisplays(
+        IEnumerable<DisplayTarget> activeDisplays,
+        string? preferredDisplayId = null)
+    {
+        ArgumentNullException.ThrowIfNull(activeDisplays);
+
+        return activeDisplays
+            .Where(display => !display.IsPrimary)
             .Select(display => display.WithPreference(preferredDisplayId))
             .OrderByDescending(display => display.Score)
-            .ThenBy(display => display.IsPrimary)
             .ToList();
     }
 
     public static DisplayDiagnosticsSnapshot BuildDiagnostics(string? preferredDisplayId = null)
     {
-        var displays = ListDisplays(preferredDisplayId);
-        var preferredAvailable = displays.Any(display => display.IsPreferred);
+        return BuildDiagnostics(EnumerateDisplays(), preferredDisplayId);
+    }
+
+    public static DisplayDiagnosticsSnapshot BuildDiagnostics(
+        IEnumerable<DisplayTarget> activeDisplays,
+        string? preferredDisplayId = null)
+    {
+        ArgumentNullException.ThrowIfNull(activeDisplays);
+
+        var active = activeDisplays.ToList();
+        var companions = ListCompanionDisplays(active, preferredDisplayId);
+        var preferredAvailable = companions.Any(display => display.IsPreferred);
         var selected = preferredAvailable
-            ? displays.First(display => display.IsPreferred)
-            : displays.Count == 1
-                ? displays[0]
+            ? companions.First(display => display.IsPreferred)
+            : companions.Count == 1
+                ? companions[0]
                 : null;
+        var selectedModeMismatch = selected?.RequiresNativeModeCorrection == true;
+        var status = companions.Count == 0
+            ? "waiting-for-companion-display"
+            : selectedModeMismatch
+                ? "display-mode-mismatch"
+            : selected is not null
+                ? "ready"
+                : "selection-required";
 
         return new DisplayDiagnosticsSnapshot
         {
             Supported = true,
-            Status = displays.Count == 0 ? "missing" : preferredAvailable || displays.Count == 1 ? "ready" : "selection-required",
+            Status = status,
             SampledAt = DateTimeOffset.UtcNow,
             PreferredDisplayId = preferredDisplayId?.Trim() ?? "",
             SelectedDisplayId = selected?.StableId ?? "",
             SelectedDisplayName = selected?.Label ?? "",
-            EdgeCandidateCount = displays.Count,
-            Message = displays.Count == 0
-                ? "Windows did not expose any active displays."
+            ActiveDisplayCount = active.Count,
+            CompanionDisplayCount = companions.Count,
+            EdgeCandidateCount = companions.Count,
+            Message = companions.Count == 0
+                ? active.Count == 0
+                    ? "Windows did not expose any active displays. Auxora is waiting for a companion display."
+                    : "Auxora is waiting for an active companion display and will not open on the Windows primary display."
+                : selectedModeMismatch
+                    ? $"The XENEON EDGE is using {selected!.ModeWidth}x{selected.ModeHeight}. Set it to 2560x720 at 60 Hz so Auxora can use the full companion surface."
                 : preferredAvailable
-                    ? "Auxora found your saved touch-display preference."
-                    : displays.Count == 1
-                        ? "One active display is available."
-                        : "Choose which Windows display should host Auxora.",
-            RepairActions = BuildDisplayRepairActions(displays, preferredAvailable),
-            Displays = displays.Select(DisplayDiagnosticsItem.FromTarget).ToList()
+                    ? "Auxora found your saved companion-display preference."
+                    : companions.Count == 1
+                        ? "One active companion display is available."
+                        : "Choose which companion display should host Auxora.",
+            RepairActions = BuildDisplayRepairActions(companions, preferredAvailable, selectedModeMismatch),
+            Displays = companions.Select(DisplayDiagnosticsItem.FromTarget).ToList()
         };
+    }
+
+    public static DisplayTarget ResolveCompanionDisplay(string? displayId)
+    {
+        return ResolveCompanionDisplay(EnumerateDisplays(), displayId);
+    }
+
+    public static DisplayTarget ValidateActiveCompanionDisplay(DisplayTarget requestedDisplay)
+    {
+        return ValidateActiveCompanionDisplay(EnumerateDisplays(), requestedDisplay);
+    }
+
+    public static DisplayTarget ValidateActiveCompanionDisplay(
+        IEnumerable<DisplayTarget> activeDisplays,
+        DisplayTarget requestedDisplay)
+    {
+        ArgumentNullException.ThrowIfNull(activeDisplays);
+        ArgumentNullException.ThrowIfNull(requestedDisplay);
+
+        if (requestedDisplay.IsPrimary)
+        {
+            throw new InvalidOperationException(
+                "The Windows primary display cannot host Auxora. Choose an active companion display.");
+        }
+
+        return ResolveCompanionDisplay(activeDisplays, requestedDisplay.StableId);
+    }
+
+    public static DisplayTarget ResolveCompanionDisplay(
+        IEnumerable<DisplayTarget> activeDisplays,
+        string? displayId)
+    {
+        ArgumentNullException.ThrowIfNull(activeDisplays);
+
+        if (string.IsNullOrWhiteSpace(displayId))
+        {
+            throw new InvalidOperationException("A companion display selection is required.");
+        }
+
+        var requestedId = displayId.Trim();
+        var selected = activeDisplays.FirstOrDefault(display => display.IsPreferredDisplay(requestedId));
+        if (selected is null)
+        {
+            throw new InvalidOperationException(
+                "The selected display is not active. Refresh the display list and choose an active companion display.");
+        }
+
+        if (selected.IsPrimary)
+        {
+            throw new InvalidOperationException(
+                "The Windows primary display cannot host Auxora. Choose an active companion display.");
+        }
+
+        return selected.WithPreference(requestedId);
     }
 
     public static DisplaySnapshot ReadPrimaryDisplaySnapshot()
@@ -174,7 +262,8 @@ public static class DisplayManager
         var monitorDevice = ReadMonitorDevice(deviceName);
         var friendlyName = monitorDevice.FriendlyName;
         var containsXeneon = friendlyName.Contains("XENEON", StringComparison.OrdinalIgnoreCase)
-            || friendlyName.Contains("EDGE", StringComparison.OrdinalIgnoreCase);
+            || friendlyName.Contains("EDGE", StringComparison.OrdinalIgnoreCase)
+            || monitorDevice.DeviceId.Contains("CRXED00", StringComparison.OrdinalIgnoreCase);
         var mode = ReadDisplayMode(deviceName);
         var modeWidth = mode.Width > 0 ? mode.Width : bounds.Width;
         var modeHeight = mode.Height > 0 ? mode.Height : bounds.Height;
@@ -265,7 +354,10 @@ public static class DisplayManager
         return new MonitorDeviceDetails(deviceName, "", 0);
     }
 
-    private static List<string> BuildDisplayRepairActions(IReadOnlyCollection<DisplayTarget> displays, bool preferredAvailable)
+    private static List<string> BuildDisplayRepairActions(
+        IReadOnlyCollection<DisplayTarget> displays,
+        bool preferredAvailable,
+        bool selectedModeMismatch)
     {
         if (displays.Count == 0)
         {
@@ -284,6 +376,16 @@ public static class DisplayManager
                 "Choose the touch display you want Auxora to use.",
                 "Confirm its orientation and Windows scaling before pinning it.",
                 "Use Diagnostics to change the preferred display later."
+            ];
+        }
+
+        if (selectedModeMismatch)
+        {
+            return
+            [
+                "Open Windows Settings > System > Display and select the XENEON EDGE.",
+                "Set Display resolution to 2560 x 720 and refresh rate to 60 Hz.",
+                "Auxora will re-anchor automatically after Windows applies the native mode."
             ];
         }
 
@@ -451,9 +553,17 @@ public sealed record DisplayTarget(
     List<string> MatchReasons,
     bool IsPreferred = false)
 {
-    public string Label => string.IsNullOrWhiteSpace(FriendlyName)
+    public bool RequiresNativeModeCorrection => ContainsXeneonName && !MatchesEdgeResolution;
+
+    public string DisplayName => DeviceId.Contains("CRXED00", StringComparison.OrdinalIgnoreCase)
+        && (string.IsNullOrWhiteSpace(FriendlyName)
+            || FriendlyName.Contains("Generic PnP", StringComparison.OrdinalIgnoreCase))
+            ? "XENEON EDGE"
+            : FriendlyName;
+
+    public string Label => string.IsNullOrWhiteSpace(DisplayName)
         ? $"{DeviceName} ({Bounds.Width}x{Bounds.Height})"
-        : $"{FriendlyName} ({Bounds.Width}x{Bounds.Height})";
+        : $"{DisplayName} ({Bounds.Width}x{Bounds.Height})";
 
     public string StableId => BuildStableDisplayId(DeviceName, DeviceId, FriendlyName, ModeWidth, ModeHeight);
 
@@ -509,6 +619,10 @@ public sealed class DisplayDiagnosticsSnapshot
 
     public string SelectedDisplayName { get; set; } = "";
 
+    public int ActiveDisplayCount { get; set; }
+
+    public int CompanionDisplayCount { get; set; }
+
     public int EdgeCandidateCount { get; set; }
 
     public string Message { get; set; } = "";
@@ -556,6 +670,8 @@ public sealed class DisplayDiagnosticsItem
 
     public bool MatchesEdgeAspect { get; set; }
 
+    public bool RequiresNativeModeCorrection { get; set; }
+
     public List<string> Reasons { get; set; } = [];
 
     public static DisplayDiagnosticsItem FromTarget(DisplayTarget target)
@@ -565,7 +681,7 @@ public sealed class DisplayDiagnosticsItem
             Id = target.StableId,
             DeviceName = target.DeviceName,
             DeviceId = target.DeviceId,
-            FriendlyName = target.FriendlyName,
+            FriendlyName = target.DisplayName,
             Label = target.Label,
             Primary = target.IsPrimary,
             Preferred = target.IsPreferred,
@@ -580,6 +696,7 @@ public sealed class DisplayDiagnosticsItem
             ContainsXeneonName = target.ContainsXeneonName,
             MatchesEdgeResolution = target.MatchesEdgeResolution,
             MatchesEdgeAspect = target.MatchesEdgeAspect,
+            RequiresNativeModeCorrection = target.RequiresNativeModeCorrection,
             Reasons = target.MatchReasons.ToList()
         };
     }

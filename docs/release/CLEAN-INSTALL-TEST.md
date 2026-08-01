@@ -47,7 +47,7 @@ The installer should not ask setup questions. A Windows SmartScreen warning is a
 1. Launch `Repair Auxora` from the Start Menu.
 2. Confirm shortcuts, Windows Apps entry, and startup registration still exist.
 3. Launch `Auxora Recovery (Safe Mode)` from the Start Menu.
-4. Confirm auto-start is disabled and Xenon opens on the primary monitor without changing saved local app data.
+4. Confirm auto-start is disabled and Auxora opens on an active non-primary companion display without changing saved local app data. If none is active, confirm Auxora remains tray-only.
 
 ## Uninstall
 

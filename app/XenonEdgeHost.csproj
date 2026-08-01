@@ -68,7 +68,14 @@
     <EmbeddedResource Include="..\refund-policy.html" Link="WebAssets\refund-policy.html" LogicalName="WebAssets/refund-policy.html" />
     <EmbeddedResource Include="..\css\**\*" Link="WebAssets\css\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/css/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\js\**\*" Link="WebAssets\js\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/js/%(RecursiveDir)%(Filename)%(Extension)" />
-    <EmbeddedResource Include="..\widgets\**\*" Link="WebAssets\widgets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/widgets/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\widgets\audio-output-panel.html" Link="WebAssets\widgets\audio-output-panel.html" LogicalName="WebAssets/widgets/audio-output-panel.html" />
+    <EmbeddedResource Include="..\widgets\calendar-widget.html" Link="WebAssets\widgets\calendar-widget.html" LogicalName="WebAssets/widgets/calendar-widget.html" />
+    <EmbeddedResource Include="..\widgets\frigate-detection-panel.html" Link="WebAssets\widgets\frigate-detection-panel.html" LogicalName="WebAssets/widgets/frigate-detection-panel.html" />
+    <EmbeddedResource Include="..\widgets\network-widget.html" Link="WebAssets\widgets\network-widget.html" LogicalName="WebAssets/widgets/network-widget.html" />
+    <EmbeddedResource Include="..\widgets\philips-hue-panel.html" Link="WebAssets\widgets\philips-hue-panel.html" LogicalName="WebAssets/widgets/philips-hue-panel.html" />
+    <EmbeddedResource Include="..\widgets\setup-guide.html" Link="WebAssets\widgets\setup-guide.html" LogicalName="WebAssets/widgets/setup-guide.html" />
+    <EmbeddedResource Include="..\widgets\system-monitor.html" Link="WebAssets\widgets\system-monitor.html" LogicalName="WebAssets/widgets/system-monitor.html" />
+    <EmbeddedResource Include="..\widgets\weather-widget.html" Link="WebAssets\widgets\weather-widget.html" LogicalName="WebAssets/widgets/weather-widget.html" />
     <EmbeddedResource Include="..\assets\**\*" Link="WebAssets\assets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/assets/%(RecursiveDir)%(Filename)%(Extension)" />
     <Content Include="..\assets\trusted-extension-publishers.json" Link="assets\trusted-extension-publishers.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

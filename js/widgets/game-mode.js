@@ -31,6 +31,7 @@
   var normalizeUnifiSnapshot = runtime.normalizeUnifiSnapshot;
   var nullableNumber = runtime.nullableNumber;
   var optionalNumber = runtime.optionalNumber;
+  var patchStableDom = runtime.patchStableDom;
   var productThemes = runtime.productThemes;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
@@ -45,9 +46,9 @@
   var customGameModeProfile = {
     id: "custom",
     name: "Custom",
-    themeId: "edge",
-    accent: "#00e0ff",
-    secondary: "#44f0c2",
+    themeId: "focus",
+    accent: "#46bce8",
+    secondary: "#7f9fb3",
     mood: "Dashboard theme"
   };
   var gameThemeKeywords = [
@@ -83,7 +84,9 @@
 
   function gameModeProfileTheme(profile, env) {
     var theme = findById(productThemes(env), settingValue(env, "themeId", customGameModeProfile.themeId));
-    var customAccent = settingValue(env, "accentColor", "");
+    var customAccent = settingValue(env, "accentMode", "preset") === "custom"
+      ? settingValue(env, "customAccentColor", "")
+      : "";
     return {
       id: theme.id,
       accent: customAccent || theme.accent || customGameModeProfile.accent,
@@ -425,7 +428,8 @@
     var data = network || {};
     var unifi = data.unifi || normalizeUnifiSnapshot({});
     var ping = optionalNumber(data.ping != null ? data.ping : unifi.latencyMs);
-    var score = networkQualityScore(normalizeNetworkSnapshot(data), unifi);
+    var normalizedNetwork = normalizeNetworkSnapshot(data);
+    var score = networkQualityScore(normalizedNetwork, unifi);
     var tone = networkQualityTone(score);
     var provider = unifi.linked ? "UniFi" : unifi.detected ? "UniFi ready" : networkTypeLabel(data.type);
     return {
@@ -434,7 +438,7 @@
       score: score,
       tone: tone,
       provider: provider,
-      detail: networkQualityLabel(score),
+      detail: networkQualityLabel(score, normalizedNetwork),
       download: formatGameFocusRate(data.download),
       upload: formatGameFocusRate(data.upload),
       clients: unifi.linked ? String(unifi.clients.total) : "--",
@@ -785,7 +789,7 @@
 
     var audioList = container.querySelector(".game-focus-audio-list");
     if (audioList) {
-      audioList.innerHTML = renderGameFocusAudioRows(audioSessions, game);
+      patchStableDom(audioList, renderGameFocusAudioRows(audioSessions, game));
     }
 
     var adminButton = container.querySelector(".game-focus-admin");
@@ -1023,7 +1027,7 @@
           patchGameFocusScene(container, activeGame, profileTheme, system, state.performance, state.audio, state.network, env, introActive, state.performanceRestarting);
           container.setAttribute("data-game-focus-intro", introActive ? "1" : "0");
         } else {
-          container.innerHTML = renderGameFocusScene(
+          patchStableDom(container, renderGameFocusScene(
             activeGame,
             profileTheme,
             system,
@@ -1033,7 +1037,7 @@
             env,
             introActive,
             state.performanceRestarting
-          );
+          ));
           container.setAttribute("data-game-focus-active-id", focusRenderId);
           container.setAttribute("data-game-focus-intro", introActive ? "1" : "0");
         }
@@ -1044,7 +1048,7 @@
       stopGameSessionClock();
       container.removeAttribute("data-game-focus-active-id");
       container.removeAttribute("data-game-focus-intro");
-      container.innerHTML = '' +
+      patchStableDom(container, '' +
         '<div class="inline-widget-shell product-shell game-mode-idle-shell">' +
           '<div class="game-mode-idle-grid">' +
             '<section class="game-mode-idle-top">' +
@@ -1063,7 +1067,7 @@
               renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
             '</section>' +
           '</div>' +
-      '</div>';
+      '</div>');
     }
 
     function refreshGameModeSession(options) {
@@ -1123,6 +1127,18 @@
         gameModeSecondary: theme.secondary,
         gameModeMood: theme.mood
       };
+
+      if (!autoTune) {
+        saveSettings(env, {
+          gameModeProfile: "custom",
+          gameModeGame: "",
+          gameModeThemeId: "",
+          gameModeAccent: "",
+          gameModeSecondary: "",
+          gameModeMood: ""
+        });
+        return;
+      }
 
       if (autoTune) {
         if (currentBudget && currentBudget !== "game" && !preGameBudget) {
@@ -1412,7 +1428,7 @@
         stopGameSessionClock();
         clearFocusIntroTimer();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }

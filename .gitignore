@@ -15,6 +15,9 @@ tmp-*.jpg
 tmp-*.jpeg
 tmp-*.webp
 
+# Local qualification evidence; release gates use immutable external receipts.
+/artifacts/
+
 # Legacy bridge build output
 bridge/AudioBridge.dll
 bridge/AudioBridge.pdb

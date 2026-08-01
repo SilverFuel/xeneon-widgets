@@ -62,7 +62,8 @@ public sealed class LocalDataResetServiceTests
         File.WriteAllText(Path.Combine(legacyLocal, "Telemetry", "presentmon-old.csv"), "old");
         File.WriteAllText(Path.Combine(legacyLocal, "logs", "host.log"), "old log");
         _logger!.Info("delete me");
-        var service = new LocalDataResetService(store, launcher, performance, _logger, legacyRoaming, legacyLocal);
+        var runtimeClearCalls = 0;
+        var service = new LocalDataResetService(store, launcher, performance, _logger, legacyRoaming, legacyLocal, () => runtimeClearCalls++);
         var browserClearCalls = 0;
         service.SetBrowserDataClearer(_ =>
         {
@@ -85,6 +86,7 @@ public sealed class LocalDataResetServiceTests
             Assert.That(receipt.Ok, Is.True);
             Assert.That(receipt.Steps.Where(step => step.Required).Select(step => step.Status), Is.All.EqualTo("cleared"));
             Assert.That(browserClearCalls, Is.EqualTo(1));
+            Assert.That(runtimeClearCalls, Is.EqualTo(1));
             Assert.That(reset.Weather.ApiKey, Is.Empty);
             Assert.That(reset.Calendar.IcsUrl, Is.Empty);
             Assert.That(reset.Dashboard.ForegroundAppTrackingEnabled, Is.False);
