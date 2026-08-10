@@ -166,16 +166,27 @@ public sealed class AuxoraWindowSample : AuxoraRectSample
 {
     public long Handle { get; set; }
     public string Title { get; set; }
+    public uint Dpi { get; set; }
     public bool IntersectsPrimary { get; set; }
+    public bool ContainedByCompanion { get; set; }
+    public bool IsForeground { get; set; }
+}
+
+public sealed class AuxoraMonitorSample : AuxoraRectSample
+{
+    public string DeviceName { get; set; }
+    public bool Primary { get; set; }
 }
 
 public sealed class AuxoraPlacementSample
 {
     public AuxoraRectSample Primary { get; set; }
+    public List<AuxoraMonitorSample> Monitors { get; set; }
     public List<AuxoraWindowSample> Windows { get; set; }
 
     public AuxoraPlacementSample()
     {
+        Monitors = new List<AuxoraMonitorSample>();
         Windows = new List<AuxoraWindowSample>();
     }
 }
@@ -221,6 +232,12 @@ public static class AuxoraWindowProbe
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr window, out NativeRect bounds);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr window);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr window, StringBuilder text, int capacity);
 
@@ -231,7 +248,7 @@ public static class AuxoraWindowProbe
     private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
 
     [DllImport("user32.dll")]
-    private static extern bool SetProcessDPIAware();
+    private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int size);
@@ -244,7 +261,10 @@ public static class AuxoraWindowProbe
 
     public static void EnablePhysicalCoordinates()
     {
-        SetProcessDPIAware();
+        if (!SetProcessDpiAwarenessContext(new IntPtr(-4)))
+        {
+            throw new InvalidOperationException("The window watcher could not enable per-monitor-v2 physical coordinates.");
+        }
         timeBeginPeriod(1);
     }
 
@@ -259,13 +279,27 @@ public static class AuxoraWindowProbe
         EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate(IntPtr monitor, IntPtr hdc, ref NativeRect bounds, IntPtr parameter)
         {
             var info = new MonitorInfo { Size = Marshal.SizeOf(typeof(MonitorInfo)) };
-            if (GetMonitorInfo(monitor, ref info) && (info.Flags & MonitorInfoPrimary) != 0)
+            if (GetMonitorInfo(monitor, ref info))
             {
-                sample.Primary = CopyRect(info.Monitor);
+                var monitorSample = new AuxoraMonitorSample
+                {
+                    DeviceName = info.DeviceName == null ? "" : info.DeviceName.TrimEnd('\0'),
+                    Primary = (info.Flags & MonitorInfoPrimary) != 0,
+                    Left = info.Monitor.Left,
+                    Top = info.Monitor.Top,
+                    Right = info.Monitor.Right,
+                    Bottom = info.Monitor.Bottom
+                };
+                sample.Monitors.Add(monitorSample);
+                if (monitorSample.Primary)
+                {
+                    sample.Primary = CopyRect(info.Monitor);
+                }
             }
             return true;
         }, IntPtr.Zero);
 
+        var foregroundWindow = GetForegroundWindow();
         EnumWindows(delegate(IntPtr window, IntPtr parameter)
         {
             uint processId;
@@ -293,11 +327,14 @@ public static class AuxoraWindowProbe
             {
                 Handle = window.ToInt64(),
                 Title = title.ToString(),
+                Dpi = GetDpiForWindow(window),
                 Left = bounds.Left,
                 Top = bounds.Top,
                 Right = bounds.Right,
                 Bottom = bounds.Bottom,
-                IntersectsPrimary = sample.Primary != null && Intersects(bounds, sample.Primary)
+                IntersectsPrimary = sample.Primary != null && Intersects(bounds, sample.Primary),
+                ContainedByCompanion = IsContainedByCompanion(bounds, sample.Monitors),
+                IsForeground = window == foregroundWindow
             });
             return true;
         }, IntPtr.Zero);
@@ -320,6 +357,23 @@ public static class AuxoraWindowProbe
     {
         return Math.Min(window.Right, primary.Right) > Math.Max(window.Left, primary.Left)
             && Math.Min(window.Bottom, primary.Bottom) > Math.Max(window.Top, primary.Top);
+    }
+
+    private static bool IsContainedByCompanion(NativeRect window, List<AuxoraMonitorSample> monitors)
+    {
+        foreach (var monitor in monitors)
+        {
+            if (!monitor.Primary
+                && window.Left >= monitor.Left
+                && window.Top >= monitor.Top
+                && window.Right <= monitor.Right
+                && window.Bottom <= monitor.Bottom)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 '@
@@ -363,15 +417,23 @@ while ([DateTimeOffset]::UtcNow -lt $deadline -and ((-not $stopTask.IsCompleted)
         top = $window.Top
         right = $window.Right
         bottom = $window.Bottom
+        dpi = $window.Dpi
+        containedByCompanion = $window.ContainedByCompanion
+        isForeground = $window.IsForeground
       })
     }
-    if ($window.IntersectsPrimary -and $violations.Count -lt 20) {
+    if (($window.IntersectsPrimary -or -not $window.ContainedByCompanion -or $window.IsForeground) -and $violations.Count -lt 20) {
       $violations.Add([ordered]@{
         observedAtMs = [int]([DateTimeOffset]::UtcNow - $startedAt).TotalMilliseconds
         handle = $window.Handle
         title = $window.Title
+        dpi = $window.Dpi
+        intersectsPrimary = $window.IntersectsPrimary
+        containedByCompanion = $window.ContainedByCompanion
+        isForeground = $window.IsForeground
         window = [ordered]@{ left=$window.Left; top=$window.Top; right=$window.Right; bottom=$window.Bottom }
         primary = $sample.Primary
+        monitors = $sample.Monitors
       })
     }
   }
@@ -697,7 +759,7 @@ try {
   const placementViolations = Array.isArray(placementResult.violations) ? placementResult.violations : [];
   assert(
     placementViolations.length === 0,
-    `Auxora exposed a visible top-level window on the Windows primary display: ${JSON.stringify(placementViolations)}`
+    `Auxora exposed a window on the primary display, outside a companion display, or as the unsolicited foreground window: ${JSON.stringify(placementViolations)}`
   );
   if (displayDiagnostics.companionDisplayCount > 0) {
     assert(placementResult.visibleSampleCount > 0, "an available companion display must produce a visible Auxora window during stabilization");

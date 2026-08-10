@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const mainWindowXaml = readWorkspaceFile("app/MainWindow.xaml");
 const appXaml = readWorkspaceFile("app/App.xaml.cs");
+const appProject = readWorkspaceFile("app/XenonEdgeHost.csproj");
+const appManifest = readWorkspaceFile("app/app.manifest");
 const trayIcon = readWorkspaceFile("app/TrayIcon.cs");
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
 const displayManager = readWorkspaceFile("app/Services/DisplayManager.cs");
@@ -98,9 +100,23 @@ assert(
 
 assert(
   /HandleBridgeReady[\s\S]+_bridgeReady = true[\s\S]+BeginDashboardStartupIfReady/.test(mainWindow)
-    && /BeginDashboardStartupIfReady[\s\S]+!_hasBeenActivated[\s\S]+_companionDisplayUnavailable[\s\S]+return/.test(mainWindow)
+    && /BeginDashboardStartupIfReady[\s\S]+!_windowHasBeenShown[\s\S]+_companionDisplayUnavailable[\s\S]+return/.test(mainWindow)
     && /RevealConfiguredWindow[\s\S]+ShowWindowNoActivate\(\);[\s\S]+BeginDashboardStartupIfReady\(\)/.test(mainWindow),
   "native services may start while Auxora is hidden, but WebView2 must wait for a verified companion window"
+);
+
+assert(
+  /<ApplicationManifest>app\.manifest<\/ApplicationManifest>/.test(appProject)
+    && /<dpiAware[^>]*>true\/pm<\/dpiAware>/.test(appManifest)
+    && /<dpiAwareness[^>]*>PerMonitorV2,PerMonitor<\/dpiAwareness>/.test(appManifest),
+  "the unpackaged native host must use per-monitor-v2 DPI coordinates on mixed-scale displays"
+);
+
+assert(
+  !/\bActivate\(\);/.test(mainWindow)
+    && /if \(_waitingForEdgeDisplay\)[\s\S]+ShowWindow\(windowHandle, SwShowNoActivate\)/.test(mainWindow)
+    && /ShowWindowNoActivate\(\);[\s\S]+_windowHasBeenShown = true;/.test(mainWindow),
+  "automatic startup, recovery, and display-picker reveals must never take foreground focus"
 );
 
 assert(
@@ -209,11 +225,14 @@ assert(
     && /EnumDisplayMonitors/.test(nativeHostApiTest)
     && /IsWindowVisible/.test(nativeHostApiTest)
     && /IntersectsPrimary/.test(nativeHostApiTest)
+    && /ContainedByCompanion/.test(nativeHostApiTest)
+    && /GetForegroundWindow/.test(nativeHostApiTest)
+    && /SetProcessDpiAwarenessContext/.test(nativeHostApiTest)
     && /System\.Threading\.Thread\]::Yield/.test(nativeHostApiTest)
     && /effectiveIntervalMs <= 5/.test(nativeHostApiTest)
     && /placementViolations\.length === 0/.test(nativeHostApiTest)
     && /primary-only startup must keep every Auxora top-level window hidden/.test(nativeHostApiTest),
-  "launched-host coverage must sample real visible HWND bounds fast enough to catch a 60 Hz primary-display flash"
+  "launched-host coverage must catch primary-display flashes, oversized companion windows, and foreground theft in physical coordinates"
 );
 
 assert(

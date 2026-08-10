@@ -23,7 +23,6 @@ public sealed partial class MainWindow : Window
     private const uint SwpFrameChanged = 0x0020;
     private const uint SwpShowWindow = 0x0040;
     private const int SwHide = 0;
-    private const int SwShow = 5;
     private const int SwShowNoActivate = 4;
     private const int WaitingWindowWidth = 1120;
     private const int WaitingWindowHeight = 720;
@@ -54,7 +53,7 @@ public sealed partial class MainWindow : Window
     private bool _taskbarStyleApplied;
     private bool _waitingForEdgeDisplay;
     private bool _companionDisplayUnavailable;
-    private bool _hasBeenActivated;
+    private bool _windowHasBeenShown;
     private bool _displayMoveMode;
     private string _configuredDisplayId = "";
     private ulong _dashboardNavigationId;
@@ -128,8 +127,7 @@ public sealed partial class MainWindow : Window
 
     private void HandleActivated(object sender, WindowActivatedEventArgs args)
     {
-        // The first activation creates the HWND and dispatcher this window needs.
-        // Keep startup idempotent for later WinUI activation paths.
+        // Startup is explicit so a later user-initiated activation remains harmless.
         Start();
     }
 
@@ -915,7 +913,7 @@ public sealed partial class MainWindow : Window
 
     private void BeginDashboardStartupIfReady()
     {
-        if (_disposed || !_bridgeReady || !_hasBeenActivated || _companionDisplayUnavailable)
+        if (_disposed || !_bridgeReady || !_windowHasBeenShown || _companionDisplayUnavailable)
         {
             _logger.Info("Native dashboard server is ready; WebView2 remains deferred until a verified companion display is revealed.");
             return;
@@ -1426,7 +1424,7 @@ public sealed partial class MainWindow : Window
 
         if (_waitingForEdgeDisplay)
         {
-            ShowWindow(windowHandle, SwShow);
+            ShowWindow(windowHandle, SwShowNoActivate);
             return;
         }
 
@@ -1487,13 +1485,8 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        if (!_hasBeenActivated)
-        {
-            Activate();
-            _hasBeenActivated = true;
-        }
-
         ShowWindowNoActivate();
+        _windowHasBeenShown = true;
         BeginDashboardStartupIfReady();
         if (!_waitingForEdgeDisplay)
         {
