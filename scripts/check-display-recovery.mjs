@@ -101,8 +101,10 @@ assert(
 assert(
   /HandleBridgeReady[\s\S]+_bridgeReady = true[\s\S]+BeginDashboardStartupIfReady/.test(mainWindow)
     && /BeginDashboardStartupIfReady[\s\S]+!_windowHasBeenShown[\s\S]+_companionDisplayUnavailable[\s\S]+return/.test(mainWindow)
+    && /BeginDashboardStartupIfReady[\s\S]+_dashboardLoaded \|\| DashboardView\.CoreWebView2 is not null[\s\S]+return/.test(mainWindow)
+    && /EnsureWebViewReadyAsync[\s\S]+if \(DashboardView\.CoreWebView2 is null\)[\s\S]+CreateWithOptionsAsync[\s\S]+EnsureCoreWebView2Async/.test(mainWindow)
     && /RevealConfiguredWindow[\s\S]+ShowWindowNoActivate\(\);[\s\S]+BeginDashboardStartupIfReady\(\)/.test(mainWindow),
-  "native services may start while Auxora is hidden, but WebView2 must wait for a verified companion window"
+  "native services may start while Auxora is hidden, but WebView2 must initialize only once after a verified companion window is revealed"
 );
 
 assert(

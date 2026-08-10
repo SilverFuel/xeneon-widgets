@@ -767,6 +767,17 @@ try {
     assert(placementResult.visibleSampleCount === 0, "primary-only startup must keep every Auxora top-level window hidden");
   }
 
+  const finalSupportResponse = await fetchWithTimeout("/api/support/bundle", {}, 5000);
+  assert(finalSupportResponse.ok, `final support bundle returned HTTP ${finalSupportResponse.status}`);
+  const finalSupportBundle = await finalSupportResponse.json();
+  const finalHostLog = Array.isArray(finalSupportBundle.log) ? finalSupportBundle.log.join("\n") : "";
+  const finalDashboardLoads = (finalHostLog.match(/Dashboard loaded successfully\./g) || []).length;
+  assert(finalDashboardLoads === 1, `display recovery must not initialize or load the dashboard more than once; observed ${finalDashboardLoads}`);
+  assert(
+    !/WebView2 initialization failed|Failed to load dashboard after bridge ready/.test(finalHostLog),
+    `display recovery produced a false WebView2 startup failure after a successful load: ${finalHostLog}`
+  );
+
   console.log(`launched native host and verified live health, companion-only display diagnostics, preference rejection, and ${placementResult.sampleCount} HWND placement samples at ${placementResult.effectiveIntervalMs} ms effective intervals; primary=${JSON.stringify(placementResult.primary)}; visibleWindows=${JSON.stringify(placementResult.observedWindows)}`);
 } finally {
   if (!placementResult) {
