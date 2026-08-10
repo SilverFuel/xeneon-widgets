@@ -24,6 +24,7 @@
     <SelfContained>true</SelfContained>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ApplicationIcon>Assets\XenonEdgeHost.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
   </PropertyGroup>
 
