@@ -573,12 +573,15 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            Directory.CreateDirectory(_webViewUserDataPath);
-            var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
-                browserExecutableFolder: null,
-                userDataFolder: _webViewUserDataPath,
-                options: null);
-            await DashboardView.EnsureCoreWebView2Async(environment);
+            if (DashboardView.CoreWebView2 is null)
+            {
+                Directory.CreateDirectory(_webViewUserDataPath);
+                var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: _webViewUserDataPath,
+                    options: null);
+                await DashboardView.EnsureCoreWebView2Async(environment);
+            }
             _webViewInitializationFailed = false;
         }
         catch (Exception error)
@@ -916,6 +919,15 @@ public sealed partial class MainWindow : Window
         if (_disposed || !_bridgeReady || !_windowHasBeenShown || _companionDisplayUnavailable)
         {
             _logger.Info("Native dashboard server is ready; WebView2 remains deferred until a verified companion display is revealed.");
+            return;
+        }
+
+        // Startup display recovery can re-reveal the window after WebView2 has
+        // already initialized or while its first navigation is still running.
+        // Reusing the live controller is safe; initializing it with a second
+        // environment raises E_INVALIDARG and hides the working dashboard.
+        if (_dashboardLoaded || DashboardView.CoreWebView2 is not null)
+        {
             return;
         }
 
