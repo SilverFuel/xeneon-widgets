@@ -173,6 +173,7 @@
     hiddenWidgets: "",
     cardSizes: "{}",
     modeLayouts: "{}",
+    modeLayoutSchemaVersion: "2",
     gameModeProfile: "custom",
     gameModeGame: "",
     gameModeThemeId: "",
@@ -2020,11 +2021,62 @@
     }
   }
 
+  var modeLayoutSettingKeys = ["layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes"];
+
+  function modeLayoutSeed(source) {
+    var settings = source || {};
+    var seed = {};
+    modeLayoutSettingKeys.forEach(function (key) {
+      var value = Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : defaultSettings[key];
+      seed[key] = String(value == null ? "" : value);
+    });
+    return seed;
+  }
+
+  function migrateLegacyModeLayouts(activeModeId) {
+    if (String(storedSettings.modeLayoutSchemaVersion || "") === "2") {
+      dashboardSettings.modeLayoutSchemaVersion = "2";
+      return false;
+    }
+
+    var legacyLayout = modeLayoutSeed(dashboardSettings);
+    var defaultLayout = modeLayoutSeed(defaultSettings);
+    var modeLayouts = readModeLayouts();
+    var modeIds = Object.keys(modeLayouts);
+    var resolvedModeId = String(activeModeId || getActiveModeId() || "scene-work");
+    var hasLegacyLayout = modeLayoutSettingKeys.some(function (key) {
+      return legacyLayout[key] !== defaultLayout[key];
+    });
+
+    modeIds.forEach(function (modeId) {
+      var modeLayout = modeLayouts[modeId];
+      if (!modeLayout || typeof modeLayout !== "object" || Array.isArray(modeLayout)) {
+        modeLayout = {};
+      }
+      modeLayouts[modeId] = Object.assign({}, legacyLayout, modeLayout);
+    });
+
+    if (!modeIds.length && hasLegacyLayout) {
+      modeLayouts[resolvedModeId] = Object.assign({}, legacyLayout);
+    }
+
+    dashboardSettings.modeLayouts = JSON.stringify(modeLayouts);
+    storedSettings.modeLayouts = dashboardSettings.modeLayouts;
+    dashboardSettings.modeLayoutSchemaVersion = "2";
+    storedSettings.modeLayoutSchemaVersion = "2";
+    persistSettings();
+    return true;
+  }
+
   function getSetting(key) {
-    if (["layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes"].indexOf(key) !== -1) {
-      var modeLayout = readModeLayouts()[getActiveModeId()];
+    if (modeLayoutSettingKeys.indexOf(key) !== -1) {
+      var modeLayouts = readModeLayouts();
+      var modeLayout = modeLayouts[getActiveModeId()];
       if (modeLayout && Object.prototype.hasOwnProperty.call(modeLayout, key)) {
         return modeLayout[key] == null ? "" : modeLayout[key];
+      }
+      if (String(storedSettings.modeLayoutSchemaVersion || "") === "2") {
+        return defaultSettings[key] == null ? "" : defaultSettings[key];
       }
     }
     return dashboardSettings[key] == null ? "" : dashboardSettings[key];
@@ -2470,9 +2522,9 @@
         title: "Layout Editor",
         requiresBridge: false,
         tier: "product",
-        kicker: "Edit mode",
-        copy: "Reorder and pin the cards that belong on your active Mode.",
-        viewerLabel: "Local layout"
+        kicker: "Customize mode",
+        copy: "Choose where each panel appears, how wide it opens, and the order you see it. Every change saves automatically.",
+        viewerLabel: "Mode layout"
       },
       {
         id: "streaming",
@@ -2947,46 +2999,67 @@
   }
 
   function saveDashboardSettings(values) {
-    var layoutKeys = ["layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes"];
-    var nextModeLayouts = readModeLayouts();
+    var nextValues = values || {};
     var activeModeId = getActiveModeId();
-    var activeModeLayout = Object.assign({}, nextModeLayouts[activeModeId] || {});
-    var layoutChanged = false;
+    var layoutChanged = modeLayoutSettingKeys.some(function (key) {
+      return Object.prototype.hasOwnProperty.call(nextValues, key);
+    });
+    var modeLayoutsChanged = Object.prototype.hasOwnProperty.call(nextValues, "modeLayouts");
+    var importsLayoutSnapshot = modeLayoutsChanged
+      || Object.prototype.hasOwnProperty.call(nextValues, "modeLayoutSchemaVersion");
 
-    Object.keys(values || {}).forEach(function (key) {
-      dashboardSettings[key] = String(values[key] || "");
+    if (layoutChanged && !importsLayoutSnapshot && String(storedSettings.modeLayoutSchemaVersion || "") !== "2") {
+      migrateLegacyModeLayouts(activeModeId);
+    }
+
+    Object.keys(nextValues).forEach(function (key) {
+      dashboardSettings[key] = String(nextValues[key] == null ? "" : nextValues[key]);
       storedSettings[key] = dashboardSettings[key];
-      if (layoutKeys.indexOf(key) !== -1) {
-        activeModeLayout[key] = dashboardSettings[key];
-        layoutChanged = true;
-      }
     });
 
-    if (layoutChanged) {
+    if (importsLayoutSnapshot && (layoutChanged || modeLayoutsChanged) && String(storedSettings.modeLayoutSchemaVersion || "") !== "2") {
+      migrateLegacyModeLayouts(activeModeId);
+    }
+
+    var nextModeLayouts = readModeLayouts();
+    var activeModeLayout = Object.assign({
+      layoutOrder: defaultSettings.layoutOrder,
+      pinnedWidgets: defaultSettings.pinnedWidgets,
+      hiddenWidgets: defaultSettings.hiddenWidgets,
+      cardSizes: defaultSettings.cardSizes
+    }, nextModeLayouts[activeModeId] || {});
+
+    if (layoutChanged && !modeLayoutsChanged) {
+      modeLayoutSettingKeys.forEach(function (key) {
+        if (Object.prototype.hasOwnProperty.call(nextValues, key)) {
+          activeModeLayout[key] = dashboardSettings[key];
+        }
+      });
+
       nextModeLayouts[activeModeId] = activeModeLayout;
       dashboardSettings.modeLayouts = JSON.stringify(nextModeLayouts);
       storedSettings.modeLayouts = dashboardSettings.modeLayouts;
     }
 
     if (["themeId", "accentMode", "customAccentColor", "accentColor", "themeVariant"].some(function (key) {
-      return Object.prototype.hasOwnProperty.call(values || {}, key);
+      return Object.prototype.hasOwnProperty.call(nextValues, key);
     })) {
-      var migratedTheme = migrateThemeSettings(dashboardSettings, Object.prototype.hasOwnProperty.call(values || {}, "accentColor"));
+      var migratedTheme = migrateThemeSettings(dashboardSettings, Object.prototype.hasOwnProperty.call(nextValues, "accentColor"));
       ["themeSchemaVersion", "themeId", "accentMode", "customAccentColor", "accentColor", "themeVariant"].forEach(function (key) {
         dashboardSettings[key] = String(migratedTheme[key] || "");
         storedSettings[key] = dashboardSettings[key];
       });
     }
 
-    if (Object.prototype.hasOwnProperty.call(values || {}, "releaseChannel")) {
+    if (Object.prototype.hasOwnProperty.call(nextValues, "releaseChannel")) {
       dashboardSettings.updateChannel = dashboardSettings.releaseChannel;
       storedSettings.updateChannel = dashboardSettings.releaseChannel;
-    } else if (Object.prototype.hasOwnProperty.call(values || {}, "updateChannel")) {
+    } else if (Object.prototype.hasOwnProperty.call(nextValues, "updateChannel")) {
       dashboardSettings.releaseChannel = dashboardSettings.updateChannel;
       storedSettings.releaseChannel = dashboardSettings.updateChannel;
     }
 
-    persistNativeDashboardSettings(values || {});
+    persistNativeDashboardSettings(nextValues);
     persistSettings();
     applyDashboardPresentation();
     widgets = createWidgets();
@@ -3045,6 +3118,7 @@
       title: getWidgetTitle(widget),
       copy: getWidgetCopy(widget),
       state: getWidgetState(widget.id),
+      configured: isWidgetConfigured(widget.id),
       tier: widget.tier || "core",
       requiresBridge: widgetRequiresBridge(widget)
     };
@@ -3807,6 +3881,8 @@
       document.body.dataset.scene = activeScene.id;
       document.body.dataset.density = activeScene.density || "comfortable";
     }
+
+    migrateLegacyModeLayouts(bridgeConfig.scenes.activeSceneId);
 
     bridgeApp = health && health.app ? Object.assign({ name: "Auxora", version: "" }, health.app) : { name: "Auxora", version: "" };
     bridgeSetup = health && health.setup ? Object.assign({ hydrated: true }, health.setup) : createBootSetupSummary();

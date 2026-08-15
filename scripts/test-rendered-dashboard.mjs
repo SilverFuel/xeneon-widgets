@@ -1246,16 +1246,36 @@ async function validateProductSurfaceSemantics(cdp) {
     const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline && document.querySelectorAll('[data-layout-item]').length === 0) await wait(50);
-    const buttons = Array.from(document.querySelectorAll('[data-layout-action="up"], [data-layout-action="down"], [data-layout-action="pin"], [data-layout-action="size"], [data-layout-action="hide"]'));
+    const rows = Array.from(document.querySelectorAll('[data-layout-item]'));
+    const controls = Array.from(document.querySelectorAll('[data-layout-action="earlier"], [data-layout-action="later"], [data-layout-placement], [data-layout-size]'));
+    const placements = Array.from(document.querySelectorAll('[data-layout-placement]'));
+    const widths = Array.from(document.querySelectorAll('[data-layout-size]'));
     return {
       copy: document.querySelector('#dashboard-inline-widget')?.innerText || '',
-      labels: buttons.map(button => button.getAttribute('aria-label') || ''),
-      buttonCount: buttons.length
+      guide: document.querySelector('.product-layout-guide')?.innerText || '',
+      listTag: document.querySelector('.product-layout-list')?.tagName || '',
+      rowKeys: rows.map(row => row.getAttribute('data-ui-key') || ''),
+      positions: rows.map(row => row.querySelector('.product-layout-row__handle strong')?.textContent.trim() || ''),
+      labels: controls.map(control => control.getAttribute('aria-label') || ''),
+      controlCount: controls.length,
+      rowCount: rows.length,
+      placementOptions: placements.map(select => Array.from(select.options).map(option => option.value)),
+      placementLabels: placements.map(select => Array.from(select.options).map(option => option.textContent.trim())),
+      widthOptions: widths.map(select => Array.from(select.options).map(option => option.value)),
+      hasLiveStatus: Boolean(document.querySelector('[data-layout-live][aria-live="polite"]')),
+      hasOldControls: Boolean(document.querySelector('[data-layout-action="pin"], [data-layout-action="hide"], [data-layout-action="size"]'))
     };
   })()`);
-  assert(layout.buttonCount > 0, `Layout Editor controls did not render: ${JSON.stringify(layout)}`);
+  assert(layout.rowCount > 0 && layout.controlCount === layout.rowCount * 4, `Layout Editor controls did not render coherently: ${JSON.stringify(layout)}`);
   assert(layout.labels.every(Boolean), `Layout Editor exposed unnamed row actions: ${JSON.stringify(layout.labels)}`);
   assert(new Set(layout.labels).size === layout.labels.length, `Layout Editor row action names are ambiguous: ${JSON.stringify(layout.labels)}`);
+  assert(layout.listTag === "OL" && layout.positions.every((position, index) => position === String(index + 1)), `Layout Editor did not expose one numbered order: ${JSON.stringify(layout)}`);
+  assert(layout.rowKeys.every(Boolean) && new Set(layout.rowKeys).size === layout.rowKeys.length, `Layout Editor rows did not have stable identities: ${JSON.stringify(layout.rowKeys)}`);
+  assert(/Editing/i.test(layout.guide) && /Mode/i.test(layout.guide) && /Changes save automatically/i.test(layout.guide), `Layout Editor did not identify the Mode or autosave behavior: ${JSON.stringify(layout.guide)}`);
+  assert(layout.placementOptions.every(options => options.includes("home") && options.includes("hidden")) && layout.placementOptions.some(options => options.includes("library")), `Layout Editor placement choices were incomplete: ${JSON.stringify(layout.placementOptions)}`);
+  assert(layout.placementLabels.every(labels => labels.includes("Hidden in this Mode") && ["On Home", "Home after setup"].includes(labels[0])), `Layout Editor placement labels did not match their real scope or setup state: ${JSON.stringify(layout.placementLabels)}`);
+  assert(layout.widthOptions.every(options => options.join(",") === "compact,standard,wide"), `Layout Editor width was not directly selectable: ${JSON.stringify(layout.widthOptions)}`);
+  assert(layout.hasLiveStatus && !layout.hasOldControls, `Layout Editor retained ambiguous controls or omitted saved-change feedback: ${JSON.stringify(layout)}`);
   assert(!/sold or used/i.test(layout.copy || ""), "Layout Editor exposed internal sales-oriented copy");
 
   const modes = await navigateAndEvaluate("scenes", "productModesTest", `(async () => {
@@ -1515,7 +1535,7 @@ async function validateProductSurfaceSemantics(cdp) {
       mediaPrivacyCopy: document.querySelector('#dashboard-inline-widget')?.innerText || ''
     };
   })()`);
-  const requiredPortableKeys = ["layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes", "modeLayouts", "marketplacePack", "themeReadability", "performanceBudget", "gameModeAutoFace"];
+  const requiredPortableKeys = ["layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes", "modeLayouts", "modeLayoutSchemaVersion", "marketplacePack", "themeReadability", "performanceBudget", "gameModeAutoFace"];
   assert(privacy.hasScenes, `Privacy backup omitted Modes: ${JSON.stringify(privacy)}`);
   assert(requiredPortableKeys.every(key => privacy.exportedKeys.includes(key)), `Privacy backup omitted presentation fields: ${JSON.stringify(privacy.exportedKeys)}`);
   assert(privacy.layoutOrder === "game-mode,system,audio" && privacy.pinnedWidgets === "game-mode" && privacy.hiddenWidgets === "weather", `Privacy backup changed layout state: ${JSON.stringify(privacy)}`);
