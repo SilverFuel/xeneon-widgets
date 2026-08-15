@@ -203,51 +203,103 @@
   function mountLayoutEditorWidget(widget, container, env) {
     var cleanups = [];
     var draggingId = "";
+    var statusMessage = "Changes save automatically.";
 
     function widgetRows() {
       return typeof env.getVisibleWidgets === "function" ? env.getVisibleWidgets() : [];
     }
 
-    function saveOrder(ids) {
+    function activeMode() {
+      var scenes = env.bridgeConfig && env.bridgeConfig.scenes ? env.bridgeConfig.scenes : {};
+      var profiles = Array.isArray(scenes.profiles) ? scenes.profiles : [];
+      var defaults = {
+        "scene-work": { name: "Work", widgets: ["home", "calendar", "system", "audio", "quick-actions"] },
+        "scene-gaming": { name: "Gaming", widgets: ["home", "game-mode", "system", "network", "audio"] },
+        "scene-media": { name: "Media", widgets: ["home", "audio", "hue", "weather"] },
+        "scene-night": { name: "Night", widgets: ["home", "audio", "weather", "calendar", "hue"] },
+        "scene-home": { name: "Home", widgets: ["home", "hue", "network", "weather", "calendar"] }
+      };
+      var fallback = defaults[scenes.activeSceneId] || defaults["scene-work"];
+      var active = profiles.filter(function (scene) {
+        return scene && scene.id === scenes.activeSceneId;
+      })[0];
+      var name = text(active && active.name, fallback.name);
+      return {
+        label: /mode$/i.test(name) ? name : name + " Mode",
+        widgets: active && Array.isArray(active.widgets) ? active.widgets : fallback.widgets
+      };
+    }
+
+    function saveOrder(ids, message) {
       saveSettings(env, { layoutOrder: ids.join(",") });
+      statusMessage = message || "Order saved.";
       redraw();
     }
 
     function redraw() {
       var rows = widgetRows();
+      var mode = activeMode();
       var pinned = settingValue(env, "pinnedWidgets", "").split(",").filter(Boolean);
       var hidden = settingValue(env, "hiddenWidgets", "").split(",").filter(Boolean);
+      var columnRows = Math.max(1, Math.ceil(rows.length / 2));
       var sizes = {};
       try { sizes = JSON.parse(settingValue(env, "cardSizes", "{}")); } catch (error) { sizes = {}; }
       patchStableDom(container, productShell(
-        "Drag and drop",
+        "Auto-saved layout",
         "Layout Editor",
-        "Move panels into the order that best fits how you use this Auxora display.",
+        "Arrange panels for this Mode. Use the plain controls below or drag a row.",
         rows.length + " panels",
         "good",
-        '<div class="product-layout-list">' +
+        '<div class="product-layout-guide" aria-label="How the layout controls work">' +
+          '<div><strong>Editing</strong><span>' + escapeHtml(mode.label) + '<br>Changes save automatically.</span></div>' +
+          '<div><strong>Order</strong><span>Drag a row, or use Earlier and Later.</span></div>' +
+          '<div><strong>Appears</strong><span>Choose Home, Library only when available, or Hidden in this Mode.</span></div>' +
+          '<div><strong>Width</strong><span>Sets how wide the panel opens.</span></div>' +
+        '</div>' +
+        '<ol class="product-layout-list" aria-label="Panel order" style="--layout-column-rows:' + columnRows + '">' +
           rows.map(function (row, index) {
             var rowTitle = escapeHtml(row.title);
-            var rowSize = escapeHtml(sizes[row.id] || "standard");
-            var pinAction = pinned.indexOf(row.id) !== -1 ? "Unpin" : "Pin";
-            var visibilityAction = hidden.indexOf(row.id) !== -1 ? "Show" : "Hide";
+            var rowSize = ["compact", "standard", "wide"].indexOf(sizes[row.id]) !== -1 ? sizes[row.id] : "standard";
+            var isHidden = hidden.indexOf(row.id) !== -1;
+            var isModePanel = mode.widgets.indexOf(row.id) !== -1;
+            var isPinned = pinned.indexOf(row.id) !== -1;
+            var needsSetupForHome = ["weather", "calendar", "hue"].indexOf(row.id) !== -1 && row.configured === false;
+            var placementValue = isHidden ? "hidden" : (isModePanel || isPinned) ? "home" : "library";
+            var placement = isHidden
+              ? "Hidden in " + mode.label
+              : (isModePanel || isPinned) && needsSetupForHome
+              ? "Needs setup before it can appear on Home"
+              : isModePanel
+              ? "Included on Home by " + mode.label
+              : isPinned
+              ? "Home shortcut"
+              : "Library only";
             return '' +
-              '<div class="product-layout-row" draggable="true" data-layout-item="' + escapeHtml(row.id) + '">' +
-                '<span class="product-layout-row__handle" aria-hidden="true">⋮⋮</span>' +
-                '<div><strong>' + rowTitle + '</strong><span>' + escapeHtml(row.state + (row.requiresBridge ? " · uses Auxora service" : " · works locally")) + '</span></div>' +
+              '<li class="product-layout-row' + (isHidden ? " is-hidden" : "") + '" data-ui-key="layout-row-' + escapeHtml(row.id) + '" data-layout-item="' + escapeHtml(row.id) + '">' +
+                '<span class="product-layout-row__handle" draggable="true" title="Drag to reorder" aria-label="Position ' + (index + 1) + '; drag to reorder"><strong>' + (index + 1) + '</strong><span aria-hidden="true">⠿</span></span>' +
+                '<div class="product-layout-row__title"><strong>' + rowTitle + '</strong><span>' + escapeHtml(placement) + '</span></div>' +
                 '<div class="product-layout-row__actions">' +
-                  '<button class="inline-button" type="button" data-layout-action="up" data-id="' + escapeHtml(row.id) + '" aria-label="' + escapeHtml("Move " + row.title + " up") + '"' + (index === 0 ? " disabled" : "") + '>Up</button>' +
-                  '<button class="inline-button" type="button" data-layout-action="down" data-id="' + escapeHtml(row.id) + '" aria-label="' + escapeHtml("Move " + row.title + " down") + '"' + (index === rows.length - 1 ? " disabled" : "") + '>Down</button>' +
-                  '<button class="inline-button" type="button" data-layout-action="pin" data-id="' + escapeHtml(row.id) + '" aria-label="' + escapeHtml(pinAction + " " + row.title) + '">' + pinAction + '</button>' +
-                  '<button class="inline-button" type="button" data-layout-action="size" data-id="' + escapeHtml(row.id) + '" aria-label="' + escapeHtml("Change " + row.title + " size; current size " + (sizes[row.id] || "standard")) + '">Size: ' + rowSize + '</button>' +
-                  '<button class="inline-button" type="button" data-layout-action="hide" data-id="' + escapeHtml(row.id) + '" aria-label="' + escapeHtml(visibilityAction + " " + row.title) + '">' + visibilityAction + '</button>' +
+                  '<div class="product-layout-row__move" role="group" aria-label="Order for ' + rowTitle + '">' +
+                    '<button class="inline-button" type="button" data-ui-key="layout-earlier-' + escapeHtml(row.id) + '" data-layout-action="earlier" data-id="' + escapeHtml(row.id) + '" aria-label="' + escapeHtml("Move " + row.title + " earlier") + '" title="Move earlier"' + (index === 0 ? " disabled" : "") + '>↑ <span>Earlier</span></button>' +
+                    '<button class="inline-button" type="button" data-ui-key="layout-later-' + escapeHtml(row.id) + '" data-layout-action="later" data-id="' + escapeHtml(row.id) + '" aria-label="' + escapeHtml("Move " + row.title + " later") + '" title="Move later"' + (index === rows.length - 1 ? " disabled" : "") + '>↓ <span>Later</span></button>' +
+                  '</div>' +
+                  '<label class="product-layout-row__placement"><span>Appears</span><select class="inline-select" data-ui-key="layout-placement-' + escapeHtml(row.id) + '" data-layout-placement data-id="' + escapeHtml(row.id) + '" aria-label="Where ' + rowTitle + ' appears">' +
+                    '<option value="home"' + (placementValue === "home" ? " selected" : "") + '>' + (needsSetupForHome ? "Home after setup" : "On Home") + '</option>' +
+                    (isModePanel ? "" : '<option value="library"' + (placementValue === "library" ? " selected" : "") + '>Library only</option>') +
+                    '<option value="hidden"' + (placementValue === "hidden" ? " selected" : "") + '>Hidden in this Mode</option>' +
+                  '</select></label>' +
+                  '<label class="product-layout-row__width"><span>Width</span><select class="inline-select" data-ui-key="layout-width-' + escapeHtml(row.id) + '" data-layout-size data-id="' + escapeHtml(row.id) + '" aria-label="Width for ' + rowTitle + '">' +
+                    '<option value="compact"' + (rowSize === "compact" ? " selected" : "") + '>Narrow</option>' +
+                    '<option value="standard"' + (rowSize === "standard" ? " selected" : "") + '>Regular</option>' +
+                    '<option value="wide"' + (rowSize === "wide" ? " selected" : "") + '>Full</option>' +
+                  '</select></label>' +
                 '</div>' +
-              '</div>';
+              '</li>';
           }).join("") +
-        '</div>' +
-        '<div class="inline-actions">' +
-          '<button class="inline-button" type="button" data-layout-action="reset">Reset order</button>' +
-          '<button class="inline-button is-primary" type="button" data-layout-action="theme">Open theme studio</button>' +
+        '</ol>' +
+        '<div class="product-layout-footer">' +
+          '<span role="status" aria-live="polite" data-layout-live>' + escapeHtml(statusMessage) + '</span>' +
+          '<button class="inline-button" type="button" data-layout-action="reset">Restore default order</button>' +
         '</div>'
       ));
     }
@@ -267,14 +319,8 @@
       action = button.getAttribute("data-layout-action");
       if (action === "reset") {
         saveSettings(env, { layoutOrder: "" });
+        statusMessage = "Default panel order restored.";
         redraw();
-        return;
-      }
-
-      if (action === "theme") {
-        if (typeof env.selectWidget === "function") {
-          env.selectWidget("theme-studio", true);
-        }
         return;
       }
 
@@ -288,36 +334,73 @@
         return;
       }
 
-      if (action === "pin" || action === "hide") {
-        var key = action === "pin" ? "pinnedWidgets" : "hiddenWidgets";
-        var values = settingValue(env, key, "").split(",").filter(Boolean);
-        values = values.indexOf(id) === -1 ? values.concat([id]) : values.filter(function (value) { return value !== id; });
-        var update = {};
-        update[key] = values.join(",");
-        saveSettings(env, update);
-        redraw();
+      if (action !== "earlier" && action !== "later") {
         return;
       }
 
-      if (action === "size") {
-        var cardSizes = {};
-        try { cardSizes = JSON.parse(settingValue(env, "cardSizes", "{}")); } catch (error) { cardSizes = {}; }
-        var choices = ["compact", "standard", "wide"];
-        var current = choices.indexOf(cardSizes[id] || "standard");
-        cardSizes[id] = choices[(current + 1) % choices.length];
-        saveSettings(env, { cardSizes: JSON.stringify(cardSizes) });
-        redraw();
-        return;
-      }
-
-      swap = action === "up" ? index - 1 : index + 1;
+      swap = action === "earlier" ? index - 1 : index + 1;
       if (swap < 0 || swap >= ids.length) {
         return;
       }
 
       ids.splice(index, 1);
       ids.splice(swap, 0, id);
-      saveOrder(ids);
+      saveOrder(ids, rows[index].title + " moved to position " + (swap + 1) + " of " + ids.length + ".");
+    });
+
+    addListener(cleanups, container, "change", function (event) {
+      var select = event.target && event.target.closest ? event.target.closest("[data-layout-size], [data-layout-placement]") : null;
+      var id;
+      var value;
+      var rows;
+      var row;
+      var cardSizes = {};
+      if (!select) {
+        return;
+      }
+
+      id = select.getAttribute("data-id");
+      value = select.value;
+      rows = widgetRows();
+      row = rows.filter(function (item) { return item.id === id; })[0];
+
+      if (select.hasAttribute("data-layout-placement")) {
+        var modeWidgets = activeMode().widgets;
+        var pinnedWidgets = settingValue(env, "pinnedWidgets", "").split(",").filter(Boolean);
+        var hiddenWidgets = settingValue(env, "hiddenWidgets", "").split(",").filter(Boolean);
+        if (["home", "library", "hidden"].indexOf(value) === -1 || (value === "library" && modeWidgets.indexOf(id) !== -1)) {
+          return;
+        }
+
+        pinnedWidgets = pinnedWidgets.filter(function (item) { return item !== id; });
+        hiddenWidgets = hiddenWidgets.filter(function (item) { return item !== id; });
+        if (value === "home" && modeWidgets.indexOf(id) === -1) {
+          pinnedWidgets.push(id);
+        } else if (value === "hidden") {
+          hiddenWidgets.push(id);
+        }
+        saveSettings(env, {
+          pinnedWidgets: pinnedWidgets.join(","),
+          hiddenWidgets: hiddenWidgets.join(",")
+        });
+        statusMessage = (row ? row.title : "Panel") + (value === "home"
+          ? (["weather", "calendar", "hue"].indexOf(id) !== -1 && row && row.configured === false ? " will appear on Home after setup." : " will appear on Home.")
+          : value === "library"
+          ? " will appear only in the Library."
+          : " is hidden in " + activeMode().label + ".");
+        redraw();
+        return;
+      }
+
+      if (["compact", "standard", "wide"].indexOf(value) === -1) {
+        return;
+      }
+
+      try { cardSizes = JSON.parse(settingValue(env, "cardSizes", "{}")); } catch (error) { cardSizes = {}; }
+      cardSizes[id] = value;
+      saveSettings(env, { cardSizes: JSON.stringify(cardSizes) });
+      statusMessage = (row ? row.title : "Panel") + " width set to " + ({ compact: "Narrow", standard: "Regular", wide: "Full" }[value]) + ".";
+      redraw();
     });
 
     addListener(cleanups, container, "dragstart", function (event) {
@@ -363,8 +446,13 @@
 
       ids.splice(fromIndex, 1);
       ids.splice(toIndex, 0, draggingId);
+      statusMessage = "Panel moved to position " + (toIndex + 1) + " of " + ids.length + ".";
       draggingId = "";
-      saveOrder(ids);
+      saveOrder(ids, statusMessage);
+    });
+
+    addListener(cleanups, container, "dragend", function () {
+      draggingId = "";
     });
 
     redraw();
@@ -667,7 +755,7 @@
     "profileId", "themeSchemaVersion", "themeId", "accentMode", "customAccentColor", "themeVariant",
     "animationIntensity", "dashboardOpacity", "performanceBudget", "gameModeAutoTune", "gameModeAutoFace",
     "themeReadability", "releaseChannel", "layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes",
-    "modeLayouts", "marketplacePack"
+    "modeLayouts", "modeLayoutSchemaVersion", "marketplacePack"
   ];
 
   function portableDashboardSettings(raw) {
@@ -734,7 +822,14 @@
     if (backup.dashboard == null) {
       return {};
     }
-    return portableDashboardSettings(backup.dashboard);
+    var settings = portableDashboardSettings(backup.dashboard);
+    if (!Object.prototype.hasOwnProperty.call(settings, "modeLayoutSchemaVersion")
+        && ["layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes", "modeLayouts"].some(function (key) {
+          return Object.prototype.hasOwnProperty.call(settings, key);
+        })) {
+      settings.modeLayoutSchemaVersion = "1";
+    }
+    return settings;
   }
 
   function mountAuxoraHomeWidget(widget, container, env) {
