@@ -2423,6 +2423,12 @@ try {
     await validateColdBoots(cdp, 100);
     const resetEvaluation = await cdp.send("Runtime.evaluate", {
       expression: `(async () => {
+        const recoveryResponse = await fetch('/api/recovery', {
+          headers: {
+            'X-Xenon-Session': window.XenonSessionToken
+          }
+        });
+        const recovery = await recoveryResponse.json();
         const response = await fetch('/api/config/reset', {
           method: 'POST',
           headers: {
@@ -2431,7 +2437,12 @@ try {
           },
           body: '{}'
         });
-        return { status: response.status, receipt: await response.json() };
+        return {
+          status: response.status,
+          receipt: await response.json(),
+          recoveryHttpStatus: recoveryResponse.status,
+          recovery
+        };
       })()`,
       awaitPromise: true,
       returnByValue: true
@@ -2439,8 +2450,23 @@ try {
     const resetResult = resetEvaluation.result?.value;
     const webViewStep = resetResult?.receipt?.steps?.find(step => step.id === "webview-data");
     assert(resetResult?.status === 200 && resetResult?.receipt?.ok === true, `initialized-host reset must complete successfully: ${JSON.stringify(resetResult || null)}`);
-    assert(webViewStep?.status === "cleared", `initialized WebView reset was not cleared: ${JSON.stringify(webViewStep || null)}`);
-    console.log("initialized WebView browsing data reset: passed");
+    assert(resetResult?.recoveryHttpStatus === 200, `native host recovery state was unavailable before reset: ${JSON.stringify(resetResult || null)}`);
+    if (resetResult?.recovery?.status === "waiting-for-companion-display") {
+      assert(
+        webViewStep?.status === "unavailable"
+          && webViewStep?.message === "The WebView profile was not initialized, so no profile deletion was claimed.",
+        `display-deferred WebView reset was not reported truthfully: ${JSON.stringify(webViewStep || null)}`
+      );
+      console.log("display-deferred WebView browsing data reset receipt: passed");
+    } else {
+      assert(resetResult?.recovery?.status === "ready", `native host published an unexpected recovery state before reset: ${JSON.stringify(resetResult?.recovery || null)}`);
+      assert(
+        webViewStep?.status === "cleared"
+          && webViewStep?.message === "Cleared the active WebView profile browsing data.",
+        `initialized WebView reset was not cleared: ${JSON.stringify(webViewStep || null)}`
+      );
+      console.log("initialized WebView browsing data reset: passed");
+    }
     await cdp.send("Emulation.setDeviceMetricsOverride", {
       width: 2560,
       height: 720,
