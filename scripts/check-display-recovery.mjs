@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { extname, resolve } from "node:path";
 
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const mainWindowXaml = readWorkspaceFile("app/MainWindow.xaml");
@@ -19,6 +19,7 @@ const installScript = readWorkspaceFile("app/install.ps1");
 const displayReceipt = readWorkspaceFile("scripts/Test-DisplayQualificationReceipt.ps1");
 const displayReceiptFixtures = readWorkspaceFile("scripts/test-display-qualification-receipt.ps1");
 const displayCertification = readWorkspaceFile("docs/release/DISPLAY-CERTIFICATION.md");
+const nativeHostSource = readWorkspaceTree("app", new Set([".cs", ".ps1", ".xaml"]));
 
 function readWorkspaceFile(relativePath) {
   const filePath = resolve(process.cwd(), relativePath);
@@ -32,6 +33,29 @@ function readWorkspaceFile(relativePath) {
     console.error(`Unable to read ${relativePath} at ${filePath}: ${error.message}`);
     process.exit(1);
   }
+}
+
+function readWorkspaceTree(relativePath, extensions) {
+  const directoryPath = resolve(process.cwd(), relativePath);
+  const chunks = [];
+  const pending = [directoryPath];
+  const ignoredDirectories = new Set(["bin", "dist", "installer-build", "obj"]);
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const entryPath = resolve(current, entry.name);
+      if (entry.isDirectory()) {
+        if (!ignoredDirectories.has(entry.name.toLowerCase())) {
+          pending.push(entryPath);
+        }
+      } else if (entry.isFile() && extensions.has(extname(entry.name).toLowerCase())) {
+        chunks.push(readFileSync(entryPath, "utf8"));
+      }
+    }
+  }
+
+  return chunks.join("\n");
 }
 
 function assert(condition, message) {
@@ -194,11 +218,14 @@ assert(
 
 assert(
   /monitorDevice\.DeviceId\.Contains\("CRXED00"/.test(displayManager)
-    && /RequiresNativeModeCorrection => ContainsXeneonName && !MatchesEdgeResolution/.test(displayManager)
-    && /display-mode-mismatch/.test(displayManager)
-    && /using \{selected!\.ModeWidth\}x\{selected\.ModeHeight\}/.test(displayManager)
-    && /Set Display resolution to 2560 x 720 and refresh rate to 60 Hz/.test(displayManager),
-  "a XENEON EDGE running a non-native mode must be identified by hardware ID and reported as a repairable readiness failure"
+    && !/RequiresNativeModeCorrection\s*=>/.test(displayManager)
+    && /RequiresNativeModeCorrection\s*=\s*false/.test(displayManager)
+    && !/display-mode-mismatch/.test(displayManager)
+    && !/Set Display resolution/.test(displayManager)
+    && /BuildStableDisplayId\(DeviceName, DeviceId, FriendlyName\)/.test(displayManager)
+    && !/BuildStableDisplayId\([^)]*ModeWidth/.test(displayManager)
+    && /MatchesLegacyModeDependentId/.test(displayManager),
+  "display identity and readiness must not depend on Windows resolution or refresh rate, while saved legacy identifiers remain compatible"
 );
 
 assert(
@@ -238,11 +265,8 @@ assert(
 );
 
 assert(
-  !/ChangeDisplaySettings/.test(mainWindow)
-    && !/SetDisplayConfig/.test(mainWindow)
-    && !/ChangeDisplaySettings/.test(bridgeManager)
-    && !/SetDisplayConfig/.test(bridgeManager),
-  "native host must not call Windows APIs that change monitor topology or display modes"
+  !/\b(?:ChangeDisplaySettings(?:Ex)?|SetDisplayConfig|DisplaySwitch|DisplayConfigSetDeviceInfo|SetDeviceGammaRamp|SetICMMode|WcsSetDefaultColorProfile|SetColorProfileElement|InstallColorProfile|UninstallColorProfile)\b/i.test(nativeHostSource),
+  "native host source must not call Windows APIs that change monitor topology, display modes, gamma ramps, or Windows color profiles"
 );
 
 assert(
