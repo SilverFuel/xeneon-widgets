@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File .\\start-xeneon.ps1",
-    "check": "npm run check:js && npm run check:theme-contract && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:album-carousel && npm run check:dependency-pins && npm run check:support-redaction && npm run check:display-recovery && npm run test:display-receipt && npm run check:unifi-form && npm run check:camera-detection && npm run test:frigate-receipt && npm run check:audit-regressions && npm run check:ui-remediation && npm run check:dashboard-smoke && npm run check:adaptive-layouts && npm run check:commercial-readiness && npm run test:release-version && npm run test:release-artifact && npm run test:release-manifest && npm run check:release-gauntlet && npm run test:iexpress-packaging && npm run check:installer-safety && npm run check:app && npm run test:rendered-dashboard && npm run test:theme-rendered && npm run test:native-host-api && npm run test:bridge-api && npm run test:app",
+    "check": "npm run check:js && npm run check:theme-contract && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:album-carousel && npm run check:dependency-pins && npm run check:support-redaction && npm run check:display-recovery && npm run test:display-receipt && npm run check:unifi-form && npm run check:camera-detection && npm run test:frigate-receipt && npm run check:audit-regressions && npm run check:ui-remediation && npm run check:dashboard-smoke && npm run check:adaptive-layouts && npm run check:commercial-readiness && npm run test:release-version && npm run test:release-artifact && npm run test:release-manifest && npm run test:release-environment && npm run check:release-gauntlet && npm run test:iexpress-packaging && npm run check:installer-safety && npm run check:app && npm run test:rendered-dashboard && npm run test:theme-rendered && npm run test:native-host-api && npm run test:bridge-api && npm run test:app",
     "check:js": "node scripts/check-js.mjs",
     "check:theme-contract": "node scripts/check-theme-contract.mjs",
     "check:setup-guide": "node scripts/check-setup-guide.mjs",
@@ -30,6 +30,7 @@
     "check:commercial-readiness": "node scripts/check-commercial-readiness.mjs",
     "test:release-artifact": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\test-release-artifact-verifier.ps1",
     "test:release-manifest": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\test-release-manifest.ps1 && pwsh -NoProfile -File .\\scripts\\test-release-manifest.ps1",
+    "test:release-environment": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\test-github-release-environment.ps1 && pwsh -NoProfile -File .\\scripts\\test-github-release-environment.ps1",
     "test:release-version": "powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\Test-ReleaseVersion.ps1 && powershell -ExecutionPolicy Bypass -NoProfile -File .\\scripts\\test-release-version-mode.ps1",
     "check:release-gauntlet": "node scripts/check-release-gauntlet.mjs",
     "check:installer-safety": "node scripts/check-installer-safety.mjs",
