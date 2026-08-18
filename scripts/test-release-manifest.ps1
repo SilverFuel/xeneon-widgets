@@ -34,14 +34,30 @@ try {
 
   $receiptPath = Join-Path $fixtureRoot "lifecycle-receipt.json"
   $receipt = [ordered]@{
-    schemaVersion = 1; tag = "v0.3.0-beta.1"; version = "0.3.0-beta.1"; commitSha = $sha
+    schemaVersion = 3; tag = "v0.3.0-beta.1"; version = "0.3.0-beta.1"; commitSha = $sha
     installerFileName = [IO.Path]::GetFileName($installer); installerSha256 = $hash
     environment = [ordered]@{ disposableWindowsVm = $true; windowsVersion = "fixture" }
     operator = "fixture"; completedAt = "2026-07-16T00:00:00Z"
-    checks = [ordered]@{ install=$true; launch=$true; health=$true; processRestart=$true; autoStartAfterReboot=$true; upgradeFromPreviousBeta=$true; repair=$true; normalUninstall=$true; removeAllData=$true }
+    checks = [ordered]@{ install=$true; staysClosedAfterInstall=$true; launch=$true; health=$true; processRestart=$true; noAutoStartAfterReboot=$true; rollbackAfterInjectedFailure=$true; upgradeFromPreviousBeta=$true; repair=$true; normalUninstall=$true; removeAllData=$true }
   }
   $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
   Invoke-ExpectedResult "matching lifecycle receipt" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $true
+
+  $receipt.schemaVersion = 2
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "obsolete lifecycle receipt schema rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+  $receipt.schemaVersion = 3
+
+  $receipt.checks["autoStartAfterReboot"] = $true
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "legacy lifecycle check rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+  $receipt.checks.Remove("autoStartAfterReboot")
+
+  $receipt.checks.rollbackAfterInjectedFailure = $false
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "missing failed-upgrade rollback evidence rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+  $receipt.checks.rollbackAfterInjectedFailure = $true
+
   $receipt.checks.health = $false
   $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
   Invoke-ExpectedResult "incomplete lifecycle receipt rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false

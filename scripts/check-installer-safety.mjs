@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 const buildInstaller = readWorkspaceFile("app/build-installer.ps1");
 const installHost = readWorkspaceFile("app/installer/Install-XenonEdgeHost.ps1");
 const autoStartInstall = readWorkspaceFile("app/install.ps1");
+const autoStartRemove = readWorkspaceFile("app/uninstall.ps1");
 const removeHost = readWorkspaceFile("app/installer/Remove-XenonEdgeHost.ps1");
 const safeModeLaunch = readWorkspaceFile("app/Launch-XenonSafeMode.ps1");
 const repairInstall = readWorkspaceFile("app/repair.ps1");
@@ -11,7 +12,9 @@ const program = readWorkspaceFile("app/Program.cs");
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
 const smokeTest = readWorkspaceFile("scripts/test-windows-install.ps1");
+const cleanInstallTest = readWorkspaceFile("docs/release/CLEAN-INSTALL-TEST.md");
 const artifactVerifier = readWorkspaceFile("scripts/Test-ReleaseArtifact.ps1");
+const iexpressFixture = readWorkspaceFile("scripts/test-iexpress-packaging.ps1");
 const releaseWorkflow = readWorkspaceFile(".github/workflows/release.yml");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 
@@ -37,13 +40,40 @@ function assert(condition, message) {
 
 assert(
   /Start-Process \$iexpress\.Source[\s\S]+-PassThru/.test(buildInstaller)
+    && /IExpress requires a staging path without whitespace/.test(buildInstaller)
+    && /-ArgumentList @\("\/N", "\/Q", "\/M", \$sedPath\)/.test(buildInstaller)
     && /IExpress failed with exit code/.test(buildInstaller)
-    && /Get-Sha256Hash \$outputPath/.test(buildInstaller)
+    && /Get-Sha256Hash \$temporaryOutputPath/.test(buildInstaller)
+    && /Published executable ProductVersion/.test(buildInstaller)
+    && /not bound to current commit/.test(buildInstaller)
+    && /Installer builds require a clean working tree/.test(buildInstaller)
+    && /Use -AllowDirtySource only for a non-release development build/.test(buildInstaller)
+    && /Git HEAD changed from \$currentCommit to \$postPublishCommit while publishing/.test(buildInstaller)
+    && /The working tree changed while publishing/.test(buildInstaller)
+    && /Auxora-InstallerBuild-/.test(buildInstaller)
+    && /Installer staging was not empty immediately after creation/.test(buildInstaller)
     && /OutputPath must end with \.exe/.test(buildInstaller)
-    && /Remove-Item -LiteralPath \$outputPath/.test(buildInstaller)
+    && /\[System\.IO\.File\]::Move\(\$temporaryOutputPath, \$outputPath\)/.test(buildInstaller)
+    && /\[System\.IO\.File\]::Move\(\$temporaryHashPath, \$hashPath\)/.test(buildInstaller)
+    && /if \(\$movedInstallerToFinal\)[\s\S]+Remove-OwnedFinalFileBestEffort \$outputPath/.test(buildInstaller)
+    && /if \(\$movedHashToFinal\)[\s\S]+Remove-OwnedFinalFileBestEffort \$hashPath/.test(buildInstaller)
+    && /Remove-TemporaryPathBestEffort \$stageRoot/.test(buildInstaller)
+    && !/Stop-Process/.test(buildInstaller)
+    && /Install-XenonEdgeHost\.ps1" -Quiet -NoAutoStart -SkipLaunch/.test(buildInstaller)
+    && /does not start at login/.test(buildInstaller)
+    && /Get-FileHash -Algorithm SHA256/.test(buildInstaller)
+    && /do not run the installer/.test(buildInstaller)
     && /Launch-XenonSafeMode\.ps1/.test(buildInstaller)
     && /repair\.ps1/.test(buildInstaller),
-  "installer build must check IExpress exit code, constrain output deletion, package rescue scripts, and write a SHA256 sidecar"
+  "installer build must check IExpress exit code, constrain output deletion, package rescue scripts, stay closed without autostart, and explain SHA256 verification"
+);
+
+assert(
+  /Auxora-IExpress-Test-/.test(iexpressFixture)
+    && /Start-Process \$iexpress\.Source -ArgumentList @\("\/N", "\/Q", "\/M", \$sedPath\) -Wait -PassThru/.test(iexpressFixture)
+    && /\.auxora-iexpress-test\.exe/.test(iexpressFixture)
+    && /Remove-Item -LiteralPath \$testRoot -Recurse -Force/.test(iexpressFixture),
+  "IExpress packaging must be tested without launching the generated fixture"
 );
 
 assert(
@@ -54,13 +84,59 @@ assert(
     && /Restored previous install after setup failed/.test(installHost)
     && /Backup remains at \$backupInstallRoot/.test(installHost)
     && /Removed partial install after setup failed/.test(installHost)
+    && /Get-InstalledWebView2Version/.test(installHost)
+    && /Get-BundledWebView2Runtime/.test(installHost)
+    && /No existing Auxora files were replaced/.test(installHost)
+    && /function Restore-BackupInstall/.test(installHost)
+    && /Restore target already exists; refusing to nest or overwrite the backup/.test(installHost)
+    && /\[System\.IO\.Directory\]::Move\(\$safeBackupPath, \$safeRestorePath\)/.test(installHost)
+    && /\$backupRestoreRoot = \$legacyInstallRoot[\s\S]+\[System\.IO\.Directory\]::Move\(\$legacyInstallRoot, \$backupInstallRoot\)/.test(installHost)
+    && /Restore-BackupInstall \$backupInstallRoot \$restoreTarget \$programsRoot/.test(installHost)
+    && /if \(-not \$installationCompleted -and \(Test-Path -LiteralPath \$backupInstallRoot -PathType Container\)\) \{\s*\$restoreTarget[\s\S]+?\s+try \{/.test(installHost)
+    && /\$installerTempRoot = \[System\.IO\.Path\]::GetTempPath\(\)/.test(installHost)
+    && /Join-Path \$installerTempRoot \("Auxora-Payload-"/.test(installHost)
+    && /Join-Path \$installerTempRoot \("Auxora-Metadata-"/.test(installHost)
+    && /AUXORA_INSTALLER_TEST_FAILURE -ceq "after-registration"/.test(installHost)
+    && /AUXORA_RELEASE_QUALIFICATION_COMMIT/.test(installHost)
+    && /AUXORA_RELEASE_QUALIFICATION_MARKER/.test(installHost)
+    && /qualificationCommit -match '\^\[0-9a-fA-F\]\{40\}\$'/.test(installHost)
+    && /installedProductVersion\.EndsWith\("\.\$qualificationCommit"/.test(installHost)
+    && /Assert-SafePathUnder \$qualificationMarkerPath \$installerTempRoot "Release qualification marker"/.test(installHost)
+    && /FileAttributes\]::ReparsePoint/.test(installHost)
+    && /markerIsDirectTempFile/.test(installHost)
+    && /qualificationMarkerMatches/.test(installHost)
+    && /Injected release-test failure after app registration/.test(installHost)
+    && /function Restore-RegistryKeySnapshot\(\$path, \$snapshot\) \{\s*\$currentUserPrefix[\s\S]+?Registry snapshot restore supports only current-user keys[\s\S]+?if \(Test-Path -LiteralPath \$path\)/.test(installHost)
+    && /CreateSubKey\(\$subKeyPath, \$true\)/.test(installHost)
+    && /Metadata rollback backup was retained at \$metadataBackupRoot/.test(installHost)
+    && /Remove-DirectoryBestEffort \$backupInstallRoot/.test(installHost)
+    && /A superseded XENEON Start Menu folder was retained/.test(installHost)
+    && /A superseded XENEON desktop shortcut was retained/.test(installHost)
+    && /superseded XenonEdgeHost uninstall registration was retained/.test(installHost)
     && /if \(\$installationCompleted\)[\s\S]+Backup install folder/.test(installHost),
-  "installer must stop the running app and preserve or restore the previous install when an upgrade fails"
+  "installer must verify WebView2 before replacement, stop the running app, and preserve or restore current and legacy installs when an upgrade fails"
+);
+
+assert(
+  /AUXORA_INSTALLER_TEST_FAILURE = 'after-registration'/.test(cleanInstallTest)
+    && /AUXORA_RELEASE_QUALIFICATION_COMMIT = \$qualificationCommit/.test(cleanInstallTest)
+    && /AUXORA_RELEASE_QUALIFICATION_MARKER = \$qualificationMarker/.test(cleanInstallTest)
+    && /Auxora-Payload-\*/.test(cleanInstallTest)
+    && /Auxora-Metadata-\*/.test(cleanInstallTest)
+    && /Auxora-ReleaseQualification-\*/.test(cleanInstallTest)
+    && /rollbackAfterInjectedFailure/.test(cleanInstallTest),
+  "disposable-VM qualification must exercise injected rollback and verify installer temporary folders are removed"
 );
 
 assert(
   /if \(-not \$NoAutoStart\)/.test(installHost)
-    && /else\s*\{[\s\S]+Disabling auto-start[\s\S]+uninstall\.ps1/.test(installHost),
+    && /Deliberate fail-safe:[\s\S]+never re-enables it after failure/.test(installHost)
+    && /Configuring runtime without automatic startup/.test(installHost)
+    && /\$runtimeScript[\s\S]+-RuntimeOnly/.test(installHost)
+    && /Preflighting automatic startup removal[\s\S]+& \$supportUninstall/.test(installHost)
+    && /Verifying automatic startup remains disabled/.test(installHost)
+    && /\$autoStartRemoveScript\s*=\s*Join-Path \$InstallRoot "uninstall\.ps1"/.test(installHost)
+    && /& \$autoStartRemoveScript/.test(installHost),
   "installer -NoAutoStart must remove any existing Xenon autostart integration"
 );
 
@@ -87,10 +163,35 @@ assert(
     && /Auxora Recovery \(Safe Mode\)\.lnk/.test(repairInstall)
     && /Repair Auxora\.lnk/.test(repairInstall)
     && /legacyShortcutRoots/.test(repairInstall)
-    && /& \$installScript -Quiet/.test(repairInstall)
+    && /& \$autoStartRemoveScript -Quiet -KeepRunning/.test(repairInstall)
+    && /& \$runtimeScript -Quiet -RuntimeOnly/.test(repairInstall)
+    && !/& \$installScript -Quiet/.test(repairInstall)
+    && /InstallerLogs/.test(repairInstall)
+    && /repair\.log/.test(repairInstall)
+    && /Start-Transcript/.test(repairInstall)
+    && /Show-QuietRepairFailure/.test(repairInstall)
+    && /MessageBox/.test(repairInstall)
+    && /Durable log/.test(repairInstall)
     && !/ResetLocalData/.test(repairInstall)
     && !/Remove-Item[\s\S]+XenonEdgeHost/.test(repairInstall),
-  "repair script must restore shortcuts, uninstall registration, startup/runtime checks, and leave local data alone"
+  "repair script must restore shortcuts and uninstall registration, keep automatic startup disabled, and leave local data alone"
+);
+
+assert(
+  /\$taskNames\s*=\s*@\("XenonEdgeHost", "XeneonBridge"\)/.test(autoStartRemove)
+    && /\$runValueNames\s*=\s*@\("XenonEdgeHost", "XeneonBridge"\)/.test(autoStartRemove)
+    && /Automatic startup could not be disabled/.test(autoStartRemove)
+    && /legacyTaskName\s*=\s*"XeneonBridge"/.test(smokeTest)
+    && /legacyRunValueName\s*=\s*"XeneonBridge"/.test(smokeTest),
+  "safe installation and repair must remove both Auxora and legacy bridge autostart paths"
+);
+
+assert(
+  /\[switch\]\$RuntimeOnly/.test(autoStartInstall)
+    && /Scheduled task \(primary auto-start method\)/.test(autoStartInstall)
+    && /if \(-not \$RuntimeOnly\)\s*\{[\s\S]+Register-ScheduledTask[\s\S]+New-ItemProperty -Path \$runKeyPath/.test(autoStartInstall)
+    && /Configuring runtime without automatic startup[\s\S]+\$runtimeScript -Quiet -RuntimeOnly/.test(installHost),
+  "fresh install and repair must configure WebView2 runtime support without enabling automatic startup"
 );
 
 assert(
@@ -133,8 +234,10 @@ assert(
 assert(
   /\$RemoveLocalData -and -not \$RunUninstall/.test(smokeTest)
     && /RemoveLocalData requires -RunUninstall/.test(smokeTest)
-    && /Assert-StartupInstalled/.test(smokeTest)
-    && /Assert-StartupRemoved/.test(smokeTest)
+    && /Assert-StartupAbsent/.test(smokeTest)
+    && /Assert-HostClosed/.test(smokeTest)
+    && /function Assert-HostClosed[\s\S]+ObservationSeconds[\s\S]+AddSeconds[\s\S]+Start-Sleep/.test(smokeTest)
+    && /if \(\$RunInstall\)[\s\S]+Stop-InstalledHost[\s\S]+Invoke-Installer \$InstallerPath/.test(smokeTest)
     && /Launch-XenonSafeMode\.ps1/.test(smokeTest)
     && /repair\.ps1/.test(smokeTest)
     && /PreviousInstallerPath/.test(smokeTest)
@@ -144,12 +247,16 @@ assert(
     && /Uninstaller exited with code/.test(smokeTest)
     && /\$installRoot\s*=\s*Join-Path \$env:LOCALAPPDATA "Programs\\Auxora"/.test(smokeTest)
     && /\$shortcutRoot\s*=\s*Join-Path \$env:APPDATA "Microsoft\\Windows\\Start Menu\\Programs\\Auxora"/.test(smokeTest),
-  "install smoke test must validate current Auxora paths, startup, rescue shortcuts, and keep data deletion inside uninstall"
+  "install smoke test must validate current Auxora paths, closed/no-autostart installation, rescue shortcuts, and keep data deletion inside uninstall"
 );
 
 assert(
   /Auxora-Setup-\$ExpectedVersion-/.test(artifactVerifier)
     && /Installer SHA256 sidecar does not match/.test(artifactVerifier)
+    && /ExpectedInformationalVersion/.test(artifactVerifier)
+    && /ExpectedProductName\s*=\s*"Auxora"/.test(artifactVerifier)
+    && /Published app ProductName must be \$ExpectedProductName/.test(artifactVerifier)
+    && /Published app ProductVersion/.test(artifactVerifier)
     && /Installer signature is not valid/.test(artifactVerifier)
     && /approved Auxora signer list/.test(artifactVerifier)
     && /Published app executable signature is not valid/.test(artifactVerifier),
@@ -165,7 +272,10 @@ assert(
 );
 
 assert(
-  packageJson.scripts.check.includes("check:installer-safety") && packageJson.scripts["check:installer-safety"] === "node scripts/check-installer-safety.mjs",
+  packageJson.scripts.check.includes("test:iexpress-packaging")
+    && packageJson.scripts.check.includes("check:installer-safety")
+    && packageJson.scripts["test:iexpress-packaging"]?.includes("test-iexpress-packaging.ps1")
+    && packageJson.scripts["check:installer-safety"] === "node scripts/check-installer-safety.mjs",
   "npm run check must include installer safety validation"
 );
 

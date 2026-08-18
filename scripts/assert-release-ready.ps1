@@ -1,6 +1,7 @@
 param(
   [string]$InstallerPath = "",
   [switch]$RequireSignedInstaller,
+  [switch]$RequireUnsignedInstaller,
   [string[]]$AllowedSignerThumbprint = @(),
   [switch]$AllowGitHubSupportPath,
   [switch]$AllowBetaVersion,
@@ -13,6 +14,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $failures = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
+$reportedMissingFiles = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 . (Join-Path $PSScriptRoot "lib\ReleaseVersionMode.ps1")
 
 function Add-Failure($message) {
@@ -29,18 +31,43 @@ function Add-Pass($message) {
   Write-Host "OK:   $message" -ForegroundColor Green
 }
 
+function Invoke-CheckedReadinessCommand($label, $command, $arguments) {
+  try {
+    & $command @arguments | Out-Host
+    $exitCode = $LASTEXITCODE
+  } catch {
+    Add-Failure "$label could not run: $($_.Exception.Message)"
+    return $false
+  }
+  if ($exitCode -ne 0) {
+    Add-Failure "$label failed with exit code $exitCode."
+    return $false
+  }
+  return $true
+}
+
 function Read-Text($relativePath) {
-  Get-Content (Join-Path $repoRoot $relativePath) -Raw
+  $path = Join-Path $repoRoot $relativePath
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    if ($script:reportedMissingFiles.Add($relativePath)) {
+      Add-Failure "$relativePath is missing"
+    }
+    return ""
+  }
+
+  Get-Content -LiteralPath $path -Raw
 }
 
 function Assert-File($relativePath) {
   $path = Join-Path $repoRoot $relativePath
-  if (Test-Path -LiteralPath $path) {
+  if (Test-Path -LiteralPath $path -PathType Leaf) {
     Add-Pass "$relativePath exists"
     return $path
   }
 
-  Add-Failure "$relativePath is missing"
+  if ($script:reportedMissingFiles.Add($relativePath)) {
+    Add-Failure "$relativePath is missing"
+  }
   return $path
 }
 
@@ -49,9 +76,33 @@ try {
   Write-Host ""
   Write-Host "Auxora release readiness" -ForegroundColor Cyan
 
+  if ($RequireSignedInstaller -and $RequireUnsignedInstaller) {
+    Add-Failure "Release readiness cannot require both a signed and an unsigned installer."
+  }
+  if ($AllowBetaVersion -and -not $RequireUnsignedInstaller) {
+    Add-Failure "Beta release readiness must require an exact unsigned installer with -RequireUnsignedInstaller."
+  }
+  if ($RequireUnsignedInstaller -and -not $AllowBetaVersion) {
+    Add-Failure "Unsigned installer readiness is allowed only with -AllowBetaVersion."
+  }
+  if ($AllowBetaVersion -and [string]::IsNullOrWhiteSpace($InstallerPath)) {
+    Add-Failure "Beta release readiness requires -InstallerPath for the exact candidate."
+  }
+
   if (-not $AllowDirty) {
-    $status = git status --porcelain
-    if ($status) {
+    $status = @()
+    $gitStatusFailed = $false
+    try {
+      $status = @(git status --porcelain)
+      if ($LASTEXITCODE -ne 0) {
+        $gitStatusFailed = $true
+      }
+    } catch {
+      $gitStatusFailed = $true
+    }
+    if ($gitStatusFailed) {
+      Add-Failure "Working tree cleanliness could not be checked."
+    } elseif ($status.Count -gt 0) {
       Add-Failure "Working tree has uncommitted changes."
     } else {
       Add-Pass "Working tree is clean"
@@ -77,6 +128,44 @@ try {
     Add-Pass "App version is valid for $versionMode release mode: $version"
   } catch {
     Add-Failure $_.Exception.Message
+  }
+
+  if ($AllowBetaVersion) {
+    Assert-File "README.md" | Out-Null
+    Assert-File "docs\release\FREE-BETA-RELEASE-NOTES.md" | Out-Null
+    Assert-File "docs\release\WINDOWS-INSTALL-UNINSTALL.md" | Out-Null
+    Assert-File "docs\release\GITHUB-RELEASE.md" | Out-Null
+    Assert-File "CHANGELOG.md" | Out-Null
+    $readmeText = Read-Text "README.md"
+    $releaseNotesText = Read-Text "docs\release\FREE-BETA-RELEASE-NOTES.md"
+    $installNotesText = Read-Text "docs\release\WINDOWS-INSTALL-UNINSTALL.md"
+    $githubReleaseText = Read-Text "docs\release\GITHUB-RELEASE.md"
+    $changelogText = Read-Text "CHANGELOG.md"
+    $customerBetaDocs = [ordered]@{
+      "README.md" = $readmeText
+      "docs/release/FREE-BETA-RELEASE-NOTES.md" = $releaseNotesText
+      "docs/release/WINDOWS-INSTALL-UNINSTALL.md" = $installNotesText
+    }
+
+    if ($releaseNotesText -match [regex]::Escape("# Auxora $version Free Public Beta") -and
+        $githubReleaseText -match [regex]::Escape("Auxora $version Free Public Beta") -and
+        $changelogText -match [regex]::Escape("## $version -")) {
+      Add-Pass "Beta version is synchronized across release notes, release title, and changelog"
+    } else {
+      Add-Failure "Beta release notes, GitHub title, and dated changelog must use exact version $version."
+    }
+
+    foreach ($customerDoc in $customerBetaDocs.GetEnumerator()) {
+      if ($customerDoc.Value -match "Get-FileHash\s+-Algorithm\s+SHA256" -and
+          $customerDoc.Value -match "(?i)do not run the installer" -and
+          $customerDoc.Value -match "(?i)unsigned" -and
+          $customerDoc.Value -match "(?i)never disable SmartScreen, Smart App Control, antivirus, or organization policy" -and
+          $customerDoc.Value -match "(?i)automatic startup disabled") {
+        Add-Pass "$($customerDoc.Key) preserves unsigned-beta checksum and Windows-security guidance"
+      } else {
+        Add-Failure "$($customerDoc.Key) must include Get-FileHash SHA256 verification, a mismatch stop rule, exact unsigned wording, no security bypass, and disabled automatic startup."
+      }
+    }
   }
 
   $supportText = Read-Text "support.html"
@@ -158,15 +247,17 @@ try {
       if ($AllowedSignerThumbprint.Count -gt 0) {
         $artifactArgs += @("-AllowedSignerThumbprint") + $AllowedSignerThumbprint
       }
+    } elseif ($RequireUnsignedInstaller) {
+      $artifactArgs += "-RequireUnsigned"
     }
     & powershell.exe @artifactArgs
     if ($LASTEXITCODE -eq 0) {
-      Add-Pass "Installer version, hash, and required signatures are verified"
+      Add-Pass "Installer version, hash, and required signature policy are verified"
     } else {
       Add-Failure "Release artifact verification failed."
     }
-  } elseif ($RequireSignedInstaller) {
-    Add-Failure "Pass -InstallerPath when -RequireSignedInstaller is used."
+  } elseif ($RequireSignedInstaller -or $RequireUnsignedInstaller) {
+    Add-Failure "Pass -InstallerPath when an exact installer signature policy is required."
   } else {
     Add-Warning "Installer signature check skipped because no installer path was provided."
   }
@@ -174,10 +265,13 @@ try {
   if ($RunBuildChecks) {
     Write-Host ""
     Write-Host "Running build checks" -ForegroundColor Cyan
-    npm run check:js
-    dotnet build app\XenonEdgeHost.sln --configuration Release
-    npm --prefix desktop/electron run check
-    Add-Pass "Build checks passed"
+    $buildChecksPassed = $true
+    if (-not (Invoke-CheckedReadinessCommand "JavaScript check" "npm" @("run", "check:js"))) { $buildChecksPassed = $false }
+    if (-not (Invoke-CheckedReadinessCommand ".NET build" "dotnet" @("build", "app\XenonEdgeHost.sln", "--configuration", "Release"))) { $buildChecksPassed = $false }
+    if (-not (Invoke-CheckedReadinessCommand "Electron syntax check" "npm" @("--prefix", "desktop/electron", "run", "check"))) { $buildChecksPassed = $false }
+    if ($buildChecksPassed) {
+      Add-Pass "Build checks passed"
+    }
   }
 
   Write-Host ""

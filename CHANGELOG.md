@@ -2,8 +2,17 @@
 
 ## Unreleased
 
+## 0.3.0-beta.1 - 2026-08-18
+
 ### Recent UI polish
 
+- Rebuilt Layout Editor around numbered order, plain Follow Mode / Keep / Hide behavior, direct width choices, and a Home preview so edits are easier to understand.
+- Enlarged now-playing artwork to use available space without overflowing short or ultrawide displays.
+- Fixed mixed-DPI placement and duplicate WebView2 initialization while keeping Auxora off the Windows primary display.
+- Removed Windows resolution from display readiness and saved-display identity so mode changes do not make Auxora fight Windows or forget the selected companion display.
+- Made the public beta installer stay closed with automatic startup disabled; Repair preserves that safe state.
+- Added checksum-first unsigned-beta instructions and fail-closed release checks for exact executable identity, runtime availability, workflow origin, and physical qualification receipts.
+- Updated the Electron helper to 41.10.5 so the release dependency audit no longer includes the high-severity protocol and archive-extraction advisories affecting the previous pin.
 - Made Audio & Media easier to use with a clearer now-playing layout, simpler sound controls, and plain-language equalizer guidance.
 - Used wide, regular, and compact screens more efficiently across Home, Quick Actions, Audio, Network, System Monitor, Game Mode, and Settings.
 - Removed repeated settings headings and kept Phone Remote and Layout Editor focused on the actions that matter.

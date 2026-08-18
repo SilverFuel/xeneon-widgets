@@ -4,7 +4,7 @@ Use this before publishing a free beta, paid release, or public download.
 
 ## Automated Gate
 
-- Run `npm run release:gauntlet` against the latest local installer.
+- Run the gauntlet with `-InstallerPath` pointing to the exact candidate. Do not select a local installer by timestamp.
 - For a disposable Windows VM or fresh Windows profile, run:
 
 ```powershell
@@ -20,10 +20,11 @@ powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<insta
 - Clearly say the Windows installer is unsigned if it has not been code-signed.
 - Publish no macOS assets; the beta workflow is Windows-only.
 - Clearly publish GitHub Issues and Security Advisories as the support path.
-- Run `npm run release:ready` and resolve every blocker.
+- Run `npm run release:ready-beta -- -InstallerPath .\app\dist\Auxora-Setup-<version>-<date>.exe` and resolve every blocker. The unsigned-beta gate requires Authenticode status exactly `NotSigned`; it rejects signed and invalidly signed files.
 - Treat `npm run release:free-beta` as a verifier, not a local-build shortcut: pass the immutable release asset directory plus all exact-candidate receipt paths. It fails closed when any are missing.
 - Confirm the product name and legal disclaimer keep the app independent from CORSAIR.
-- Require the exact manifest-bound installer to pass install, live `/api/health`, process restart, reboot/autostart, previous-beta upgrade, repair, normal uninstall, and remove-all-data on a disposable Windows VM.
+- Require the exact manifest-bound installer to stay closed after install, pass deliberate launch, live `/api/health`, process restart, reboot with no autostart, injected failed-upgrade rollback, successful previous-beta upgrade, repair, normal uninstall, and remove-all-data on a disposable Windows VM. Require a passing schema-3 receipt.
+- Confirm customer instructions show `Get-FileHash -Algorithm SHA256`, require exact filename/hash agreement, and tell users to stop on a mismatch or policy block without disabling Windows security.
 - Require the same manifest-bound installer to pass `docs/release/FRIGATE-CERTIFICATION.md` against a physical Frigate server and real camera on the target LAN. Verify the secret-free receipt with `scripts/Test-FrigateQualificationReceipt.ps1`.
 - Require the same manifest-bound installer to pass `docs/release/DISPLAY-CERTIFICATION.md` on a physical Windows machine and physical touch companion display. Verify the privacy-safe receipt with `scripts/Test-DisplayQualificationReceipt.ps1`.
 - Confirm Reset all app data removes local settings and protected secrets for the current user.
