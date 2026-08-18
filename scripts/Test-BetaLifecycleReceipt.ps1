@@ -8,8 +8,8 @@ $root = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
 $manifest = Get-Content -LiteralPath (Join-Path $root "release-manifest.json") -Raw | ConvertFrom-Json
 $receipt = Get-Content -LiteralPath $ReceiptPath -Raw | ConvertFrom-Json
 
-if ($receipt.schemaVersion -ne 1) {
-  throw "Lifecycle receipt schemaVersion must be 1."
+if ($receipt.schemaVersion -ne 3) {
+  throw "Lifecycle receipt schemaVersion must be 3."
 }
 foreach ($binding in @("tag", "version", "commitSha")) {
   if ([string]$receipt.$binding -cne [string]$manifest.$binding) {
@@ -31,15 +31,27 @@ if (([string]::IsNullOrWhiteSpace([string]$receipt.environment.windowsVersion)) 
 
 $requiredChecks = @(
   "install",
+  "staysClosedAfterInstall",
   "launch",
   "health",
   "processRestart",
-  "autoStartAfterReboot",
+  "noAutoStartAfterReboot",
+  "rollbackAfterInjectedFailure",
   "upgradeFromPreviousBeta",
   "repair",
   "normalUninstall",
   "removeAllData"
 )
+if ($null -eq $receipt.checks) {
+  throw "Lifecycle receipt checks object is missing."
+}
+$actualChecks = @($receipt.checks.PSObject.Properties.Name)
+$checkDifference = Compare-Object `
+  -ReferenceObject @($requiredChecks | Sort-Object) `
+  -DifferenceObject @($actualChecks | Sort-Object)
+if ($actualChecks.Count -ne $requiredChecks.Count -or $checkDifference) {
+  throw "Lifecycle receipt checks must contain exactly the schema-3 check names and no legacy or unknown entries."
+}
 foreach ($check in $requiredChecks) {
   if ($receipt.checks.$check -ne $true) {
     throw "Lifecycle receipt check '$check' must be true before publication."

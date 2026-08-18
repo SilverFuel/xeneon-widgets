@@ -1,5 +1,8 @@
 # Release Readiness
 
+> [!WARNING]
+> Historical archive only. This file records older 0.2.0-era work and is not a current release procedure or proof that Auxora is ready to publish. Use `docs/release/BETA-READINESS-LEDGER.md`, `docs/release/PUBLIC-RELEASE-CHECKLIST.md`, `docs/release/CLEAN-INSTALL-TEST.md`, and `docs/release/GITHUB-RELEASE.md` for the current unsigned Windows beta gates.
+
 ## Summary
 
 Release-readiness pass run for the current 0.2.0 beta release branch.

@@ -1,5 +1,6 @@
 param(
-  [switch]$Quiet
+  [switch]$Quiet,
+  [switch]$RuntimeOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,10 +20,7 @@ if (Test-Path (Join-Path $scriptRoot "XenonEdgeHost.exe")) {
 }
 
 if (-not $appRoot) {
-  if (-not $Quiet) {
-    Write-Host "Auxora executable could not be found next to install.ps1 or in ..\\publish." -ForegroundColor Red
-  }
-  exit 1
+  throw "Auxora executable could not be found next to install.ps1 or in ..\publish."
 }
 
 $appRoot = $appRoot.ToString()
@@ -116,7 +114,11 @@ function Enable-XenonStartupTask($taskName) {
   }
 }
 
-Write-Step "Auxora - Install Auto-Start"
+if ($RuntimeOnly) {
+  Write-Step "Auxora - Repair Runtime"
+} else {
+  Write-Step "Auxora - Install Auto-Start"
+}
 
 Write-Info "App root: $appRoot"
 
@@ -130,11 +132,12 @@ if (-not (Test-Path $exePath)) {
   } else {
     Write-Info "Reinstall or copy the published app files into this folder."
   }
-  exit 1
+  throw "Auxora executable was not found at $exePath."
 }
 
 # --- Scheduled task (primary auto-start method) ---
 
+if (-not $RuntimeOnly) {
 $taskInstalled = $false
 
 try {
@@ -201,6 +204,7 @@ if (Get-ItemProperty -Path $runKeyPath -Name $oldBridgeRun -ErrorAction Silently
   Remove-ItemProperty -Path $runKeyPath -Name $oldBridgeRun -ErrorAction SilentlyContinue
   Write-Info "Removed old bridge-only startup entry '$oldBridgeRun'."
 }
+}
 
 # --- WebView2 runtime checks ---
 
@@ -219,10 +223,14 @@ if ($fixedRuntimePath) {
       if ($grantAppPackagesExitCode -eq 0 -and $grantRestrictedPackagesExitCode -eq 0) {
         Write-Info "Granted the required AppContainer read permissions to the bundled FixedRuntime folder."
       } else {
-        Write-QuietWarning "icacls did not complete successfully. WebView2 may fail to start until the FixedRuntime permissions are granted."
+        $message = "icacls did not grant the required AppContainer read permissions to the bundled FixedRuntime folder."
+        if ($RuntimeOnly) { throw $message }
+        Write-QuietWarning "$message WebView2 may fail to start until the permissions are repaired."
       }
     } catch {
-      Write-QuietWarning "Unable to apply the required FixedRuntime permissions automatically. WebView2 may fail to start until they are granted."
+      $message = "Unable to apply the required FixedRuntime permissions automatically: $($_.Exception.Message)"
+      if ($RuntimeOnly) { throw $message }
+      Write-QuietWarning "$message WebView2 may fail to start until the permissions are repaired."
     }
   } else {
     Write-Info "Bundled FixedRuntime detected. No extra Windows 11 permission changes were needed."
@@ -232,8 +240,9 @@ if ($fixedRuntimePath) {
   if ($webViewVersion) {
     Write-Info "Using installed Evergreen WebView2 Runtime $webViewVersion."
   } else {
-    Write-QuietWarning "No bundled FixedRuntime folder was found and no installed Evergreen WebView2 Runtime was detected."
-    Write-QuietWarning "Install WebView2 from https://developer.microsoft.com/en-us/microsoft-edge/webview2/ or bundle app\\FixedRuntime before publishing."
+    $message = "No bundled FixedRuntime folder was found and no installed Evergreen WebView2 Runtime was detected. Install WebView2 from Microsoft, then try again."
+    if ($RuntimeOnly) { throw $message }
+    Write-QuietWarning $message
   }
 }
 
@@ -247,9 +256,13 @@ if (Test-WindowsAppRuntimeInstalled) {
 
 if (-not $Quiet) {
   Write-Host ""
-  Write-Host "Auto-start installed." -ForegroundColor Green
-  Write-Host "Auxora will launch after login."
-  Write-Host ""
-  Write-Host "To start it now:"
-  Write-Host "  Start Menu > Auxora > Auxora" -ForegroundColor Yellow
+  if ($RuntimeOnly) {
+    Write-Host "Runtime checks repaired without changing automatic startup." -ForegroundColor Green
+  } else {
+    Write-Host "Auto-start installed." -ForegroundColor Green
+    Write-Host "Auxora will launch after login."
+    Write-Host ""
+    Write-Host "To start it now:"
+    Write-Host "  Start Menu > Auxora > Auxora" -ForegroundColor Yellow
+  }
 }

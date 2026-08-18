@@ -13,7 +13,12 @@ const releaseReadiness = readWorkspaceFile("scripts/assert-release-ready.ps1");
 const freeBetaPreparation = readWorkspaceFile("scripts/prepare-free-beta-release.ps1");
 const releaseVersionMode = readWorkspaceFile("scripts/lib/ReleaseVersionMode.ps1");
 const releaseVersionModeFixtures = readWorkspaceFile("scripts/test-release-version-mode.ps1");
+const buildRelease = readWorkspaceFile("scripts/build-release.ps1");
+const readme = readWorkspaceFile("README.md");
+const freeBetaNotes = readWorkspaceFile("docs/release/FREE-BETA-RELEASE-NOTES.md");
+const installNotes = readWorkspaceFile("docs/release/WINDOWS-INSTALL-UNINSTALL.md");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
+const pwshRunScripts = collectPwshRunScripts(releaseWorkflow);
 
 function readWorkspaceFile(relativePath) {
   const filePath = resolve(process.cwd(), relativePath);
@@ -35,19 +40,64 @@ function assert(condition, message) {
   }
 }
 
+function collectPwshRunScripts(workflowText) {
+  const lines = workflowText.split(/\r?\n/);
+  const scripts = [];
+  let pwshStep = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^\s*-\s+name:/.test(line)) {
+      pwshStep = false;
+    }
+    if (/^\s+shell:\s*pwsh\s*$/.test(line)) {
+      pwshStep = true;
+      continue;
+    }
+    const runMatch = line.match(/^(\s*)run:\s*\|\s*$/);
+    if (!pwshStep || !runMatch) {
+      continue;
+    }
+
+    const runIndent = runMatch[1].length;
+    const body = [];
+    for (index += 1; index < lines.length; index += 1) {
+      const bodyLine = lines[index];
+      const bodyIndent = bodyLine.match(/^\s*/)[0].length;
+      if (bodyLine.trim() && bodyIndent <= runIndent) {
+        index -= 1;
+        break;
+      }
+      body.push(bodyLine);
+    }
+    scripts.push(body.join("\n"));
+  }
+
+  return scripts.join("\n");
+}
+
 assert(
   /\$RequireSignedInstaller\s+-and\s+\$AllowUnsignedBeta/.test(gauntlet)
     && /Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta/.test(gauntlet)
+    && /Specify exactly one release mode: -RequireSignedInstaller or -AllowUnsignedBeta/.test(gauntlet)
     && /Signed commercial releases require -CommercialEvidencePath/.test(gauntlet)
     && /assert-commercial-launch-evidence\.ps1/.test(gauntlet)
     && /AllowedSignerThumbprint/.test(gauntlet)
-    && /if\s*\(\$AllowUnsignedBeta\)\s*\{\s*\$readyArgs\s*\+=\s*"-AllowBetaVersion"\s*\}/.test(gauntlet)
+    && /if\s*\(\$AllowUnsignedBeta\)\s*\{\s*\$readyArgs\s*\+=\s*@\("-AllowBetaVersion",\s*"-RequireUnsignedInstaller"\)\s*\}/.test(gauntlet)
     && /Test-ReleaseManifest\.ps1/.test(gauntlet)
     && /Test-BetaLifecycleReceipt\.ps1/.test(gauntlet)
     && /Test-FrigateQualificationReceipt\.ps1/.test(gauntlet)
     && /Test-DisplayQualificationReceipt\.ps1/.test(gauntlet)
     && /ReleaseAssetsPath, LifecycleReceiptPath, FrigateQualificationReceiptPath, and DisplayQualificationReceiptPath must be supplied together/.test(gauntlet)
+    && /ExpectedTag", \$expectedTag/.test(gauntlet)
+    && /ExpectedCommitSha", \$currentCommit/.test(gauntlet)
+    && /Automatic selection is allowed only when app\\dist contains exactly one installer/.test(gauntlet)
+    && /-Filter\s+"Auxora-Setup-\*\.exe"/.test(gauntlet)
     && /Assert-ReleaseVersionMode/.test(releaseReadiness)
+    && /Beta release readiness requires -InstallerPath for the exact candidate/.test(releaseReadiness)
+    && /Beta release readiness must require an exact unsigned installer/.test(releaseReadiness)
+    && /function Invoke-CheckedReadinessCommand[\s\S]+?catch \{[\s\S]+?could not run:[\s\S]+?return \$false/.test(releaseReadiness)
+    && /function Assert-File[\s\S]+?Test-Path -LiteralPath \$path -PathType Leaf/.test(releaseReadiness)
     && /\$AllowBetaVersion\s+-and\s+\$RequireSignedInstaller/.test(releaseVersionMode)
     && /Unsigned beta mode requires/.test(releaseVersionMode)
     && /Default and signed release modes require/.test(releaseVersionMode)
@@ -57,6 +107,20 @@ assert(
     && /stable Unicode digit/.test(releaseVersionModeFixtures)
     && /beta Unicode digit/.test(releaseVersionModeFixtures),
   "release gauntlet must reject conflicting signing modes and support exact manifest and lifecycle evidence"
+);
+
+assert(
+  packageJson.scripts["release:ready-beta"]?.includes("-AllowBetaVersion")
+    && packageJson.scripts["release:ready-beta"]?.includes("-RequireUnsignedInstaller")
+    && packageJson.scripts["release:windows-beta"]?.includes("-AllowUnsignedBeta")
+    && /Invoke-CheckedCommand/.test(buildRelease)
+    && /\$versionNode = \$project\.Project\.PropertyGroup \| Where-Object \{ \$_\.Version \} \| Select-Object -First 1/.test(buildRelease)
+    && /\$safeVersion = \$version -replace '\[\^0-9A-Za-z\._-\]', '-'/.test(buildRelease)
+    && /-InstallerPath applies only with -SkipInstaller/.test(buildRelease)
+    && /exact installer built in this run or an explicit -InstallerPath/.test(buildRelease)
+    && /-RequireUnsignedInstaller/.test(buildRelease)
+    && !/Sort-Object LastWriteTime[\s\S]+Select-Object -First 1/.test(buildRelease),
+  "beta release commands must allow beta mode, propagate failures, and carry an exact installer path"
 );
 
 assert(
@@ -85,6 +149,14 @@ assert(
     && /Release .* already exists.*Published bytes are immutable/.test(releaseWorkflow)
     && /New-ReleaseManifest\.ps1/.test(releaseWorkflow)
     && /Test-BetaLifecycleReceipt\.ps1/.test(releaseWorkflow)
+    && /workflow_id[\s\S]+Windows Beta Candidate workflow/.test(releaseWorkflow)
+    && /Test-ReleaseArtifact\.ps1[\s\S]+ExpectedInformationalVersion/.test(releaseWorkflow)
+    && /ExpectedCommitSha/.test(releaseWorkflow)
+    && /-RequireUnsigned/.test(releaseWorkflow)
+    && (releaseWorkflow.match(/assert-release-ready\.ps1/g) ?? []).length === 2
+    && (releaseWorkflow.match(/^\s+-RequireUnsignedInstaller\s*`?$/gm) ?? []).length === 2
+    && /releaseLookupExitCode[\s\S]+\\bHTTP 404\\b/.test(releaseWorkflow)
+    && !pwshRunScripts.includes("${{")
     && /frigate_qualification_receipt_base64:[\s\S]+?required:\s*true/.test(releaseWorkflow)
     && /Test-FrigateQualificationReceipt\.ps1/.test(releaseWorkflow)
     && /display_qualification_receipt_base64:[\s\S]+?required:\s*true/.test(releaseWorkflow)
@@ -92,6 +164,11 @@ assert(
     && !/macos-latest|macOS package|release edit|-X DELETE/.test(releaseWorkflow)
     && /exactly five unique public assets/.test(releaseManifest)
     && /installerSha256/.test(lifecycleReceipt)
+    && /schemaVersion -ne 3/.test(lifecycleReceipt)
+    && /rollbackAfterInjectedFailure/.test(lifecycleReceipt)
+    && /must contain exactly the schema-3 check names and no legacy or unknown entries/.test(lifecycleReceipt)
+    && /staysClosedAfterInstall/.test(lifecycleReceipt)
+    && /noAutoStartAfterReboot/.test(lifecycleReceipt)
     && /physicalFrigateServer/.test(frigateReceipt)
     && /realCamera/.test(frigateReceipt)
     && /windowsTrustedTls/.test(frigateReceipt)
@@ -104,6 +181,17 @@ assert(
     && /hashStatus/.test(productWidget)
     && /signatureStatus/.test(productWidget),
   "release flow must expose available trust evidence without claiming verification and publish only immutable receipt-bound Windows assets"
+);
+
+assert(
+  [readme, freeBetaNotes, installNotes].every((text) => (
+    /Get-FileHash\s+-Algorithm\s+SHA256/.test(text)
+      && /do not run the installer/i.test(text)
+      && /unsigned/i.test(text)
+      && /Never disable SmartScreen, Smart App Control, antivirus, or organization policy/.test(text)
+      && /automatic startup disabled/.test(text)
+  )),
+  "unsigned beta customer docs must explain checksum verification, stop on mismatch, preserve Windows security, and keep automatic startup disabled"
 );
 
 console.log("checked release gauntlet argument validation");

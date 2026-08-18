@@ -22,9 +22,11 @@ The first Auxora upgrade preserves existing XENEON settings and Windows-protecte
 
 For beta users, use the Windows setup EXE from GitHub Releases instead of the source code ZIP:
 
-1. Download `Auxora-Setup-<version>-<date>.exe`.
-2. Run it.
-3. Auxora installs for the current Windows user, creates one clear Auxora Start Menu/Desktop shortcut, registers auto-start, and launches itself.
+1. Download the five files listed in `release-manifest.json` from the official GitHub Release.
+2. In PowerShell, run `(Get-FileHash -Algorithm SHA256 '.\Auxora-Setup-<version>-<date>.exe').Hash`.
+3. Confirm the 64-character result exactly matches the manifest's SHA-256 value and the first hash field in the `.sha256` sidecar. If the filename or hash differs, do not run the installer; delete the download and stop.
+4. Run the verified installer. Auxora installs for the current Windows user and creates clear Start Menu/Desktop shortcuts, but it stays closed and does not start at login.
+5. Open Auxora deliberately from the Start Menu when the companion display is ready.
 
 After install, the normal app to click is:
 
@@ -33,7 +35,9 @@ After install, the normal app to click is:
 
 Use `Auxora Recovery (Safe Mode)` only when the dashboard is stuck on the wrong display or you need to repair a broken startup. Do not launch files from `publish`, `app\bin`, `bridge`, or `desktop\electron` for normal use.
 
-The installer is meant to be hands-free. It does not ask the user to choose folders, services, setup steps, or uninstall behavior. The free beta may still show a Windows SmartScreen warning until the installer is signed, but Auxora itself does not add extra setup questions.
+The installer is meant to be hands-free. It does not ask the user to choose folders, services, setup steps, or uninstall behavior. This free beta is unsigned, so Windows may show a SmartScreen warning. Verify the official source, exact filename, and SHA-256 before deciding whether to run it. Never disable SmartScreen, Smart App Control, antivirus, or organization policy; if Windows or your organization blocks the installer, stop.
+
+If setup does not finish, troubleshooting details are in `%LOCALAPPDATA%\Auxora\InstallerLogs\install.log`. Setup does not launch Auxora or add automatic startup. The log identifies any older startup entry that could not be removed; report it instead of repeatedly retrying the installer.
 
 On first launch, Auxora scans the PC and prepares the normal dashboard automatically:
 
@@ -50,7 +54,7 @@ Uninstall is also meant to be hands-free:
 - Start Menu > Auxora > Uninstall Auxora does the same thing.
 - Start Menu > Auxora > Remove Auxora and Local Data also removes `%APPDATA%\Auxora`, `%LOCALAPPDATA%\Auxora`, and legacy XENEON data left for rollback.
 - Start Menu > Auxora > Auxora Recovery (Safe Mode) disables auto-start, ignores saved display placement, and opens only on an active companion display. If no companion display is active, Auxora remains tray-only.
-- Start Menu > Auxora > Repair Auxora restores shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
+- Start Menu > Auxora > Repair Auxora restores shortcuts, uninstall registration, and runtime checks without touching local app data or enabling automatic startup.
 
 Plain-language install/uninstall notes live in [docs/release/WINDOWS-INSTALL-UNINSTALL.md](docs/release/WINDOWS-INSTALL-UNINSTALL.md).
 
@@ -92,7 +96,7 @@ Privacy & Backup exports Modes plus portable presentation settings such as theme
 3. Launch `..\Open Auxora.cmd`.
 4. Optional: run `powershell -File install.ps1` from the `app` folder to register auto-start at login.
 
-For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, auto-start registration, Apps & Features registration, and packaged uninstall flow without asking setup questions.
+For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, Apps & Features registration, and packaged uninstall flow without asking setup questions. It intentionally leaves Auxora closed and automatic startup disabled.
 
 The native host:
 
@@ -187,7 +191,7 @@ That creates:
 - `app\dist\Auxora-Setup-<version>-<date>.exe.sha256`
 - `app\dist\README-install.txt`
 
-The installer installs per-user to `%LOCALAPPDATA%\Programs\Auxora`, creates Start Menu and Desktop shortcuts, registers auto-start, launches the app, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed. The normal installer and uninstaller paths are hands-free.
+The installer installs per-user to `%LOCALAPPDATA%\Programs\Auxora`, creates Start Menu and Desktop shortcuts, leaves automatic startup disabled, leaves the app closed, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed. The normal installer and uninstaller paths are hands-free.
 
 Uninstall paths:
 
@@ -214,13 +218,21 @@ Release docs now live in `docs/release`.
 
 ## Windows Free Beta Release
 
-Build the Windows free beta locally with:
+The authoritative beta candidate is built by the `Windows Beta Candidate` workflow from a fresh immutable `v<version>-beta.<number>` tag. Local installers are for preflight testing only and must not be substituted for the workflow artifact.
+
+After the exact candidate has its schema-3 disposable-VM lifecycle receipt (including injected failed-upgrade rollback), physical Frigate receipt, and physical companion-display receipt, verify the complete handoff with the public assets and private evidence kept outside the clean source checkout:
 
 ```powershell
-npm run release:free-beta
+$assets = Join-Path $env:USERPROFILE 'Downloads\Auxora-0.3.0-beta.1-assets'
+$evidence = Join-Path $env:USERPROFILE 'Downloads\Auxora-0.3.0-beta.1-evidence'
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\prepare-free-beta-release.ps1 `
+  -ReleaseAssetsPath $assets `
+  -LifecycleReceiptPath (Join-Path $evidence 'lifecycle-receipt.json') `
+  -FrigateQualificationReceiptPath (Join-Path $evidence 'frigate-qualification-receipt.json') `
+  -DisplayQualificationReceiptPath (Join-Path $evidence 'display-qualification-receipt.json')
 ```
 
-For the free beta, upload the installer only with clear "unsigned beta" wording and the SHA256 file. For a paid/stable release, sign the installer before public upload:
+Upload only the five manifest-bound files: the installer, its SHA-256 sidecar, install notes, release notes, and `release-manifest.json`. Label the release as an unsigned Windows free public beta. For a paid/stable release, sign the installer before public upload:
 
 ```powershell
 powershell -File scripts\sign-windows.ps1 -Path app\dist\<installer>.exe -CertificatePath C:\path\to\certificate.pfx
@@ -234,16 +246,19 @@ Run the clean install smoke helper on a fresh Windows profile or VM:
 powershell -File scripts\test-windows-install.ps1 -InstallerPath app\dist\<installer>.exe -RunInstall -QuietInstall -RunUninstall
 ```
 
-Run the release gate separately before uploading if needed:
+Run the beta readiness gate against one explicitly named installer. This mode requires the candidate's Authenticode status to be exactly `NotSigned`; a signed or invalidly signed file does not satisfy the unsigned-beta gate.
 
 ```powershell
-npm run release:ready
+npm run release:ready-beta -- -InstallerPath .\app\dist\Auxora-Setup-<version>-<date>.exe
 ```
 
-Run the full non-destructive release gauntlet against the latest installer:
+Run the full non-destructive release gauntlet against an explicitly named installer:
 
 ```powershell
-npm run release:gauntlet
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-release-gauntlet.ps1 `
+  -InstallerPath .\app\dist\Auxora-Setup-<version>-<date>.exe `
+  -AllowGitHubSupportPath `
+  -AllowUnsignedBeta
 ```
 
 For a disposable Windows VM or fresh Windows profile, run the destructive install/uninstall smoke:

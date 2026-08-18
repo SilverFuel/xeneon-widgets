@@ -21,6 +21,9 @@ if ($PSVersionTable.PSEdition -eq "Desktop") {
 if ($RequireSignedInstaller -and $AllowUnsignedBeta) {
   throw "Cannot specify both -RequireSignedInstaller and -AllowUnsignedBeta."
 }
+if (-not $RequireSignedInstaller -and -not $AllowUnsignedBeta) {
+  throw "Specify exactly one release mode: -RequireSignedInstaller or -AllowUnsignedBeta."
+}
 if ($RequireSignedInstaller -and [string]::IsNullOrWhiteSpace($CommercialEvidencePath)) {
   throw "Signed commercial releases require -CommercialEvidencePath with completed launch evidence."
 }
@@ -67,15 +70,12 @@ function Resolve-LatestInstaller {
     return (Resolve-Path -LiteralPath $InstallerPath).Path
   }
 
-  $latestInstaller = Get-ChildItem (Join-Path $repoRoot "app\dist") -Filter "*.exe" -File -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-
-  if (-not $latestInstaller) {
-    throw "No installer found in app\dist. Run npm run installer first or pass -InstallerPath."
+  $localInstallers = @(Get-ChildItem (Join-Path $repoRoot "app\dist") -Filter "Auxora-Setup-*.exe" -File -ErrorAction SilentlyContinue)
+  if ($localInstallers.Count -ne 1) {
+    throw "Pass -InstallerPath for the exact candidate. Automatic selection is allowed only when app\dist contains exactly one installer; found $($localInstallers.Count)."
   }
 
-  return $latestInstaller.FullName
+  return $localInstallers[0].FullName
 }
 
 Push-Location $repoRoot
@@ -99,30 +99,26 @@ try {
 
   try {
     $signature = Get-AuthenticodeSignature -LiteralPath $resolvedInstaller -ErrorAction Stop
-    if ($signature.Status -eq "Valid") {
-      if ($RequireSignedInstaller) {
-        $actualThumbprint = ([string]$signature.SignerCertificate.Thumbprint -replace '\s', '').ToUpperInvariant()
-        $approved = @($allowedSignerThumbprints | ForEach-Object { ([string]$_ -replace '\s', '').ToUpperInvariant() })
-        if ($actualThumbprint -notin $approved) {
-          throw "Installer signer is not in the approved Auxora signer list: $actualThumbprint"
-        }
-      }
-      Write-Host "OK: Installer signature is valid"
-    } elseif ($RequireSignedInstaller) {
-      throw "Installer signature is required but is $($signature.Status)."
-    } elseif ($AllowUnsignedBeta) {
-      Write-Warning "Installer is unsigned ($($signature.Status)); allowed for free beta only."
-    } else {
-      throw "Installer is not signed ($($signature.Status)). Pass -AllowUnsignedBeta for the free beta path or sign the artifact."
-    }
   } catch {
+    throw "Installer signature could not be checked and cannot be treated as unsigned: $($_.Exception.Message)"
+  }
+  if ($signature.Status -eq "Valid") {
     if ($RequireSignedInstaller) {
-      throw "Installer signature is required but could not be checked: $($_.Exception.Message)"
-    } elseif ($AllowUnsignedBeta) {
-      Write-Warning "Installer signature could not be checked; allowed for free beta only. $($_.Exception.Message)"
-    } else {
-      throw "Installer signature could not be checked. Pass -AllowUnsignedBeta for the free beta path or sign and verify the artifact. $($_.Exception.Message)"
+      $actualThumbprint = ([string]$signature.SignerCertificate.Thumbprint -replace '\s', '').ToUpperInvariant()
+      $approved = @($allowedSignerThumbprints | ForEach-Object { ([string]$_ -replace '\s', '').ToUpperInvariant() })
+      if ($actualThumbprint -notin $approved) {
+        throw "Installer signer is not in the approved Auxora signer list: $actualThumbprint"
+      }
     }
+    Write-Host "OK: Installer signature is valid"
+  } elseif ($RequireSignedInstaller) {
+    throw "Installer signature is required but is $($signature.Status)."
+  } elseif ($AllowUnsignedBeta -and $signature.Status -eq "NotSigned") {
+    Write-Warning "Installer is unsigned (NotSigned); allowed for free beta only."
+  } elseif ($AllowUnsignedBeta) {
+    throw "Installer has invalid Authenticode status $($signature.Status) and cannot be treated as an unsigned beta."
+  } else {
+    throw "Installer is not signed ($($signature.Status)). Pass -AllowUnsignedBeta only for an artifact whose status is exactly NotSigned, or sign the artifact."
   }
 
   Write-Step "Running release readiness gate"
@@ -131,7 +127,7 @@ try {
     $readyArgs += "-AllowGitHubSupportPath"
   }
   if ($AllowUnsignedBeta) {
-    $readyArgs += "-AllowBetaVersion"
+    $readyArgs += @("-AllowBetaVersion", "-RequireUnsignedInstaller")
   }
   if ($RequireSignedInstaller) {
     $readyArgs += "-RequireSignedInstaller"
@@ -141,9 +137,23 @@ try {
 
   if (-not [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
     Write-Step "Checking immutable release manifest and lifecycle, Frigate, and display qualification receipts"
+    $resolvedAssetsRoot = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
+    $candidateManifest = Get-Content -LiteralPath (Join-Path $resolvedAssetsRoot "release-manifest.json") -Raw | ConvertFrom-Json
+    $manifestInstallerPath = (Resolve-Path -LiteralPath (Join-Path $resolvedAssetsRoot ([string]$candidateManifest.installer.fileName)) -ErrorAction Stop).Path
+    if (-not $manifestInstallerPath.Equals($resolvedInstaller, [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "InstallerPath must be the exact installer named by the release manifest."
+    }
+    $currentCommit = (& git -C $repoRoot rev-parse HEAD 2>$null).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $currentCommit -notmatch '^[0-9a-f]{40}$') {
+      throw "Receipt-bound verification requires a valid current Git commit."
+    }
+    [xml]$project = Get-Content -LiteralPath (Join-Path $repoRoot "app\XenonEdgeHost.csproj")
+    $expectedTag = "v$([string]$project.Project.PropertyGroup.Version)"
     Invoke-CheckedCommand "powershell" @(
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-ReleaseManifest.ps1",
-      "-ReleaseAssetsPath", $ReleaseAssetsPath
+      "-ReleaseAssetsPath", $ReleaseAssetsPath,
+      "-ExpectedTag", $expectedTag,
+      "-ExpectedCommitSha", $currentCommit
     ) "Release manifest verification failed."
     Invoke-CheckedCommand "powershell" @(
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-BetaLifecycleReceipt.ps1",

@@ -32,6 +32,8 @@ $legacyUserDataRoot = Join-Path $env:APPDATA "XenonEdgeHost"
 $legacyLocalDataRoot = Join-Path $env:LOCALAPPDATA "XenonEdgeHost"
 $taskName = "XenonEdgeHost"
 $runValueName = "XenonEdgeHost"
+$legacyTaskName = "XeneonBridge"
+$legacyRunValueName = "XeneonBridge"
 $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 
 function Write-Step($message) {
@@ -77,31 +79,36 @@ function Get-XenonStartupRunValue {
   return (Get-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue).$runValueName
 }
 
-function Assert-StartupInstalled {
-  $startupTask = Get-XenonStartupTask
-  $startupRunValue = Get-XenonStartupRunValue
-
-  if (-not $startupTask -and [string]::IsNullOrWhiteSpace($startupRunValue)) {
-    throw "Neither scheduled task nor Run key startup integration was installed."
-  }
-
-  if ($startupTask -and $startupTask.State -eq "Disabled") {
-    throw "Scheduled task '$taskName' is installed but disabled."
-  }
-
-  Write-Host "OK: startup integration installed"
-}
-
-function Assert-StartupRemoved {
+function Assert-StartupAbsent {
   if (Get-XenonStartupTask) {
-    throw "Scheduled task '$taskName' still exists after uninstall."
+    throw "Scheduled task '$taskName' exists even though automatic startup must stay disabled."
   }
 
   if (-not [string]::IsNullOrWhiteSpace((Get-XenonStartupRunValue))) {
-    throw "Run key startup entry '$runValueName' still exists after uninstall."
+    throw "Run key startup entry '$runValueName' exists even though automatic startup must stay disabled."
   }
 
-  Write-Host "OK: startup integration removed"
+  if (Get-ScheduledTask -TaskName $legacyTaskName -TaskPath "\" -ErrorAction SilentlyContinue) {
+    throw "Legacy scheduled task '$legacyTaskName' exists even though automatic startup must stay disabled."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace((Get-ItemProperty -Path $runKeyPath -Name $legacyRunValueName -ErrorAction SilentlyContinue).$legacyRunValueName)) {
+    throw "Legacy Run-key startup entry '$legacyRunValueName' exists even though automatic startup must stay disabled."
+  }
+
+  Write-Host "OK: automatic startup is absent"
+}
+
+function Assert-HostClosed([int]$ObservationSeconds = 30) {
+  $deadline = (Get-Date).AddSeconds($ObservationSeconds)
+  do {
+    if (Get-Process -Name "XenonEdgeHost" -ErrorAction SilentlyContinue) {
+      throw "Auxora was launched automatically; the public installer must leave it closed."
+    }
+    Start-Sleep -Milliseconds 250
+  } while ((Get-Date) -lt $deadline)
+
+  Write-Host "OK: installer left Auxora closed for $ObservationSeconds seconds"
 }
 
 function Invoke-Installer($path, $label) {
@@ -160,8 +167,11 @@ if ($RunInstall) {
     throw "Pass -InstallerPath when using -RunInstall."
   }
 
+  Write-Step "Preparing a closed-state install"
+  Stop-InstalledHost
   if (-not [string]::IsNullOrWhiteSpace($PreviousInstallerPath)) {
     Invoke-Installer $PreviousInstallerPath "Installing previous beta for upgrade test"
+    Stop-InstalledHost
   }
   Invoke-Installer $InstallerPath "Installing exact candidate"
 }
@@ -196,7 +206,8 @@ if ([string]::IsNullOrWhiteSpace($uninstallEntry.InstallLocation) -or -not (Test
   throw "InstallLocation is missing or invalid in the uninstall entry."
 }
 Write-Host "OK: install location registered"
-Assert-StartupInstalled
+Assert-StartupAbsent
+Assert-HostClosed
 
 if ($RunLaunchHealth) {
   Write-Step "Checking live installed host"
@@ -209,7 +220,7 @@ if ($RunRepair) {
   Assert-Present $repairScript "Installed repair script"
   $repairProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $repairScript, "-Quiet") -Wait -WindowStyle Hidden -PassThru
   if ($repairProcess.ExitCode -ne 0) { throw "Repair exited with code $($repairProcess.ExitCode)." }
-  Assert-StartupInstalled
+  Assert-StartupAbsent
   Write-Host "OK: installed repair completed"
 }
 
@@ -238,7 +249,7 @@ if ($RunUninstall) {
   Assert-Absent $shortcutRoot "Start Menu shortcut folder"
   Assert-Absent $desktopShortcut "Desktop shortcut"
   Assert-Absent $uninstallKey "Apps and Features uninstall entry"
-  Assert-StartupRemoved
+  Assert-StartupAbsent
   if ($RemoveLocalData) {
     Write-Step "Checking local data cleanup"
     Assert-Absent $userDataRoot "Roaming local data"

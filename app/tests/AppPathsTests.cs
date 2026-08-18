@@ -44,14 +44,14 @@ public sealed class AppPathsTests
     public void DashboardUri_UsesItsConfiguredLocalOriginForTheBridge()
     {
         var baseUri = new Uri("http://127.0.0.1:54321/");
-        var dashboard = BridgeManager.BuildDashboardUri(baseUri, "20260731-99", advanced: false);
-        var settings = BridgeManager.BuildDashboardUri(baseUri, "20260731-99", advanced: true);
+        var dashboard = BridgeManager.BuildDashboardUri(baseUri, "20260818-01", advanced: false);
+        var settings = BridgeManager.BuildDashboardUri(baseUri, "20260818-01", advanced: true);
 
         Assert.Multiple((Action)(() =>
         {
             Assert.That(dashboard.GetLeftPart(UriPartial.Path), Is.EqualTo("http://127.0.0.1:54321/dashboard.html"));
-            Assert.That(dashboard.Query, Is.EqualTo("?bridge=http%3A%2F%2F127.0.0.1%3A54321&v=20260731-99"));
-            Assert.That(settings.Query, Is.EqualTo("?advanced=1&bridge=http%3A%2F%2F127.0.0.1%3A54321&v=20260731-99"));
+            Assert.That(dashboard.Query, Is.EqualTo("?bridge=http%3A%2F%2F127.0.0.1%3A54321&v=20260818-01"));
+            Assert.That(settings.Query, Is.EqualTo("?advanced=1&bridge=http%3A%2F%2F127.0.0.1%3A54321&v=20260818-01"));
         }));
     }
 
