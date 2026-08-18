@@ -115,6 +115,18 @@ function captureChildOutput(child, logPath) {
 }
 
 async function waitForEmbeddedDashboardBoot(timeoutMs = 15000) {
+  const displayResponse = await fetchWithTimeout("/api/display/diagnostics", {}, 3000);
+  assert(displayResponse.ok, `live display diagnostics returned HTTP ${displayResponse.status} before embedded dashboard boot`);
+  const display = await displayResponse.json();
+  const companionDisplayCount = display?.companionDisplayCount;
+  assert(Number.isInteger(companionDisplayCount), "display diagnostics must report an integer companion count before embedded dashboard boot");
+  if (companionDisplayCount === 0) {
+    assert(
+      display?.status === "waiting-for-companion-display",
+      `primary-only startup must publish the waiting display state before embedded dashboard boot: ${JSON.stringify(display)}`
+    );
+  }
+
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const response = await fetchWithTimeout("/api/support/bundle", {}, 3000);
@@ -122,15 +134,33 @@ async function waitForEmbeddedDashboardBoot(timeoutMs = 15000) {
     const log = Array.isArray(bundle.log) ? bundle.log.join("\n") : "";
     const dashboardLoads = (log.match(/Dashboard loaded successfully\./g) || []).length;
     const dashboardConfigRequests = (log.match(/"method":"GET","path":"\/api\/config","statusCode":200/g) || []).length;
+    if (companionDisplayCount === 0) {
+      assert(
+        dashboardLoads === 0 && dashboardConfigRequests === 0,
+        `primary-only startup initialized the embedded dashboard instead of deferring it: ${JSON.stringify({ dashboardLoads, dashboardConfigRequests })}`
+      );
+      return {
+        companionDisplayCount,
+        displayStatus: display.status,
+        dashboardLoads,
+        dashboardConfigRequests
+      };
+    }
+    assert(dashboardLoads <= 1, `embedded dashboard loaded more than once during startup: ${dashboardLoads}`);
     if (dashboardLoads === 1 && dashboardConfigRequests >= 1) {
-      return { dashboardLoads, dashboardConfigRequests };
+      return {
+        companionDisplayCount,
+        displayStatus: display.status,
+        dashboardLoads,
+        dashboardConfigRequests
+      };
     }
     await new Promise(resolvePromise => setTimeout(resolvePromise, 250));
   }
 
   const response = await fetchWithTimeout("/api/support/bundle", {}, 3000);
   const bundle = response.ok ? await response.json() : {};
-  throw new Error(`embedded dashboard did not complete a real boot within ${timeoutMs} ms; log tail=${JSON.stringify(Array.isArray(bundle.log) ? bundle.log.slice(-30) : [])}`);
+  throw new Error(`embedded dashboard did not complete a real companion-display boot within ${timeoutMs} ms; display=${JSON.stringify(display)}; log tail=${JSON.stringify(Array.isArray(bundle.log) ? bundle.log.slice(-30) : [])}`);
 }
 
 async function stopChild(child) {
@@ -593,7 +623,16 @@ try {
     assert(!healthJson.includes(`"${privateKey}"`), `live /api/health leaked private provisioning field '${privateKey}'`);
   }
   const embeddedBoot = await waitForEmbeddedDashboardBoot();
-  assert(embeddedBoot.dashboardLoads === 1 && embeddedBoot.dashboardConfigRequests >= 1, `embedded dashboard boot evidence was incomplete: ${JSON.stringify(embeddedBoot)}`);
+  if (embeddedBoot.companionDisplayCount === 0) {
+    assert(
+      embeddedBoot.displayStatus === "waiting-for-companion-display"
+        && embeddedBoot.dashboardLoads === 0
+        && embeddedBoot.dashboardConfigRequests === 0,
+      `primary-only embedded dashboard deferral evidence was incomplete: ${JSON.stringify(embeddedBoot)}`
+    );
+  } else {
+    assert(embeddedBoot.dashboardLoads === 1 && embeddedBoot.dashboardConfigRequests >= 1, `embedded dashboard boot evidence was incomplete: ${JSON.stringify(embeddedBoot)}`);
+  }
 
   const configResponse = await fetchWithTimeout("/api/config");
   assert(configResponse.ok, `live /api/config returned HTTP ${configResponse.status}`);
@@ -772,10 +811,14 @@ try {
   const finalSupportBundle = await finalSupportResponse.json();
   const finalHostLog = Array.isArray(finalSupportBundle.log) ? finalSupportBundle.log.join("\n") : "";
   const finalDashboardLoads = (finalHostLog.match(/Dashboard loaded successfully\./g) || []).length;
-  assert(finalDashboardLoads === 1, `display recovery must not initialize or load the dashboard more than once; observed ${finalDashboardLoads}`);
+  const expectedDashboardLoads = displayDiagnostics.companionDisplayCount > 0 ? 1 : 0;
+  assert(
+    finalDashboardLoads === expectedDashboardLoads,
+    `display recovery must preserve the companion-only embedded dashboard policy; expected ${expectedDashboardLoads} load(s), observed ${finalDashboardLoads}`
+  );
   assert(
     !/WebView2 initialization failed|Failed to load dashboard after bridge ready/.test(finalHostLog),
-    `display recovery produced a false WebView2 startup failure after a successful load: ${finalHostLog}`
+    `display recovery produced a false WebView2 startup failure: ${finalHostLog}`
   );
 
   console.log(`launched native host and verified live health, companion-only display diagnostics, preference rejection, and ${placementResult.sampleCount} HWND placement samples at ${placementResult.effectiveIntervalMs} ms effective intervals; primary=${JSON.stringify(placementResult.primary)}; visibleWindows=${JSON.stringify(placementResult.observedWindows)}`);
