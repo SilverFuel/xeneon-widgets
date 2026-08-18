@@ -155,6 +155,7 @@ assert(
     && /verify-publication-environment:[\s\S]+Verify protected publication environment/.test(releaseWorkflow)
     && /publish-tested-candidate:[\s\S]+needs:\s*verify-publication-environment/.test(releaseWorkflow)
     && (releaseWorkflow.match(/Test-GitHubReleaseEnvironment\.ps1/g) ?? []).length === 2
+    && (releaseWorkflow.match(/SoloOwnerLogin\s+\$env:GITHUB_REPOSITORY_OWNER/g) ?? []).length === 2
     && finalEnvironmentCheckIndex > 0
     && releaseCreateIndex > finalEnvironmentCheckIndex
     && releaseWorkflow.slice(finalEnvironmentCheckIndex, releaseCreateIndex).includes('EnvironmentName "beta-publication"')
@@ -201,10 +202,18 @@ assert(
     && /testedScalingPercent/.test(displayReceipt)
     && /installerSha256/.test(displayReceipt)
     && /required_reviewers/.test(releaseEnvironment)
+    && /can_admins_bypass\s+-isnot\s+\[bool\]/.test(releaseEnvironment)
+    && /must disable administrator bypass/.test(releaseEnvironment)
     && /prevent_self_review\s+-isnot\s+\[bool\]/.test(releaseEnvironment)
+    && /explicitly selected solo-owner reviewer/.test(releaseEnvironment)
+    && /must name solo owner/.test(releaseEnvironment)
     && /between one and six required reviewers/.test(releaseEnvironment)
     && /missing reviewer rule rejected/.test(releaseEnvironmentFixtures)
+    && /administrator bypass rejected/.test(releaseEnvironmentFixtures)
+    && /string administrator bypass evidence rejected/.test(releaseEnvironmentFixtures)
     && /self-review allowed rejected/.test(releaseEnvironmentFixtures)
+    && /explicit solo owner accepted/.test(releaseEnvironmentFixtures)
+    && /wrong solo owner rejected/.test(releaseEnvironmentFixtures)
     && /hashStatus/.test(productWidget)
     && /signatureStatus/.test(productWidget)
     && /Direct download stays hidden until a newer artifact is verified/.test(productWidget)

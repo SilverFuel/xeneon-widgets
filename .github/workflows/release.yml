@@ -144,14 +144,15 @@ jobs:
       - name: Check out publication guard
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
-      - name: Require independent publication approval
+      - name: Require explicit solo-owner publication approval
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           & ./scripts/Test-GitHubReleaseEnvironment.ps1 `
             -Repository $env:GITHUB_REPOSITORY `
-            -EnvironmentName "beta-publication"
+            -EnvironmentName "beta-publication" `
+            -SoloOwnerLogin $env:GITHUB_REPOSITORY_OWNER
 
   publish-tested-candidate:
     if: github.event_name == 'workflow_dispatch'
@@ -294,7 +295,8 @@ jobs:
           )
           & ./scripts/Test-GitHubReleaseEnvironment.ps1 `
             -Repository $env:GITHUB_REPOSITORY `
-            -EnvironmentName "beta-publication"
+            -EnvironmentName "beta-publication" `
+            -SoloOwnerLogin $env:GITHUB_REPOSITORY_OWNER
           gh release create $env:RELEASE_TAG @assets `
             --repo $env:GITHUB_REPOSITORY `
             --verify-tag `
