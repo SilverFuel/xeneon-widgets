@@ -2,6 +2,12 @@
 
 Run every pass below against the same manifest-bound candidate in a disposable Windows VM. Record the exact tag, commit SHA, installer filename, and SHA-256. Verify the official GitHub source, filename, manifest value, and first hash field in the `.sha256` sidecar before running anything. Never disable Windows or organization security policy.
 
+Run the automated install/uninstall portion from the parent folder of `release-assets` so it verifies the installed executable binding before launch or health checks:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-windows-install.ps1 -InstallerPath .\release-assets\<installer>.exe -ReleaseAssetsPath .\release-assets -RunInstall -QuietInstall -RunLaunchHealth -RunRepair -RunUninstall
+```
+
 ## Clean Install And Closed-by-Default Pass
 
 1. Start from a VM snapshot with no Auxora or XENEON installation, process, scheduled task, Run-key value, or local data.

@@ -8,10 +8,10 @@ Use this before publishing a free beta, paid release, or public download.
 - For a disposable Windows VM or fresh Windows profile, run:
 
 ```powershell
-powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<installer>.exe -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall -RemoveLocalData
+powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath .\release-assets\<installer>.exe -ReleaseAssetsPath .\release-assets -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall -RemoveLocalData
 ```
 
-- A publication-bound run must also supply `-ReleaseAssetsPath`, `-LifecycleReceiptPath`, `-FrigateQualificationReceiptPath`, and `-DisplayQualificationReceiptPath` together. The gauntlet rejects partial evidence.
+- Install smoke always requires `-ReleaseAssetsPath`; it verifies the installed `XenonEdgeHost.exe` hash, product identity, version, and commit from manifest schema 2 before any health result. A publication-bound run must also supply `-LifecycleReceiptPath`, `-FrigateQualificationReceiptPath`, and `-DisplayQualificationReceiptPath` together. The gauntlet rejects partial receipt evidence.
 
 ## Free Public Beta Must Do
 

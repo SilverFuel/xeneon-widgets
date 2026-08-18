@@ -1,5 +1,6 @@
 param(
   [string]$InstallerPath = "",
+  [string]$ReleaseAssetsPath = "",
   [switch]$RunInstall,
   [switch]$RunUninstall,
   [switch]$RemoveLocalData,
@@ -14,6 +15,9 @@ $ErrorActionPreference = "Stop"
 
 if ($RemoveLocalData -and -not $RunUninstall) {
   throw "-RemoveLocalData requires -RunUninstall so local data is removed only through the product uninstaller."
+}
+if ($RunInstall -and [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
+  throw "-RunInstall requires -ReleaseAssetsPath so the installed executable can be bound to the exact candidate manifest."
 }
 
 $installRoot = Join-Path $env:LOCALAPPDATA "Programs\Auxora"
@@ -35,6 +39,21 @@ $runValueName = "XenonEdgeHost"
 $legacyTaskName = "XeneonBridge"
 $legacyRunValueName = "XeneonBridge"
 $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$releaseManifest = $null
+
+if (-not [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
+  $resolvedReleaseAssets = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
+  & (Join-Path $PSScriptRoot "Test-ReleaseManifest.ps1") -ReleaseAssetsPath $resolvedReleaseAssets
+  $releaseManifest = Get-Content -LiteralPath (Join-Path $resolvedReleaseAssets "release-manifest.json") -Raw | ConvertFrom-Json
+
+  if ($RunInstall) {
+    $resolvedInstaller = (Resolve-Path -LiteralPath $InstallerPath -ErrorAction Stop).Path
+    $manifestInstaller = (Resolve-Path -LiteralPath (Join-Path $resolvedReleaseAssets ([string]$releaseManifest.installer.fileName)) -ErrorAction Stop).Path
+    if (-not $resolvedInstaller.Equals($manifestInstaller, [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "InstallerPath must be the exact installer named by release-manifest.json."
+    }
+  }
+}
 
 function Write-Step($message) {
   Write-Host ""
@@ -63,6 +82,33 @@ function Assert-Contains($value, $expected, $label) {
   }
 
   Write-Host "OK: $label"
+}
+
+function Assert-InstalledCandidateIdentity {
+  if ($null -eq $releaseManifest) {
+    if ($RunInstall -or $RunLaunchHealth) {
+      throw "Exact-candidate install and health checks require release-manifest.json."
+    }
+    return
+  }
+
+  $expected = $releaseManifest.installedExecutable
+  if ([string]$expected.fileName -cne [System.IO.Path]::GetFileName($exePath)) {
+    throw "Installed executable filename does not match the release manifest."
+  }
+  $actualHash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash
+  if (-not $actualHash.Equals([string]$expected.sha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Installed executable SHA-256 does not match the release manifest."
+  }
+  $versionInfo = (Get-Item -LiteralPath $exePath).VersionInfo
+  if ([string]$versionInfo.ProductName -cne [string]$expected.productName -or
+      [string]$versionInfo.ProductVersion -cne [string]$expected.productVersion -or
+      [string]$expected.version -cne [string]$releaseManifest.version -or
+      [string]$expected.commitSha -cne [string]$releaseManifest.commitSha) {
+    throw "Installed executable product identity, version, or commit does not match the release manifest."
+  }
+
+  Write-Host "OK: installed executable matches the exact manifest hash, product, version, and commit"
 }
 
 function Get-ShortcutArguments($path) {
@@ -144,6 +190,13 @@ function Assert-LiveHealth($label) {
     try {
       $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8976/api/health" -TimeoutSec 3
       if ($response.StatusCode -eq 200) {
+        if ($null -ne $releaseManifest) {
+          $health = $response.Content | ConvertFrom-Json
+          if ([string]$health.app.name -cne [string]$releaseManifest.installedExecutable.productName -or
+              [string]$health.app.version -cne [string]$releaseManifest.version) {
+            throw "Installed host health identity does not match the release manifest."
+          }
+        }
         Write-Host "OK: $label"
         return
       }
@@ -178,6 +231,7 @@ if ($RunInstall) {
 
 Write-Step "Checking installed app"
 Assert-Present $exePath "Installed executable"
+Assert-InstalledCandidateIdentity
 Assert-Present $shortcutRoot "Start Menu shortcut folder"
 Assert-Present $startMenuShortcut "Start Menu app shortcut"
 Assert-Present $safeModeShortcut "Start Menu Safe Mode shortcut"
@@ -220,6 +274,7 @@ if ($RunRepair) {
   Assert-Present $repairScript "Installed repair script"
   $repairProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $repairScript, "-Quiet") -Wait -WindowStyle Hidden -PassThru
   if ($repairProcess.ExitCode -ne 0) { throw "Repair exited with code $($repairProcess.ExitCode)." }
+  Assert-InstalledCandidateIdentity
   Assert-StartupAbsent
   Write-Host "OK: installed repair completed"
 }

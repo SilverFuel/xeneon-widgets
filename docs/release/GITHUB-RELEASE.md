@@ -50,7 +50,7 @@ Auxora 0.3.0-beta.1 Free Public Beta
 - Paid/stable Windows installers are signed.
 - Paid/stable macOS packages are signed and notarized.
 - SHA256 files match the uploaded files.
-- The manifest binds the exact tag, project version, full commit SHA, installer filename, SHA-256, signature status, and five-file asset allowlist.
+- Manifest schema 2 binds the exact tag, project version, full commit SHA, installer filename, SHA-256, signature status, installed `XenonEdgeHost.exe` SHA-256/ProductName/ProductVersion/commit, and five-file asset allowlist.
 - A schema-3 disposable-VM lifecycle receipt for that exact installer SHA passes `scripts\Test-BetaLifecycleReceipt.ps1`, including the injected failed-upgrade rollback proof.
 - The GitHub `beta-publication` environment exists, names `SilverFuel` as a required User reviewer, allows that solo owner to review their own dispatch, and has administrator bypass disabled; `scripts\Test-GitHubReleaseEnvironment.ps1 -Repository SilverFuel/xeneon-widgets -SoloOwnerLogin SilverFuel` passes against the live repository.
 - `support.html` and `refund-policy.html` are included in the app package.

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File .\\start-xeneon.ps1",
-    "check": "npm run check:js && npm run check:theme-contract && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:album-carousel && npm run check:dependency-pins && npm run check:support-redaction && npm run check:display-recovery && npm run test:display-receipt && npm run check:unifi-form && npm run check:camera-detection && npm run test:frigate-receipt && npm run check:audit-regressions && npm run check:ui-remediation && npm run check:dashboard-smoke && npm run check:adaptive-layouts && npm run check:commercial-readiness && npm run test:release-version && npm run test:release-artifact && npm run test:release-manifest && npm run test:release-environment && npm run check:release-gauntlet && npm run test:iexpress-packaging && npm run check:installer-safety && npm run check:app && npm run test:rendered-dashboard && npm run test:theme-rendered && npm run test:native-host-api && npm run test:bridge-api && npm run test:app",
+    "check": "npm run check:js && npm run check:theme-contract && npm run check:setup-guide && npm run check:bridge-boundaries && npm run check:observability && npm run check:album-carousel && npm run check:dependency-pins && npm run check:support-redaction && npm run check:display-recovery && npm run test:display-receipt && npm run check:unifi-form && npm run check:camera-detection && npm run test:frigate-receipt && npm run check:audit-regressions && npm run check:ui-remediation && npm run check:dashboard-smoke && npm run check:adaptive-layouts && npm run check:commercial-readiness && npm run test:release-version && npm run test:release-artifact && npm run test:release-manifest && npm run test:release-environment && npm run check:release-gauntlet && npm run test:iexpress-packaging && npm run test:webview2-runtime && npm run check:installer-safety && npm run check:app && npm run test:rendered-dashboard && npm run test:theme-rendered && npm run test:native-host-api && npm run test:bridge-api && npm run test:app",
     "check:js": "node scripts/check-js.mjs",
     "check:theme-contract": "node scripts/check-theme-contract.mjs",
     "check:setup-guide": "node scripts/check-setup-guide.mjs",
@@ -35,6 +35,7 @@
     "check:release-gauntlet": "node scripts/check-release-gauntlet.mjs",
     "check:installer-safety": "node scripts/check-installer-safety.mjs",
     "test:iexpress-packaging": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\test-iexpress-packaging.ps1",
+    "test:webview2-runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\test-webview2-runtime-probe.ps1 && pwsh -NoProfile -File .\\scripts\\test-webview2-runtime-probe.ps1",
     "check:app": "dotnet build app\\XenonEdgeHost.sln --configuration Release",
     "test:native-host-api": "node scripts/test-native-host-api.mjs",
     "test:bridge-api": "node scripts/test-bridge-api.mjs",

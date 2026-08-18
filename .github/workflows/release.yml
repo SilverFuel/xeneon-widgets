@@ -44,6 +44,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Require candidate tag commit from main
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git fetch origin main --no-tags
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch origin/main before candidate creation." }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw "The beta tag commit must already be present on origin/main." }
+
       - name: Set up .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
@@ -118,11 +127,16 @@ jobs:
             -Tag $env:RELEASE_TAG `
             -Version $version `
             -CommitSha $env:SOURCE_COMMIT_SHA `
+            -PublishedAppPath publish/XenonEdgeHost.exe `
             -InstallNotesPath (Join-Path $candidateRoot "WINDOWS-INSTALL-UNINSTALL.md") `
             -ReleaseNotesPath (Join-Path $candidateRoot "FREE-BETA-RELEASE-NOTES.md") `
             -OutputPath (Join-Path $candidateRoot "release-manifest.json")
 
-          & ./scripts/Test-ReleaseManifest.ps1 -ReleaseAssetsPath $candidateRoot -ExpectedTag $env:RELEASE_TAG -ExpectedCommitSha $env:SOURCE_COMMIT_SHA
+          & ./scripts/Test-ReleaseManifest.ps1 `
+            -ReleaseAssetsPath $candidateRoot `
+            -ExpectedTag $env:RELEASE_TAG `
+            -ExpectedCommitSha $env:SOURCE_COMMIT_SHA `
+            -PublishedAppPath publish/XenonEdgeHost.exe
 
       - name: Upload immutable Windows candidate for VM testing
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -170,6 +184,15 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
+
+      - name: Re-require publication tag commit from main
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git fetch origin main --no-tags
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch origin/main before publication verification." }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw "The beta tag commit must already be present on origin/main." }
 
       - name: Verify candidate run and download exact artifact
         shell: pwsh

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 const buildInstaller = readWorkspaceFile("app/build-installer.ps1");
 const installHost = readWorkspaceFile("app/installer/Install-XenonEdgeHost.ps1");
+const webView2RuntimeProbe = readWorkspaceFile("app/installer/WebView2RuntimeProbe.ps1");
 const autoStartInstall = readWorkspaceFile("app/install.ps1");
 const autoStartRemove = readWorkspaceFile("app/uninstall.ps1");
 const removeHost = readWorkspaceFile("app/installer/Remove-XenonEdgeHost.ps1");
@@ -16,6 +17,10 @@ const cleanInstallTest = readWorkspaceFile("docs/release/CLEAN-INSTALL-TEST.md")
 const artifactVerifier = readWorkspaceFile("scripts/Test-ReleaseArtifact.ps1");
 const iexpressFixture = readWorkspaceFile("scripts/test-iexpress-packaging.ps1");
 const releaseWorkflow = readWorkspaceFile(".github/workflows/release.yml");
+const manifestGenerator = readWorkspaceFile("scripts/New-ReleaseManifest.ps1");
+const manifestVerifier = readWorkspaceFile("scripts/Test-ReleaseManifest.ps1");
+const manifestFixture = readWorkspaceFile("scripts/test-release-manifest.ps1");
+const webView2ProbeFixture = readWorkspaceFile("scripts/test-webview2-runtime-probe.ps1");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 
 function readWorkspaceFile(relativePath) {
@@ -60,6 +65,7 @@ assert(
     && /Remove-TemporaryPathBestEffort \$stageRoot/.test(buildInstaller)
     && !/Stop-Process/.test(buildInstaller)
     && /Install-XenonEdgeHost\.ps1" -Quiet -NoAutoStart -SkipLaunch/.test(buildInstaller)
+    && /WebView2RuntimeProbe\.ps1/.test(buildInstaller)
     && /does not start at login/.test(buildInstaller)
     && /Get-FileHash -Algorithm SHA256/.test(buildInstaller)
     && /do not run the installer/.test(buildInstaller)
@@ -84,8 +90,8 @@ assert(
     && /Restored previous install after setup failed/.test(installHost)
     && /Backup remains at \$backupInstallRoot/.test(installHost)
     && /Removed partial install after setup failed/.test(installHost)
-    && /Get-InstalledWebView2Version/.test(installHost)
-    && /Get-BundledWebView2Runtime/.test(installHost)
+    && /Get-UsableWebView2Runtime \$stagedInstallRoot/.test(installHost)
+    && /\. \$runtimeProbeScript/.test(installHost)
     && /No existing Auxora files were replaced/.test(installHost)
     && /function Restore-BackupInstall/.test(installHost)
     && /Restore target already exists; refusing to nest or overwrite the backup/.test(installHost)
@@ -115,6 +121,20 @@ assert(
     && /superseded XenonEdgeHost uninstall registration was retained/.test(installHost)
     && /if \(\$installationCompleted\)[\s\S]+Backup install folder/.test(installHost),
   "installer must verify WebView2 before replacement, stop the running app, and preserve or restore current and legacy installs when an upgrade fails"
+);
+
+assert(
+  /GetAvailableCoreWebView2BrowserVersionString/.test(webView2RuntimeProbe)
+    && /LoadLibraryExW/.test(webView2RuntimeProbe)
+    && /Marshal\.FreeCoTaskMem\(versionInfo\)/.test(webView2RuntimeProbe)
+    && /Test-UsableWebView2Version/.test(webView2RuntimeProbe)
+    && /0, 0, 0, 0/.test(webView2RuntimeProbe)
+    && !/EdgeUpdate|Get-ItemProperty|["']pv["']/.test(webView2RuntimeProbe)
+    && /Evergreen uses the candidate loader Core API/.test(webView2ProbeFixture)
+    && /FixedRuntime uses its exact browser folder/.test(webView2ProbeFixture)
+    && /zero version rejected/.test(webView2ProbeFixture)
+    && /loader API failure rejected/.test(webView2ProbeFixture),
+  "installer and repair must prove WebView2 availability through the shipped official loader API without trusting registry pv"
 );
 
 assert(
@@ -190,7 +210,10 @@ assert(
   /\[switch\]\$RuntimeOnly/.test(autoStartInstall)
     && /Scheduled task \(primary auto-start method\)/.test(autoStartInstall)
     && /if \(-not \$RuntimeOnly\)\s*\{[\s\S]+Register-ScheduledTask[\s\S]+New-ItemProperty -Path \$runKeyPath/.test(autoStartInstall)
-    && /Configuring runtime without automatic startup[\s\S]+\$runtimeScript -Quiet -RuntimeOnly/.test(installHost),
+    && /Configuring runtime without automatic startup[\s\S]+\$runtimeScript -Quiet -RuntimeOnly/.test(installHost)
+    && /Get-UsableWebView2Runtime \$appRoot[\s\S]+# --- Scheduled task/.test(autoStartInstall)
+    && !/Get-InstalledWebView2Version|EdgeUpdate|["']pv["']/.test(autoStartInstall)
+    && /Verifying embedded browser runtime[\s\S]+\$runtimeScript -Quiet -RuntimeOnly[\s\S]+Repairing simple launch shortcuts/.test(repairInstall),
   "fresh install and repair must configure WebView2 runtime support without enabling automatic startup"
 );
 
@@ -251,6 +274,33 @@ assert(
 );
 
 assert(
+  /ReleaseAssetsPath/.test(smokeTest)
+    && /Test-ReleaseManifest\.ps1/.test(smokeTest)
+    && /function Assert-InstalledCandidateIdentity/.test(smokeTest)
+    && /Get-FileHash -LiteralPath \$exePath -Algorithm SHA256/.test(smokeTest)
+    && /ProductVersion/.test(smokeTest)
+    && /Assert-Present \$exePath "Installed executable"\s+Assert-InstalledCandidateIdentity[\s\S]+if \(\$RunLaunchHealth\)/.test(smokeTest)
+    && /RunInstallSmoke requires ReleaseAssetsPath/.test(readWorkspaceFile("scripts/run-release-gauntlet.ps1")),
+  "disposable install smoke must verify the installed executable manifest binding before health or receipt claims"
+);
+
+assert(
+  /schemaVersion = 2/.test(manifestGenerator)
+    && /installedExecutable = \[ordered\]@\{/.test(manifestGenerator)
+    && /PublishedAppPath/.test(manifestGenerator)
+    && /ProductVersion/.test(manifestGenerator)
+    && /Assert-ExactProperties \$manifest/.test(manifestVerifier)
+    && /installedExecutableHash/.test(manifestVerifier)
+    && /Published app SHA-256 does not match/.test(manifestVerifier)
+    && /extra manifest root property rejected/.test(manifestFixture)
+    && /mis-cased installer property rejected/.test(manifestFixture)
+    && /mis-cased installed executable property rejected/.test(manifestFixture)
+    && /wrong installed executable hash rejected/.test(manifestFixture)
+    && /different published executable bytes rejected/.test(manifestFixture),
+  "release manifest schema must bind exact installed executable bytes and reject extra, mis-cased, or tampered identity fields"
+);
+
+assert(
   /Auxora-Setup-\$ExpectedVersion-/.test(artifactVerifier)
     && /Installer SHA256 sidecar does not match/.test(artifactVerifier)
     && /ExpectedInformationalVersion/.test(artifactVerifier)
@@ -273,8 +323,10 @@ assert(
 
 assert(
   packageJson.scripts.check.includes("test:iexpress-packaging")
+    && packageJson.scripts.check.includes("test:webview2-runtime")
     && packageJson.scripts.check.includes("check:installer-safety")
     && packageJson.scripts["test:iexpress-packaging"]?.includes("test-iexpress-packaging.ps1")
+    && packageJson.scripts["test:webview2-runtime"]?.includes("test-webview2-runtime-probe.ps1")
     && packageJson.scripts["check:installer-safety"] === "node scripts/check-installer-safety.mjs",
   "npm run check must include installer safety validation"
 );

@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory = $true)][string]$ReleaseAssetsPath,
   [string]$ExpectedTag = "",
   [string]$ExpectedCommitSha = "",
+  [string]$PublishedAppPath = "",
   [switch]$RequireValidSignature
 )
 
@@ -16,8 +17,38 @@ $root = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
 $manifestPath = Join-Path $root "release-manifest.json"
 $manifest = ConvertFrom-JsonPreservingLexicalTypes (Get-Content -LiteralPath $manifestPath -Raw)
 
+function Assert-ExactProperties($value, [string[]]$expectedNames, $label) {
+  if ($null -eq $value -or $value -isnot [pscustomobject]) {
+    throw "$label must be a JSON object."
+  }
+
+  $actualNames = @($value.PSObject.Properties.Name)
+  if ($actualNames.Count -ne $expectedNames.Count) {
+    throw "$label must contain exactly: $($expectedNames -join ', ')."
+  }
+  foreach ($expectedName in $expectedNames) {
+    if ($actualNames -cnotcontains $expectedName) {
+      throw "$label is missing exact property '$expectedName'."
+    }
+  }
+  foreach ($actualName in $actualNames) {
+    if ($expectedNames -cnotcontains $actualName) {
+      throw "$label contains unexpected or mis-cased property '$actualName'."
+    }
+  }
+}
+
+Assert-ExactProperties $manifest @(
+  "schemaVersion", "product", "platform", "channel", "tag", "version", "commitSha",
+  "installer", "installedExecutable", "installNotesFileName", "releaseNotesFileName", "allowedAssets"
+) "Release manifest"
+Assert-ExactProperties $manifest.installer @("fileName", "sha256", "sha256FileName", "signatureStatus") "Release manifest installer"
+Assert-ExactProperties $manifest.installedExecutable @(
+  "fileName", "sha256", "productName", "version", "productVersion", "commitSha"
+) "Release manifest installedExecutable"
+
 $schemaVersionIsInteger = $manifest.schemaVersion -is [int16] -or $manifest.schemaVersion -is [int32] -or $manifest.schemaVersion -is [int64]
-if (-not $schemaVersionIsInteger -or [int64]$manifest.schemaVersion -ne 1 -or $manifest.product -cne "Auxora" -or $manifest.platform -cne "windows-x64" -or $manifest.channel -cne "beta") {
+if (-not $schemaVersionIsInteger -or [int64]$manifest.schemaVersion -ne 2 -or $manifest.product -cne "Auxora" -or $manifest.platform -cne "windows-x64" -or $manifest.channel -cne "beta") {
   throw "Release manifest identity or schema is invalid."
 }
 if ($manifest.tag -cne "v$($manifest.version)") {
@@ -31,6 +62,42 @@ if ($ExpectedTag -and $manifest.tag -cne $ExpectedTag) {
 }
 if ($ExpectedCommitSha -and $manifest.commitSha -cne $ExpectedCommitSha.Trim().ToLowerInvariant()) {
   throw "Release manifest commit SHA does not match the immutable candidate commit."
+}
+
+$installedExecutable = $manifest.installedExecutable
+$installedExecutableName = [string]$installedExecutable.fileName
+$installedExecutableHash = [string]$installedExecutable.sha256
+$installedProductName = [string]$installedExecutable.productName
+$installedVersion = [string]$installedExecutable.version
+$installedProductVersion = [string]$installedExecutable.productVersion
+$installedCommitSha = [string]$installedExecutable.commitSha
+if ($installedExecutableName -cne "XenonEdgeHost.exe" -or
+    $installedExecutableHash -cnotmatch '^[0-9A-F]{64}$' -or
+    $installedProductName -cne "Auxora" -or
+    $installedVersion -cne ([string]$manifest.version) -or
+    $installedCommitSha -cne ([string]$manifest.commitSha)) {
+  throw "Release manifest installed executable identity is invalid."
+}
+$escapedVersion = [regex]::Escape([string]$manifest.version)
+$escapedCommit = [regex]::Escape([string]$manifest.commitSha)
+if ($installedProductVersion -cnotmatch "^$escapedVersion(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\.$escapedCommit$") {
+  throw "Release manifest installed executable ProductVersion is not bound to its version and commit."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($PublishedAppPath)) {
+  $publishedApp = Get-Item -LiteralPath $PublishedAppPath -ErrorAction Stop
+  if ($publishedApp.Name -cne $installedExecutableName) {
+    throw "Published app filename does not match the release manifest installed executable."
+  }
+  $publishedHash = Get-Sha256Hash $publishedApp.FullName
+  if (-not $publishedHash.Equals($installedExecutableHash, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Published app SHA-256 does not match the release manifest installed executable."
+  }
+  $publishedVersionInfo = $publishedApp.VersionInfo
+  if ([string]$publishedVersionInfo.ProductName -cne $installedProductName -or
+      [string]$publishedVersionInfo.ProductVersion -cne $installedProductVersion) {
+    throw "Published app product identity does not match the release manifest installed executable."
+  }
 }
 
 $allowedAssets = @($manifest.allowedAssets | ForEach-Object { [string]$_ })

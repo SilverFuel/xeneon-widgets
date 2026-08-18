@@ -103,35 +103,6 @@ function Stop-RunningHost {
   }
 }
 
-function Get-InstalledWebView2Version {
-  $webViewClientId = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
-  $registryPaths = @(
-    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$webViewClientId",
-    "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$webViewClientId",
-    "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$webViewClientId"
-  )
-
-  foreach ($path in $registryPaths) {
-    $value = (Get-ItemProperty -Path $path -Name "pv" -ErrorAction SilentlyContinue).pv
-    if ($value -and $value -ne "0.0.0.0") {
-      return [string]$value
-    }
-  }
-
-  return $null
-}
-
-function Get-BundledWebView2Runtime($rootPath) {
-  $fixedRuntimeRoot = Join-Path $rootPath "FixedRuntime"
-  if (-not (Test-Path -LiteralPath $fixedRuntimeRoot -PathType Container)) {
-    return $null
-  }
-
-  return Get-ChildItem -LiteralPath $fixedRuntimeRoot -Filter "msedgewebview2.exe" -File -Recurse -ErrorAction SilentlyContinue |
-    Sort-Object FullName |
-    Select-Object -First 1
-}
-
 function Register-UninstallEntry($installPath, $exePath) {
   $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Auxora"
   $version = (Get-Item $exePath).VersionInfo.FileVersion
@@ -281,12 +252,14 @@ $supportUninstall = Join-Path $SourceRoot "uninstall.ps1"
 $supportRemove = Join-Path $SourceRoot "Remove-XenonEdgeHost.ps1"
 $supportSafeMode = Join-Path $SourceRoot "Launch-XenonSafeMode.ps1"
 $supportRepair = Join-Path $SourceRoot "repair.ps1"
+$runtimeProbeScript = Join-Path $SourceRoot "WebView2RuntimeProbe.ps1"
 
-foreach ($requiredPath in @($payloadZip, $supportInstall, $supportUninstall, $supportRemove, $supportSafeMode, $supportRepair)) {
+foreach ($requiredPath in @($payloadZip, $supportInstall, $supportUninstall, $supportRemove, $supportSafeMode, $supportRepair, $runtimeProbeScript)) {
   if (-not (Test-Path $requiredPath)) {
     throw "Missing installer payload file: $requiredPath"
   }
 }
+. $runtimeProbeScript
 
 $InstallRoot = Assert-SafeInstallPath $InstallRoot
 $programsRoot = Get-ProgramsRoot
@@ -348,6 +321,7 @@ try {
   Copy-Item $supportRemove (Join-Path $stagedInstallRoot "Remove-XenonEdgeHost.ps1") -Force
   Copy-Item $supportSafeMode (Join-Path $stagedInstallRoot "Launch-XenonSafeMode.ps1") -Force
   Copy-Item $supportRepair (Join-Path $stagedInstallRoot "repair.ps1") -Force
+  Copy-Item $runtimeProbeScript (Join-Path $stagedInstallRoot "WebView2RuntimeProbe.ps1") -Force
 
   $stagedExePath = Join-Path $stagedInstallRoot "XenonEdgeHost.exe"
   if (-not (Test-Path $stagedExePath)) {
@@ -355,16 +329,12 @@ try {
   }
 
   Write-Step "Checking embedded browser runtime"
-  $bundledWebView2 = Get-BundledWebView2Runtime $stagedInstallRoot
-  $installedWebView2Version = Get-InstalledWebView2Version
-  if (-not $bundledWebView2 -and [string]::IsNullOrWhiteSpace($installedWebView2Version)) {
-    throw "Auxora requires Microsoft Edge WebView2 Runtime. Install the Evergreen WebView2 Runtime from Microsoft, then run setup again. No existing Auxora files were replaced."
+  try {
+    $webView2Runtime = Get-UsableWebView2Runtime $stagedInstallRoot
+  } catch {
+    throw "Auxora requires a usable Microsoft Edge WebView2 Runtime. Install or repair the Evergreen WebView2 Runtime from Microsoft, then run setup again. No existing Auxora files were replaced. Probe failure: $($_.Exception.Message)"
   }
-  if ($bundledWebView2) {
-    Write-Info "Verified bundled WebView2 runtime."
-  } else {
-    Write-Info "Verified installed Evergreen WebView2 Runtime $installedWebView2Version."
-  }
+  Write-Info "Verified $($webView2Runtime.Kind) WebView2 Runtime $($webView2Runtime.Version) with the candidate WebView2 loader."
 
   Write-Step "Stopping running processes"
   Stop-RunningHost

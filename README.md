@@ -24,7 +24,7 @@ The first Auxora upgrade preserves existing XENEON settings and Windows-protecte
 - An x64 PC; this beta does not include ARM64 or 32-bit Windows builds
 - Microsoft Edge WebView2 Evergreen Runtime installed
 
-This beta does not bundle a fixed WebView2 runtime. Setup verifies the installed Evergreen runtime before replacing an existing Auxora installation and stops with an actionable error if it is missing.
+This beta does not bundle a fixed WebView2 runtime. Setup uses its shipped official WebView2 loader API to prove Evergreen is usable before replacing an existing Auxora installation; it does not trust a registry version string alone.
 
 ## Install And Uninstall Without Setup Questions
 
@@ -251,7 +251,7 @@ See `docs/release/WINDOWS-SIGNING.md`.
 Run the clean install smoke helper on a fresh Windows profile or VM:
 
 ```powershell
-powershell -File scripts\test-windows-install.ps1 -InstallerPath app\dist\<installer>.exe -RunInstall -QuietInstall -RunUninstall
+powershell -File scripts\test-windows-install.ps1 -InstallerPath .\release-assets\<installer>.exe -ReleaseAssetsPath .\release-assets -RunInstall -QuietInstall -RunUninstall
 ```
 
 Run the beta readiness gate against one explicitly named installer. This mode requires the candidate's Authenticode status to be exactly `NotSigned`; a signed or invalidly signed file does not satisfy the unsigned-beta gate.
@@ -272,7 +272,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-release-gauntlet
 For a disposable Windows VM or fresh Windows profile, run the destructive install/uninstall smoke:
 
 ```powershell
-powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<installer>.exe -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall
+powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath .\release-assets\<installer>.exe -ReleaseAssetsPath .\release-assets -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall
 ```
 
 For the beta release asset list and wording, see `docs/release/FREE-BETA-RELEASE-NOTES.md` and `docs/release/GITHUB-RELEASE.md`.
