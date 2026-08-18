@@ -37,7 +37,6 @@
     <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
     <PackageReference Include="Polly.Core" Version="8.7.0" />
-    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -62,6 +61,70 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <None Include="$(NuGetPackageRoot)hidsharp\2.6.4\LICENSE.txt" Link="THIRD-PARTY-LICENSES\HidSharp-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)polly.core\8.7.0\LICENSE" Link="THIRD-PARTY-LICENSES\Polly.Core-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.web.webview2\1.0.3179.45\LICENSE.txt" Link="THIRD-PARTY-LICENSES\Microsoft.Web.WebView2-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.web.webview2\1.0.3179.45\NOTICE.txt" Link="THIRD-PARTY-LICENSES\Microsoft.Web.WebView2-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk\1.8.260317003\license.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk.ai\1.8.53\license.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-Component-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk.ml\1.8.2141\license.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-ML-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk\1.8.260317003\NOTICE.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk.ml\1.8.2141\ThirdPartyNotices.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-ML-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64\8.0.26\LICENSE.TXT" Link="THIRD-PARTY-LICENSES\DotNet-Runtime-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64\8.0.26\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-Runtime-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.win32.systemevents\8.0.0\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-8-Libraries-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)system.drawing.common\8.0.0\LICENSE.TXT" Link="THIRD-PARTY-LICENSES\System.Drawing.Common-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)system.drawing.common\8.0.0\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\System.Drawing.Common-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)system.numerics.tensors\9.0.0\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-9-Libraries-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)system.codedom\10.0.2\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-10-Libraries-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
     <EmbeddedResource Include="..\dashboard.html" Link="WebAssets\dashboard.html" LogicalName="WebAssets/dashboard.html" />
     <EmbeddedResource Include="..\hosted-dashboard.html" Link="WebAssets\hosted-dashboard.html" LogicalName="WebAssets/hosted-dashboard.html" />
     <EmbeddedResource Include="..\index.html" Link="WebAssets\index.html" LogicalName="WebAssets/index.html" />

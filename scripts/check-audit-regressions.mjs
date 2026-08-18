@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const files = new Map();
 
@@ -98,6 +99,7 @@ const httpReadResilience = readWorkspaceFile("app/Infrastructure/HttpReadResilie
 const monitorControlService = readWorkspaceFile("app/Services/MonitorControlService.cs");
 const nativeMethods = readWorkspaceFile("app/NativeMethods.txt");
 const thirdPartyNotices = readWorkspaceFile("THIRD-PARTY-NOTICES.md");
+const nugetAssets = readWorkspaceJson("app/obj/project.assets.json");
 const packageReferences = readEvaluatedMsbuildItems("PackageReference");
 const contentItems = readEvaluatedMsbuildItems("Content");
 const embeddedResourceItems = readEvaluatedMsbuildItems("EmbeddedResource");
@@ -286,22 +288,169 @@ assert(
   packageReferences.some(item => item.Identity === "LibreHardwareMonitorLib" && item.Version === "0.9.6"),
   "LibreHardwareMonitorLib must remain pinned to version 0.9.6"
 );
+assert(
+  !packageReferences.some(item => item.Identity === "QRCoder"),
+  "unused QRCoder must not return to the shipped Windows dependency graph"
+);
 assert(Boolean(noticesContentItem), "publish content must source the repository THIRD-PARTY-NOTICES.md file");
 assert(noticesContentItem?.Link === "THIRD-PARTY-NOTICES.md", "third-party notices must publish at the distribution root");
 assert(
   noticesContentItem?.CopyToPublishDirectory === "PreserveNewest",
   "third-party notices must be copied into every publish output"
 );
-assert(/Mozilla Public License 2\.0/.test(thirdPartyNotices), "third-party notices must retain the MPL-2.0 notice");
-assert(/DiskInfoToolkit 1\.1\.2/.test(thirdPartyNotices), "third-party notices must list DiskInfoToolkit 1.1.2");
-assert(/HidSharp 2\.6\.4/.test(thirdPartyNotices), "third-party notices must list HidSharp 2.6.4");
-assert(/RAMSPDToolkit-NDD 1\.4\.2/.test(thirdPartyNotices), "third-party notices must list RAMSPDToolkit-NDD 1.4.2");
-assert(/System\.IO\.Ports 10\.0\.3/.test(thirdPartyNotices), "third-party notices must list System.IO.Ports 10.0.3");
-assert(/System\.Management 10\.0\.2/.test(thirdPartyNotices), "third-party notices must list System.Management 10.0.2");
+
+const expectedWinX64RuntimePackages = new Map([
+  ["BlackSharp.Core", "1.0.7"],
+  ["DiskInfoToolkit", "1.1.2"],
+  ["HidSharp", "2.6.4"],
+  ["Ical.Net", "5.2.3"],
+  ["LibreHardwareMonitorLib", "0.9.6"],
+  ["Microsoft.Web.WebView2", "1.0.3179.45"],
+  ["Microsoft.Win32.SystemEvents", "8.0.0"],
+  ["Microsoft.WindowsAppSDK", "1.8.260317003"],
+  ["Microsoft.WindowsAppSDK.AI", "1.8.53"],
+  ["Microsoft.WindowsAppSDK.Base", "1.8.251216001"],
+  ["Microsoft.WindowsAppSDK.DWrite", "1.8.25122902"],
+  ["Microsoft.WindowsAppSDK.Foundation", "1.8.260222000"],
+  ["Microsoft.WindowsAppSDK.InteractiveExperiences", "1.8.260125001"],
+  ["Microsoft.WindowsAppSDK.ML", "1.8.2141"],
+  ["Microsoft.WindowsAppSDK.Runtime", "1.8.260317003"],
+  ["Microsoft.WindowsAppSDK.Widgets", "1.8.251231004"],
+  ["Microsoft.WindowsAppSDK.WinUI", "1.8.260224000"],
+  ["Mono.Posix.NETStandard", "1.0.0"],
+  ["NodaTime", "3.2.2"],
+  ["Polly.Core", "8.7.0"],
+  ["RAMSPDToolkit-NDD", "1.4.2"],
+  ["System.CodeDom", "10.0.2"],
+  ["System.Drawing.Common", "8.0.0"],
+  ["System.IO.Ports", "10.0.3"],
+  ["System.Management", "10.0.2"],
+  ["System.Numerics.Tensors", "9.0.0"],
+  ["System.Security.Cryptography.ProtectedData", "8.0.0"],
+  ["System.Threading.AccessControl", "10.0.3"]
+]);
+
+const winX64Target = Object.entries(nugetAssets.targets || {})
+  .find(([targetName]) => /\/win-x64$/i.test(targetName));
+assert(Boolean(winX64Target), "NuGet assets must contain a resolved win-x64 target; run dotnet restore before this check");
+
+const hasRuntimeAsset = packageNode => ["runtime", "native", "runtimeTargets", "contentFiles"]
+  .some(groupName => Object.keys(packageNode?.[groupName] || {})
+    .some(assetPath => !/(?:^|\/)_[.]_$/i.test(assetPath)));
+const actualWinX64RuntimePackages = new Map();
+for (const [packageKey, packageNode] of Object.entries(winX64Target?.[1] || {})) {
+  const separator = packageKey.lastIndexOf("/");
+  const packageId = separator >= 0 ? packageKey.slice(0, separator) : packageKey;
+  const packageVersion = separator >= 0 ? packageKey.slice(separator + 1) : "";
+  if (hasRuntimeAsset(packageNode) || /^Microsoft[.]WindowsAppSDK(?:[.]|$)/.test(packageId)) {
+    actualWinX64RuntimePackages.set(packageId, packageVersion);
+  }
+}
+
+const expectedRuntimeRows = [...expectedWinX64RuntimePackages]
+  .map(([id, version]) => `${id}/${version}`)
+  .sort();
+const actualRuntimeRows = [...actualWinX64RuntimePackages]
+  .map(([id, version]) => `${id}/${version}`)
+  .sort();
 assert(
-  /System\.Threading\.AccessControl 10\.0\.3/.test(thirdPartyNotices),
-  "third-party notices must list System.Threading.AccessControl 10.0.3"
+  JSON.stringify(actualRuntimeRows) === JSON.stringify(expectedRuntimeRows),
+  `win-x64 runtime dependency inventory changed; update THIRD-PARTY-NOTICES.md and this guard together. Expected ${expectedRuntimeRows.join(", ")}; resolved ${actualRuntimeRows.join(", ")}`
 );
+
+const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+for (const [packageId, version] of expectedWinX64RuntimePackages) {
+  assert(
+    new RegExp(`^\\| ${escapeRegExp(packageId)} \\| ${escapeRegExp(version)} \\|`, "m").test(thirdPartyNotices),
+    `third-party notices must contain an exact inventory row for ${packageId} ${version}`
+  );
+}
+
+const frameworkDownloads = Object.values(nugetAssets.project?.frameworks || {})
+  .flatMap(framework => framework.downloadDependencies || []);
+const resolvedFrameworkDownload = name => frameworkDownloads.find(item => item.name === name)?.version
+  ?.replace(/^\[/, "")
+  .replace(/\]$/, "")
+  .split(",")[0]
+  .trim();
+const dotNetRuntimeVersion = resolvedFrameworkDownload("Microsoft.NETCore.App.Runtime.win-x64");
+const windowsSdkNetVersion = resolvedFrameworkDownload("Microsoft.Windows.SDK.NET.Ref");
+assert(dotNetRuntimeVersion === "8.0.26", `self-contained .NET runtime changed from noticed version 8.0.26 to ${dotNetRuntimeVersion || "missing"}`);
+assert(windowsSdkNetVersion === "10.0.19041.56", `Windows SDK .NET runtime pack changed from noticed version 10.0.19041.56 to ${windowsSdkNetVersion || "missing"}`);
+assert(
+  /^\| Microsoft [. ]NET Runtime for Windows x64 \| 8[.]0[.]26 \|/m.test(thirdPartyNotices),
+  "third-party notices must inventory the self-contained .NET runtime"
+);
+assert(
+  /^\| Microsoft[.]Windows[.]SDK[.]NET[.]Ref \| 10[.]0[.]19041[.]56 \|/m.test(thirdPartyNotices),
+  "third-party notices must inventory the shipped Windows SDK .NET runtime pack"
+);
+assert(
+  /Mozilla Public License 2[.]0/.test(thirdPartyNotices)
+    && /https:\/\/www[.]mozilla[.]org\/MPL\/2[.]0\//.test(thirdPartyNotices)
+    && /Auxora has not modified files covered by the Mozilla Public License 2[.]0/.test(thirdPartyNotices),
+  "third-party notices must retain the MPL-2.0 terms, source path, and unmodified-source statement"
+);
+assert(
+  /Permission is hereby granted, free of charge/.test(thirdPartyNotices)
+    && /Portions of Noda Time were derived from Joda Time 1[.]6[.]0/.test(thirdPartyNotices),
+  "third-party notices must retain the MIT text and Noda Time attribution"
+);
+assert(
+  /Build and test dependencies not shipped in the Windows app/.test(thirdPartyNotices)
+    && /Microsoft[.]Windows[.]CsWin32/.test(thirdPartyNotices)
+    && /runtime[.][*][.]System[.]IO[.]Ports/.test(thirdPartyNotices)
+    && /Electron and electron-builder are development-only dependencies/.test(thirdPartyNotices),
+  "third-party notices must distinguish build, test, platform, and prototype dependencies from the Windows runtime"
+);
+
+const expectedLegalFiles = [
+  ["THIRD-PARTY-LICENSES/HidSharp-LICENSE.txt", "/hidsharp/2.6.4/license.txt", "B065E07179F06490C96BF946E73F821086B2F29EFDE395F092AEA69A907EAE16"],
+  ["THIRD-PARTY-LICENSES/Polly.Core-LICENSE.txt", "/polly.core/8.7.0/license", "EAE3CCEE9064911010C23FE3D3C9FCA687A6631F8452BFB11B939AFBC89BA5A0"],
+  ["THIRD-PARTY-LICENSES/Microsoft.Web.WebView2-LICENSE.txt", "/microsoft.web.webview2/1.0.3179.45/license.txt", "0AF8F1B807512AAE39C2AC1AA4D0CAE65CABECB6FD554B8439A5162A0D6ECA55"],
+  ["THIRD-PARTY-LICENSES/Microsoft.Web.WebView2-NOTICE.txt", "/microsoft.web.webview2/1.0.3179.45/notice.txt", "106423785C5B7EBA0A8E61D1837F2132E9C828E20AD530F565D981C1DF60DD90"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-LICENSE.txt", "/microsoft.windowsappsdk/1.8.260317003/license.txt", "5B11E6347756E40FE0274BC08C97F89201B94F0D50181A09A00F1F4740840501"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-Component-LICENSE.txt", "/microsoft.windowsappsdk.ai/1.8.53/license.txt", "F9ED00147604BDC48C7E62D127D73245781CE53903CEF9C3863F8A7EF8120CC2"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-ML-LICENSE.txt", "/microsoft.windowsappsdk.ml/1.8.2141/license.txt", "656AAB74C15AA9F9964BCDCC993EB2755CBDB4822D5E0E3BC61D2E281897F758"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-NOTICE.txt", "/microsoft.windowsappsdk/1.8.260317003/notice.txt", "E25393C0D340A1821827B093FA4DBBFCCCD8FEB7BF769E7FA773E3955CD5314B"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-ML-NOTICE.txt", "/microsoft.windowsappsdk.ml/1.8.2141/thirdpartynotices.txt", "E00F828E0A33DE591A355AE6606D2625F5758DA7D2C844DB7821C9DD3E3647B6"],
+  ["THIRD-PARTY-LICENSES/DotNet-Runtime-LICENSE.txt", "/microsoft.netcore.app.runtime.win-x64/8.0.26/license.txt", "D7A68596AB69B06F51CA278A6545148E4269A9381C26D597C13DF5D88E08CF5B"],
+  ["THIRD-PARTY-LICENSES/DotNet-Runtime-NOTICE.txt", "/microsoft.netcore.app.runtime.win-x64/8.0.26/third-party-notices.txt", "B60B2912DA28EAA6518593C9E2EFB5334EE062D3C42E80D8FDFA806B3DC52977"],
+  ["THIRD-PARTY-LICENSES/DotNet-8-Libraries-NOTICE.txt", "/microsoft.win32.systemevents/8.0.0/third-party-notices.txt", "19C19DCAC9F3EE6302CFBC6745BB8E79F08EFC4C933EB8DC5509BF14B88347EC"],
+  ["THIRD-PARTY-LICENSES/System.Drawing.Common-LICENSE.txt", "/system.drawing.common/8.0.0/license.txt", "A89886665765362EB77E0F8E26602C924520041D1711B2EEDC136434FE4D01AB"],
+  ["THIRD-PARTY-LICENSES/System.Drawing.Common-NOTICE.txt", "/system.drawing.common/8.0.0/third-party-notices.txt", "093E2589A27ED137E519B9856E425EFA7982221A7B3D9E7CEA3B5153F711905E"],
+  ["THIRD-PARTY-LICENSES/DotNet-9-Libraries-NOTICE.txt", "/system.numerics.tensors/9.0.0/third-party-notices.txt", "40686C6447A7D5B5D3693068E4571B5F483D7ED335AEEE773EF662440DE4C5D5"],
+  ["THIRD-PARTY-LICENSES/DotNet-10-Libraries-NOTICE.txt", "/system.codedom/10.0.2/third-party-notices.txt", "6D15E10A101C6BFFF2AB4429ED061BF76C456FC4B23AD6B03E0D0F8377148A21"]
+];
+
+const legalFileItems = [...appCsproj.matchAll(
+  /<None\s+Include="([^"]+)"\s+Link="(THIRD-PARTY-LICENSES\\[^"]+)">([\s\S]*?)<\/None>/g
+)].map(match => ({
+  Identity: match[1],
+  Link: match[2],
+  CopyToOutputDirectory: match[3].match(/<CopyToOutputDirectory>([^<]+)<\/CopyToOutputDirectory>/)?.[1]?.trim(),
+  CopyToPublishDirectory: match[3].match(/<CopyToPublishDirectory>([^<]+)<\/CopyToPublishDirectory>/)?.[1]?.trim()
+}));
+const nugetPackageRoot = Object.keys(nugetAssets.packageFolders || {})[0];
+assert(Boolean(nugetPackageRoot), "NuGet assets must identify the restored global package folder");
+
+for (const [link, sourceSuffix, expectedSha256] of expectedLegalFiles) {
+  const legalFileItem = legalFileItems.find(item => String(item.Link || "").replaceAll("\\", "/") === link);
+  assert(Boolean(legalFileItem), `${link} must be included as a non-resource file from its resolved NuGet package`);
+  assert(legalFileItem?.CopyToOutputDirectory === "PreserveNewest", `${link} must be copied into build output`);
+  assert(legalFileItem?.CopyToPublishDirectory === "PreserveNewest", `${link} must be copied into publish output`);
+  const packageRelativePath = String(legalFileItem?.Identity || "")
+    .replace(/^\$\(NuGetPackageRoot\)[\\/]?/, "");
+  const sourcePath = normalize(resolve(nugetPackageRoot, packageRelativePath));
+  assert(
+    sourcePath.replaceAll("\\", "/").toLowerCase().endsWith(sourceSuffix),
+    `${link} must come from ${sourceSuffix}`
+  );
+  assert(existsSync(sourcePath), `${link} source file is missing; restore the pinned NuGet packages`);
+  const actualSha256 = createHash("sha256").update(readFileSync(sourcePath)).digest("hex").toUpperCase();
+  assert(actualSha256 === expectedSha256, `${link} changed; re-verify the authoritative package license text before shipping`);
+  assert(thirdPartyNotices.includes(`\`${link}\``), `${link} must be mapped in THIRD-PARTY-NOTICES.md`);
+}
 
 assert(
   /NormalizeRemoteHttpUrl\(.*Calendar ICS URL/.test(configController)
