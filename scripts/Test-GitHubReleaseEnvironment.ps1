@@ -1,7 +1,8 @@
 param(
   [string]$Repository = $env:GITHUB_REPOSITORY,
   [string]$EnvironmentName = "beta-publication",
-  [string]$EnvironmentJsonPath
+  [string]$EnvironmentJsonPath,
+  [string]$SoloOwnerLogin
 )
 
 $ErrorActionPreference = "Stop"
@@ -50,6 +51,9 @@ if ($environment -isnot [System.Management.Automation.PSCustomObject]) {
 if ($environment.name -isnot [string] -or [string]$environment.name -cne $EnvironmentName) {
   throw "GitHub environment response does not identify exact environment '$EnvironmentName'."
 }
+if ($environment.can_admins_bypass -isnot [bool] -or $environment.can_admins_bypass -ne $false) {
+  throw "GitHub environment '$EnvironmentName' must disable administrator bypass."
+}
 
 $rules = @($environment.protection_rules)
 $reviewerRules = @($rules | Where-Object { $_ -is [System.Management.Automation.PSCustomObject] -and [string]$_.type -ceq "required_reviewers" })
@@ -58,8 +62,16 @@ if ($reviewerRules.Count -ne 1) {
 }
 
 $reviewerRule = $reviewerRules[0]
-if ($reviewerRule.prevent_self_review -isnot [bool] -or $reviewerRule.prevent_self_review -ne $true) {
-  throw "GitHub environment '$EnvironmentName' must prevent self-review."
+if ($reviewerRule.prevent_self_review -isnot [bool]) {
+  throw "GitHub environment '$EnvironmentName' prevent_self_review must be a JSON Boolean."
+}
+$soloOwnerMode = -not [string]::IsNullOrWhiteSpace($SoloOwnerLogin)
+if ($soloOwnerMode) {
+  if ($reviewerRule.prevent_self_review -ne $false) {
+    throw "GitHub environment '$EnvironmentName' must allow self-review for explicitly selected solo-owner reviewer '$SoloOwnerLogin'."
+  }
+} elseif ($reviewerRule.prevent_self_review -ne $true) {
+  throw "GitHub environment '$EnvironmentName' must prevent self-review unless an explicit solo owner is supplied."
 }
 
 $reviewers = @($reviewerRule.reviewers)
@@ -72,6 +84,19 @@ foreach ($reviewer in $reviewers) {
       $reviewer.reviewer -isnot [System.Management.Automation.PSCustomObject]) {
     throw "GitHub environment '$EnvironmentName' contains an invalid required reviewer."
   }
+}
+
+if ($soloOwnerMode) {
+  $ownerReviewers = @($reviewers | Where-Object {
+    $_.type -ceq "User" -and
+    $_.reviewer.login -is [string] -and
+    ([string]$_.reviewer.login).Equals($SoloOwnerLogin, [StringComparison]::OrdinalIgnoreCase)
+  })
+  if ($ownerReviewers.Count -ne 1) {
+    throw "GitHub environment '$EnvironmentName' must name solo owner '$SoloOwnerLogin' exactly once as a required User reviewer."
+  }
+  Write-Host "GitHub environment '$EnvironmentName' requires an explicit approval from solo owner '$SoloOwnerLogin' and disables administrator bypass."
+  return
 }
 
 Write-Host "GitHub environment '$EnvironmentName' has required-reviewer protection with self-review disabled for $($reviewers.Count) reviewer(s)."
