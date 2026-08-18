@@ -67,7 +67,7 @@ public sealed class DisplayManagerPolicyTests
     }
 
     [Test]
-    public void BuildDiagnostics_XeneonEdgeAtWrongMode_RequiresNativeModeRepair()
+    public void BuildDiagnostics_XeneonEdgeAtAnyWindowsMode_RemainsReady()
     {
         var xeneon = CreateDisplay("CRXED00", isPrimary: false, baseScore: 2000) with
         {
@@ -82,12 +82,12 @@ public sealed class DisplayManagerPolicyTests
 
         var diagnostics = DisplayManager.BuildDiagnostics([xeneon]);
 
-        Assert.That(diagnostics.Status, Is.EqualTo("display-mode-mismatch"));
-        Assert.That(ConfigController.IsCompanionDisplayReady(diagnostics), Is.False);
-        Assert.That(diagnostics.Message, Does.Contain("1280x1024"));
-        Assert.That(diagnostics.Message, Does.Contain("2560x720 at 60 Hz"));
-        Assert.That(diagnostics.RepairActions, Has.Some.Contains("Display resolution"));
-        Assert.That(diagnostics.Displays.Single().RequiresNativeModeCorrection, Is.True);
+        Assert.That(diagnostics.Status, Is.EqualTo("ready"));
+        Assert.That(ConfigController.IsCompanionDisplayReady(diagnostics), Is.True);
+        Assert.That(diagnostics.Message, Does.Not.Contain("1280x1024"));
+        Assert.That(diagnostics.Message, Does.Not.Contain("2560x720"));
+        Assert.That(diagnostics.RepairActions, Has.None.Contains("Display resolution"));
+        Assert.That(diagnostics.Displays.Single().RequiresNativeModeCorrection, Is.False);
         Assert.That(diagnostics.SelectedDisplayName, Does.StartWith("XENEON EDGE"));
         Assert.That(diagnostics.Displays.Single().FriendlyName, Is.EqualTo("XENEON EDGE"));
         Assert.That(diagnostics.Displays.Single().Label, Does.StartWith("XENEON EDGE"));
@@ -124,7 +124,48 @@ public sealed class DisplayManagerPolicyTests
 
         Assert.That(diagnostics.Status, Is.EqualTo("ready"));
         Assert.That(ConfigController.IsCompanionDisplayReady(diagnostics), Is.True);
-        Assert.That(diagnostics.Displays.Single().RequiresNativeModeCorrection, Is.False);
+    }
+
+    [Test]
+    public void StableId_DoesNotChangeWhenWindowsChangesResolution()
+    {
+        var original = CreateDisplay("GENERIC", isPrimary: false, baseScore: 2000) with
+        {
+            DeviceId = "",
+            ModeWidth = 2560,
+            ModeHeight = 720
+        };
+        var resized = original with
+        {
+            Bounds = new Rectangle(1920, 0, 1280, 1024),
+            ModeWidth = 1280,
+            ModeHeight = 1024
+        };
+
+        Assert.That(resized.StableId, Is.EqualTo(original.StableId));
+    }
+
+    [Test]
+    public void BuildDiagnostics_LegacyModeDependentIdStillSelectsSameDisplayAfterResolutionChange()
+    {
+        var other = CreateDisplay("OTHER", isPrimary: false, baseScore: 2000) with
+        {
+            DeviceId = ""
+        };
+        var selected = CreateDisplay("SELECTED", isPrimary: false, baseScore: 1500) with
+        {
+            DeviceId = "",
+            Bounds = new Rectangle(1920, 0, 1280, 1024),
+            ModeWidth = 1280,
+            ModeHeight = 1024
+        };
+        var legacyId = $"{selected.DeviceName}|{selected.FriendlyName}|2560x720";
+
+        var diagnostics = DisplayManager.BuildDiagnostics([other, selected], legacyId);
+
+        Assert.That(diagnostics.Status, Is.EqualTo("ready"));
+        Assert.That(diagnostics.SelectedDisplayId, Is.EqualTo(selected.StableId));
+        Assert.That(diagnostics.Displays.Single(display => display.Preferred).Id, Is.EqualTo(selected.StableId));
     }
 
     [Test]

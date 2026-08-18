@@ -57,11 +57,8 @@ public static class DisplayManager
             : companions.Count == 1
                 ? companions[0]
                 : null;
-        var selectedModeMismatch = selected?.RequiresNativeModeCorrection == true;
         var status = companions.Count == 0
             ? "waiting-for-companion-display"
-            : selectedModeMismatch
-                ? "display-mode-mismatch"
             : selected is not null
                 ? "ready"
                 : "selection-required";
@@ -81,14 +78,12 @@ public static class DisplayManager
                 ? active.Count == 0
                     ? "Windows did not expose any active displays. Auxora is waiting for a companion display."
                     : "Auxora is waiting for an active companion display and will not open on the Windows primary display."
-                : selectedModeMismatch
-                    ? $"The XENEON EDGE is using {selected!.ModeWidth}x{selected.ModeHeight}. Set it to 2560x720 at 60 Hz so Auxora can use the full companion surface."
                 : preferredAvailable
                     ? "Auxora found your saved companion-display preference."
                     : companions.Count == 1
                         ? "One active companion display is available."
                         : "Choose which companion display should host Auxora.",
-            RepairActions = BuildDisplayRepairActions(companions, preferredAvailable, selectedModeMismatch),
+            RepairActions = BuildDisplayRepairActions(companions, preferredAvailable),
             Displays = companions.Select(DisplayDiagnosticsItem.FromTarget).ToList()
         };
     }
@@ -356,8 +351,7 @@ public static class DisplayManager
 
     private static List<string> BuildDisplayRepairActions(
         IReadOnlyCollection<DisplayTarget> displays,
-        bool preferredAvailable,
-        bool selectedModeMismatch)
+        bool preferredAvailable)
     {
         if (displays.Count == 0)
         {
@@ -376,16 +370,6 @@ public static class DisplayManager
                 "Choose the touch display you want Auxora to use.",
                 "Confirm its orientation and Windows scaling before pinning it.",
                 "Use Diagnostics to change the preferred display later."
-            ];
-        }
-
-        if (selectedModeMismatch)
-        {
-            return
-            [
-                "Open Windows Settings > System > Display and select the XENEON EDGE.",
-                "Set Display resolution to 2560 x 720 and refresh rate to 60 Hz.",
-                "Auxora will re-anchor automatically after Windows applies the native mode."
             ];
         }
 
@@ -553,8 +537,6 @@ public sealed record DisplayTarget(
     List<string> MatchReasons,
     bool IsPreferred = false)
 {
-    public bool RequiresNativeModeCorrection => ContainsXeneonName && !MatchesEdgeResolution;
-
     public string DisplayName => DeviceId.Contains("CRXED00", StringComparison.OrdinalIgnoreCase)
         && (string.IsNullOrWhiteSpace(FriendlyName)
             || FriendlyName.Contains("Generic PnP", StringComparison.OrdinalIgnoreCase))
@@ -565,7 +547,7 @@ public sealed record DisplayTarget(
         ? $"{DeviceName} ({Bounds.Width}x{Bounds.Height})"
         : $"{DisplayName} ({Bounds.Width}x{Bounds.Height})";
 
-    public string StableId => BuildStableDisplayId(DeviceName, DeviceId, FriendlyName, ModeWidth, ModeHeight);
+    public string StableId => BuildStableDisplayId(DeviceName, DeviceId, FriendlyName);
 
     public DisplayTarget WithPreference(string? preferredDisplayId)
     {
@@ -590,17 +572,46 @@ public sealed record DisplayTarget(
         var preferred = preferredDisplayId.Trim();
         return string.Equals(preferred, StableId, StringComparison.OrdinalIgnoreCase)
             || string.Equals(preferred, DeviceName, StringComparison.OrdinalIgnoreCase)
-            || (!string.IsNullOrWhiteSpace(DeviceId) && string.Equals(preferred, DeviceId, StringComparison.OrdinalIgnoreCase));
+            || (!string.IsNullOrWhiteSpace(DeviceId) && string.Equals(preferred, DeviceId, StringComparison.OrdinalIgnoreCase))
+            || MatchesLegacyModeDependentId(preferred);
     }
 
-    private static string BuildStableDisplayId(string deviceName, string deviceId, string friendlyName, int width, int height)
+    private bool MatchesLegacyModeDependentId(string preferredDisplayId)
+    {
+        if (!string.IsNullOrWhiteSpace(DeviceId))
+        {
+            return false;
+        }
+
+        var modeSeparator = preferredDisplayId.LastIndexOf('|');
+        if (modeSeparator <= 0 || modeSeparator >= preferredDisplayId.Length - 1)
+        {
+            return false;
+        }
+
+        var identity = preferredDisplayId[..modeSeparator].Trim().Trim('|');
+        var mode = preferredDisplayId[(modeSeparator + 1)..].Trim();
+        var dimensionSeparator = mode.IndexOf('x', StringComparison.OrdinalIgnoreCase);
+        if (dimensionSeparator <= 0 || dimensionSeparator >= mode.Length - 1
+            || !int.TryParse(mode[..dimensionSeparator], out var width)
+            || !int.TryParse(mode[(dimensionSeparator + 1)..], out var height)
+            || width <= 0
+            || height <= 0)
+        {
+            return false;
+        }
+
+        return string.Equals(identity, StableId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildStableDisplayId(string deviceName, string deviceId, string friendlyName)
     {
         var source = string.IsNullOrWhiteSpace(deviceId)
-            ? $"{deviceName}|{friendlyName}|{width}x{height}"
+            ? $"{deviceName}|{friendlyName}"
             : deviceId;
-        var normalized = source.Trim();
+        var normalized = source.Trim().Trim('|');
         return string.IsNullOrWhiteSpace(normalized)
-            ? $"{width}x{height}"
+            ? "unknown-display"
             : normalized;
     }
 }
@@ -696,7 +707,7 @@ public sealed class DisplayDiagnosticsItem
             ContainsXeneonName = target.ContainsXeneonName,
             MatchesEdgeResolution = target.MatchesEdgeResolution,
             MatchesEdgeAspect = target.MatchesEdgeAspect,
-            RequiresNativeModeCorrection = target.RequiresNativeModeCorrection,
+            RequiresNativeModeCorrection = false,
             Reasons = target.MatchReasons.ToList()
         };
     }
