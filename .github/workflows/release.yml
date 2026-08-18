@@ -132,9 +132,31 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  verify-publication-environment:
+    if: github.event_name == 'workflow_dispatch'
+    name: Verify protected publication environment
+    runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out publication guard
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Require independent publication approval
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          & ./scripts/Test-GitHubReleaseEnvironment.ps1 `
+            -Repository $env:GITHUB_REPOSITORY `
+            -EnvironmentName "beta-publication"
+
   publish-tested-candidate:
     if: github.event_name == 'workflow_dispatch'
     name: Publish receipt-bound Windows beta
+    needs: verify-publication-environment
     runs-on: windows-latest
     environment: beta-publication
     permissions:
@@ -270,6 +292,9 @@ jobs:
             (Join-Path $root ([string]$manifest.releaseNotesFileName)),
             (Join-Path $root "release-manifest.json")
           )
+          & ./scripts/Test-GitHubReleaseEnvironment.ps1 `
+            -Repository $env:GITHUB_REPOSITORY `
+            -EnvironmentName "beta-publication"
           gh release create $env:RELEASE_TAG @assets `
             --repo $env:GITHUB_REPOSITORY `
             --verify-tag `

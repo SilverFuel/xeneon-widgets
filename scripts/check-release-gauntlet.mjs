@@ -15,6 +15,8 @@ const releaseVersionMode = readWorkspaceFile("scripts/lib/ReleaseVersionMode.ps1
 const releaseVersionModeFixtures = readWorkspaceFile("scripts/test-release-version-mode.ps1");
 const buildRelease = readWorkspaceFile("scripts/build-release.ps1");
 const jsonHelper = readWorkspaceFile("scripts/lib/Json.ps1");
+const releaseEnvironment = readWorkspaceFile("scripts/Test-GitHubReleaseEnvironment.ps1");
+const releaseEnvironmentFixtures = readWorkspaceFile("scripts/test-github-release-environment.ps1");
 const readme = readWorkspaceFile("README.md");
 const freeBetaNotes = readWorkspaceFile("docs/release/FREE-BETA-RELEASE-NOTES.md");
 const installNotes = readWorkspaceFile("docs/release/WINDOWS-INSTALL-UNINSTALL.md");
@@ -22,6 +24,8 @@ const publicReleaseChecklist = readWorkspaceFile("docs/release/PUBLIC-RELEASE-CH
 const githubReleaseGuide = readWorkspaceFile("docs/release/GITHUB-RELEASE.md");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 const pwshRunScripts = collectPwshRunScripts(releaseWorkflow);
+const finalEnvironmentCheckIndex = releaseWorkflow.lastIndexOf("Test-GitHubReleaseEnvironment.ps1");
+const releaseCreateIndex = releaseWorkflow.indexOf("gh release create");
 
 function readWorkspaceFile(relativePath) {
   const filePath = resolve(process.cwd(), relativePath);
@@ -148,6 +152,12 @@ assert(
     && /verificationStatus/.test(releaseService)
     && /trusted = false/.test(releaseService)
     && /Build immutable Windows candidate/.test(releaseWorkflow)
+    && /verify-publication-environment:[\s\S]+Verify protected publication environment/.test(releaseWorkflow)
+    && /publish-tested-candidate:[\s\S]+needs:\s*verify-publication-environment/.test(releaseWorkflow)
+    && (releaseWorkflow.match(/Test-GitHubReleaseEnvironment\.ps1/g) ?? []).length === 2
+    && finalEnvironmentCheckIndex > 0
+    && releaseCreateIndex > finalEnvironmentCheckIndex
+    && releaseWorkflow.slice(finalEnvironmentCheckIndex, releaseCreateIndex).includes('EnvironmentName "beta-publication"')
     && /Publish receipt-bound Windows beta/.test(releaseWorkflow)
     && /Release .* already exists.*Published bytes are immutable/.test(releaseWorkflow)
     && /New-ReleaseManifest\.ps1/.test(releaseWorkflow)
@@ -190,6 +200,11 @@ assert(
     && /taskbarHidden/.test(displayReceipt)
     && /testedScalingPercent/.test(displayReceipt)
     && /installerSha256/.test(displayReceipt)
+    && /required_reviewers/.test(releaseEnvironment)
+    && /prevent_self_review\s+-isnot\s+\[bool\]/.test(releaseEnvironment)
+    && /between one and six required reviewers/.test(releaseEnvironment)
+    && /missing reviewer rule rejected/.test(releaseEnvironmentFixtures)
+    && /self-review allowed rejected/.test(releaseEnvironmentFixtures)
     && /hashStatus/.test(productWidget)
     && /signatureStatus/.test(productWidget)
     && /Direct download stays hidden until a newer artifact is verified/.test(productWidget)
@@ -208,7 +223,9 @@ assert(
     && /ConvertFrom-JsonPreservingLexicalTypes/.test(releaseManifest)
     && ["test:release-manifest", "test:frigate-receipt", "test:display-receipt"].every((name) => (
       /powershell/i.test(packageJson.scripts[name]) && /pwsh/i.test(packageJson.scripts[name])
-    )),
+    ))
+    && /powershell/i.test(packageJson.scripts["test:release-environment"])
+    && /pwsh/i.test(packageJson.scripts["test:release-environment"]),
   "manifest and receipt gates must preserve JSON token types and run fixtures under Windows PowerShell and PowerShell 7"
 );
 
