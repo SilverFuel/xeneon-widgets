@@ -2,6 +2,12 @@
 
 Auxora 0.3.0-beta.1 is the adaptive Windows touch-display beta that succeeds XENEON Edge Host.
 
+## System Requirements
+
+- 64-bit Windows 10 version 1809 (build 17763) or newer, including Windows 11
+- An x64 PC; this beta does not include ARM64 or 32-bit Windows builds
+- Microsoft Edge WebView2 Evergreen Runtime installed; this beta does not bundle a fixed runtime
+
 ## Downloads
 
 Use the Windows installer asset and matching SHA256 checksum:
@@ -52,4 +58,5 @@ The 64-character result must exactly match the manifest's SHA-256 value and the 
 - Publication is blocked until this exact manifest-bound installer passes the schema-3 disposable-VM lifecycle, including an injected failed-upgrade rollback, plus the physical Frigate/camera and physical companion-display qualification gates.
 - macOS packaging exists as a beta scaffold and needs real Mac testing before public promotion.
 - Update checks can see GitHub Releases, but there is no silent auto-updater yet.
+- The Updates panel opens the official Releases page for newer beta versions. Direct installer links remain hidden because Auxora does not download and verify release bytes itself.
 - Support is community/beta level through GitHub, not a paid support desk.

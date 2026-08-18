@@ -160,10 +160,13 @@ try {
           $customerDoc.Value -match "(?i)do not run the installer" -and
           $customerDoc.Value -match "(?i)unsigned" -and
           $customerDoc.Value -match "(?i)never disable SmartScreen, Smart App Control, antivirus, or organization policy" -and
-          $customerDoc.Value -match "(?i)automatic startup disabled") {
-        Add-Pass "$($customerDoc.Key) preserves unsigned-beta checksum and Windows-security guidance"
+          $customerDoc.Value -match "(?i)automatic startup disabled" -and
+          $customerDoc.Value -match "(?i)Windows 10 version 1809" -and
+          $customerDoc.Value -match "(?i)x64" -and
+          $customerDoc.Value -match "(?i)WebView2 Evergreen Runtime") {
+        Add-Pass "$($customerDoc.Key) preserves unsigned-beta safety and Windows system requirements"
       } else {
-        Add-Failure "$($customerDoc.Key) must include Get-FileHash SHA256 verification, a mismatch stop rule, exact unsigned wording, no security bypass, and disabled automatic startup."
+        Add-Failure "$($customerDoc.Key) must include checksum verification, a mismatch stop rule, exact unsigned wording, no security bypass, disabled automatic startup, and Windows 10 1809/x64/WebView2 requirements."
       }
     }
   }

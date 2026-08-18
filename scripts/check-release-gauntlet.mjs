@@ -14,9 +14,12 @@ const freeBetaPreparation = readWorkspaceFile("scripts/prepare-free-beta-release
 const releaseVersionMode = readWorkspaceFile("scripts/lib/ReleaseVersionMode.ps1");
 const releaseVersionModeFixtures = readWorkspaceFile("scripts/test-release-version-mode.ps1");
 const buildRelease = readWorkspaceFile("scripts/build-release.ps1");
+const jsonHelper = readWorkspaceFile("scripts/lib/Json.ps1");
 const readme = readWorkspaceFile("README.md");
 const freeBetaNotes = readWorkspaceFile("docs/release/FREE-BETA-RELEASE-NOTES.md");
 const installNotes = readWorkspaceFile("docs/release/WINDOWS-INSTALL-UNINSTALL.md");
+const publicReleaseChecklist = readWorkspaceFile("docs/release/PUBLIC-RELEASE-CHECKLIST.md");
+const githubReleaseGuide = readWorkspaceFile("docs/release/GITHUB-RELEASE.md");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 const pwshRunScripts = collectPwshRunScripts(releaseWorkflow);
 
@@ -164,23 +167,49 @@ assert(
     && !/macos-latest|macOS package|release edit|-X DELETE/.test(releaseWorkflow)
     && /exactly five unique public assets/.test(releaseManifest)
     && /installerSha256/.test(lifecycleReceipt)
-    && /schemaVersion -ne 3/.test(lifecycleReceipt)
+    && /ConvertFrom-JsonPreservingLexicalTypes/.test(lifecycleReceipt)
+    && /Assert-ExactSchemaVersion/.test(lifecycleReceipt)
+    && /-isnot \[bool\]/.test(lifecycleReceipt)
+    && /ISO-8601 UTC timestamp/.test(lifecycleReceipt)
+    && /AddMinutes\(5\)/.test(lifecycleReceipt)
+    && /AddDays\(-30\)/.test(lifecycleReceipt)
     && /rollbackAfterInjectedFailure/.test(lifecycleReceipt)
     && /must contain exactly the schema-3 check names and no legacy or unknown entries/.test(lifecycleReceipt)
     && /staysClosedAfterInstall/.test(lifecycleReceipt)
     && /noAutoStartAfterReboot/.test(lifecycleReceipt)
     && /physicalFrigateServer/.test(frigateReceipt)
+    && /ConvertFrom-JsonPreservingLexicalTypes/.test(frigateReceipt)
+    && /Assert-ExactObjectShape/.test(frigateReceipt)
     && /realCamera/.test(frigateReceipt)
     && /windowsTrustedTls/.test(frigateReceipt)
     && /installerSha256/.test(frigateReceipt)
     && /physicalCompanionDisplay/.test(displayReceipt)
+    && /ConvertFrom-JsonPreservingLexicalTypes/.test(displayReceipt)
+    && /Assert-ExactObjectShape/.test(displayReceipt)
     && /noPrimaryIntersection/.test(displayReceipt)
     && /taskbarHidden/.test(displayReceipt)
     && /testedScalingPercent/.test(displayReceipt)
     && /installerSha256/.test(displayReceipt)
     && /hashStatus/.test(productWidget)
-    && /signatureStatus/.test(productWidget),
+    && /signatureStatus/.test(productWidget)
+    && /Direct download stays hidden until a newer artifact is verified/.test(productWidget)
+    && /Open releases/.test(productWidget)
+    && /open the official Releases page for a newer beta/.test(publicReleaseChecklist)
+    && /keep direct installer links hidden/.test(publicReleaseChecklist)
+    && /open its official Releases page/.test(githubReleaseGuide)
+    && /keeps direct installer links hidden/.test(githubReleaseGuide),
   "release flow must expose available trust evidence without claiming verification and publish only immutable receipt-bound Windows assets"
+);
+
+assert(
+  /DateKind/.test(jsonHelper)
+    && /System\.Web\.Script\.Serialization\.JavaScriptSerializer/.test(jsonHelper)
+    && /ConvertTo-JsonObjectPreservingLexicalTypes/.test(jsonHelper)
+    && /ConvertFrom-JsonPreservingLexicalTypes/.test(releaseManifest)
+    && ["test:release-manifest", "test:frigate-receipt", "test:display-receipt"].every((name) => (
+      /powershell/i.test(packageJson.scripts[name]) && /pwsh/i.test(packageJson.scripts[name])
+    )),
+  "manifest and receipt gates must preserve JSON token types and run fixtures under Windows PowerShell and PowerShell 7"
 );
 
 assert(
@@ -190,8 +219,11 @@ assert(
       && /unsigned/i.test(text)
       && /Never disable SmartScreen, Smart App Control, antivirus, or organization policy/.test(text)
       && /automatic startup disabled/.test(text)
+      && /Windows 10 version 1809/i.test(text)
+      && /x64/i.test(text)
+      && /WebView2 Evergreen Runtime/i.test(text)
   )),
-  "unsigned beta customer docs must explain checksum verification, stop on mismatch, preserve Windows security, and keep automatic startup disabled"
+  "unsigned beta customer docs must explain checksum verification, stop on mismatch, preserve Windows security, keep startup disabled, and state Windows/x64/WebView2 requirements"
 );
 
 console.log("checked release gauntlet argument validation");

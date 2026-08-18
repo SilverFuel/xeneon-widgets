@@ -10,12 +10,14 @@ if ($PSVersionTable.PSEdition -eq "Desktop") {
   Import-Module (Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1") -Force
 }
 . (Join-Path $PSScriptRoot "lib\Hashing.ps1")
+. (Join-Path $PSScriptRoot "lib\Json.ps1")
 
 $root = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
 $manifestPath = Join-Path $root "release-manifest.json"
-$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+$manifest = ConvertFrom-JsonPreservingLexicalTypes (Get-Content -LiteralPath $manifestPath -Raw)
 
-if ($manifest.schemaVersion -ne 1 -or $manifest.product -cne "Auxora" -or $manifest.platform -cne "windows-x64" -or $manifest.channel -cne "beta") {
+$schemaVersionIsInteger = $manifest.schemaVersion -is [int16] -or $manifest.schemaVersion -is [int32] -or $manifest.schemaVersion -is [int64]
+if (-not $schemaVersionIsInteger -or [int64]$manifest.schemaVersion -ne 1 -or $manifest.product -cne "Auxora" -or $manifest.platform -cne "windows-x64" -or $manifest.channel -cne "beta") {
   throw "Release manifest identity or schema is invalid."
 }
 if ($manifest.tag -cne "v$($manifest.version)") {

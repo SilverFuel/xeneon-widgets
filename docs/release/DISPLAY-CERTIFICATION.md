@@ -28,6 +28,16 @@ Also verify all of these exact-candidate behaviors:
 
 Record only privacy-safe screenshot identifiers. Do not put local paths, URLs, serial numbers, EDID/device-instance data, credentials, or other private device data in the receipt.
 
+The schema-1 receipt is intentionally strict and fails closed:
+
+- `schemaVersion` is the JSON integer `1`, not `"1"`, `1.0`, or `true`.
+- The receipt root plus `app`, `environment`, `checks`, and `evidence` must exactly match the property shapes shown in the template, with no missing, extra, or differently-cased fields. Required text values are non-empty JSON strings.
+- `physicalWindowsMachine`, `physicalCompanionDisplay`, `multipleActiveDisplays`, `physicalTouch`, and every required check are the JSON Boolean `true`, not strings or numbers.
+- `checks` contains exactly the check names enforced by the verifier, with no missing, extra, or differently-cased names.
+- `companionWidth` and `companionHeight` are positive JSON integers. `testedScalingPercent` is a JSON array containing exactly the integer values `100`, `125`, `150`, `175`, and `200`, once each, in any order.
+- `screenshotReferences` is a non-empty JSON array of privacy-safe identifier strings.
+- `completedAt` is an ISO-8601 UTC string ending in `Z` or `+00:00`. It must be no more than five minutes in the future and no older than 30 days when verified.
+
 Verify the completed schema-1 receipt against the exact release asset directory:
 
 ```powershell

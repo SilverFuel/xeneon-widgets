@@ -23,7 +23,7 @@ Never put a username, password, bearer token, cookie, authorization header, or o
 6. Expire or revoke the current Frigate session. Confirm Auxora performs one successful reauthentication and resumes without sending unauthenticated event/snapshot requests.
 7. Disconnect Frigate or the target LAN. Confirm Auxora reports a retryable disconnected/needs-attention state without clearing saved settings or showing stale data as live.
 8. Restore connectivity. Confirm save-and-test or normal refresh returns health to **Ready** and new events/snapshots render again.
-9. Complete the schema-1 receipt below using observations from this run, then verify it against the exact release asset directory.
+9. Complete the schema-1 receipt below using observations from this run, then verify it against the exact release asset directory. Record both timestamps in ISO-8601 UTC (`Z` or `+00:00`).
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-FrigateQualificationReceipt.ps1 `
@@ -62,7 +62,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-FrigateQualific
     "tokenRenewalObserved": true
   },
   "evidence": {
-    "eventObservedAt": "<ISO-8601 timestamp within 15 minutes of completion>",
+    "eventObservedAt": "<ISO-8601 UTC timestamp within 15 minutes of completion>",
     "snapshotContentType": "image/jpeg",
     "snapshotBytes": 12345
   },
@@ -78,8 +78,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-FrigateQualific
     "reconnectRecovered": true
   },
   "operator": "<operator name>",
-  "completedAt": "<ISO-8601 timestamp>"
+  "completedAt": "<ISO-8601 UTC timestamp>"
 }
 ```
 
-The verifier fails closed if the receipt is not bound to the exact manifest, uses a fixture instead of physical hardware, uses plaintext authentication, contains secret fields, records stale event evidence, or leaves any required check false.
+The verifier accepts only the exact object and property shapes shown above. `schemaVersion` must be the JSON integer `1`; every text value must be a non-empty JSON string; environment, authentication, and check confirmations must be the JSON Boolean `true`; and `snapshotBytes` must be a positive JSON integer. Strings such as `"true"` or `"12345"`, numeric stand-ins such as `1`, fractional numbers, arrays, missing properties, and extra properties are rejected rather than coerced.
+
+Both timestamps must be valid ISO-8601 UTC values ending in `Z` or `+00:00`, and neither may be more than five minutes in the future. `completedAt` must be within the previous 30 days. `eventObservedAt` must be no later than `completedAt` and no more than 15 minutes before it.
+
+The verifier also fails closed if the receipt is not bound to the exact manifest, uses a fixture instead of physical hardware, uses plaintext authentication, contains secret fields, or leaves any required check false.

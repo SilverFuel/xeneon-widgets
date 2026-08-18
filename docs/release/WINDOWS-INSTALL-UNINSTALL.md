@@ -2,6 +2,14 @@
 
 This app should not make normal users answer setup questions.
 
+## System Requirements
+
+- 64-bit Windows 10 version 1809 (build 17763) or newer, including Windows 11
+- An x64 PC; this beta does not include ARM64 or 32-bit Windows builds
+- Microsoft Edge WebView2 Evergreen Runtime installed
+
+This beta does not bundle a fixed WebView2 runtime. Setup checks for the Evergreen runtime before replacing an existing Auxora installation and stops with an actionable error if it is missing.
+
 ## Install
 
 Download the Windows setup EXE from GitHub Releases and run it.
