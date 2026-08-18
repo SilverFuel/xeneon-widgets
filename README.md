@@ -18,6 +18,14 @@ Auxora is independent software. It is not an official product of CORSAIR or any 
 
 The first Auxora upgrade preserves existing XENEON settings and Windows-protected secrets. The legacy internal executable name remains temporarily for rollback compatibility while public shortcuts, storage, UI, and installer assets transition to Auxora.
 
+## Windows System Requirements
+
+- 64-bit Windows 10 version 1809 (build 17763) or newer, including Windows 11
+- An x64 PC; this beta does not include ARM64 or 32-bit Windows builds
+- Microsoft Edge WebView2 Evergreen Runtime installed
+
+This beta does not bundle a fixed WebView2 runtime. Setup verifies the installed Evergreen runtime before replacing an existing Auxora installation and stops with an actionable error if it is missing.
+
 ## Install And Uninstall Without Setup Questions
 
 For beta users, use the Windows setup EXE from GitHub Releases instead of the source code ZIP:

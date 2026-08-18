@@ -52,5 +52,5 @@ Auxora 0.3.0-beta.1 Free Public Beta
 - A schema-3 disposable-VM lifecycle receipt for that exact installer SHA passes `scripts\Test-BetaLifecycleReceipt.ps1`, including the injected failed-upgrade rollback proof.
 - `support.html` and `refund-policy.html` are included in the app package.
 - GitHub Issues and Security Advisories are enabled, or monitored support/security inboxes are published.
-- The in-app Updates panel can see this release and expose installer links.
+- The in-app Updates panel can see this release and open its official Releases page. The unsigned beta keeps direct installer links hidden because Auxora has not downloaded and verified the installer bytes itself.
 - Release notes list known limitations plainly.

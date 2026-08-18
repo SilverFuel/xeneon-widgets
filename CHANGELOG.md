@@ -12,6 +12,7 @@
 - Removed Windows resolution from display readiness and saved-display identity so mode changes do not make Auxora fight Windows or forget the selected companion display.
 - Made the public beta installer stay closed with automatic startup disabled; Repair preserves that safe state.
 - Added checksum-first unsigned-beta instructions and fail-closed release checks for exact executable identity, runtime availability, workflow origin, and physical qualification receipts.
+- Declared the Windows 10 1809/x64/WebView2 requirements and made lifecycle, Frigate, display, and manifest verifiers reject coerced JSON types, wrong-case or extra fields, and stale or future-dated qualification evidence under both Windows PowerShell and PowerShell 7.
 - Updated the Electron helper to 41.10.5 so the release dependency audit no longer includes the high-severity protocol and archive-extraction advisories affecting the previous pin.
 - Made Audio & Media easier to use with a clearer now-playing layout, simpler sound controls, and plain-language equalizer guidance.
 - Used wide, regular, and compact screens more efficiently across Home, Quick Actions, Audio, Network, System Monitor, Game Mode, and Settings.

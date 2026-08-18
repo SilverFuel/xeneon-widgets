@@ -133,6 +133,8 @@ Use the installer test seam only inside the disposable VM. Do not set it on a no
 
 Do not publish if any step fails. After all passes succeed, create this schema-3 receipt and verify it with `scripts\Test-BetaLifecycleReceipt.ps1` against the downloaded release asset directory:
 
+Use JSON Boolean values, not quoted strings, for every environment and check result. Record `completedAt` as a UTC ISO-8601 timestamp. Publication verification rejects timestamps more than five minutes in the future or more than 30 days old.
+
 ```json
 {
   "schemaVersion": 3,

@@ -7,8 +7,9 @@ $receiptVerifier = Join-Path $PSScriptRoot "Test-BetaLifecycleReceipt.ps1"
 
 function Invoke-ExpectedResult($label, [scriptblock]$command, [bool]$shouldPass) {
   $passed = $true
-  try { & $command | Out-Null } catch { $passed = $false }
-  if ($passed -ne $shouldPass) { throw "$label expected pass=$shouldPass but pass=$passed." }
+  $failureMessage = ""
+  try { & $command | Out-Null } catch { $passed = $false; $failureMessage = $_.Exception.Message }
+  if ($passed -ne $shouldPass) { throw "$label expected pass=$shouldPass but pass=$passed. $failureMessage" }
   Write-Host "OK: $label"
 }
 
@@ -27,17 +28,34 @@ try {
   & $generator -InstallerPath $installer -Tag "v0.3.0-beta.1" -Version "0.3.0-beta.1" -CommitSha $sha -InstallNotesPath $installNotes -ReleaseNotesPath $releaseNotes -OutputPath $manifestPath | Out-Null
 
   Invoke-ExpectedResult "valid exact manifest" { & $verifier -ReleaseAssetsPath $fixtureRoot -ExpectedTag "v0.3.0-beta.1" -ExpectedCommitSha $sha } $true
+
+  $manifestFixture = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  $manifestFixture.schemaVersion = "1"
+  $manifestFixture | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+  Invoke-ExpectedResult "string manifest schema rejected" { & $verifier -ReleaseAssetsPath $fixtureRoot -ExpectedTag "v0.3.0-beta.1" -ExpectedCommitSha $sha } $false
+  $manifestFixture.schemaVersion = $true
+  $manifestFixture | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+  Invoke-ExpectedResult "Boolean manifest schema rejected" { & $verifier -ReleaseAssetsPath $fixtureRoot -ExpectedTag "v0.3.0-beta.1" -ExpectedCommitSha $sha } $false
+  $manifestFixture.schemaVersion = 1
+  $manifestFractionJson = $manifestFixture | ConvertTo-Json -Depth 6
+  $manifestFractionJson = [regex]::Replace($manifestFractionJson, '"schemaVersion"\s*:\s*1(?=\s*[,}])', '"schemaVersion": 1.0', 1)
+  Set-Content -LiteralPath $manifestPath -Value $manifestFractionJson -Encoding UTF8
+  Invoke-ExpectedResult "fractional-form manifest schema rejected" { & $verifier -ReleaseAssetsPath $fixtureRoot -ExpectedTag "v0.3.0-beta.1" -ExpectedCommitSha $sha } $false
+  $manifestFixture.schemaVersion = 1
+  $manifestFixture | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+
   $extra = Join-Path $fixtureRoot "unexpected.txt"
   Set-Content -LiteralPath $extra -Value "unexpected" -Encoding ASCII
   Invoke-ExpectedResult "extra asset rejected" { & $verifier -ReleaseAssetsPath $fixtureRoot -ExpectedTag "v0.3.0-beta.1" -ExpectedCommitSha $sha } $false
   Remove-Item -LiteralPath $extra
 
   $receiptPath = Join-Path $fixtureRoot "lifecycle-receipt.json"
+  $receiptCompletedAt = [DateTimeOffset]::UtcNow
   $receipt = [ordered]@{
     schemaVersion = 3; tag = "v0.3.0-beta.1"; version = "0.3.0-beta.1"; commitSha = $sha
     installerFileName = [IO.Path]::GetFileName($installer); installerSha256 = $hash
     environment = [ordered]@{ disposableWindowsVm = $true; windowsVersion = "fixture" }
-    operator = "fixture"; completedAt = "2026-07-16T00:00:00Z"
+    operator = "fixture"; completedAt = $receiptCompletedAt.ToString("O")
     checks = [ordered]@{ install=$true; staysClosedAfterInstall=$true; launch=$true; health=$true; processRestart=$true; noAutoStartAfterReboot=$true; rollbackAfterInjectedFailure=$true; upgradeFromPreviousBeta=$true; repair=$true; normalUninstall=$true; removeAllData=$true }
   }
   $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
@@ -47,6 +65,23 @@ try {
   $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
   Invoke-ExpectedResult "obsolete lifecycle receipt schema rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
   $receipt.schemaVersion = 3
+
+  $receipt.schemaVersion = "3"
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "string lifecycle schema rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+  $receipt.schemaVersion = 3
+
+  $receipt.schemaVersion = 3
+  $receiptFractionJson = $receipt | ConvertTo-Json -Depth 5
+  $receiptFractionJson = [regex]::Replace($receiptFractionJson, '"schemaVersion"\s*:\s*3(?=\s*[,}])', '"schemaVersion": 3.0', 1)
+  Set-Content -LiteralPath $receiptPath -Value $receiptFractionJson -Encoding UTF8
+  Invoke-ExpectedResult "fractional-form lifecycle schema rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+  $receipt.schemaVersion = 3
+
+  $receipt.environment.disposableWindowsVm = "true"
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "string VM evidence rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+  $receipt.environment.disposableWindowsVm = $true
 
   $receipt.checks["autoStartAfterReboot"] = $true
   $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
@@ -61,6 +96,32 @@ try {
   $receipt.checks.health = $false
   $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
   Invoke-ExpectedResult "incomplete lifecycle receipt rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+  $receipt.checks.health = "true"
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "string lifecycle check rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+  $receipt.checks.health = $true
+
+  $receipt.completedAt = $receiptCompletedAt.AddHours(1).ToString("O")
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "future lifecycle receipt rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+
+  $receipt.completedAt = $receiptCompletedAt.AddDays(-31).ToString("O")
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "stale lifecycle receipt rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+
+  $receipt.completedAt = $receiptCompletedAt.ToOffset([TimeSpan]::FromHours(-4)).ToString("O")
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "non-UTC lifecycle receipt rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+
+  $receipt.completedAt = $receiptCompletedAt.ToString("O") + "`n"
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "newline lifecycle timestamp rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
+
+  $receipt.completedAt = $receiptCompletedAt.ToString("O")
+  $receipt.checks.Remove("health")
+  $receipt.checks["Health"] = $true
+  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+  Invoke-ExpectedResult "mis-cased lifecycle check rejected" { & $receiptVerifier -ReceiptPath $receiptPath -ReleaseAssetsPath $fixtureRoot } $false
 } finally {
   if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
 }

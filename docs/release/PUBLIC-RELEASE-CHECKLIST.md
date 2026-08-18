@@ -29,7 +29,7 @@ powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<insta
 - Require the same manifest-bound installer to pass `docs/release/DISPLAY-CERTIFICATION.md` on a physical Windows machine and physical touch companion display. Verify the privacy-safe receipt with `scripts/Test-DisplayQualificationReceipt.ps1`.
 - Confirm Reset all app data removes local settings and protected secrets for the current user.
 - Confirm the Start Menu uninstall cleanup shortcut removes local app data when selected and does not ask extra questions.
-- Confirm the in-app Updates panel can read the GitHub Releases feed and expose the latest installer download.
+- Confirm the in-app Updates panel can read the GitHub Releases feed and open the official Releases page for a newer beta. This unsigned beta must keep direct installer links hidden because Auxora has not downloaded and verified the installer bytes itself.
 - Upload only the manifest allowlist: one Windows installer, its SHA256 file, install notes, release notes, and `release-manifest.json`.
 - Never edit a release or replace bytes under an existing tag. Increment the beta version and create a new tag.
 - Keep the app described as independent from CORSAIR, Ubiquiti, Philips Hue, OpenWeather, Microsoft, and Apple unless permission exists.
