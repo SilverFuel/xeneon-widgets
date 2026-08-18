@@ -29,7 +29,6 @@ $taskName = "XenonEdgeHost"
 $runValueName = "XenonEdgeHost"
 $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$webViewClientId = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 
 function Write-Step($message) {
   if (-not $Quiet) {
@@ -48,44 +47,6 @@ function Write-QuietWarning($message) {
   if (-not $Quiet) {
     Write-Warning $message
   }
-}
-
-function Get-FixedRuntimePath($rootPath) {
-  $fixedRoot = Join-Path $rootPath "FixedRuntime"
-  if (-not (Test-Path $fixedRoot)) {
-    return $null
-  }
-
-  $exe = Get-ChildItem $fixedRoot -Filter "msedgewebview2.exe" -File -Recurse -ErrorAction SilentlyContinue |
-    Sort-Object `
-      @{ Expression = {
-          try { [version] $_.Directory.Name } catch { [version] "0.0" }
-        }; Descending = $true },
-      @{ Expression = { $_.FullName }; Descending = $false } |
-    Select-Object -First 1
-
-  if ($exe) {
-    return $exe.Directory.FullName
-  }
-
-  return $null
-}
-
-function Get-InstalledWebView2Version() {
-  $registryPaths = @(
-    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$webViewClientId",
-    "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$webViewClientId",
-    "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$webViewClientId"
-  )
-
-  foreach ($path in $registryPaths) {
-    $value = (Get-ItemProperty -Path $path -Name "pv" -ErrorAction SilentlyContinue).pv
-    if ($value -and $value -ne "0.0.0.0") {
-      return $value
-    }
-  }
-
-  return $null
 }
 
 function Test-WindowsAppRuntimeInstalled() {
@@ -133,6 +94,50 @@ if (-not (Test-Path $exePath)) {
     Write-Info "Reinstall or copy the published app files into this folder."
   }
   throw "Auxora executable was not found at $exePath."
+}
+
+$runtimeProbeScript = @(
+  (Join-Path $appRoot "WebView2RuntimeProbe.ps1"),
+  (Join-Path $scriptRoot "WebView2RuntimeProbe.ps1"),
+  (Join-Path $scriptRoot "installer\WebView2RuntimeProbe.ps1")
+) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+if ([string]::IsNullOrWhiteSpace($runtimeProbeScript)) {
+  throw "WebView2RuntimeProbe.ps1 is missing. Reinstall Auxora before repairing runtime support."
+}
+. $runtimeProbeScript
+
+# --- WebView2 runtime checks ---
+
+try {
+  $webView2Runtime = Get-UsableWebView2Runtime $appRoot
+} catch {
+  throw "Auxora could not prove a usable WebView2 runtime with its shipped loader. Install or repair Microsoft Edge WebView2 Runtime, then try again. $($_.Exception.Message)"
+}
+
+if ($webView2Runtime.Kind -ceq "FixedRuntime") {
+  Write-Step "Configuring bundled WebView2 runtime"
+  $fixedRuntimePath = $webView2Runtime.RuntimePath
+
+  $isWindows10 = [Environment]::OSVersion.Version.Build -lt 22000
+  if ($isWindows10) {
+    try {
+      & icacls.exe $fixedRuntimePath /grant "*S-1-15-2-2:(OI)(CI)(RX)" | Out-Null
+      $grantAppPackagesExitCode = $LASTEXITCODE
+      & icacls.exe $fixedRuntimePath /grant "*S-1-15-2-1:(OI)(CI)(RX)" | Out-Null
+      $grantRestrictedPackagesExitCode = $LASTEXITCODE
+
+      if ($grantAppPackagesExitCode -ne 0 -or $grantRestrictedPackagesExitCode -ne 0) {
+        throw "icacls did not grant the required AppContainer read permissions to the bundled FixedRuntime folder."
+      }
+      Write-Info "Granted the required AppContainer read permissions to the bundled FixedRuntime folder."
+    } catch {
+      throw "Unable to apply the required FixedRuntime permissions automatically: $($_.Exception.Message)"
+    }
+  } else {
+    Write-Info "Bundled FixedRuntime detected. No extra Windows 11 permission changes were needed."
+  }
+} else {
+  Write-Info "Verified installed Evergreen WebView2 Runtime $($webView2Runtime.Version) with the shipped WebView2 loader."
 }
 
 # --- Scheduled task (primary auto-start method) ---
@@ -204,46 +209,6 @@ if (Get-ItemProperty -Path $runKeyPath -Name $oldBridgeRun -ErrorAction Silently
   Remove-ItemProperty -Path $runKeyPath -Name $oldBridgeRun -ErrorAction SilentlyContinue
   Write-Info "Removed old bridge-only startup entry '$oldBridgeRun'."
 }
-}
-
-# --- WebView2 runtime checks ---
-
-$fixedRuntimePath = Get-FixedRuntimePath $appRoot
-if ($fixedRuntimePath) {
-  Write-Step "Configuring bundled WebView2 runtime"
-
-  $isWindows10 = [Environment]::OSVersion.Version.Build -lt 22000
-  if ($isWindows10) {
-    try {
-      & icacls.exe $fixedRuntimePath /grant "*S-1-15-2-2:(OI)(CI)(RX)" | Out-Null
-      $grantAppPackagesExitCode = $LASTEXITCODE
-      & icacls.exe $fixedRuntimePath /grant "*S-1-15-2-1:(OI)(CI)(RX)" | Out-Null
-      $grantRestrictedPackagesExitCode = $LASTEXITCODE
-
-      if ($grantAppPackagesExitCode -eq 0 -and $grantRestrictedPackagesExitCode -eq 0) {
-        Write-Info "Granted the required AppContainer read permissions to the bundled FixedRuntime folder."
-      } else {
-        $message = "icacls did not grant the required AppContainer read permissions to the bundled FixedRuntime folder."
-        if ($RuntimeOnly) { throw $message }
-        Write-QuietWarning "$message WebView2 may fail to start until the permissions are repaired."
-      }
-    } catch {
-      $message = "Unable to apply the required FixedRuntime permissions automatically: $($_.Exception.Message)"
-      if ($RuntimeOnly) { throw $message }
-      Write-QuietWarning "$message WebView2 may fail to start until the permissions are repaired."
-    }
-  } else {
-    Write-Info "Bundled FixedRuntime detected. No extra Windows 11 permission changes were needed."
-  }
-} else {
-  $webViewVersion = Get-InstalledWebView2Version
-  if ($webViewVersion) {
-    Write-Info "Using installed Evergreen WebView2 Runtime $webViewVersion."
-  } else {
-    $message = "No bundled FixedRuntime folder was found and no installed Evergreen WebView2 Runtime was detected. Install WebView2 from Microsoft, then try again."
-    if ($RuntimeOnly) { throw $message }
-    Write-QuietWarning $message
-  }
 }
 
 if (Test-WindowsAppRuntimeInstalled) {

@@ -8,7 +8,7 @@ This app should not make normal users answer setup questions.
 - An x64 PC; this beta does not include ARM64 or 32-bit Windows builds
 - Microsoft Edge WebView2 Evergreen Runtime installed
 
-This beta does not bundle a fixed WebView2 runtime. Setup checks for the Evergreen runtime before replacing an existing Auxora installation and stops with an actionable error if it is missing.
+This beta does not bundle a fixed WebView2 runtime. Before replacing an existing Auxora installation, Setup asks its shipped official WebView2 loader API to prove that Evergreen is usable; a stale registry version string is not accepted. Repair repeats the same proof and stops if the runtime is unavailable.
 
 ## Install
 
@@ -37,7 +37,7 @@ The Start Menu folder also includes clearly labeled recovery shortcuts:
 - `Auxora Recovery (Safe Mode)` stops any running host process, disables auto-start, ignores saved display placement, and opens only on an active non-primary companion display. If none is active, it remains tray-only.
 - `Repair Auxora` restores Start Menu/Desktop shortcuts, uninstall registration, and runtime checks without touching local app data or enabling automatic startup.
 
-Before publication, the exact manifest-bound installer must complete the schema-3 disposable-VM lifecycle receipt: install while staying closed, deliberate launch, live `/api/health`, process restart, reboot with no autostart, injected failed-upgrade rollback, successful previous-beta upgrade, repair, normal uninstall, and remove-all-data.
+Before publication, the exact manifest-bound installer must complete the schema-3 disposable-VM lifecycle receipt: manifest schema 2 must first match the installed `XenonEdgeHost.exe` hash/ProductName/ProductVersion/commit, then the test must cover install while staying closed, deliberate launch, live `/api/health`, process restart, reboot with no autostart, injected failed-upgrade rollback, successful previous-beta upgrade, repair, normal uninstall, and remove-all-data.
 
 This free beta installer is unsigned, so Windows may show a SmartScreen warning or organization policy may block it. Verify the official source, exact filename, and SHA-256 first. Never disable SmartScreen, Smart App Control, antivirus, or organization policy. If Windows or policy blocks the installer, stop. After Windows permits the verified installer, Auxora should not ask more setup questions.
 

@@ -19,6 +19,27 @@ function Get-ExactPropertyValue($owner, [string]$name, [string]$label) {
   return $properties[0].Value
 }
 
+function Assert-ExactObjectShape($value, [string]$label, [string[]]$expectedProperties) {
+  if ($value -isnot [System.Management.Automation.PSCustomObject]) {
+    throw "$label must be a JSON object."
+  }
+
+  $actualProperties = @($value.PSObject.Properties.Name)
+  if ($actualProperties.Count -ne $expectedProperties.Count) {
+    throw "$label must contain exactly: $($expectedProperties -join ', ')."
+  }
+  foreach ($property in $expectedProperties) {
+    if ($actualProperties -cnotcontains $property) {
+      throw "$label is missing exact property '$property'."
+    }
+  }
+  foreach ($property in $actualProperties) {
+    if ($expectedProperties -cnotcontains $property) {
+      throw "$label contains unexpected property '$property'."
+    }
+  }
+}
+
 function Get-RequiredStringValue($owner, [string]$name, [string]$label) {
   $value = Get-ExactPropertyValue $owner $name $label
   if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) {
@@ -45,6 +66,22 @@ $root = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
 $manifest = ConvertFrom-JsonPreservingLexicalTypes (Get-Content -LiteralPath (Join-Path $root "release-manifest.json") -Raw)
 $receipt = ConvertFrom-JsonPreservingLexicalTypes (Get-Content -LiteralPath $ReceiptPath -Raw)
 
+Assert-ExactObjectShape $receipt "Lifecycle receipt" @(
+  "schemaVersion",
+  "tag",
+  "version",
+  "commitSha",
+  "installerFileName",
+  "installerSha256",
+  "environment",
+  "operator",
+  "completedAt",
+  "checks"
+)
+Assert-ExactObjectShape $receipt.environment "Lifecycle receipt environment" @(
+  "disposableWindowsVm",
+  "windowsVersion"
+)
 Assert-ExactSchemaVersion (Get-ExactPropertyValue $receipt "schemaVersion" "Lifecycle receipt schemaVersion")
 foreach ($binding in @("tag", "version", "commitSha")) {
   $receiptBinding = Get-RequiredStringValue $receipt $binding "Lifecycle receipt $binding"

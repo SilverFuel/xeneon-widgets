@@ -26,6 +26,10 @@ const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 const pwshRunScripts = collectPwshRunScripts(releaseWorkflow);
 const finalEnvironmentCheckIndex = releaseWorkflow.lastIndexOf("Test-GitHubReleaseEnvironment.ps1");
 const releaseCreateIndex = releaseWorkflow.indexOf("gh release create");
+const candidateMainGuardIndex = releaseWorkflow.indexOf("Require candidate tag commit from main");
+const candidateVersionCheckIndex = releaseWorkflow.indexOf("Validate synchronized beta version and tag");
+const publicationMainGuardIndex = releaseWorkflow.indexOf("Re-require publication tag commit from main");
+const candidateRunCheckIndex = releaseWorkflow.indexOf("Verify candidate run and download exact artifact");
 
 function readWorkspaceFile(relativePath) {
   const filePath = resolve(process.cwd(), relativePath);
@@ -95,7 +99,9 @@ assert(
     && /Test-BetaLifecycleReceipt\.ps1/.test(gauntlet)
     && /Test-FrigateQualificationReceipt\.ps1/.test(gauntlet)
     && /Test-DisplayQualificationReceipt\.ps1/.test(gauntlet)
-    && /ReleaseAssetsPath, LifecycleReceiptPath, FrigateQualificationReceiptPath, and DisplayQualificationReceiptPath must be supplied together/.test(gauntlet)
+    && /LifecycleReceiptPath, FrigateQualificationReceiptPath, and DisplayQualificationReceiptPath must be supplied together/.test(gauntlet)
+    && /ReleaseAssetsPath is required with qualification receipts/.test(gauntlet)
+    && /RunInstallSmoke requires ReleaseAssetsPath/.test(gauntlet)
     && /ExpectedTag", \$expectedTag/.test(gauntlet)
     && /ExpectedCommitSha", \$currentCommit/.test(gauntlet)
     && /Automatic selection is allowed only when app\\dist contains exactly one installer/.test(gauntlet)
@@ -133,6 +139,17 @@ assert(
 assert(
   packageJson.scripts.check.includes("check:release-gauntlet") && packageJson.scripts["check:release-gauntlet"] === "node scripts/check-release-gauntlet.mjs",
   "npm run check must include the release gauntlet validation"
+);
+
+assert(
+  (releaseWorkflow.match(/git fetch origin main --no-tags/g) ?? []).length === 2
+    && (releaseWorkflow.match(/git merge-base --is-ancestor HEAD origin\/main/g) ?? []).length === 2
+    && (releaseWorkflow.match(/The beta tag commit must already be present on origin\/main\./g) ?? []).length === 2
+    && candidateMainGuardIndex > 0
+    && candidateMainGuardIndex < candidateVersionCheckIndex
+    && publicationMainGuardIndex > 0
+    && publicationMainGuardIndex < candidateRunCheckIndex,
+  "candidate creation and publication must both reject beta tags whose commit is not already on origin/main"
 );
 
 assert(

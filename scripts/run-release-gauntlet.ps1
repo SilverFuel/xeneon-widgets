@@ -30,10 +30,16 @@ if ($RequireSignedInstaller -and [string]::IsNullOrWhiteSpace($CommercialEvidenc
 if (-not [string]::IsNullOrWhiteSpace($CommercialEvidencePath) -and -not $RequireSignedInstaller) {
   throw "Commercial evidence can only be used with -RequireSignedInstaller."
 }
-$candidateEvidencePaths = @($ReleaseAssetsPath, $LifecycleReceiptPath, $FrigateQualificationReceiptPath, $DisplayQualificationReceiptPath) |
+$receiptEvidencePaths = @($LifecycleReceiptPath, $FrigateQualificationReceiptPath, $DisplayQualificationReceiptPath) |
   Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-if ($candidateEvidencePaths.Count -ne 0 -and $candidateEvidencePaths.Count -ne 4) {
-  throw "ReleaseAssetsPath, LifecycleReceiptPath, FrigateQualificationReceiptPath, and DisplayQualificationReceiptPath must be supplied together for a receipt-bound candidate."
+if ($receiptEvidencePaths.Count -ne 0 -and $receiptEvidencePaths.Count -ne 3) {
+  throw "LifecycleReceiptPath, FrigateQualificationReceiptPath, and DisplayQualificationReceiptPath must be supplied together."
+}
+if ($receiptEvidencePaths.Count -eq 3 -and [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
+  throw "ReleaseAssetsPath is required with qualification receipts."
+}
+if ($RunInstallSmoke -and [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
+  throw "RunInstallSmoke requires ReleaseAssetsPath so the installed executable is checked against the exact candidate manifest."
 }
 
 $allowedSignerThumbprints = @()
@@ -136,7 +142,7 @@ try {
   Invoke-CheckedCommand "powershell" (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\assert-release-ready.ps1") + $readyArgs) "Release readiness gate failed."
 
   if (-not [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
-    Write-Step "Checking immutable release manifest and lifecycle, Frigate, and display qualification receipts"
+    Write-Step "Checking immutable release manifest"
     $resolvedAssetsRoot = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
     $candidateManifest = Get-Content -LiteralPath (Join-Path $resolvedAssetsRoot "release-manifest.json") -Raw | ConvertFrom-Json
     $manifestInstallerPath = (Resolve-Path -LiteralPath (Join-Path $resolvedAssetsRoot ([string]$candidateManifest.installer.fileName)) -ErrorAction Stop).Path
@@ -155,21 +161,24 @@ try {
       "-ExpectedTag", $expectedTag,
       "-ExpectedCommitSha", $currentCommit
     ) "Release manifest verification failed."
-    Invoke-CheckedCommand "powershell" @(
-      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-BetaLifecycleReceipt.ps1",
-      "-ReceiptPath", $LifecycleReceiptPath,
-      "-ReleaseAssetsPath", $ReleaseAssetsPath
-    ) "Lifecycle receipt verification failed."
-    Invoke-CheckedCommand "powershell" @(
-      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-FrigateQualificationReceipt.ps1",
-      "-ReceiptPath", $FrigateQualificationReceiptPath,
-      "-ReleaseAssetsPath", $ReleaseAssetsPath
-    ) "Frigate qualification receipt verification failed."
-    Invoke-CheckedCommand "powershell" @(
-      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-DisplayQualificationReceipt.ps1",
-      "-ReceiptPath", $DisplayQualificationReceiptPath,
-      "-ReleaseAssetsPath", $ReleaseAssetsPath
-    ) "Display qualification receipt verification failed."
+    if ($receiptEvidencePaths.Count -eq 3) {
+      Write-Step "Checking lifecycle, Frigate, and display qualification receipts"
+      Invoke-CheckedCommand "powershell" @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-BetaLifecycleReceipt.ps1",
+        "-ReceiptPath", $LifecycleReceiptPath,
+        "-ReleaseAssetsPath", $ReleaseAssetsPath
+      ) "Lifecycle receipt verification failed."
+      Invoke-CheckedCommand "powershell" @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-FrigateQualificationReceipt.ps1",
+        "-ReceiptPath", $FrigateQualificationReceiptPath,
+        "-ReleaseAssetsPath", $ReleaseAssetsPath
+      ) "Frigate qualification receipt verification failed."
+      Invoke-CheckedCommand "powershell" @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts\Test-DisplayQualificationReceipt.ps1",
+        "-ReceiptPath", $DisplayQualificationReceiptPath,
+        "-ReleaseAssetsPath", $ReleaseAssetsPath
+      ) "Display qualification receipt verification failed."
+    }
   }
 
   if ($RequireSignedInstaller) {
@@ -187,7 +196,11 @@ try {
 
   if ($RunInstallSmoke) {
     Write-Step "Running Windows install smoke test"
-    $smokeArgs = @("-InstallerPath", $resolvedInstaller, "-RunInstall", "-QuietInstall")
+    $smokeArgs = @(
+      "-InstallerPath", $resolvedInstaller,
+      "-ReleaseAssetsPath", $ReleaseAssetsPath,
+      "-RunInstall", "-QuietInstall"
+    )
     if ($RunUninstall) {
       $smokeArgs += "-RunUninstall"
     }

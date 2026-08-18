@@ -3,6 +3,7 @@ param(
   [Parameter(Mandatory = $true)][string]$Tag,
   [Parameter(Mandatory = $true)][string]$Version,
   [Parameter(Mandatory = $true)][string]$CommitSha,
+  [Parameter(Mandatory = $true)][string]$PublishedAppPath,
   [Parameter(Mandatory = $true)][string]$InstallNotesPath,
   [Parameter(Mandatory = $true)][string]$ReleaseNotesPath,
   [Parameter(Mandatory = $true)][string]$OutputPath
@@ -15,6 +16,7 @@ if ($PSVersionTable.PSEdition -eq "Desktop") {
 . (Join-Path $PSScriptRoot "lib\Hashing.ps1")
 
 $installer = Get-Item -LiteralPath $InstallerPath -ErrorAction Stop
+$publishedApp = Get-Item -LiteralPath $PublishedAppPath -ErrorAction Stop
 $hashSidecar = Get-Item -LiteralPath "$($installer.FullName).sha256" -ErrorAction Stop
 $installNotes = Get-Item -LiteralPath $InstallNotesPath -ErrorAction Stop
 $releaseNotes = Get-Item -LiteralPath $ReleaseNotesPath -ErrorAction Stop
@@ -26,6 +28,22 @@ if ($normalizedSha -notmatch '^[0-9a-f]{40}$') {
 if ($Tag -cne "v$Version") {
   throw "Release tag '$Tag' must exactly equal v$Version."
 }
+if ($publishedApp.Name -cne "XenonEdgeHost.exe") {
+  throw "PublishedAppPath must name XenonEdgeHost.exe."
+}
+
+$publishedVersionInfo = $publishedApp.VersionInfo
+$publishedProductName = [string]$publishedVersionInfo.ProductName
+$publishedProductVersion = [string]$publishedVersionInfo.ProductVersion
+if ($publishedProductName -cne "Auxora") {
+  throw "Published application ProductName must be Auxora; found '$publishedProductName'."
+}
+$escapedVersion = [regex]::Escape($Version)
+$escapedCommit = [regex]::Escape($normalizedSha)
+if ($publishedProductVersion -notmatch "^$escapedVersion(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\.$escapedCommit$") {
+  throw "Published application ProductVersion '$publishedProductVersion' is not bound to version $Version and commit $normalizedSha."
+}
+$publishedAppHash = Get-Sha256Hash $publishedApp.FullName
 
 $expectedPrefix = "Auxora-Setup-$Version-"
 if (-not ($installer.Name.StartsWith($expectedPrefix, [StringComparison]::Ordinal) -and $installer.Name.EndsWith(".exe", [StringComparison]::OrdinalIgnoreCase))) {
@@ -59,7 +77,7 @@ if (($allowedAssets | Select-Object -Unique).Count -ne $allowedAssets.Count) {
 }
 
 $manifest = [ordered]@{
-  schemaVersion = 1
+  schemaVersion = 2
   product = "Auxora"
   platform = "windows-x64"
   channel = "beta"
@@ -71,6 +89,14 @@ $manifest = [ordered]@{
     sha256 = $actualHash.ToUpperInvariant()
     sha256FileName = $hashSidecar.Name
     signatureStatus = [string]$signature.Status
+  }
+  installedExecutable = [ordered]@{
+    fileName = $publishedApp.Name
+    sha256 = $publishedAppHash.ToUpperInvariant()
+    productName = $publishedProductName
+    version = $Version
+    productVersion = $publishedProductVersion
+    commitSha = $normalizedSha
   }
   installNotesFileName = $installNotes.Name
   releaseNotesFileName = $releaseNotes.Name

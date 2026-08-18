@@ -11,6 +11,7 @@ $autoStartRemoveScript = Join-Path $scriptRoot "uninstall.ps1"
 $removeScript = Join-Path $scriptRoot "Remove-XenonEdgeHost.ps1"
 $safeModeScript = Join-Path $scriptRoot "Launch-XenonSafeMode.ps1"
 $repairScript = Join-Path $scriptRoot "repair.ps1"
+$runtimeProbeScript = Join-Path $scriptRoot "WebView2RuntimeProbe.ps1"
 $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Auxora"
 $legacyShortcutRoots = @(
   (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"),
@@ -110,11 +111,17 @@ try {
   Start-Transcript -Path $logPath -Append | Out-Null
   $transcriptStarted = $true
 
-  foreach ($requiredPath in @($exePath, $runtimeScript, $autoStartRemoveScript, $removeScript, $safeModeScript)) {
+  foreach ($requiredPath in @($exePath, $runtimeScript, $autoStartRemoveScript, $removeScript, $safeModeScript, $runtimeProbeScript)) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
       throw "Repair is missing required installed file: $requiredPath"
     }
   }
+
+  Write-Step "Keeping automatic startup disabled"
+  & $autoStartRemoveScript -Quiet -KeepRunning
+
+  Write-Step "Verifying embedded browser runtime"
+  & $runtimeScript -Quiet -RuntimeOnly
 
   Write-Step "Repairing simple launch shortcuts"
   foreach ($legacyShortcutRoot in $legacyShortcutRoots) {
@@ -173,12 +180,6 @@ try {
 
   Write-Step "Repairing uninstall registration"
   Register-UninstallEntry -installPath $scriptRoot -appExePath $exePath
-
-  Write-Step "Keeping automatic startup disabled"
-  & $autoStartRemoveScript -Quiet -KeepRunning
-
-  Write-Step "Repairing embedded browser runtime"
-  & $runtimeScript -Quiet -RuntimeOnly
 
   if (-not $Quiet) {
     Write-Host ""
