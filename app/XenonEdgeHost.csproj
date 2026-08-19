@@ -97,11 +97,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
-    <None Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64\8.0.26\LICENSE.TXT" Link="THIRD-PARTY-LICENSES\DotNet-Runtime-LICENSE.txt">
+    <None Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64\8.0.30\LICENSE.TXT" Link="THIRD-PARTY-LICENSES\DotNet-Runtime-LICENSE.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
-    <None Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64\8.0.26\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-Runtime-NOTICE.txt">
+    <None Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64\8.0.30\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-Runtime-NOTICE.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>

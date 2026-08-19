@@ -56,7 +56,26 @@ const assetRevisionPayload = readWorkspaceJson("assets/revision.json");
 const currentAssetRevision = String(assetRevisionPayload.assetRevision || "").trim();
 assert(/^20\d{6}-\d{2}$/.test(currentAssetRevision), "assets/revision.json must define the current dashboard asset revision");
 
+const dotnetSdkPin = readWorkspaceJson("global.json");
+assert(dotnetSdkPin?.sdk?.version === "8.0.424", "global.json must pin .NET SDK 8.0.424 for runtime 8.0.30");
+assert(dotnetSdkPin?.sdk?.rollForward === "disable", "global.json must disable SDK roll-forward");
+assert(dotnetSdkPin?.sdk?.allowPrerelease === false, "global.json must reject prerelease SDKs");
+
+for (const workflowPath of [
+  ".github/workflows/ci.yml",
+  ".github/workflows/release.yml",
+  ".github/workflows/commercial-release.yml"
+]) {
+  const workflow = readWorkspaceFile(workflowPath);
+  const setupDotnetSteps = [...workflow.matchAll(/uses:\s*actions\/setup-dotnet@[^\r\n]+/g)].length;
+  const pinnedSetupSteps = [...workflow.matchAll(/global-json-file:\s*[.]\/global[.]json/g)].length;
+  assert(setupDotnetSteps > 0, `${workflowPath} must set up .NET`);
+  assert(pinnedSetupSteps === setupDotnetSteps, `${workflowPath} must use global.json for every setup-dotnet step`);
+  assert(!/dotnet-version:\s*8[.]0[.](?:x|\*)/i.test(workflow), `${workflowPath} must not float across .NET 8 SDK patches`);
+}
+
 const appCsproj = readWorkspaceFile("app/XenonEdgeHost.csproj");
+assert(!/<RuntimeFrameworkVersion>/i.test(appCsproj), "app project must use the pinned SDK instead of RuntimeFrameworkVersion, which conflicts with the Windows SDK framework reference");
 const appVersion = appCsproj.match(/<Version>([^<]+)<\/Version>/)?.[1]?.trim() || "";
 assert(appVersion, "app/XenonEdgeHost.csproj must define <Version>");
 
@@ -375,10 +394,10 @@ const resolvedFrameworkDownload = name => frameworkDownloads.find(item => item.n
   .trim();
 const dotNetRuntimeVersion = resolvedFrameworkDownload("Microsoft.NETCore.App.Runtime.win-x64");
 const windowsSdkNetVersion = resolvedFrameworkDownload("Microsoft.Windows.SDK.NET.Ref");
-assert(dotNetRuntimeVersion === "8.0.26", `self-contained .NET runtime changed from noticed version 8.0.26 to ${dotNetRuntimeVersion || "missing"}`);
+assert(dotNetRuntimeVersion === "8.0.30", `self-contained .NET runtime changed from noticed version 8.0.30 to ${dotNetRuntimeVersion || "missing"}`);
 assert(windowsSdkNetVersion === "10.0.19041.56", `Windows SDK .NET runtime pack changed from noticed version 10.0.19041.56 to ${windowsSdkNetVersion || "missing"}`);
 assert(
-  /^\| Microsoft [. ]NET Runtime for Windows x64 \| 8[.]0[.]26 \|/m.test(thirdPartyNotices),
+  /^\| Microsoft [. ]NET Runtime for Windows x64 \| 8[.]0[.]30 \|/m.test(thirdPartyNotices),
   "third-party notices must inventory the self-contained .NET runtime"
 );
 assert(
@@ -414,8 +433,8 @@ const expectedLegalFiles = [
   ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-ML-LICENSE.txt", "/microsoft.windowsappsdk.ml/1.8.2141/license.txt", "656AAB74C15AA9F9964BCDCC993EB2755CBDB4822D5E0E3BC61D2E281897F758"],
   ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-NOTICE.txt", "/microsoft.windowsappsdk/1.8.260317003/notice.txt", "E25393C0D340A1821827B093FA4DBBFCCCD8FEB7BF769E7FA773E3955CD5314B"],
   ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-ML-NOTICE.txt", "/microsoft.windowsappsdk.ml/1.8.2141/thirdpartynotices.txt", "E00F828E0A33DE591A355AE6606D2625F5758DA7D2C844DB7821C9DD3E3647B6"],
-  ["THIRD-PARTY-LICENSES/DotNet-Runtime-LICENSE.txt", "/microsoft.netcore.app.runtime.win-x64/8.0.26/license.txt", "D7A68596AB69B06F51CA278A6545148E4269A9381C26D597C13DF5D88E08CF5B"],
-  ["THIRD-PARTY-LICENSES/DotNet-Runtime-NOTICE.txt", "/microsoft.netcore.app.runtime.win-x64/8.0.26/third-party-notices.txt", "B60B2912DA28EAA6518593C9E2EFB5334EE062D3C42E80D8FDFA806B3DC52977"],
+  ["THIRD-PARTY-LICENSES/DotNet-Runtime-LICENSE.txt", "/microsoft.netcore.app.runtime.win-x64/8.0.30/license.txt", "D7A68596AB69B06F51CA278A6545148E4269A9381C26D597C13DF5D88E08CF5B"],
+  ["THIRD-PARTY-LICENSES/DotNet-Runtime-NOTICE.txt", "/microsoft.netcore.app.runtime.win-x64/8.0.30/third-party-notices.txt", "B60B2912DA28EAA6518593C9E2EFB5334EE062D3C42E80D8FDFA806B3DC52977"],
   ["THIRD-PARTY-LICENSES/DotNet-8-Libraries-NOTICE.txt", "/microsoft.win32.systemevents/8.0.0/third-party-notices.txt", "19C19DCAC9F3EE6302CFBC6745BB8E79F08EFC4C933EB8DC5509BF14B88347EC"],
   ["THIRD-PARTY-LICENSES/System.Drawing.Common-LICENSE.txt", "/system.drawing.common/8.0.0/license.txt", "A89886665765362EB77E0F8E26602C924520041D1711B2EEDC136434FE4D01AB"],
   ["THIRD-PARTY-LICENSES/System.Drawing.Common-NOTICE.txt", "/system.drawing.common/8.0.0/third-party-notices.txt", "093E2589A27ED137E519B9856E425EFA7982221A7B3D9E7CEA3B5153F711905E"],

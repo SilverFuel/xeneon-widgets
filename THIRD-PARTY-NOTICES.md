@@ -8,7 +8,7 @@ The versions in this inventory come from the resolved `win-x64` NuGet asset grap
 
 | Component | Version | License or terms | Authoritative package or project |
 | --- | --- | --- | --- |
-| Microsoft .NET Runtime for Windows x64 | 8.0.26 | MIT; Microsoft and upstream third-party notices | [NuGet](https://www.nuget.org/packages/Microsoft.NETCore.App.Runtime.win-x64/8.0.26), [source](https://github.com/dotnet/runtime/tree/v8.0.26) |
+| Microsoft .NET Runtime for Windows x64 | 8.0.30 | MIT; Microsoft and upstream third-party notices | [NuGet](https://www.nuget.org/packages/Microsoft.NETCore.App.Runtime.win-x64/8.0.30), [source](https://github.com/dotnet/runtime/tree/v8.0.30) |
 | Microsoft.Windows.SDK.NET.Ref | 10.0.19041.56 | [Microsoft Windows SDK license terms](https://aka.ms/WinSDKLicenseURL) | [NuGet](https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref/10.0.19041.56) |
 | Microsoft.WindowsAppSDK | 1.8.260317003 | Microsoft Software License Terms - Microsoft Windows App SDK | [NuGet](https://www.nuget.org/packages/Microsoft.WindowsAppSDK/1.8.260317003) |
 | Microsoft.WindowsAppSDK.AI | 1.8.53 | Microsoft Software License Terms - Microsoft Windows App SDK | [NuGet](https://www.nuget.org/packages/Microsoft.WindowsAppSDK.AI/1.8.53) |
@@ -49,8 +49,8 @@ The following files are copied without modification from the resolved NuGet pack
 
 | Distributed file | Applies to |
 | --- | --- |
-| `THIRD-PARTY-LICENSES/DotNet-Runtime-LICENSE.txt` | Microsoft .NET Runtime 8.0.26 and MIT-licensed Microsoft .NET libraries |
-| `THIRD-PARTY-LICENSES/DotNet-Runtime-NOTICE.txt` | Microsoft .NET Runtime 8.0.26 third-party material |
+| `THIRD-PARTY-LICENSES/DotNet-Runtime-LICENSE.txt` | Microsoft .NET Runtime 8.0.30 and MIT-licensed Microsoft .NET libraries |
+| `THIRD-PARTY-LICENSES/DotNet-Runtime-NOTICE.txt` | Microsoft .NET Runtime 8.0.30 third-party material |
 | `THIRD-PARTY-LICENSES/DotNet-8-Libraries-NOTICE.txt` | Microsoft.Win32.SystemEvents 8.0.0 and System.Security.Cryptography.ProtectedData 8.0.0 |
 | `THIRD-PARTY-LICENSES/DotNet-9-Libraries-NOTICE.txt` | System.Numerics.Tensors 9.0.0 |
 | `THIRD-PARTY-LICENSES/DotNet-10-Libraries-NOTICE.txt` | System.CodeDom 10.0.2, System.IO.Ports 10.0.3, System.Management 10.0.2, and System.Threading.AccessControl 10.0.3 |

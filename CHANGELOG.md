@@ -16,6 +16,7 @@
 - Made beta publication fail closed unless GitHub's `beta-publication` environment already has required reviewers and the selected review policy, with a second live check immediately before release creation.
 - Added an explicit solo-owner publication mode that still requires `SilverFuel` to approve the protected release job before any unsigned beta assets can be uploaded.
 - Updated the Electron helper to 41.10.5 so the release dependency audit no longer includes the high-severity protocol and archive-extraction advisories affecting the previous pin.
+- Pinned the Windows build to .NET SDK 8.0.424 so local and CI self-contained outputs consistently include .NET runtime 8.0.30.
 - Made Audio & Media easier to use with a clearer now-playing layout, simpler sound controls, and plain-language equalizer guidance.
 - Used wide, regular, and compact screens more efficiently across Home, Quick Actions, Audio, Network, System Monitor, Game Mode, and Settings.
 - Removed repeated settings headings and kept Phone Remote and Layout Editor focused on the actions that matter.

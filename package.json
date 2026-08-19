@@ -40,7 +40,7 @@
     "test:native-host-api": "node scripts/test-native-host-api.mjs",
     "test:bridge-api": "node scripts/test-bridge-api.mjs",
     "test:app": "dotnet test app\\XenonEdgeHost.sln --configuration Release --no-restore",
-    "audit:deps": "npm audit --audit-level=moderate && npm --prefix desktop/electron audit --audit-level=moderate && dotnet list app\\XenonEdgeHost.sln package --vulnerable --include-transitive",
+    "audit:deps": "npm audit --audit-level=moderate && npm --prefix desktop/electron audit --audit-level=moderate && dotnet restore app\\XenonEdgeHost.sln --force-evaluate && dotnet list app\\XenonEdgeHost.sln package --vulnerable --include-transitive",
     "clean": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clean-workspace.ps1",
     "installer": "powershell -ExecutionPolicy Bypass -File .\\app\\build-installer.ps1",
     "release:gauntlet": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-release-gauntlet.ps1 -AllowGitHubSupportPath -AllowUnsignedBeta",
