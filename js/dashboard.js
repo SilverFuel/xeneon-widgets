@@ -1,6 +1,10 @@
 (function () {
   var params = new URLSearchParams(window.location.search);
-  var bridgeOrigin = params.get("bridge") || "http://127.0.0.1:8976";
+  var sameOriginLocalBridge = window.location.protocol === "http:"
+    && /^(127\.0\.0\.1|localhost)$/i.test(window.location.hostname)
+    ? window.location.origin
+    : "";
+  var bridgeOrigin = params.get("bridge") || sameOriginLocalBridge || "http://127.0.0.1:8976";
   var widgetBase = params.get("widgetBase") || bridgeOrigin;
   var perfMode = params.get("perf") === "1";
   var assetRevision = params.get("v") || "";
@@ -11,6 +15,8 @@
   var widgetStorageKey = "xeneon-dashboard-widget";
   var lastPrimaryWidgetStorageKey = "xeneon-dashboard-last-widget";
   var primaryDestinationStorageKey = "auxora-dashboard-destination";
+  var destinationPanelsStorageKey = "auxora-dashboard-panels-v1";
+  var nowStripModeStorageKey = "auxora-now-strip-mode";
   var settingsStorageKey = "xeneon-dashboard-settings";
   var pickerNode = null;
   var inlineViewerNode = null;
@@ -18,19 +24,28 @@
   var settingsNode = null;
   var emptyNode = null;
   var retryNode = null;
-  var diagnosticsRailNode = null;
   var diagnosticsInlineNode = null;
   var settingsPanelNode = null;
   var settingsToggleNode = null;
   var touchLockToggleNode = null;
   var touchUnlockNode = null;
+  var touchLockScrimNode = null;
   var launcherDockNode = null;
   var nowStripNode = null;
   var touchFeedbackNode = null;
   var primaryNavNode = null;
   var quickDrawerNode = null;
   var quickToggleNode = null;
+  var quickDrawerOpener = null;
+  var pendingSettingsWidgetId = "";
+  var pendingSettingsRenderTimerId = 0;
+  var settingsRenderInProgress = false;
+  var requestedSetupSection = "";
+  var widgetErrorNode = null;
+  var widgetErrorGeneration = 0;
   var primaryDestination = "home";
+  var destinationPanels = { home: "home", scenes: "scenes", library: "system", settings: "setup" };
+  var surfaceStatuses = {};
   var inlineWidgetController = null;
   var activeInlineWidgetId = "";
   var lastBridgeSnapshotKey = "";
@@ -44,10 +59,12 @@
   var pendingGameFaceTimerId = 0;
   var dashboardInteractionActive = false;
   var dashboardInteractionTimerId = 0;
-  var fatalDashboardReloadTimerId = 0;
   var widgets = [];
   var dashboardSettings = {};
   var storedSettings = {};
+  var hadExplicitStoredThemeSelection = false;
+  var initialScenePresentationApplied = false;
+  var ambientCanvasPalette = [];
   var bridgeReachable = null;
   var bridgeCapabilities = {
     system: true,
@@ -62,6 +79,7 @@
     weather: true,
     hue: false,
     unifi: true,
+    frigate: true,
     gameActivity: false
   };
   var bridgeConfig = {
@@ -90,19 +108,32 @@
       host: "",
       site: "default"
     },
+    frigate: {
+      configured: false,
+      baseUrl: "",
+      camera: "",
+      endpoint: "/api/frigate",
+      configEndpoint: "/api/config/frigate"
+    },
     dashboard: {
       onboardingCompleted: false,
       onboardingCompletedAt: "",
       onboardingVersion: onboardingVersion,
       launcherReviewRequired: true,
       autoApplyLauncherSuggestions: false,
+      foregroundAppTrackingEnabled: false,
       preferredDisplayId: "",
       preferredDisplayDeviceName: "",
+      themeId: "focus",
+      accentMode: "preset",
+      customAccentColor: "",
+      themeVariant: "auto",
+      animationIntensity: 25,
+      dashboardOpacity: 100,
       performanceBudget: "balanced",
       gameModeAutoTune: true,
       themeReadability: "normal",
-      releaseChannel: "stable",
-      updateRollbackEnabled: true
+      releaseChannel: "stable"
     },
     scenes: {
       activeSceneId: "scene-work",
@@ -110,12 +141,16 @@
       profiles: []
     }
   };
+  var bridgeApp = { name: "Auxora", version: "" };
   var bridgeSetup = createBootSetupSummary();
   var settingsDrawerOpen = false;
   var touchFeedbackTimerId = 0;
   var updateAvailabilityChecked = false;
+  var recoveryAvailabilityChecked = false;
   var lastSceneEvaluationAt = 0;
   var nowStripTimerId = 0;
+  var nowStripMode = "auto";
+  var nowStripRenderSignature = "";
   var launcherDockTimerId = 0;
   var launcherDockEntries = [];
   var launcherDockSnapshotKey = "";
@@ -125,7 +160,11 @@
   var defaultSettings = {
     dashboardOpacity: "100",
     profileId: "command",
-    themeId: "edge",
+    themeSchemaVersion: "2",
+    themeId: "focus",
+    accentMode: "preset",
+    customAccentColor: "",
+    themeVariant: "auto",
     animationIntensity: "25",
     accentColor: "",
     touchLockMode: "0",
@@ -133,6 +172,8 @@
     pinnedWidgets: "",
     hiddenWidgets: "",
     cardSizes: "{}",
+    modeLayouts: "{}",
+    modeLayoutSchemaVersion: "2",
     gameModeProfile: "custom",
     gameModeGame: "",
     gameModeThemeId: "",
@@ -181,43 +222,59 @@
   };
   var productThemePresets = [
     {
-      id: "edge",
-      name: "Edge Neon",
-      accent: "#00e0ff",
-      secondary: "#44f0c2",
-      warm: "#ffb547",
-      background: "#070d13",
-      copy: "High-energy cyan, green, and amber motion for an Auxora touch panel."
+      id: "focus",
+      name: "Focus",
+      accent: "#46bce8",
+      secondary: "#7f9fb3",
+      warm: "#e6b85c",
+      background: "#0b0e12",
+      copy: "Calm charcoal surfaces and restrained cyan for maximum readability."
     },
     {
-      id: "afterburn",
-      name: "Afterburn",
-      accent: "#ff4d8d",
-      secondary: "#f5a623",
-      warm: "#44f0c2",
-      background: "#120910",
-      copy: "A warmer stream-ready look with rose and amber highlights."
+      id: "gaming",
+      name: "Gaming",
+      accent: "#9a7cff",
+      secondary: "#36c8f0",
+      warm: "#e7b85e",
+      background: "#05060a",
+      copy: "Deep black, purple, and cyan with controlled performance energy."
     },
     {
-      id: "deepcore",
-      name: "Deep Core",
-      accent: "#7a5cff",
-      secondary: "#00e0ff",
-      warm: "#f5a623",
-      background: "#090b16",
-      copy: "Dark, quieter control-room contrast for long sessions."
-    },
-    {
-      id: "verdant",
-      name: "Verdant",
-      accent: "#44f0c2",
-      secondary: "#00e0ff",
-      warm: "#ff4d8d",
-      background: "#06110f",
-      copy: "Green-forward telemetry with brighter status accents."
+      id: "warm",
+      name: "Warm",
+      accent: "#d9a35f",
+      secondary: "#ce7d86",
+      warm: "#e4b861",
+      background: "#120c0d",
+      copy: "Muted amber and rose for media, evening, and comfortable long sessions."
     }
   ];
   var localProductWidgetIds = ["game-mode"];
+  var surfaceContracts = {
+    home: { destination: "home", category: "Home", defaultStatus: "Available" },
+    scenes: { destination: "scenes", category: "Modes", defaultStatus: "Available" },
+    setup: { destination: "settings", category: "Setup", defaultStatus: "Checking", alwaysVisible: true },
+    "theme-studio": { destination: "settings", category: "Personalization", defaultStatus: "Available", alwaysVisible: true },
+    updates: { destination: "settings", category: "Maintenance", defaultStatus: "Not checked", alwaysVisible: true },
+    "layout-editor": { destination: "settings", category: "Personalization", defaultStatus: "Available", alwaysVisible: true },
+    streaming: { destination: "settings", category: "Creator", defaultStatus: "Preview", alwaysVisible: true },
+    marketplace: { destination: "settings", category: "Widget Packs", defaultStatus: "Available", alwaysVisible: true },
+    privacy: { destination: "settings", category: "Privacy", defaultStatus: "Available", alwaysVisible: true },
+    remote: { destination: "settings", category: "Remote", defaultStatus: "Unavailable", alwaysVisible: true },
+    installer: { destination: "settings", category: "Recovery", defaultStatus: "Checking", alwaysVisible: true },
+    "game-mode": { destination: "library", category: "Gaming", defaultStatus: "Available" },
+    system: { destination: "library", category: "System", defaultStatus: "Checking" },
+    network: { destination: "library", category: "System", defaultStatus: "Checking" },
+    audio: { destination: "library", category: "Media", defaultStatus: "Checking" },
+    "quick-actions": { destination: "library", category: "Productivity", defaultStatus: "Checking" },
+    shortcuts: { destination: "library", category: "System", defaultStatus: "Checking" },
+    "display-controls": { destination: "library", category: "System", defaultStatus: "Available" },
+    clipboard: { destination: "library", category: "Productivity", defaultStatus: "Unavailable" },
+    weather: { destination: "library", category: "Productivity", defaultStatus: "Optional" },
+    calendar: { destination: "library", category: "Productivity", defaultStatus: "Optional" },
+    hue: { destination: "library", category: "Smart Home", defaultStatus: "Optional" },
+    frigate: { destination: "library", category: "Smart Home", defaultStatus: "Setup" }
+  };
 
   function createSetupItem(label, state, required, nextStep) {
     return { label: label, state: state, required: required, nextStep: nextStep };
@@ -225,39 +282,42 @@
 
   function createBootSetupSummary() {
     return {
+      hydrated: false,
       essentialsReady: false,
       onboardingCompleted: false,
       onboardingCompletedAt: "",
       onboardingVersion: onboardingVersion,
-      needsAttention: true,
+      needsAttention: false,
       items: {
-        bridge: createSetupItem("Local bridge", "Needs Setup", true, "Checking the bridge state."),
-        system: createSetupItem("System Monitor", "Needs Setup", true, "Waiting for the bridge."),
-        network: createSetupItem("Network Monitor", "Needs Setup", true, "Waiting for the bridge."),
-        launchers: createSetupItem("Recent apps", "Needs Setup", false, "Waiting for the bridge."),
-        "quick-actions": createSetupItem("Quick Actions", "Needs Setup", false, "Waiting for the bridge."),
-        shortcuts: createSetupItem("System Shortcuts", "Needs Setup", false, "Waiting for the bridge."),
-        audio: createSetupItem("Audio & Media", "Needs Setup", false, "Waiting for the bridge."),
-        clipboard: createSetupItem("Clipboard History", "Needs Setup", false, "Waiting for the bridge."),
+        bridge: createSetupItem("Local service", "Checking", true, "Checking the local Auxora service."),
+        system: createSetupItem("System Monitor", "Checking", true, "Waiting for Auxora."),
+        network: createSetupItem("Network Monitor", "Checking", true, "Waiting for Auxora."),
+        launchers: createSetupItem("Recent apps", "Checking", false, "Waiting for Auxora."),
+        "quick-actions": createSetupItem("Quick Actions", "Checking", false, "Waiting for Auxora."),
+        shortcuts: createSetupItem("System Shortcuts", "Checking", false, "Waiting for Auxora."),
+        audio: createSetupItem("Audio & Media", "Checking", false, "Waiting for Auxora."),
+        clipboard: createSetupItem("Clipboard History", "Checking", false, "Waiting for Auxora."),
         weather: createSetupItem("Weather", "Optional", false, "Add an OpenWeather key if you want the Weather widget."),
         calendar: createSetupItem("Calendar", "Optional", false, "Add an ICS feed if you want the Calendar widget."),
-        hue: createSetupItem("Philips Hue", "Optional", false, "Link your Hue Bridge only if you want local lighting controls.")
+        hue: createSetupItem("Philips Hue", "Optional", false, "Link your Hue Bridge only if you want local lighting controls."),
+        frigate: createSetupItem("Camera Detection", "Optional", false, "Add a local Frigate address only if you want object-detection events.")
       }
     };
   }
 
   function createOfflineSetupSummary() {
     return {
+      hydrated: true,
       essentialsReady: false,
       onboardingCompleted: Boolean(bridgeConfig.dashboard && bridgeConfig.dashboard.onboardingCompleted),
       onboardingCompletedAt: bridgeConfig.dashboard && bridgeConfig.dashboard.onboardingCompletedAt ? bridgeConfig.dashboard.onboardingCompletedAt : "",
       onboardingVersion: bridgeConfig.dashboard && bridgeConfig.dashboard.onboardingVersion ? bridgeConfig.dashboard.onboardingVersion : onboardingVersion,
       needsAttention: true,
       items: {
-        bridge: createSetupItem("Local bridge", "Needs Setup", true, "Start the localhost bridge to load the dashboard."),
-        display: createSetupItem("Auxora display", "Needs Setup", true, "Start the local bridge to choose a touch display."),
-        system: createSetupItem("System Monitor", "Needs Setup", true, "System telemetry depends on the local bridge."),
-        network: createSetupItem("Network Monitor", "Needs Setup", true, "Network telemetry depends on the local bridge."),
+        bridge: createSetupItem("Local service", "Needs Setup", true, "Start Auxora to load live controls."),
+        display: createSetupItem("Auxora display", "Needs Setup", true, "Start Auxora to choose a companion touch display."),
+        system: createSetupItem("System Monitor", "Needs Setup", true, "System information depends on the local Auxora service."),
+        network: createSetupItem("Network Monitor", "Needs Setup", true, "Network information depends on the local Auxora service."),
         launchers: createSetupItem("Recent apps", "Needs Setup", false, "App launching depends on the local bridge."),
         "quick-actions": createSetupItem("Quick Actions", "Needs Setup", false, "Quick actions depend on the local bridge."),
         shortcuts: createSetupItem("System Shortcuts", "Needs Setup", false, "System shortcuts depend on the local bridge."),
@@ -266,7 +326,8 @@
         calendar: createSetupItem("Calendar", bridgeConfig.calendar && bridgeConfig.calendar.configured ? "Needs Setup" : "Optional", false, bridgeConfig.calendar && bridgeConfig.calendar.configured ? "Calendar was configured before. Start the bridge, then re-check it." : "Add an ICS feed if you want the Calendar widget."),
         weather: createSetupItem("Weather", bridgeConfig.weather && bridgeConfig.weather.configured ? "Needs Setup" : "Optional", false, bridgeConfig.weather && bridgeConfig.weather.configured ? "Weather was configured before. Start the bridge, then re-check it." : "Add an OpenWeather key if you want the Weather widget."),
         hue: createSetupItem("Philips Hue", bridgeConfig.hue && bridgeConfig.hue.configured ? "Needs Setup" : "Optional", false, bridgeConfig.hue && bridgeConfig.hue.configured ? "Hue was configured before. Start the bridge, then re-check it." : "Link your Hue Bridge only if you want local lighting controls."),
-        unifi: createSetupItem("UniFi Network", "Checking", false, "Auxora checks for UniFi in the background.")
+        unifi: createSetupItem("UniFi Network", "Checking", false, "Auxora checks for UniFi in the background."),
+        frigate: createSetupItem("Camera Detection", bridgeConfig.frigate && bridgeConfig.frigate.configured ? "Needs Setup" : "Optional", false, bridgeConfig.frigate && bridgeConfig.frigate.configured ? "Start Auxora to reconnect to Frigate." : "Add a local Frigate address only if you want object-detection events.")
       }
     };
   }
@@ -379,14 +440,16 @@
     }
 
     function laneColor(index, alpha) {
-      var colors = [
-        "rgba(0, 224, 255, " + alpha + ")",
-        "rgba(71, 255, 186, " + alpha + ")",
-        "rgba(255, 77, 141, " + alpha + ")",
-        "rgba(245, 166, 35, " + alpha + ")",
-        "rgba(133, 117, 255, " + alpha + ")"
-      ];
-      return colors[index % colors.length];
+      var value = ambientCanvasPalette[index % Math.max(1, ambientCanvasPalette.length)] || "#ffffff";
+      var hex = parseHexColor(value);
+      var rgb = String(value).match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+      if (hex) {
+        return rgbaFromHex(hex, alpha);
+      }
+      if (rgb) {
+        return "rgba(" + Math.round(Number(rgb[1])) + ", " + Math.round(Number(rgb[2])) + ", " + Math.round(Number(rgb[3])) + ", " + alpha + ")";
+      }
+      return "rgba(255, 255, 255, " + alpha + ")";
     }
 
     function draw(timestamp) {
@@ -467,6 +530,20 @@
     return allowed.indexOf(normalized) >= 0 ? normalized : fallback;
   }
 
+  function normalizeReleaseChannelForVersion(value, version) {
+    var channel = normalizeChoice(value, "stable", ["stable", "beta", "nightly"]);
+    var productVersion = String(version || "").trim().toLowerCase();
+    var prereleaseIndex = productVersion.indexOf("-");
+    var prerelease = prereleaseIndex >= 0 ? productVersion.slice(prereleaseIndex + 1) : "";
+    if (!prerelease) {
+      return channel;
+    }
+    if (prerelease.indexOf("nightly") !== -1) {
+      return "nightly";
+    }
+    return channel === "nightly" ? "nightly" : "beta";
+  }
+
   function getPerformanceBudget() {
     return normalizeChoice(getSetting("performanceBudget"), "balanced", ["balanced", "battery", "game", "max"]);
   }
@@ -491,8 +568,29 @@
     return normalizeAnimationPercent(getSetting("animationIntensity"));
   }
 
+  function normalizeThemeId(value) {
+    var requested = String(value || "").trim().toLowerCase();
+    var aliases = {
+      edge: "focus",
+      deepcore: "gaming",
+      afterburn: "warm",
+      verdant: "focus"
+    };
+    requested = aliases[requested] || requested;
+    return ["focus", "gaming", "warm"].indexOf(requested) === -1 ? "focus" : requested;
+  }
+
+  function normalizeAccentMode(value) {
+    return String(value || "").trim().toLowerCase() === "custom" ? "custom" : "preset";
+  }
+
+  function normalizeThemeVariantPreference(value) {
+    var requested = String(value || "").trim().toLowerCase();
+    return ["auto", "standard", "night"].indexOf(requested) === -1 ? "auto" : requested;
+  }
+
   function getProductTheme(themeId) {
-    var requested = String(themeId || getSetting("themeId") || defaultSettings.themeId);
+    var requested = normalizeThemeId(themeId || getSetting("themeId") || defaultSettings.themeId);
     return productThemePresets.filter(function (preset) {
       return preset.id === requested;
     })[0] || productThemePresets[0];
@@ -529,6 +627,79 @@
     return "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + alpha + ")";
   }
 
+  function contrastSafeTextColor(value) {
+    var rgb = hexToRgb(value);
+    function channel(valuePart) {
+      var normalized = valuePart / 255;
+      return normalized <= 0.04045 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
+    }
+    var luminance;
+    if (!rgb) {
+      return "#ffffff";
+    }
+    luminance = (0.2126 * channel(rgb.r)) + (0.7152 * channel(rgb.g)) + (0.0722 * channel(rgb.b));
+    return ((luminance + 0.05) / 0.05) >= (1.05 / (luminance + 0.05)) ? "#05070a" : "#ffffff";
+  }
+
+  function removeInlineThemeOverrides() {
+    [
+      "--theme-accent", "--theme-accent-secondary", "--theme-on-accent", "--theme-accent-soft", "--theme-accent-border", "--theme-accent-glow",
+      "--color-accent", "--color-accent-soft", "--dashboard-accent", "--dashboard-secondary", "--dashboard-warm",
+      "--dashboard-accent-glow", "--dashboard-secondary-glow", "--dashboard-warm-glow", "--dashboard-theme-bg"
+    ].forEach(function (name) {
+      document.documentElement.style.removeProperty(name);
+      if (document.body) {
+        document.body.style.removeProperty(name);
+      }
+    });
+  }
+
+  function setInlineThemeOverride(name, value) {
+    document.documentElement.style.setProperty(name, value);
+    if (document.body) {
+      document.body.style.setProperty(name, value);
+    }
+  }
+
+  function resolveThemeVariant() {
+    var preference = normalizeThemeVariantPreference(getSetting("themeVariant"));
+    var scenes = bridgeConfig && bridgeConfig.scenes ? bridgeConfig.scenes : {};
+    var profiles = Array.isArray(scenes.profiles) ? scenes.profiles : [];
+    var active = scenes.activeScene || profiles.filter(function (scene) {
+      return scene && scene.id === scenes.activeSceneId;
+    })[0];
+    var nativeVariant = String(scenes.themeVariant || (active && active.themeVariant) || "").trim().toLowerCase();
+    var hour;
+    if (preference !== "auto") {
+      return preference;
+    }
+    if (nativeVariant === "night" || nativeVariant === "standard") {
+      return nativeVariant;
+    }
+    if (active && active.id === "scene-night") {
+      return "night";
+    }
+    hour = new Date().getHours();
+    return hour >= 22 || hour < 7 ? "night" : "standard";
+  }
+
+  function isLiveGameThemeActive() {
+    return String(getSetting("gameModeAutoTune") || "1") !== "0"
+      && Boolean(gameActivity && gameActivity.active && gameActivity.activeGame);
+  }
+
+  function refreshAmbientCanvasPalette() {
+    var style = window.getComputedStyle(document.body || document.documentElement);
+    ambientCanvasPalette = [
+      style.getPropertyValue("--theme-ambient-canvas-a").trim() || style.getPropertyValue("--theme-accent").trim(),
+      style.getPropertyValue("--theme-ambient-canvas-b").trim() || style.getPropertyValue("--theme-accent-secondary").trim(),
+      style.getPropertyValue("--theme-ambient-canvas-c").trim() || style.getPropertyValue("--theme-ambient-rim").trim()
+    ].filter(Boolean);
+    if (!ambientCanvasPalette.length) {
+      ambientCanvasPalette = ["#ffffff"];
+    }
+  }
+
   function applyDashboardOpacity() {
     var ratio = getDashboardOpacityPercent() / 100;
     document.documentElement.style.setProperty("--dashboard-surface-opacity", String(ratio));
@@ -537,13 +708,14 @@
 
   function applyDashboardPresentation() {
     var theme = getProductTheme();
-    var gameAccent = hasValue("gameModeGame") ? parseHexColor(getSetting("gameModeAccent")) : null;
-    var gameSecondary = hasValue("gameModeGame") ? parseHexColor(getSetting("gameModeSecondary")) : null;
-    var accent = gameAccent || parseHexColor(getSetting("accentColor")) || theme.accent;
-    var secondary = gameSecondary || theme.secondary;
+    var customAccent = normalizeAccentMode(getSetting("accentMode")) === "custom" ? parseHexColor(getSetting("customAccentColor")) : null;
+    var gameAccent = isLiveGameThemeActive() ? parseHexColor(getSetting("gameModeAccent")) : null;
+    var gameSecondary = isLiveGameThemeActive() ? parseHexColor(getSetting("gameModeSecondary")) : null;
+    var accent = gameAccent || customAccent || theme.accent;
     var intensity = getAnimationIntensityPercent();
     var budget = getPerformanceBudget();
     var readability = getThemeReadability();
+    var variant = resolveThemeVariant();
     var effectiveIntensity = intensity;
 
     if (budget === "battery") {
@@ -553,19 +725,24 @@
     }
 
     applyDashboardOpacity();
-    document.documentElement.style.setProperty("--color-accent", accent);
-    document.documentElement.style.setProperty("--color-accent-soft", rgbaFromHex(accent, 0.18));
-    document.documentElement.style.setProperty("--dashboard-accent", accent);
-    document.documentElement.style.setProperty("--dashboard-secondary", secondary);
-    document.documentElement.style.setProperty("--dashboard-warm", theme.warm);
-    document.documentElement.style.setProperty("--dashboard-accent-glow", rgbaFromHex(accent, 0.12));
-    document.documentElement.style.setProperty("--dashboard-secondary-glow", rgbaFromHex(secondary, 0.1));
-    document.documentElement.style.setProperty("--dashboard-warm-glow", rgbaFromHex(theme.warm, 0.1));
-    document.documentElement.style.setProperty("--dashboard-theme-bg", theme.background);
+    removeInlineThemeOverrides();
+    if (customAccent || gameAccent) {
+      setInlineThemeOverride("--theme-accent", accent);
+      setInlineThemeOverride("--theme-on-accent", contrastSafeTextColor(accent));
+      setInlineThemeOverride("--theme-accent-soft", rgbaFromHex(accent, 0.14));
+      setInlineThemeOverride("--theme-accent-border", rgbaFromHex(accent, 0.58));
+      setInlineThemeOverride("--theme-accent-glow", rgbaFromHex(accent, 0.22));
+    }
+    if (gameSecondary) {
+      setInlineThemeOverride("--theme-accent-secondary", gameSecondary);
+    }
     document.documentElement.style.setProperty("--dashboard-aura-opacity", String(effectiveIntensity / 100));
+    document.documentElement.setAttribute("data-theme", theme.id);
+    document.documentElement.setAttribute("data-theme-variant", variant);
 
     if (document.body) {
       document.body.setAttribute("data-theme", theme.id);
+      document.body.setAttribute("data-theme-variant", variant);
       document.body.setAttribute("data-performance-budget", budget);
       document.body.setAttribute("data-readability", readability);
       document.body.classList.toggle("dashboard-native-page--motion-low", effectiveIntensity > 0 && effectiveIntensity <= 35);
@@ -577,6 +754,8 @@
       document.body.classList.toggle("dashboard-native-page--readability-high-contrast", readability === "high-contrast");
       document.body.classList.toggle("dashboard-native-page--readability-visor", readability === "visor");
     }
+
+    refreshAmbientCanvasPalette();
 
     renderDashboardChromeState();
   }
@@ -611,6 +790,21 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function patchDashboardDom(node, html) {
+    var patch = window.InlineWidgets && window.InlineWidgets.runtime && window.InlineWidgets.runtime.patchStableDom;
+    var range;
+    if (!node) {
+      return null;
+    }
+    if (typeof patch === "function") {
+      return patch(node, html);
+    }
+    range = document.createRange();
+    range.selectNodeContents(node);
+    node.replaceChildren(range.createContextualFragment(String(html || "").trim()));
+    return node.firstElementChild;
   }
 
   function text(value, fallback) {
@@ -650,6 +844,9 @@
 
   function renderDashboardChromeState() {
     var locked = isTouchLockEnabled();
+    var railNode = document.querySelector(".router-rail");
+    var viewerNode = document.querySelector(".router-viewer");
+    var quickScrimNode = document.getElementById("dashboard-quick-scrim");
     if (locked) {
       settingsDrawerOpen = false;
     }
@@ -667,7 +864,8 @@
     }
 
     if (settingsToggleNode) {
-      settingsToggleNode.textContent = settingsDrawerOpen && !locked ? "Hide Settings" : "Settings";
+      settingsToggleNode.textContent = settingsDrawerOpen && !locked ? "Hide options" : "Panel options";
+      settingsToggleNode.setAttribute("aria-label", settingsDrawerOpen && !locked ? "Close panel options" : "Open panel options");
       settingsToggleNode.setAttribute("aria-expanded", settingsDrawerOpen && !locked ? "true" : "false");
       settingsToggleNode.classList.toggle("is-active", settingsDrawerOpen && !locked);
     }
@@ -680,15 +878,50 @@
 
     if (touchUnlockNode) {
       touchUnlockNode.classList.toggle("is-hidden", !locked);
+      touchUnlockNode.setAttribute("aria-hidden", locked ? "false" : "true");
+    }
+
+    [railNode, viewerNode, quickDrawerNode, quickScrimNode].forEach(function (node) {
+      if (node) {
+        node.toggleAttribute("inert", locked);
+      }
+    });
+
+    if (touchLockScrimNode) {
+      touchLockScrimNode.classList.toggle("is-hidden", !locked);
+    }
+  }
+
+  function blockLockedInteraction(event) {
+    if (!isTouchLockEnabled()) {
+      return;
+    }
+    if (touchUnlockNode && (event.target === touchUnlockNode || touchUnlockNode.contains(event.target))) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.type === "click" || event.type === "touchstart") {
+      showTouchFeedback("Touch locked — use Unlock Touch");
     }
   }
 
   function setTouchLockEnabled(enabled) {
+    if (enabled) {
+      quickDrawerOpener = null;
+      setQuickDrawerOpen(false);
+    }
     dashboardSettings.touchLockMode = enabled ? "1" : "0";
     storedSettings.touchLockMode = dashboardSettings.touchLockMode;
     persistSettings();
     renderDashboardChromeState();
     showTouchFeedback(enabled ? "Touch locked" : "Touch unlocked");
+    window.setTimeout(function () {
+      var focusTarget = enabled ? touchUnlockNode : touchLockToggleNode;
+      if (focusTarget && typeof focusTarget.focus === "function") {
+        focusTarget.focus({ preventScroll: true });
+      }
+    }, 0);
     if (!enabled) {
       maybeOpenPendingGameFace();
     }
@@ -775,26 +1008,32 @@
       empty.classList.remove("is-hidden");
     }
 
-    scheduleFatalDashboardReload();
-  }
-
-  function scheduleFatalDashboardReload() {
-    if (fatalDashboardReloadTimerId) {
-      return;
-    }
-
-    fatalDashboardReloadTimerId = window.setTimeout(function () {
-      try {
-        window.location.reload();
-      } catch (error) {
-        console.warn("Dashboard self-heal reload failed", error);
-      }
-    }, 60000);
   }
 
   function reportBackgroundDashboardError(title, error) {
     console.warn(title + ": " + formatDashboardError(error), error);
     showTouchFeedback("Background task failed");
+  }
+
+  function clearWidgetError() {
+    if (widgetErrorNode) {
+      widgetErrorNode.classList.add("is-hidden");
+    }
+  }
+
+  function reportWidgetError(widget, error, phase, generation) {
+    if (generation !== widgetErrorGeneration || !widget || widget.id !== currentWidgetId) {
+      return;
+    }
+    console.error("Panel " + phase + " failed: " + formatDashboardError(error), error);
+    setText("dashboard-widget-error-title", getWidgetTitle(widget) + " stopped");
+    setText("dashboard-widget-error-copy", "This panel stopped while " + phase + ". Navigation and the other Auxora panels are still available.");
+    if (widgetErrorNode) {
+      widgetErrorNode.dataset.widgetId = widget.id;
+      widgetErrorNode.dataset.phase = phase;
+      widgetErrorNode.dataset.diagnostic = widget.id + ":" + phase + ":" + formatDashboardError(error).slice(0, 240);
+      widgetErrorNode.classList.remove("is-hidden");
+    }
   }
 
   function setQueryParam(name, value) {
@@ -846,12 +1085,16 @@
   }
 
   function postJson(url, body, timeoutMs) {
+    var headers = {
+      "Content-Type": "application/json"
+    };
+    if (typeof window.XenonSessionToken === "string" && window.XenonSessionToken) {
+      headers["X-Xenon-Session"] = window.XenonSessionToken;
+    }
     return withTimeout(fetch(url, {
       method: "POST",
       cache: "no-store",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: headers,
       body: JSON.stringify(body || {})
     }).then(function (response) {
       if (!response.ok) {
@@ -882,13 +1125,48 @@
     }
 
     updateAvailabilityChecked = true;
+    publishSurfaceStatus("updates", "Checking", "muted", "Checking the selected release channel.");
     channel = getSetting("updateChannel") || (bridgeConfig.dashboard && bridgeConfig.dashboard.releaseChannel) || "stable";
     fetchJson(buildUrl(bridgeOrigin, "/api/releases/latest", { channel: channel }), 8500).then(function (payload) {
+      if (payload && payload.status === "live") {
+        publishSurfaceStatus("updates", "Ready", payload.updateAvailable ? "warn" : "good", payload.updateAvailable ? "Update available" : "Up to date");
+      } else {
+        publishSurfaceStatus("updates", "Degraded", "warn", "Release check did not complete.");
+      }
       if (payload && payload.status === "live" && payload.updateAvailable) {
         showTouchFeedback("Update " + text(payload.latestVersion, "available") + " is ready in Updates");
       }
     }).catch(function (error) {
+      publishSurfaceStatus("updates", "Degraded", "warn", "Release check failed.");
       console.warn("Background update check failed", error);
+    });
+  }
+
+  function maybeCheckRecoveryAvailability() {
+    if (recoveryAvailabilityChecked || bridgeReachable !== true) {
+      return;
+    }
+
+    recoveryAvailabilityChecked = true;
+    if (currentWidgetId === "installer") {
+      return;
+    }
+
+    publishSurfaceStatus("installer", "Checking", "muted", "Checking recovery actions.");
+    fetchJson(buildUrl(bridgeOrigin, "/api/recovery"), 7000).then(function (payload) {
+      if (currentWidgetId === "installer") {
+        return;
+      }
+      publishSurfaceStatus(
+        "installer",
+        payload && payload.status === "ready" ? "Ready" : "Waiting for display",
+        payload && payload.status === "ready" ? "good" : "warn",
+        text(payload && payload.message, "Recovery actions checked")
+      );
+    }).catch(function () {
+      if (currentWidgetId !== "installer") {
+        publishSurfaceStatus("installer", "Unavailable", "danger", "Recovery actions unavailable.");
+      }
     });
   }
 
@@ -1081,6 +1359,19 @@
     });
   }
 
+  function clearTransientGameTheme() {
+    if (!hasValue("gameModeGame") && !hasValue("gameModeThemeId") && !hasValue("gameModeAccent") && !hasValue("gameModeSecondary") && !hasValue("gameModeMood")) {
+      return;
+    }
+    saveDashboardSettings({
+      gameModeGame: "",
+      gameModeThemeId: "",
+      gameModeAccent: "",
+      gameModeSecondary: "",
+      gameModeMood: ""
+    });
+  }
+
   function handleGameActivity(payload) {
     var activeGame;
     var activeId;
@@ -1091,6 +1382,7 @@
 
     if (!activeGame || !activeId) {
       restorePreGamePerformanceBudget();
+      clearTransientGameTheme();
       gameFaceLastActiveId = "";
       gameFaceAutoOpenedGameId = "";
       gameFaceSuppressedGameId = "";
@@ -1105,6 +1397,8 @@
       gameFaceSuppressedGameId = "";
       clearPendingGameFaceAutoOpen();
     }
+
+    applyDashboardPresentation();
 
     if (!isGameFaceAutoOpenEnabled()
       || gameFaceSuppressedGameId === activeId
@@ -1141,8 +1435,7 @@
       handleGameActivity(payload);
       evaluateSceneContext(payload);
     }, function () {
-      gameActivity = null;
-      renderDashboardChromeState();
+      handleGameActivity(null);
     });
   }
 
@@ -1166,7 +1459,7 @@
       if (payload.activeSceneId && payload.activeSceneId !== previousId) {
         applyScenePresentation(payload.activeScene);
         renderQuickDrawer();
-        showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Scene") + " activated automatically");
+        showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Mode") + " activated automatically");
       }
     }).catch(function (error) {
       console.warn("Scene evaluation failed", error);
@@ -1195,21 +1488,45 @@
       return;
     }
 
-    nowStripNode.dataset.targetWidget = targetWidget || "";
-    nowStripNode.innerHTML = '' +
-      '<span class="dashboard-now-strip__label">' + escapeHtml(label || "Now") + '</span>' +
-      '<strong>' + escapeHtml(title || "Ready") + '</strong>' +
-      '<small>' + escapeHtml(detail || "") + '</small>';
+    var nextTarget = targetWidget || "";
+    var nextLabel = label || "Now";
+    var nextTitle = title || "Ready";
+    var nextDetail = detail || "";
+    var nextPin = nowStripMode === "pinned" ? "Auto" : "Keep";
+    var nextSignature = [nextTarget, nextLabel, nextTitle, nextDetail, nextPin].join("\u001f");
+    if (nowStripRenderSignature === nextSignature && !nowStripNode.classList.contains("is-hidden")) {
+      return;
+    }
+
+    nowStripRenderSignature = nextSignature;
+    nowStripNode.dataset.targetWidget = nextTarget;
+    var labelNode = nowStripNode.querySelector(".dashboard-now-strip__label");
+    var titleNode = nowStripNode.querySelector("strong");
+    var detailNode = nowStripNode.querySelector("small");
+    var pinNode = nowStripNode.querySelector("[data-now-strip-action='pin']");
+    if (labelNode) { labelNode.textContent = nextLabel; }
+    if (titleNode) { titleNode.textContent = nextTitle; }
+    if (detailNode) { detailNode.textContent = nextDetail; }
+    if (pinNode) { pinNode.textContent = nextPin; }
     nowStripNode.classList.remove("is-hidden");
-    document.body.classList.add("dashboard-native-page--now-strip-visible");
   }
 
   function hideNowStrip() {
     if (nowStripNode) {
+      nowStripRenderSignature = "";
       nowStripNode.classList.add("is-hidden");
       nowStripNode.dataset.targetWidget = "";
     }
-    document.body.classList.remove("dashboard-native-page--now-strip-visible");
+  }
+
+  function setNowStripMode(mode) {
+    nowStripMode = ["auto", "pinned", "hidden"].indexOf(mode) === -1 ? "auto" : mode;
+    try {
+      window.localStorage.setItem(nowStripModeStorageKey, nowStripMode);
+    } catch (error) {
+      console.warn("Unable to persist media strip preference", error);
+    }
+    updateNowPlayingStrip();
   }
 
   function findAudioDeviceName(payload) {
@@ -1223,7 +1540,7 @@
 
   function updateNowPlayingStrip() {
     var activeGame = gameActivity && gameActivity.active && gameActivity.activeGame ? gameActivity.activeGame : null;
-    if (!nowStripNode || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin() || shouldSuppressNowStrip()) {
+    if (!nowStripNode || nowStripMode === "hidden" || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin() || shouldSuppressNowStrip()) {
       hideNowStrip();
       return;
     }
@@ -1242,7 +1559,7 @@
       var title = text(payload && payload.title, "");
       var artist = text(payload && payload.artist, "");
       var status = text(payload && payload.playbackStatus, text(payload && payload.status, ""));
-      if (title || artist) {
+      if ((title || artist) && status.toLowerCase() === "playing") {
         setNowStrip(
           "audio",
           status && status !== "idle" ? status.replace(/-/g, " ") : "Media controls",
@@ -1252,8 +1569,17 @@
         return;
       }
 
+      if (nowStripMode !== "pinned") {
+        hideNowStrip();
+        return null;
+      }
+
       throw new Error("No active media");
     }).catch(function () {
+      if (nowStripMode !== "pinned") {
+        hideNowStrip();
+        return null;
+      }
       return fetchJson(buildUrl(bridgeOrigin, "/api/audio"), 2600).then(function (payload) {
         var parsedVolume = Number(payload && payload.masterVolume);
         var volume = Number.isFinite(parsedVolume) ? parsedVolume : null;
@@ -1271,7 +1597,22 @@
       return;
     }
 
-    nowStripNode.addEventListener("click", function () {
+    nowStripNode.addEventListener("click", function (event) {
+      var actionNode = event.target && event.target.closest ? event.target.closest("[data-now-strip-action]") : null;
+      var action = actionNode && actionNode.getAttribute("data-now-strip-action");
+      if (action === "dismiss") {
+        setNowStripMode("hidden");
+        showTouchFeedback("Media strip hidden");
+        return;
+      }
+      if (action === "pin") {
+        setNowStripMode(nowStripMode === "pinned" ? "auto" : "pinned");
+        showTouchFeedback(nowStripMode === "pinned" ? "Media strip kept visible" : "Media strip automatic");
+        return;
+      }
+      if (action !== "open") {
+        return;
+      }
       var targetWidget = nowStripNode.dataset.targetWidget || "";
       if (targetWidget) {
         selectWidget(targetWidget, true);
@@ -1378,7 +1719,7 @@
 
     launcherDockRenderKey = renderKey;
     launcherDockNode.classList.toggle("is-expanded", launcherDockExpanded);
-    launcherDockNode.innerHTML = '' +
+    patchDashboardDom(launcherDockNode, '' +
       '<div class="dashboard-launcher-dock__head">' +
         '<span>Apps</span>' +
         '<strong>' + escapeHtml(String(launcherDockEntries.length)) + '</strong>' +
@@ -1399,7 +1740,7 @@
       }).join("") + '</div>' +
       (hasMore
         ? '<button class="dashboard-launcher-dock__more" type="button" data-launcher-dock-action="toggle-expanded" aria-expanded="' + (launcherDockExpanded ? "true" : "false") + '">' + (launcherDockExpanded ? "Less" : "More") + '</button>'
-        : '');
+        : ''));
     setLauncherDockVisible(true);
   }
 
@@ -1499,12 +1840,64 @@
     }
   }
 
+  function readDestinationPanels() {
+    try {
+      var parsed = JSON.parse(window.localStorage.getItem(destinationPanelsStorageKey) || "{}");
+      return Object.assign({}, destinationPanels, parsed && typeof parsed === "object" ? parsed : {});
+    } catch (error) {
+      return Object.assign({}, destinationPanels);
+    }
+  }
+
+  function persistDestinationPanel(destination, widgetId) {
+    destinationPanels[destination] = widgetId;
+    try {
+      window.localStorage.setItem(destinationPanelsStorageKey, JSON.stringify(destinationPanels));
+    } catch (error) {
+      console.warn("Unable to persist destination panel", error);
+    }
+  }
+
   function persistSettings() {
     try {
       window.localStorage.setItem(settingsStorageKey, JSON.stringify(dashboardSettings));
     } catch (error) {
       console.warn("Unable to persist dashboard settings", error);
     }
+  }
+
+  function migrateThemeSettings(settings, forceLegacyAccent) {
+    var migrated = Object.assign({}, settings || {});
+    var legacyVersion = String(migrated.themeSchemaVersion || "") !== "2" || forceLegacyAccent === true;
+    var legacyAccent = parseHexColor(migrated.accentColor);
+    var customAccent = parseHexColor(migrated.customAccentColor);
+    var oldPresetAccents = ["#00e0ff", "#7a5cff", "#ff4d8d", "#44f0c2"];
+
+    migrated.themeId = normalizeThemeId(migrated.themeId);
+    migrated.themeVariant = normalizeThemeVariantPreference(migrated.themeVariant);
+
+    if (legacyVersion) {
+      if (legacyAccent && oldPresetAccents.indexOf(legacyAccent) === -1) {
+        migrated.accentMode = "custom";
+        migrated.customAccentColor = legacyAccent;
+      } else if (normalizeAccentMode(migrated.accentMode) === "custom" && customAccent) {
+        migrated.accentMode = "custom";
+        migrated.customAccentColor = customAccent;
+      } else {
+        migrated.accentMode = "preset";
+        migrated.customAccentColor = "";
+      }
+    } else if (normalizeAccentMode(migrated.accentMode) === "custom" && customAccent) {
+      migrated.accentMode = "custom";
+      migrated.customAccentColor = customAccent;
+    } else {
+      migrated.accentMode = "preset";
+      migrated.customAccentColor = "";
+    }
+
+    migrated.accentColor = "";
+    migrated.themeSchemaVersion = "2";
+    return migrated;
   }
 
   function getDefaultSettingValue(key) {
@@ -1516,13 +1909,22 @@
 
   function buildInitialSettings() {
     storedSettings = readStoredSettings();
+    hadExplicitStoredThemeSelection = Object.prototype.hasOwnProperty.call(storedSettings, "themeId")
+      || Object.prototype.hasOwnProperty.call(storedSettings, "accentMode")
+      || Object.prototype.hasOwnProperty.call(storedSettings, "customAccentColor");
+    storedSettings = migrateThemeSettings(storedSettings, false);
+    try {
+      window.localStorage.setItem(settingsStorageKey, JSON.stringify(storedSettings));
+    } catch (error) {
+      console.warn("Unable to persist migrated dashboard theme settings", error);
+    }
     var merged = Object.assign({}, defaultSettings, storedSettings);
 
     Object.keys(defaultSettings).forEach(function (key) {
       merged[key] = params.has(key) && params.get(key) !== "" ? params.get(key) : (merged[key] == null ? defaultSettings[key] : merged[key]);
     });
 
-    return merged;
+    return migrateThemeSettings(merged, params.has("accentColor"));
   }
 
   function reloadDashboardSettings() {
@@ -1548,10 +1950,22 @@
       return;
     }
 
+    var effectiveReleaseChannel = normalizeReleaseChannelForVersion(
+      dashboardSettings.updateChannel || dashboardSettings.releaseChannel || bridgeConfig.dashboard.releaseChannel,
+      bridgeApp.version
+    );
+    bridgeConfig.dashboard.releaseChannel = effectiveReleaseChannel;
+    dashboardSettings.releaseChannel = effectiveReleaseChannel;
+    dashboardSettings.updateChannel = effectiveReleaseChannel;
+    storedSettings.releaseChannel = effectiveReleaseChannel;
+    storedSettings.updateChannel = effectiveReleaseChannel;
+
     [
       "performanceBudget",
       "themeReadability",
-      "releaseChannel"
+      "releaseChannel",
+      "animationIntensity",
+      "dashboardOpacity"
     ].forEach(function (key) {
       if (!Object.prototype.hasOwnProperty.call(storedSettings, key) && bridgeConfig.dashboard[key] != null) {
         dashboardSettings[key] = String(bridgeConfig.dashboard[key] || defaultSettings[key]);
@@ -1564,6 +1978,21 @@
 
     if (!Object.prototype.hasOwnProperty.call(storedSettings, "gameModeAutoTune")) {
       dashboardSettings.gameModeAutoTune = bridgeConfig.dashboard.gameModeAutoTune === false ? "0" : "1";
+    }
+
+    if (!hadExplicitStoredThemeSelection && bridgeConfig.dashboard.themeId) {
+      var nativeTheme = migrateThemeSettings({
+        themeSchemaVersion: "2",
+        themeId: bridgeConfig.dashboard.themeId,
+        accentMode: bridgeConfig.dashboard.accentMode,
+        customAccentColor: bridgeConfig.dashboard.customAccentColor,
+        themeVariant: bridgeConfig.dashboard.themeVariant
+      }, false);
+      ["themeSchemaVersion", "themeId", "accentMode", "customAccentColor", "accentColor", "themeVariant"].forEach(function (key) {
+        dashboardSettings[key] = nativeTheme[key];
+        storedSettings[key] = nativeTheme[key];
+      });
+      persistSettings();
     }
   }
 
@@ -1579,7 +2008,77 @@
     persistSettings();
   }
 
+  function getActiveModeId() {
+    return String((bridgeConfig.scenes && bridgeConfig.scenes.activeSceneId) || dashboardSettings.profileId || "scene-work");
+  }
+
+  function readModeLayouts() {
+    try {
+      var parsed = JSON.parse(String(dashboardSettings.modeLayouts || "{}"));
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  var modeLayoutSettingKeys = ["layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes"];
+
+  function modeLayoutSeed(source) {
+    var settings = source || {};
+    var seed = {};
+    modeLayoutSettingKeys.forEach(function (key) {
+      var value = Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : defaultSettings[key];
+      seed[key] = String(value == null ? "" : value);
+    });
+    return seed;
+  }
+
+  function migrateLegacyModeLayouts(activeModeId) {
+    if (String(storedSettings.modeLayoutSchemaVersion || "") === "2") {
+      dashboardSettings.modeLayoutSchemaVersion = "2";
+      return false;
+    }
+
+    var legacyLayout = modeLayoutSeed(dashboardSettings);
+    var defaultLayout = modeLayoutSeed(defaultSettings);
+    var modeLayouts = readModeLayouts();
+    var modeIds = Object.keys(modeLayouts);
+    var resolvedModeId = String(activeModeId || getActiveModeId() || "scene-work");
+    var hasLegacyLayout = modeLayoutSettingKeys.some(function (key) {
+      return legacyLayout[key] !== defaultLayout[key];
+    });
+
+    modeIds.forEach(function (modeId) {
+      var modeLayout = modeLayouts[modeId];
+      if (!modeLayout || typeof modeLayout !== "object" || Array.isArray(modeLayout)) {
+        modeLayout = {};
+      }
+      modeLayouts[modeId] = Object.assign({}, legacyLayout, modeLayout);
+    });
+
+    if (!modeIds.length && hasLegacyLayout) {
+      modeLayouts[resolvedModeId] = Object.assign({}, legacyLayout);
+    }
+
+    dashboardSettings.modeLayouts = JSON.stringify(modeLayouts);
+    storedSettings.modeLayouts = dashboardSettings.modeLayouts;
+    dashboardSettings.modeLayoutSchemaVersion = "2";
+    storedSettings.modeLayoutSchemaVersion = "2";
+    persistSettings();
+    return true;
+  }
+
   function getSetting(key) {
+    if (modeLayoutSettingKeys.indexOf(key) !== -1) {
+      var modeLayouts = readModeLayouts();
+      var modeLayout = modeLayouts[getActiveModeId()];
+      if (modeLayout && Object.prototype.hasOwnProperty.call(modeLayout, key)) {
+        return modeLayout[key] == null ? "" : modeLayout[key];
+      }
+      if (String(storedSettings.modeLayoutSchemaVersion || "") === "2") {
+        return defaultSettings[key] == null ? "" : defaultSettings[key];
+      }
+    }
     return dashboardSettings[key] == null ? "" : dashboardSettings[key];
   }
 
@@ -1594,7 +2093,7 @@
   }
 
   function isWidgetConfigured(widgetId) {
-    if (widgetId === "weather" || widgetId === "hue" || widgetId === "calendar") {
+    if (widgetId === "weather" || widgetId === "hue" || widgetId === "calendar" || widgetId === "frigate") {
       return getWidgetState(widgetId) !== "Optional";
     }
 
@@ -1606,7 +2105,14 @@
   }
 
   function getWidgetState(widgetId) {
+    if (surfaceStatuses[widgetId] && surfaceStatuses[widgetId].status) {
+      return surfaceStatuses[widgetId].status;
+    }
+
     if (widgetId === "setup") {
+      if (!bridgeSetup.hydrated) {
+        return "Checking";
+      }
       return (!bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention) ? "Needs Setup" : "Ready";
     }
 
@@ -1618,18 +2124,73 @@
       return getSetupItem("unifi").state || "Optional";
     }
 
-    return isWidgetConfigured(widgetId) ? "Ready" : "Optional";
+    if (widgetId === "frigate") {
+      var frigateState = getSetupItem("frigate").state || "Optional";
+      return frigateState === "Optional" ? "Setup" : frigateState;
+    }
+
+    return surfaceContracts[widgetId]
+      ? surfaceContracts[widgetId].defaultStatus
+      : "Unavailable";
+  }
+
+  function updatePickerSurfaceStatus(widgetId) {
+    var button;
+    var meta;
+    var state;
+
+    if (!pickerNode || !widgetId) {
+      return;
+    }
+
+    button = Array.prototype.slice.call(pickerNode.querySelectorAll("[data-widget-id]")).filter(function (candidate) {
+      return candidate.getAttribute("data-widget-id") === widgetId;
+    })[0] || null;
+    meta = button && button.querySelector(".router-picker__meta");
+    if (!meta) {
+      return;
+    }
+
+    state = getWidgetState(widgetId);
+    meta.textContent = state;
+    meta.setAttribute("data-state", state.toLowerCase().replace(/\s+/g, "-"));
+  }
+
+  function publishSurfaceStatus(widgetId, status, tone, detail) {
+    var nextStatus = {
+      status: status || "Unavailable",
+      tone: tone || getStateTone(status),
+      detail: detail || ""
+    };
+    var previousStatus = surfaceStatuses[widgetId];
+
+    if (previousStatus
+        && previousStatus.status === nextStatus.status
+        && previousStatus.tone === nextStatus.tone
+        && previousStatus.detail === nextStatus.detail) {
+      return false;
+    }
+
+    surfaceStatuses[widgetId] = nextStatus;
+    if (currentWidgetId === widgetId) {
+      setText("dashboard-widget-source", nextStatus.status);
+    }
+    updatePickerSurfaceStatus(widgetId);
+    return true;
   }
 
   function getStateTone(state) {
-    if (state === "Ready" || state === "Detected" || state === "Built in") {
+    if (state === "Ready" || state === "Available" || state === "Detected" || state === "Built in") {
       return "good";
     }
-    if (state === "Unsupported" || state === "Checking" || state === "Later") {
+    if (state === "Unsupported" || state === "Checking" || state === "Not checked" || state === "Later" || state === "Locked") {
       return "muted";
     }
-    if (state === "Needs Setup") {
+    if (state === "Setup" || state === "Needs Setup" || state === "Degraded") {
       return "warn";
+    }
+    if (state === "Unavailable") {
+      return "danger";
     }
     return "muted";
   }
@@ -1679,6 +2240,10 @@
       return bridgeCapabilities.hue === true;
     }
 
+    if (widgetId === "frigate") {
+      return bridgeCapabilities.frigate === true;
+    }
+
     return true;
   }
 
@@ -1693,6 +2258,15 @@
         return item.trim();
       })
       .filter(Boolean);
+  }
+
+  function getCardSize(widgetId) {
+    try {
+      var sizes = JSON.parse(String(getSetting("cardSizes") || "{}"));
+      return ["compact", "standard", "wide"].indexOf(sizes[widgetId]) !== -1 ? sizes[widgetId] : "standard";
+    } catch (error) {
+      return "standard";
+    }
   }
 
   function sortWidgetsByLayout(widgetList) {
@@ -1717,15 +2291,24 @@
   }
 
   function shouldShowWidget(widget) {
+    if (!widget) {
+      return false;
+    }
+    if (String(getSetting("hiddenWidgets") || "").split(",").filter(Boolean).indexOf(widget.id) !== -1) {
+      return false;
+    }
     if (widget.id === "home" || widget.id === "scenes") {
       return true;
     }
     if (widget.id === "setup") {
-      return !perfMode && (currentWidgetId === "setup" || !bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention);
+      // Diagnostics is a permanent settings surface. Its status changes between
+      // Ready and Needs Setup, but a healthy machine must not make the repair and
+      // display-selection entry point disappear.
+      return !perfMode;
     }
 
-    if (widget.tier === "product") {
-      return isLocalProductWidget(widget.id);
+    if (widget.alwaysVisible || widget.tier === "product") {
+      return true;
     }
 
     if (isLocalProductWidget(widget.id)) {
@@ -1745,15 +2328,20 @@
     }
 
     if (widget.id === "clipboard") {
-      return false;
+      // Clipboard contents are read only after the user opens this surface. The
+      // lightweight health snapshot reports capability without enumerating data,
+      // so keeping the entry discoverable does not weaken the private default.
+      return isWidgetSupported(widget.id);
     }
 
     if (widget.id === "media") {
       return isWidgetSupported("media");
     }
 
-    if (widget.id === "weather" || widget.id === "hue" || widget.id === "calendar") {
-      return isWidgetSupported(widget.id) && getWidgetState(widget.id) !== "Optional";
+    if (widget.id === "weather" || widget.id === "hue" || widget.id === "calendar" || widget.id === "frigate") {
+      // Optional integrations remain visible as honest setup surfaces. Hiding
+      // them until configured makes their renderers and deep links unreachable.
+      return true;
     }
 
     if (widget.tier === "advanced") {
@@ -1769,6 +2357,12 @@
     }));
   }
 
+  function getLayoutEditorWidgets() {
+    return sortWidgetsByLayout(widgets.filter(function (widget) {
+      return widget && widget.destination === "library";
+    }));
+  }
+
   function sceneWidgetIds() {
     var scenes = bridgeConfig && bridgeConfig.scenes ? bridgeConfig.scenes : {};
     var profiles = Array.isArray(scenes.profiles) ? scenes.profiles : [];
@@ -1779,29 +2373,31 @@
     var pinned = String(getSetting("pinnedWidgets") || "").split(",").filter(Boolean);
     var hidden = String(getSetting("hiddenWidgets") || "").split(",").filter(Boolean);
     return base.concat(pinned).filter(function (id, index, list) {
-      return hidden.indexOf(id) === -1 && list.indexOf(id) === index;
+      var optionalIntegration = id === "weather" || id === "calendar" || id === "hue";
+      return hidden.indexOf(id) === -1
+        && list.indexOf(id) === index
+        && (!optionalIntegration || isWidgetConfigured(id));
     });
   }
 
   function getDestinationWidgets(destination) {
     var target = destination || primaryDestination;
-    var settingsIds = ["setup", "theme-studio", "layout-editor", "remote", "updates", "privacy", "installer"];
     var ids;
     if (target === "home") {
       ids = ["home"].concat(sceneWidgetIds().filter(function (id) { return id !== "home"; }));
     } else if (target === "scenes") {
       ids = ["scenes"];
-    } else if (target === "settings") {
-      ids = settingsIds;
     } else {
-      ids = widgets.map(function (widget) { return widget.id; }).filter(function (id) {
-        return id !== "home" && id !== "scenes" && settingsIds.indexOf(id) === -1;
+      ids = widgets.filter(function (widget) {
+        return widget.destination === target;
+      }).map(function (widget) {
+        return widget.id;
       });
     }
 
-    return ids.map(getWidgetById).filter(function (widget, index, list) {
-      return widget && list.indexOf(widget) === index;
-    });
+    return sortWidgetsByLayout(ids.map(getWidgetById).filter(function (widget, index, list) {
+      return widget && shouldShowWidget(widget) && list.indexOf(widget) === index;
+    }));
   }
 
   function getWidgetById(widgetId) {
@@ -1811,7 +2407,7 @@
 
     return widgets.filter(function (entry) {
       return entry.id === widgetId;
-    })[0] || widgets[0];
+    })[0] || null;
   }
 
   function hasWidgetId(widgetId) {
@@ -1845,34 +2441,30 @@
   }
 
   function createWidgets() {
-    return [
+    var registry = [
       {
         id: "home",
         title: "Home",
         requiresBridge: true,
         tier: "product",
-        kicker: "Smart Glance",
-        copy: "The most important information and actions for the active Scene.",
+        kicker: "Quick Look",
+        copy: "Your most useful information and controls, all in one place.",
         viewerLabel: "Auxora"
       },
       {
         id: "scenes",
-        title: "Scenes",
+        title: "Modes",
         requiresBridge: true,
         tier: "product",
         kicker: "Adaptive experience",
-        copy: "Switch the entire touch surface between Work, Gaming, Media, Night, and Home.",
+        copy: "Switch the entire touch surface between Work, Gaming, Media, and Home. Night display settings stay separate.",
         viewerLabel: "Manual + automatic"
       },
       {
         id: "setup",
+        title: "Diagnostics",
+        kicker: "Setup & diagnostics",
         requiresBridge: true,
-        getTitle: function () {
-          return bridgeSetup.onboardingCompleted ? "Diagnostics" : "Auto Setup";
-        },
-        getKicker: function () {
-          return bridgeSetup.onboardingCompleted ? "Diagnostics" : "Auto provisioning";
-        },
         getCopy: function () {
           return bridgeSetup.onboardingCompleted
             ? "Auto-detected services, optional permissions, and repair steps."
@@ -1889,9 +2481,10 @@
             configEndpoint: buildUrl(bridgeOrigin, "/api/config"),
             dashboardConfigEndpoint: buildUrl(bridgeOrigin, "/api/config/dashboard"),
             weatherConfigEndpoint: buildUrl(bridgeOrigin, "/api/config/weather"),
+            frigateConfigEndpoint: buildUrl(bridgeOrigin, "/api/config/frigate"),
+            frigateTestEndpoint: buildUrl(bridgeOrigin, "/api/frigate/test"),
             hueEndpoint: buildUrl(bridgeOrigin, "/api/hue"),
             hueLinkEndpoint: buildUrl(bridgeOrigin, "/api/hue/link"),
-            dashboardUrl: buildUrl(bridgeOrigin, "/dashboard.html", { v: assetRevision }),
             advanced: showAdvanced ? "1" : "",
             onboardingVersion: onboardingVersion
           });
@@ -1912,7 +2505,7 @@
         requiresBridge: false,
         tier: "product",
         kicker: "Visual style",
-        copy: "Theme, readability, performance budget, and Game Mode tuning for the touch surface.",
+        copy: "Theme, readability, performance, and Game Mode tuning for the touch surface.",
         viewerLabel: "Display tuning"
       },
       {
@@ -1921,7 +2514,7 @@
         requiresBridge: true,
         tier: "product",
         kicker: "Release safety",
-        copy: "Stable, beta, and nightly release checks with rollback state from the local host.",
+        copy: "Release checks and artifact trust from the local host, limited to channels supported by this build.",
         viewerLabel: "Release channel"
       },
       {
@@ -1929,27 +2522,27 @@
         title: "Layout Editor",
         requiresBridge: false,
         tier: "product",
-        kicker: "Edit mode",
-        copy: "Reorder and pin the cards that belong on your active Scene.",
-        viewerLabel: "Local layout"
+        kicker: "Customize mode",
+        copy: "Choose where each panel appears, how wide it opens, and the order you see it. Every change saves automatically.",
+        viewerLabel: "Mode layout"
       },
       {
         id: "streaming",
         title: "Streaming",
         requiresBridge: false,
         tier: "product",
-        kicker: "Creator controls",
-        copy: "Local OBS connectivity, audio, media, and stream-ready Scene controls.",
+        kicker: "Creator preview",
+        copy: "Local-only OBS reachability, audio and media shortcuts, and a streaming layout preview. This beta does not issue OBS commands.",
         viewerLabel: "Creator beta"
       },
       {
         id: "marketplace",
-        title: "Extensions",
+        title: "Widget Packs",
         requiresBridge: true,
         tier: "product",
-        kicker: "Signed Library",
-        copy: "Curated packs and locally inspected signed extensions with declared permissions.",
-        viewerLabel: "Trust enforced"
+        kicker: "Local dashboard layouts",
+        copy: "Built-in widget layouts plus inspection-only checks for third-party manifests. Third-party code never runs in this beta.",
+        viewerLabel: "Built-in packs"
       },
       {
         id: "privacy",
@@ -1965,9 +2558,9 @@
         title: "Phone Remote",
         requiresBridge: true,
         tier: "product",
-        kicker: "Temporary local session",
-        copy: "Start a short-lived, token-protected remote on your private network.",
-        viewerLabel: "No account"
+        kicker: "Unavailable in this beta",
+        copy: "Phone Remote is not included in 0.3.0-beta.1. Auxora does not open a phone-control listener.",
+        viewerLabel: "Unavailable"
       },
       {
         id: "installer",
@@ -1975,14 +2568,14 @@
         requiresBridge: true,
         tier: "product",
         kicker: "Install health",
-        copy: "Verify installer, update, rollback, and repair readiness.",
-        viewerLabel: "Release safety"
+        copy: "Retry the dashboard, repair an installed copy, restart in Safe Mode, open logs, or quit.",
+        viewerLabel: "Recovery tools"
       },
       {
         id: "system",
         title: "System Monitor",
         requiresBridge: true,
-        copy: "CPU, GPU, and RAM telemetry from the local bridge.",
+        copy: "CPU, GPU, and memory information from the local Auxora service.",
         getViewerLabel: function () {
           return "Local bridge";
         },
@@ -2018,7 +2611,7 @@
         id: "audio",
         title: "Audio & Media",
         requiresBridge: true,
-        copy: "Volume, output switching, active app audio, and now-playing controls in one place.",
+        copy: "Control where sound plays, what is playing, app volumes, and tone.",
         getViewerLabel: function () {
           return "Sound and playback";
         },
@@ -2060,7 +2653,7 @@
       },
       {
         id: "clipboard",
-        title: "Clipboard",
+        title: "Clipboard History",
         requiresBridge: true,
         copy: "Recent clipboard history with one-tap restore.",
         getViewerLabel: function () {
@@ -2071,7 +2664,7 @@
         id: "weather",
         title: "Weather",
         requiresBridge: true,
-        copy: "Current, hourly, and five-day weather from the bridge.",
+        copy: "Current, hourly, and five-day weather from Auxora.",
         getViewerLabel: function () {
           return getWidgetState("weather") === "Optional" ? "Optional" : (getSetting("city") + " / " + getSetting("units"));
         },
@@ -2095,7 +2688,7 @@
           return getWidgetState("calendar") === "Optional" ? "Optional" : "ICS feed";
         },
         buildSrc: function () {
-          return buildUrl(widgetBase, "/widgets/calendar-upcoming.html", {
+          return buildUrl(widgetBase, "/widgets/calendar-widget.html", {
             size: "full",
             rev: assetRevision,
             endpoint: buildUrl(bridgeOrigin, "/api/calendar")
@@ -2106,7 +2699,7 @@
         id: "hue",
         title: "Philips Hue",
         requiresBridge: true,
-        copy: "Direct local light control with compact bridge diagnostics.",
+        copy: "Direct local light control with simple connection diagnostics.",
         getViewerLabel: function () {
           return bridgeConfig.hue.linked ? "Local bridge" : "Optional";
         },
@@ -2119,41 +2712,65 @@
             actionBase: buildUrl(bridgeOrigin, "/api/hue")
           });
         }
+      },
+      {
+        id: "frigate",
+        title: "Camera Detection",
+        requiresBridge: true,
+        copy: "Recent local Frigate object detections and event snapshots, with setup available directly from Apps & Controls.",
+        getViewerLabel: function () {
+          var frigate = bridgeConfig.frigate || {};
+          return frigate.configured ? (frigate.camera || "All cameras") : "Setup";
+        },
+        buildSrc: function () {
+          return buildUrl(widgetBase, "/widgets/frigate-detection-panel.html", {
+            size: "full",
+            rev: assetRevision,
+            endpoint: buildUrl(bridgeOrigin, "/api/frigate"),
+            refresh: "30000"
+          });
+        }
       }
     ];
+
+    return registry.map(function (widget) {
+      var contract = surfaceContracts[widget.id];
+      if (!contract) {
+        throw new Error("Surface registry contract missing for " + widget.id);
+      }
+      return Object.assign({}, contract, widget);
+    });
   }
 
   function renderPicker() {
     var destinationWidgets = getDestinationWidgets();
     var categories = ["System", "Media", "Productivity", "Gaming", "Smart Home", "More"];
+    var pickerHtml;
     function categoryFor(widget) {
-      if (["system", "network", "shortcuts", "display-controls", "updates"].indexOf(widget.id) !== -1) { return "System"; }
-      if (["audio", "streaming"].indexOf(widget.id) !== -1) { return "Media"; }
-      if (["calendar", "quick-actions", "clipboard", "weather"].indexOf(widget.id) !== -1) { return "Productivity"; }
-      if (widget.id === "game-mode") { return "Gaming"; }
-      if (["hue", "automation", "plex", "nas", "unifi-camera", "unifi-network"].indexOf(widget.id) !== -1) { return "Smart Home"; }
-      return "More";
+      return widget.category || "More";
     }
     function buttonFor(widget) {
       var activeClass = widget.id === currentWidgetId ? " is-active" : "";
       var state = getWidgetState(widget.id);
+      var cardSize = getCardSize(widget.id);
       return '' +
-        '<button class="router-picker__button' + activeClass + '" data-widget-id="' + widget.id + '" aria-pressed="' + (widget.id === currentWidgetId ? "true" : "false") + '" title="' + escapeHtml(getWidgetCopy(widget)) + '">' +
+        '<button class="router-picker__button router-picker__button--' + cardSize + activeClass + '" data-ui-key="widget-' + widget.id + '" data-widget-id="' + widget.id + '" data-card-size="' + cardSize + '" aria-pressed="' + (widget.id === currentWidgetId ? "true" : "false") + '" title="' + escapeHtml(getWidgetCopy(widget)) + '">' +
           '<span class="router-picker__title">' + escapeHtml(getWidgetTitle(widget)) + '</span>' +
           '<span class="router-picker__meta" data-state="' + escapeHtml(state.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(state) + '</span>' +
         '</button>';
     }
-    pickerNode.innerHTML = primaryDestination === "library"
+    pickerHtml = primaryDestination === "library"
       ? categories.map(function (category) {
           var items = destinationWidgets.filter(function (widget) { return categoryFor(widget) === category; });
           return items.length ? '<div class="router-picker__category"><span>' + escapeHtml(category) + '</span>' + items.map(buttonFor).join("") + '</div>' : '';
         }).join("")
       : destinationWidgets.map(buttonFor).join("");
+    patchDashboardDom(pickerNode, pickerHtml);
 
     pickerNode.querySelectorAll("[data-widget-id]").forEach(function (button) {
-      button.addEventListener("click", function () {
+      button.onclick = function () {
         selectWidget(button.getAttribute("data-widget-id"), true);
-      });
+      };
     });
   }
 
@@ -2176,7 +2793,14 @@
     }
     renderPrimaryNavigation();
     var available = getDestinationWidgets(primaryDestination);
-    var preferred = primaryDestination === "home" ? "home" : primaryDestination === "scenes" ? "scenes" : available[0] && available[0].id;
+    var availableIds = available.map(function (widget) { return widget.id; });
+    var preferred = destinationPanels[primaryDestination];
+    if (availableIds.indexOf(preferred) === -1) {
+      preferred = available[0] && available[0].id;
+      if (preferred) {
+        persistDestinationPanel(primaryDestination, preferred);
+      }
+    }
     if (preferred) {
       currentWidgetId = preferred;
       renderCurrentSelection(true);
@@ -2187,14 +2811,17 @@
     if (!scene) {
       return;
     }
-    saveDashboardSettings({
+    var presentation = {
       profileId: scene.id || "scene-work",
-      themeId: scene.themeId || "edge",
+      themeId: normalizeThemeId(scene.themeId),
       accentColor: scene.accentColor || "",
       animationIntensity: String(scene.animationIntensity == null ? 25 : scene.animationIntensity),
-      performanceBudget: scene.performanceBudget || "balanced",
-      layoutOrder: Array.isArray(scene.widgets) ? scene.widgets.join(",") : ""
-    });
+      performanceBudget: scene.performanceBudget || "balanced"
+    };
+    if (!readModeLayouts()[scene.id || "scene-work"] && Array.isArray(scene.widgets)) {
+      presentation.layoutOrder = scene.widgets.join(",");
+    }
+    saveDashboardSettings(presentation);
     document.body.dataset.scene = scene.id || "scene-work";
     document.body.dataset.density = scene.density || "comfortable";
   }
@@ -2207,7 +2834,7 @@
       bridgeConfig.scenes = payload;
       applyScenePresentation(payload.activeScene);
       renderQuickDrawer();
-      showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Scene") + " active");
+      showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Mode") + " active");
       return payload;
     });
   }
@@ -2217,7 +2844,7 @@
       bridgeConfig.scenes = payload;
       applyScenePresentation(payload.activeScene);
       renderQuickDrawer();
-      showTouchFeedback("Automatic Scenes resumed");
+      showTouchFeedback("Automatic Modes resumed");
       return payload;
     });
   }
@@ -2229,20 +2856,60 @@
     if (!scenesNode) {
       return;
     }
-    scenesNode.innerHTML = profiles.map(function (scene) {
+    profiles = profiles.filter(function (scene) {
+      return scene && scene.themeVariant !== "night" && scene.id !== "scene-night";
+    });
+    patchDashboardDom(scenesNode, profiles.map(function (scene) {
       return '<button type="button" data-quick-scene="' + escapeHtml(scene.id) + '" class="' + (scene.id === sceneConfig.activeSceneId ? "is-active" : "") + '">' + escapeHtml(scene.name) + '</button>';
-    }).join("");
+    }).join("") +
+      '<div class="auxora-quick-night" role="group" aria-label="Night display variant">' +
+        '<span>Night</span>' +
+        ["auto", "standard", "night"].map(function (variant) {
+          var label = variant === "auto" ? "Automatic" : variant === "night" ? "On" : "Off";
+          return '<button type="button" data-quick-night="' + variant + '" class="' + (normalizeThemeVariantPreference(getSetting("themeVariant")) === variant ? "is-active" : "") + '">' + label + '</button>';
+        }).join("") +
+      '</div>');
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-quick-widget]"), function (button) {
+      var item = getWidgetById(button.getAttribute("data-quick-widget"));
+      var available = !!(item && shouldShowWidget(item));
+      if (item && item.id === "hue") {
+        // The full Hue setup surface is discoverable before configuration, but
+        // a quick Lights shortcut is useful only after a bridge is linked.
+        available = available && !!(bridgeConfig.hue && bridgeConfig.hue.linked);
+      }
+      button.hidden = !available;
+      button.disabled = !available;
+      button.setAttribute("aria-hidden", available ? "false" : "true");
+    });
   }
 
   function setQuickDrawerOpen(open) {
     if (!quickDrawerNode || !quickToggleNode) {
       return;
     }
+    var scrim = document.getElementById("dashboard-quick-scrim");
+    if (open) {
+      quickDrawerOpener = document.activeElement || quickToggleNode;
+    }
     quickDrawerNode.classList.toggle("is-hidden", !open);
     quickToggleNode.classList.toggle("is-hidden", open);
     quickToggleNode.setAttribute("aria-expanded", open ? "true" : "false");
+    quickDrawerNode.setAttribute("aria-hidden", open ? "false" : "true");
+    document.body.classList.toggle("dashboard-native-page--quick-open", open);
+    if (scrim) {
+      scrim.classList.toggle("is-hidden", !open);
+      scrim.setAttribute("aria-hidden", open ? "false" : "true");
+    }
     if (open) {
       renderQuickDrawer();
+      window.setTimeout(function () {
+        var first = quickDrawerNode.querySelector("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])");
+        (first || quickDrawerNode).focus();
+      }, 0);
+    } else if (quickDrawerOpener && typeof quickDrawerOpener.focus === "function") {
+      quickDrawerOpener.focus();
+      quickDrawerOpener = null;
     }
   }
 
@@ -2251,6 +2918,8 @@
   }
 
   function clearInlineWidget() {
+    widgetErrorGeneration += 1;
+    clearWidgetError();
     if (inlineWidgetController && typeof inlineWidgetController.destroy === "function") {
       inlineWidgetController.destroy();
     }
@@ -2260,7 +2929,7 @@
 
     if (inlineViewerNode) {
       inlineViewerNode.classList.add("is-hidden");
-      inlineViewerNode.innerHTML = "";
+      patchDashboardDom(inlineViewerNode, "");
     }
   }
 
@@ -2294,6 +2963,32 @@
       hasPayload = true;
     }
 
+    if (Object.prototype.hasOwnProperty.call(values || {}, "animationIntensity")) {
+      payload.animationIntensity = normalizeAnimationPercent(values.animationIntensity);
+      hasPayload = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values || {}, "dashboardOpacity")) {
+      payload.dashboardOpacity = normalizeOpacityPercent(values.dashboardOpacity);
+      hasPayload = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values || {}, "themeId")
+        || Object.prototype.hasOwnProperty.call(values || {}, "accentMode")
+        || Object.prototype.hasOwnProperty.call(values || {}, "customAccentColor")
+        || Object.prototype.hasOwnProperty.call(values || {}, "themeVariant")) {
+      payload.themeId = normalizeThemeId(dashboardSettings.themeId);
+      payload.accentMode = normalizeAccentMode(dashboardSettings.accentMode);
+      payload.customAccentColor = payload.accentMode === "custom" ? (parseHexColor(dashboardSettings.customAccentColor) || "") : "";
+      payload.themeVariant = normalizeThemeVariantPreference(dashboardSettings.themeVariant);
+      hasPayload = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values || {}, "foregroundAppTrackingEnabled")) {
+      payload.foregroundAppTrackingEnabled = String(values.foregroundAppTrackingEnabled || "0") !== "0";
+      hasPayload = true;
+    }
+
     if (!hasPayload) {
       return;
     }
@@ -2304,20 +2999,67 @@
   }
 
   function saveDashboardSettings(values) {
-    Object.keys(values || {}).forEach(function (key) {
-      dashboardSettings[key] = String(values[key] || "");
+    var nextValues = values || {};
+    var activeModeId = getActiveModeId();
+    var layoutChanged = modeLayoutSettingKeys.some(function (key) {
+      return Object.prototype.hasOwnProperty.call(nextValues, key);
+    });
+    var modeLayoutsChanged = Object.prototype.hasOwnProperty.call(nextValues, "modeLayouts");
+    var importsLayoutSnapshot = modeLayoutsChanged
+      || Object.prototype.hasOwnProperty.call(nextValues, "modeLayoutSchemaVersion");
+
+    if (layoutChanged && !importsLayoutSnapshot && String(storedSettings.modeLayoutSchemaVersion || "") !== "2") {
+      migrateLegacyModeLayouts(activeModeId);
+    }
+
+    Object.keys(nextValues).forEach(function (key) {
+      dashboardSettings[key] = String(nextValues[key] == null ? "" : nextValues[key]);
       storedSettings[key] = dashboardSettings[key];
     });
 
-    if (Object.prototype.hasOwnProperty.call(values || {}, "releaseChannel")) {
+    if (importsLayoutSnapshot && (layoutChanged || modeLayoutsChanged) && String(storedSettings.modeLayoutSchemaVersion || "") !== "2") {
+      migrateLegacyModeLayouts(activeModeId);
+    }
+
+    var nextModeLayouts = readModeLayouts();
+    var activeModeLayout = Object.assign({
+      layoutOrder: defaultSettings.layoutOrder,
+      pinnedWidgets: defaultSettings.pinnedWidgets,
+      hiddenWidgets: defaultSettings.hiddenWidgets,
+      cardSizes: defaultSettings.cardSizes
+    }, nextModeLayouts[activeModeId] || {});
+
+    if (layoutChanged && !modeLayoutsChanged) {
+      modeLayoutSettingKeys.forEach(function (key) {
+        if (Object.prototype.hasOwnProperty.call(nextValues, key)) {
+          activeModeLayout[key] = dashboardSettings[key];
+        }
+      });
+
+      nextModeLayouts[activeModeId] = activeModeLayout;
+      dashboardSettings.modeLayouts = JSON.stringify(nextModeLayouts);
+      storedSettings.modeLayouts = dashboardSettings.modeLayouts;
+    }
+
+    if (["themeId", "accentMode", "customAccentColor", "accentColor", "themeVariant"].some(function (key) {
+      return Object.prototype.hasOwnProperty.call(nextValues, key);
+    })) {
+      var migratedTheme = migrateThemeSettings(dashboardSettings, Object.prototype.hasOwnProperty.call(nextValues, "accentColor"));
+      ["themeSchemaVersion", "themeId", "accentMode", "customAccentColor", "accentColor", "themeVariant"].forEach(function (key) {
+        dashboardSettings[key] = String(migratedTheme[key] || "");
+        storedSettings[key] = dashboardSettings[key];
+      });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(nextValues, "releaseChannel")) {
       dashboardSettings.updateChannel = dashboardSettings.releaseChannel;
       storedSettings.updateChannel = dashboardSettings.releaseChannel;
-    } else if (Object.prototype.hasOwnProperty.call(values || {}, "updateChannel")) {
+    } else if (Object.prototype.hasOwnProperty.call(nextValues, "updateChannel")) {
       dashboardSettings.releaseChannel = dashboardSettings.updateChannel;
       storedSettings.releaseChannel = dashboardSettings.updateChannel;
     }
 
-    persistNativeDashboardSettings(values || {});
+    persistNativeDashboardSettings(nextValues);
     persistSettings();
     applyDashboardPresentation();
     widgets = createWidgets();
@@ -2342,9 +3084,8 @@
 
   function clearDashboardBrowserStorage() {
     try {
-      window.localStorage.removeItem(settingsStorageKey);
-      window.localStorage.removeItem(widgetStorageKey);
-      window.localStorage.removeItem(lastPrimaryWidgetStorageKey);
+      window.localStorage.clear();
+      window.sessionStorage.clear();
     } catch (error) {
       console.warn("Unable to clear dashboard browser storage", error);
     }
@@ -2357,7 +3098,10 @@
   }
 
   function resetAllLocalData() {
-    return postJson(buildUrl(bridgeOrigin, "/api/config/reset"), {}, 10000).then(function () {
+    return postJson(buildUrl(bridgeOrigin, "/api/config/reset"), {}, 15000).then(function (receipt) {
+      if (!receipt || receipt.ok !== true) {
+        throw new Error(receipt && receipt.message ? receipt.message : "Required app data could not be cleared.");
+      }
       clearDashboardBrowserStorage();
       return refreshBridgeState({
         resolveInitialWidget: true,
@@ -2374,6 +3118,7 @@
       title: getWidgetTitle(widget),
       copy: getWidgetCopy(widget),
       state: getWidgetState(widget.id),
+      configured: isWidgetConfigured(widget.id),
       tier: widget.tier || "core",
       requiresBridge: widgetRequiresBridge(widget)
     };
@@ -2383,11 +3128,19 @@
     return refreshBridgeState({
       forceWeatherDefaults: kind === "weather",
       moveOffSetup: kind === "dashboard",
-      reloadLocalSettings: kind === "local-settings"
+      reloadLocalSettings: kind === "local-settings",
+      skipFrameReload: kind === "local-settings"
     });
   }
 
-  function buildInlineWidgetEnv() {
+  function openSetupSection(sectionId) {
+    requestedSetupSection = String(sectionId || "").trim();
+    selectWidget("setup", true);
+    requestedSetupSection = "";
+  }
+
+  function buildInlineWidgetEnv(widget, generation) {
+    var widgetId = widget && widget.id ? widget.id : "";
     return {
       bridgeOrigin: bridgeOrigin,
       assetRevision: assetRevision,
@@ -2395,21 +3148,44 @@
       showAdvanced: showAdvanced,
       bridgeSetup: bridgeSetup,
       bridgeConfig: bridgeConfig,
+      bridgeApp: bridgeApp,
+      requestedSetupSection: requestedSetupSection,
       gameActivity: gameActivity,
       gameFaceHomeWidget: gameFacePreviousWidgetId || getFallbackPrimaryWidget(),
       getSetting: getSetting,
       getSettings: function () {
         return Object.assign({}, dashboardSettings);
       },
+      getNowStripMode: function () { return nowStripMode; },
+      setNowStripMode: setNowStripMode,
       getVisibleWidgets: function () {
-        return getVisibleWidgets().map(summarizeInlineWidget);
+        return getLayoutEditorWidgets().map(summarizeInlineWidget);
+      },
+      getSurfaceCatalog: function () {
+        return widgets.map(function (widget) {
+          return { id: widget.id, title: getWidgetTitle(widget), destination: widget.destination, category: widget.category };
+        });
+      },
+      publishStatus: function (status, tone, detail) {
+        if (!widgetId || widgetErrorGeneration !== generation || currentWidgetId !== widgetId) {
+          return;
+        }
+        publishSurfaceStatus(widgetId, status, tone, detail);
+      },
+      reportWidgetError: function (error, phase) {
+        if (!widgetId || widgetErrorGeneration !== generation || currentWidgetId !== widgetId) {
+          return;
+        }
+        reportWidgetError(widget, error, phase || "updating", generation);
       },
       productThemes: productThemePresets.slice(),
       saveSettings: saveDashboardSettings,
+      normalizeReleaseChannel: function (value) { return normalizeReleaseChannelForVersion(value, bridgeApp.version); },
       resetSettings: resetLocalDashboardSettings,
       resetAllLocalData: resetAllLocalData,
       activateScene: activateScene,
       resumeSceneAutomation: resumeSceneAutomation,
+      openSetupSection: openSetupSection,
       selectWidget: selectWidget,
       returnHomeFromGameFace: function () {
         var activeId = activeGameIdFromPayload(gameActivity);
@@ -2436,12 +3212,14 @@
     var shouldRemount = reloadView !== false
       || activeInlineWidgetId !== widget.id
       || !inlineWidgetController;
+    var generation;
 
     loadingNode.classList.add("is-hidden");
     emptyNode.classList.add("is-hidden");
 
     if (shouldRemount) {
       clearInlineWidget();
+      generation = widgetErrorGeneration;
       inlineViewerNode.classList.remove("is-hidden");
       inlineViewerNode.scrollTop = 0;
 
@@ -2454,29 +3232,23 @@
       }
 
       try {
-        inlineWidgetController = window.InlineWidgets.mountWidget(widget, inlineViewerNode, buildInlineWidgetEnv());
+        inlineWidgetController = window.InlineWidgets.mountWidget(widget, inlineViewerNode, buildInlineWidgetEnv(widget, generation));
         activeInlineWidgetId = widget.id;
       } catch (error) {
-        reportFatalDashboardError(
-          "Inline widget failed",
-          error,
-          "The selected widget crashed while mounting."
-        );
+        activeInlineWidgetId = widget.id;
+        reportWidgetError(widget, error, "starting", generation);
       }
       return;
     }
 
     inlineViewerNode.classList.remove("is-hidden");
     if (inlineWidgetController && typeof inlineWidgetController.refresh === "function") {
-      try {
-        inlineWidgetController.refresh();
-      } catch (error) {
-        reportFatalDashboardError(
-          "Inline widget refresh failed",
-          error,
-          "The selected widget crashed while refreshing."
-        );
-      }
+      generation = widgetErrorGeneration;
+      Promise.resolve().then(function () {
+        return inlineWidgetController.refresh();
+      }).then(clearWidgetError).catch(function (error) {
+        reportWidgetError(widget, error, "refreshing", generation);
+      });
     }
   }
 
@@ -2489,22 +3261,27 @@
   }
 
   function updateWidgetMeta(widget) {
+    if (inlineViewerNode) {
+      inlineViewerNode.dataset.cardSize = getCardSize(widget.id);
+    }
     setText("dashboard-widget-kicker", getWidgetKicker(widget));
     setText("dashboard-widget-title", getWidgetTitle(widget));
     setText("dashboard-widget-copy", getWidgetCopy(widget));
-    setText("dashboard-widget-source", getViewerLabel(widget));
-    setText("dashboard-selection-status", "Selected: " + getWidgetTitle(widget));
+    setText("dashboard-widget-source", getWidgetState(widget.id));
+    setText("dashboard-selection-status", getWidgetTitle(widget));
   }
 
   function setRailCopy() {
-    var copy = !bridgeSetup.onboardingCompleted
-      ? "Finish the essentials once. Optional integrations stay tucked away until you need them."
+    var copy = !bridgeSetup.hydrated
+      ? "Auxora is checking the local service and companion display."
+      : !bridgeSetup.onboardingCompleted
+      ? "Finish the essentials once. Optional integrations remain available when you are ready."
       : bridgeSetup.needsAttention
         ? "System and Network stay available. Diagnostics is promoted only when something needs attention."
         : "System and Network stay front and center. Diagnostics remains available if anything changes.";
 
     if (showAdvanced) {
-      copy = "Core widgets stay visible. Optional panels appear only after they are set up.";
+      copy = "Core widgets, optional setup panels, and advanced compatibility tools are available together.";
     }
 
     setText("dashboard-rail-copy", copy);
@@ -2513,32 +3290,35 @@
   function renderDiagnostics() {
     if (perfMode) {
       diagnosticsInlineNode.classList.add("is-hidden");
-      diagnosticsRailNode.classList.add("is-hidden");
       diagnosticsInlineNode.classList.remove("is-active");
-      diagnosticsRailNode.classList.remove("is-active");
+      setRailCopy();
+      return;
+    }
+
+    if (!bridgeSetup.hydrated && bridgeReachable !== false) {
+      diagnosticsInlineNode.textContent = "Checking";
+      diagnosticsInlineNode.setAttribute("data-tone", "muted");
+      renderOriginStatus();
       setRailCopy();
       return;
     }
 
     var needsSetup = bridgeReachable === false || !bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention;
-    var summary = bridgeReachable === false
-      ? "Bridge is offline."
-      : !bridgeSetup.onboardingCompleted
-        ? "Finish bridge, system, and network once."
-        : bridgeSetup.needsAttention
-          ? "Something needs attention."
-          : "Open Diagnostics if something breaks.";
-
     diagnosticsInlineNode.textContent = needsSetup ? "Diagnostics" : "Open Diagnostics";
     diagnosticsInlineNode.setAttribute("data-tone", needsSetup ? "warn" : "good");
     diagnosticsInlineNode.classList.toggle("is-active", currentWidgetId === "setup");
-
-    diagnosticsRailNode.classList.toggle("is-hidden", !needsSetup);
-    diagnosticsRailNode.classList.toggle("is-active", currentWidgetId === "setup");
-    diagnosticsRailNode.setAttribute("data-state", needsSetup ? "needs-setup" : "ready");
-    setText("dashboard-diagnostics-rail-state", needsSetup ? "Needs Setup" : "Ready");
-    setText("dashboard-diagnostics-rail-copy", summary);
+    renderOriginStatus();
     setRailCopy();
+  }
+
+  function renderOriginStatus() {
+    var needsSetup = bridgeReachable === false
+      || (bridgeSetup.hydrated && (!bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention));
+    if (!bridgeSetup.hydrated && bridgeReachable !== false) {
+      setStatus("dashboard-origin-status", "Loading", "muted");
+    } else {
+      setStatus("dashboard-origin-status", needsSetup ? "Needs Setup" : "Ready", needsSetup ? "warn" : "good");
+    }
   }
 
   function renderNoSettingsCopy(widget) {
@@ -2684,9 +3464,53 @@
     }
   }
 
+  function settingsContainsActiveControl() {
+    return Boolean(settingsNode && document.activeElement && settingsNode.contains(document.activeElement));
+  }
+
+  function schedulePendingSettingsRender() {
+    if (pendingSettingsRenderTimerId) {
+      window.clearTimeout(pendingSettingsRenderTimerId);
+    }
+    pendingSettingsRenderTimerId = window.setTimeout(function () {
+      var widget;
+      pendingSettingsRenderTimerId = 0;
+      if (!pendingSettingsWidgetId || settingsContainsActiveControl()) {
+        return;
+      }
+      widget = getWidgetById(pendingSettingsWidgetId);
+      pendingSettingsWidgetId = "";
+      if (widget) {
+        renderSettings(widget);
+      }
+    }, 0);
+  }
+
+  function replaceSettingsMarkup(html) {
+    settingsRenderInProgress = true;
+    try {
+      patchDashboardDom(settingsNode, html);
+    } finally {
+      settingsRenderInProgress = false;
+    }
+  }
+
   function renderSettings(widget) {
+    if (!widget) {
+      return;
+    }
+    if (settingsRenderInProgress) {
+      pendingSettingsWidgetId = widget.id;
+      schedulePendingSettingsRender();
+      return;
+    }
+    if (settingsContainsActiveControl()) {
+      pendingSettingsWidgetId = widget.id;
+      return;
+    }
+    pendingSettingsWidgetId = "";
     if (perfMode) {
-      settingsNode.innerHTML = '<div class="router-settings__note">Display mode keeps the EDGE surface lean.</div>';
+      replaceSettingsMarkup('<div class="router-settings__note">Display mode keeps the EDGE surface lean.</div>');
       renderDashboardChromeState();
       return;
     }
@@ -2699,28 +3523,32 @@
     setStatus("dashboard-config-status", widgetState, getStateTone(widgetState));
 
     if (!schema) {
-      settingsNode.innerHTML = '' +
+      replaceSettingsMarkup('' +
         renderGlobalSettings() +
+        renderForegroundTrackingControl(widget) +
         '<div class="router-settings__empty">' +
           '<div class="router-settings__note">' + escapeHtml(renderNoSettingsCopy(widget)) + '</div>' +
-        '</div>';
+        '</div>');
       bindGlobalSettings();
+      bindForegroundTrackingControl();
       renderDashboardChromeState();
       return;
     }
 
     if (!schema.fields.length) {
-      settingsNode.innerHTML = '' +
+      replaceSettingsMarkup('' +
         renderGlobalSettings() +
+        renderForegroundTrackingControl(widget) +
         '<div class="router-settings__empty">' +
           '<div class="router-settings__note">' + escapeHtml(schema.copy) + '</div>' +
-        '</div>';
+        '</div>');
       bindGlobalSettings();
+      bindForegroundTrackingControl();
       renderDashboardChromeState();
       return;
     }
 
-    settingsNode.innerHTML = '' +
+    replaceSettingsMarkup('' +
       renderGlobalSettings() +
       '<form id="dashboard-settings-form" class="router-settings__form">' +
         '<div class="router-settings__grid">' +
@@ -2748,11 +3576,53 @@
           '<button id="dashboard-settings-reset" class="router-settings__button" type="button">Reset section</button>' +
         '</div>' +
         '<div class="router-settings__note">Saved locally in this browser for the real-time dashboard.</div>' +
-      '</form>';
+      '</form>');
 
     bindGlobalSettings();
     bindSettingsForm(widget, schema);
     renderDashboardChromeState();
+  }
+
+  function renderForegroundTrackingControl(widget) {
+    var dashboard = bridgeConfig && bridgeConfig.dashboard ? bridgeConfig.dashboard : {};
+    var enabled = Boolean(dashboard.foregroundAppTrackingEnabled);
+    if (!widget || (widget.id !== "setup" && widget.id !== "privacy")) {
+      return "";
+    }
+
+    return '' +
+      '<div class="router-settings__form" data-foreground-tracking-panel>' +
+        '<label class="router-settings__field">' +
+          '<span><input type="checkbox" data-foreground-tracking-setting' + (enabled ? " checked" : "") + '> Track the foreground app to build Recent Apps</span>' +
+          '<small class="router-settings__field-help">Off by default. When on, Auxora observes the active executable and stores up to 24 names, paths, sources, and last-opened times locally. Turning it off clears that history.</small>' +
+        '</label>' +
+        '<div class="router-settings__note" role="status" data-foreground-tracking-status>' + (enabled ? "Foreground tracking is on." : "Foreground tracking is off.") + '</div>' +
+      '</div>';
+  }
+
+  function bindForegroundTrackingControl() {
+    var toggle = settingsNode.querySelector("[data-foreground-tracking-setting]");
+    var status = settingsNode.querySelector("[data-foreground-tracking-status]");
+    if (!toggle || !status) {
+      return;
+    }
+
+    toggle.addEventListener("change", function () {
+      var enabled = Boolean(toggle.checked);
+      toggle.disabled = true;
+      status.textContent = enabled ? "Enabling foreground tracking..." : "Disabling tracking and clearing recent history...";
+      postJson(buildUrl(bridgeOrigin, "/api/config/dashboard"), {
+        foregroundAppTrackingEnabled: enabled
+      }, 8000).then(function (payload) {
+        bridgeConfig = Object.assign({}, bridgeConfig, payload || {});
+        status.textContent = enabled ? "Foreground tracking is on." : "Foreground tracking is off and recent history was cleared.";
+      }).catch(function (error) {
+        toggle.checked = !enabled;
+        status.textContent = error.message || "Foreground tracking could not be changed.";
+      }).finally(function () {
+        toggle.disabled = false;
+      });
+    });
   }
 
   function bindSettingsForm(widget, schema) {
@@ -2810,7 +3680,7 @@
       return;
     }
 
-    setStatus("dashboard-origin-status", bridgeReachable === false ? "Needs Setup" : "Ready", bridgeReachable === false ? "warn" : "good");
+    renderOriginStatus();
     showInlineWidget(widget, reloadFrame);
     renderLauncherDock();
     updateNowPlayingStrip();
@@ -2855,7 +3725,11 @@
     preferredWidget = getWidgetById(preferredWidgetId || "home");
 
     if (explicitWidgetParam) {
-      return shouldShowWidget(preferredWidget) ? preferredWidget.id : getFallbackPrimaryWidget();
+      if (shouldShowWidget(preferredWidget)) {
+        primaryDestination = preferredWidget.destination || "home";
+        return preferredWidget.id;
+      }
+      return getFallbackPrimaryWidget();
     }
 
     if (!perfMode && !bridgeSetup.onboardingCompleted) {
@@ -2863,23 +3737,30 @@
       return "setup";
     }
 
-    primaryDestination = "home";
-    return "home";
+    if (["home", "scenes", "library", "settings"].indexOf(primaryDestination) === -1) {
+      primaryDestination = "home";
+    }
+    var available = getDestinationWidgets(primaryDestination);
+    var availableIds = available.map(function (widget) { return widget.id; });
+    var remembered = destinationPanels[primaryDestination];
+    return availableIds.indexOf(remembered) !== -1 ? remembered : (available[0] ? available[0].id : "home");
   }
 
   function selectWidget(widgetId, persistSelection) {
-    var settingsIds = ["setup", "theme-studio", "layout-editor", "remote", "updates", "privacy", "installer"];
-    if (widgetId === "home") {
-      primaryDestination = "home";
-    } else if (widgetId === "scenes") {
-      primaryDestination = "scenes";
-    } else if (settingsIds.indexOf(widgetId) !== -1) {
-      primaryDestination = "settings";
-    } else if (getDestinationWidgets(primaryDestination).map(function (entry) { return entry.id; }).indexOf(widgetId) === -1) {
-      primaryDestination = "library";
+    var widget = getWidgetById(widgetId);
+    if (!widget) {
+      showTouchFeedback("Panel unavailable");
+      return;
+    }
+    primaryDestination = widget.destination || "home";
+    try {
+      window.localStorage.setItem(primaryDestinationStorageKey, primaryDestination);
+    } catch (error) {
+      console.warn("Unable to persist primary destination", error);
     }
     renderPrimaryNavigation();
-    currentWidgetId = getWidgetById(widgetId).id;
+    currentWidgetId = widget.id;
+    persistDestinationPanel(primaryDestination, currentWidgetId);
     renderCurrentSelection(true);
 
     if (persistSelection) {
@@ -2908,6 +3789,9 @@
   }
 
   function applyBridgeState(health, configSnapshot) {
+    if (document.body) {
+      document.body.dataset.bridgeHydrated = "true";
+    }
     bridgeCapabilities = Object.assign({}, bridgeCapabilities, (health && health.capabilities) || {});
     bridgeConfig = Object.assign({}, bridgeConfig, configSnapshot || {});
 
@@ -2944,6 +3828,16 @@
       };
     }
 
+    if (!bridgeConfig.frigate) {
+      bridgeConfig.frigate = {
+        configured: false,
+        baseUrl: "",
+        camera: "",
+        endpoint: "/api/frigate",
+        configEndpoint: "/api/config/frigate"
+      };
+    }
+
     if (!bridgeConfig.dashboard) {
       bridgeConfig.dashboard = {
         onboardingCompleted: false,
@@ -2958,13 +3852,19 @@
       onboardingVersion: onboardingVersion,
       launcherReviewRequired: true,
       autoApplyLauncherSuggestions: false,
+      foregroundAppTrackingEnabled: false,
       preferredDisplayId: "",
       preferredDisplayDeviceName: "",
+      themeId: "focus",
+      accentMode: "preset",
+      customAccentColor: "",
+      themeVariant: "auto",
+      animationIntensity: 25,
+      dashboardOpacity: 100,
       performanceBudget: "balanced",
       gameModeAutoTune: true,
       themeReadability: "normal",
-      releaseChannel: "stable",
-      updateRollbackEnabled: true
+      releaseChannel: "stable"
     }, bridgeConfig.dashboard);
 
     bridgeConfig.scenes = Object.assign({
@@ -2976,16 +3876,30 @@
     var activeScene = (bridgeConfig.scenes.profiles || []).filter(function (scene) {
       return scene && scene.id === bridgeConfig.scenes.activeSceneId;
     })[0];
+    bridgeConfig.scenes.activeScene = activeScene || bridgeConfig.scenes.activeScene || null;
     if (activeScene && document.body) {
       document.body.dataset.scene = activeScene.id;
       document.body.dataset.density = activeScene.density || "comfortable";
     }
 
-    bridgeSetup = health && health.setup ? health.setup : createBootSetupSummary();
+    migrateLegacyModeLayouts(bridgeConfig.scenes.activeSceneId);
+
+    bridgeApp = health && health.app ? Object.assign({ name: "Auxora", version: "" }, health.app) : { name: "Auxora", version: "" };
+    bridgeSetup = health && health.setup ? Object.assign({ hydrated: true }, health.setup) : createBootSetupSummary();
     syncSettingsFromBridgeConfig();
+    if (!initialScenePresentationApplied && activeScene && !hadExplicitStoredThemeSelection) {
+      initialScenePresentationApplied = true;
+      applyScenePresentation(activeScene);
+    } else {
+      initialScenePresentationApplied = true;
+      applyDashboardPresentation();
+    }
   }
 
   function handleBridgeOffline() {
+    if (document.body) {
+      document.body.dataset.bridgeHydrated = "true";
+    }
     var widget = getWidgetById(currentWidgetId || "system");
     currentWidgetId = widget.id;
     bridgeReachable = false;
@@ -3037,6 +3951,7 @@
       if (settings.resolveInitialWidget) {
         currentWidgetId = resolveInitialWidget(settings.preferredWidgetId, settings.explicitWidgetParam);
         persistWidgetChoice(currentWidgetId);
+        renderPrimaryNavigation();
       } else if (settings.moveOffSetup && currentWidgetId === "setup" && bridgeSetup.onboardingCompleted) {
         currentWidgetId = getFallbackPrimaryWidget();
         persistWidgetChoice(currentWidgetId);
@@ -3076,10 +3991,9 @@
       return;
     }
 
-    reportFatalDashboardError(
+    reportBackgroundDashboardError(
       "Dashboard runtime error",
-      event && (event.error || event.message),
-      "The dashboard hit a client-side exception."
+      event && (event.error || event.message)
     );
   }, true);
 
@@ -3090,8 +4004,145 @@
     );
   });
 
+  function scheduleRenderedLayoutProbe() {
+    if (getParam("renderedTest") !== "1") {
+      return;
+    }
+
+    var attempts = 0;
+    var runProbe = function () {
+      attempts++;
+      var viewport = { width: window.innerWidth, height: window.innerHeight };
+      var visible = function (element) {
+        var style = window.getComputedStyle(element);
+        var rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+      };
+      var rectOf = function (selector) {
+        var element = document.querySelector(selector);
+        if (!element || !visible(element)) {
+          return null;
+        }
+        var rect = element.getBoundingClientRect();
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+      };
+      var inBounds = function (rect) {
+        return rect && rect.left >= -1 && rect.top >= -1 && rect.right <= viewport.width + 1 && rect.bottom <= viewport.height + 1;
+      };
+      var horizontallyInBounds = function (rect) {
+        return rect && rect.left >= -1 && rect.right <= viewport.width + 1;
+      };
+      var overlaps = function (left, right) {
+        return Boolean(left && right && left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top);
+      };
+      var shell = rectOf(".dashboard-stage-shell");
+      var navigation = rectOf("#dashboard-primary-nav");
+      var viewer = rectOf(".router-viewer");
+      var visibleControls = Array.prototype.slice.call(document.querySelectorAll("button, a[href], input, select, textarea"))
+        .filter(visible);
+      var requestedWidget = getParam("widget");
+      var requestedPanelReady = requestedWidget !== "game-mode"
+        || document.getElementById("dashboard-widget-title").textContent.trim() === "Game Mode";
+      if ((!navigation || !viewer || visibleControls.length < 10 || !requestedPanelReady) && attempts < 20) {
+        window.setTimeout(runProbe, 400);
+        return;
+      }
+      var unnamed = visibleControls.filter(function (element) {
+        return !(element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent.trim() || element.labels && element.labels.length);
+      });
+      var undersized = visibleControls.filter(function (element) {
+        var rect = element.getBoundingClientRect();
+        var label = element.id ? document.querySelector('label[for="' + element.id + '"]') : element.closest("label");
+        var labelRect = label ? label.getBoundingClientRect() : null;
+        var effectiveWidth = Math.max(rect.width, labelRect ? labelRect.width : 0);
+        var effectiveHeight = Math.max(rect.height, labelRect ? labelRect.height : 0);
+        return effectiveWidth < 44 || effectiveHeight < 44;
+      });
+      var distanceViewport = viewport.width >= 1800 && viewport.height >= 600;
+      var distanceUndersized = distanceViewport ? visibleControls.filter(function (element) {
+        var rect = element.getBoundingClientRect();
+        var label = element.id ? document.querySelector('label[for="' + element.id + '"]') : element.closest("label");
+        var labelRect = label ? label.getBoundingClientRect() : null;
+        var effectiveWidth = Math.max(rect.width, labelRect ? labelRect.width : 0);
+        var effectiveHeight = Math.max(rect.height, labelRect ? labelRect.height : 0);
+        return effectiveWidth < 54 || effectiveHeight < 54;
+      }) : [];
+      var distanceSmallControlText = distanceViewport ? visibleControls.filter(function (element) {
+        var type = String(element.getAttribute("type") || "").toLowerCase();
+        if (["range", "checkbox", "radio", "color"].indexOf(type) !== -1) return false;
+        return parseFloat(window.getComputedStyle(element).fontSize) < 15;
+      }) : [];
+      renderQuickDrawer();
+      var quickLights = document.querySelector('[data-quick-widget="hue"]');
+      var quickOptionalHidden = !!quickLights && !visible(quickLights) && quickLights.disabled;
+      var undersizedText = Array.prototype.slice.call(document.querySelectorAll(".router-inline-widget *"))
+        .filter(function (element) {
+          return visible(element)
+            && ["SCRIPT", "STYLE", "SVG", "PATH"].indexOf(element.tagName) === -1
+            && element.children.length === 0
+            && element.textContent.trim();
+        })
+        .filter(function (element) { return parseFloat(window.getComputedStyle(element).fontSize) < 12; })
+        .map(function (element) {
+          return element.className + ":" + element.textContent.trim().slice(0, 60) + "@" + window.getComputedStyle(element).fontSize;
+        });
+      var clippedPrimaryNavLabels = Array.prototype.slice.call(document.querySelectorAll("#dashboard-primary-nav button"))
+        .filter(visible)
+        .filter(function (element) {
+          return element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1;
+        })
+        .map(function (element) { return element.textContent.trim(); });
+      var settingsButton = document.querySelector('[data-destination="settings"]');
+      var keyboardFocus = false;
+      var keyboardActivation = false;
+      if (settingsButton && visible(settingsButton)) {
+        settingsButton.focus();
+        keyboardFocus = document.activeElement === settingsButton;
+        settingsButton.click();
+        keyboardActivation = settingsButton.classList.contains("is-active")
+          || settingsButton.getAttribute("aria-current") === "page"
+          || settingsButton.getAttribute("aria-pressed") === "true";
+      }
+
+      var result = {
+        viewport: viewport,
+        layoutClass: document.body.dataset.layoutClass || "",
+        shell: shell,
+        navigation: navigation,
+        viewer: viewer,
+        shellInBounds: inBounds(shell),
+        shellHorizontallyInBounds: horizontallyInBounds(shell),
+        navigationInBounds: inBounds(navigation),
+        navigationHorizontallyInBounds: horizontallyInBounds(navigation),
+        viewerInBounds: inBounds(viewer),
+        viewerHorizontallyInBounds: horizontallyInBounds(viewer),
+        horizontalOverflow: document.documentElement.scrollWidth > viewport.width + 1,
+        navigationViewerOverlap: overlaps(navigation, viewer),
+        keyboardFocus: keyboardFocus,
+        keyboardActivation: keyboardActivation,
+        visibleControlCount: visibleControls.length,
+        quickOptionalHidden: quickOptionalHidden,
+        undersizedText: undersizedText,
+        clippedPrimaryNavLabels: clippedPrimaryNavLabels,
+        undersizedControls: undersized.map(function (element) { return element.id || element.getAttribute("aria-label") || element.textContent.trim().slice(0, 60); }),
+        distanceUndersizedControls: distanceUndersized.map(function (element) { return element.id || element.getAttribute("aria-label") || element.textContent.trim().slice(0, 60); }),
+        distanceSmallControlText: distanceSmallControlText.map(function (element) {
+          return (element.id || element.getAttribute("aria-label") || element.textContent.trim().slice(0, 60)) + "@" + window.getComputedStyle(element).fontSize;
+        }),
+        unnamedControls: unnamed.map(function (element) { return element.outerHTML.slice(0, 160); })
+      };
+      var output = document.createElement("script");
+      output.id = "auxora-rendered-test-result";
+      output.type = "application/json";
+      output.textContent = JSON.stringify(result);
+      document.body.appendChild(output);
+    };
+    window.setTimeout(runProbe, 600);
+  }
+
   function bootDashboard() {
     try {
+      document.body.dataset.bridgeHydrated = "false";
       var explicitWidgetParam = params.has("widget") && params.get("widget") !== "";
       var preferredWidgetId = getParam("widget") || readStoredWidget(widgetStorageKey) || "";
 
@@ -3102,21 +4153,33 @@
       settingsNode = document.getElementById("dashboard-widget-settings");
       emptyNode = document.getElementById("dashboard-widget-empty");
       retryNode = document.getElementById("dashboard-widget-retry");
-      diagnosticsRailNode = document.getElementById("dashboard-diagnostics-rail");
       diagnosticsInlineNode = document.getElementById("dashboard-diagnostics-inline");
       settingsPanelNode = document.getElementById("dashboard-settings-panel");
       settingsToggleNode = document.getElementById("dashboard-settings-toggle");
       touchLockToggleNode = document.getElementById("dashboard-touch-lock-toggle");
       touchUnlockNode = document.getElementById("dashboard-touch-unlock");
+      touchLockScrimNode = document.getElementById("dashboard-touch-lock-scrim");
       launcherDockNode = document.getElementById("dashboard-launcher-dock");
       nowStripNode = document.getElementById("dashboard-now-strip");
+      widgetErrorNode = document.getElementById("dashboard-widget-error");
       touchFeedbackNode = document.getElementById("dashboard-touch-feedback");
       quickDrawerNode = document.getElementById("dashboard-quick-drawer");
       quickToggleNode = document.getElementById("dashboard-quick-toggle");
+      setText("dashboard-bridge-url", buildUrl(bridgeOrigin, "/dashboard.html").toString());
+      if (settingsNode) {
+        settingsNode.addEventListener("focusout", schedulePendingSettingsRender);
+      }
       try {
         primaryDestination = window.localStorage.getItem(primaryDestinationStorageKey) || "home";
+        destinationPanels = readDestinationPanels();
+        nowStripMode = window.localStorage.getItem(nowStripModeStorageKey) || "auto";
+        if (["auto", "pinned", "hidden"].indexOf(nowStripMode) === -1) {
+          nowStripMode = "auto";
+        }
       } catch (error) {
         primaryDestination = "home";
+        destinationPanels = readDestinationPanels();
+        nowStripMode = "auto";
       }
       document.body.classList.toggle("dashboard-native-page--perf", perfMode);
       dashboardSettings = buildInitialSettings();
@@ -3143,11 +4206,29 @@
         refreshBridgeState({ moveOffSetup: false });
       });
 
-      diagnosticsRailNode.addEventListener("click", function () {
-        primaryDestination = "settings";
-        renderPrimaryNavigation();
-        selectWidget("setup", false);
-      });
+      if (widgetErrorNode) {
+        widgetErrorNode.addEventListener("click", function (event) {
+          var actionNode = event.target && event.target.closest ? event.target.closest("[data-widget-error-action]") : null;
+          var action = actionNode && actionNode.getAttribute("data-widget-error-action");
+          if (action === "retry") {
+            var failedWidget = getWidgetById(widgetErrorNode.dataset.widgetId || currentWidgetId);
+            if (failedWidget) {
+              showInlineWidget(failedWidget, true);
+            }
+          } else if (action === "home") {
+            selectDestination("home");
+          } else if (action === "copy") {
+            var diagnostic = "Auxora panel diagnostic\n" + (widgetErrorNode.dataset.diagnostic || "No diagnostic available");
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(diagnostic).then(function () {
+                showTouchFeedback("Diagnostic copied");
+              }, function () {
+                showTouchFeedback("Copy unavailable");
+              });
+            }
+          }
+        });
+      }
 
       diagnosticsInlineNode.addEventListener("click", function () {
         primaryDestination = "settings";
@@ -3173,21 +4254,70 @@
           var close = event.target && event.target.closest ? event.target.closest("[data-quick-close]") : null;
           var scene = event.target && event.target.closest ? event.target.closest("[data-quick-scene]") : null;
           var widget = event.target && event.target.closest ? event.target.closest("[data-quick-widget]") : null;
+          var night = event.target && event.target.closest ? event.target.closest("[data-quick-night]") : null;
           if (close) {
             setQuickDrawerOpen(false);
           } else if (scene) {
             activateScene(scene.getAttribute("data-quick-scene")).then(function () {
               setQuickDrawerOpen(false);
               selectDestination("home");
-            }).catch(function (error) { showTouchFeedback(error.message || "Scene failed"); });
+            }).catch(function (error) { showTouchFeedback(error.message || "Mode failed"); });
           } else if (widget) {
+            var quickWidget = getWidgetById(widget.getAttribute("data-quick-widget"));
+            if (!quickWidget || !shouldShowWidget(quickWidget)) {
+              renderQuickDrawer();
+              showTouchFeedback("That control is not available yet");
+              return;
+            }
             setQuickDrawerOpen(false);
             primaryDestination = "library";
             renderPrimaryNavigation();
-            selectWidget(widget.getAttribute("data-quick-widget"), true);
+            selectWidget(quickWidget.id, true);
+          } else if (night) {
+            saveDashboardSettings({ themeVariant: night.getAttribute("data-quick-night") });
+            renderQuickDrawer();
+            showTouchFeedback("Night " + night.textContent.trim());
           }
         });
       }
+
+      var quickScrimNode = document.getElementById("dashboard-quick-scrim");
+      if (quickScrimNode) {
+        quickScrimNode.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          setQuickDrawerOpen(false);
+        });
+      }
+
+      document.addEventListener("keydown", function (event) {
+        if (!quickDrawerNode || quickDrawerNode.classList.contains("is-hidden")) {
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setQuickDrawerOpen(false);
+          return;
+        }
+        if (event.key !== "Tab") {
+          return;
+        }
+        var focusable = Array.from(quickDrawerNode.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])"));
+        if (!focusable.length) {
+          event.preventDefault();
+          quickDrawerNode.focus();
+          return;
+        }
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      });
 
       if (settingsToggleNode) {
         settingsToggleNode.addEventListener("click", toggleSettingsDrawer);
@@ -3205,11 +4335,19 @@
         });
       }
 
-      setStatus("dashboard-origin-status", "Loading", "warn");
+      var dashboardStageNode = document.getElementById("dashboard-stage");
+      if (dashboardStageNode) {
+        ["click", "pointerdown", "touchstart", "wheel", "keydown"].forEach(function (eventName) {
+          dashboardStageNode.addEventListener(eventName, blockLockedInteraction, { capture: true, passive: false });
+        });
+      }
+
+      setStatus("dashboard-origin-status", "Loading", "muted");
       setText("dashboard-selection-status", "Preparing dashboard");
       setRailCopy();
       renderPicker();
       renderDiagnostics();
+      scheduleRenderedLayoutProbe();
 
       if (isLocalBridgeBlockedByPageOrigin()) {
         showLocalhostWarning(preferredWidgetId || "system");
@@ -3219,6 +4357,7 @@
 
       checkBridgeAndRender(preferredWidgetId, explicitWidgetParam).then(function () {
         maybeCheckForAvailableUpdate();
+        maybeCheckRecoveryAvailability();
         return refreshGameActivity();
       }).catch(function (error) {
         reportFatalDashboardError(

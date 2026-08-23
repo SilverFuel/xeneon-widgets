@@ -15,6 +15,7 @@ public sealed class GamePerformanceService : IDisposable
     private static readonly TimeSpan MaxTelemetryFileAge = TimeSpan.FromHours(6);
     private readonly HostLogger _logger;
     private readonly ConfigStore _configStore;
+    private readonly string _telemetryDirectory;
     private readonly object _sync = new();
     private Process? _captureProcess;
     private int? _captureProcessId;
@@ -31,9 +32,17 @@ public sealed class GamePerformanceService : IDisposable
     private bool _warnedMissingPresentMon;
 
     public GamePerformanceService(HostLogger logger, ConfigStore configStore)
+        : this(logger, configStore, null)
+    {
+    }
+
+    internal GamePerformanceService(HostLogger logger, ConfigStore configStore, string? telemetryDirectoryOverride)
     {
         _logger = logger;
         _configStore = configStore;
+        _telemetryDirectory = string.IsNullOrWhiteSpace(telemetryDirectoryOverride)
+            ? Path.Combine(AppPaths.LocalDataDirectory, "Telemetry")
+            : telemetryDirectoryOverride;
         PruneTelemetryFiles();
     }
 
@@ -96,6 +105,32 @@ public sealed class GamePerformanceService : IDisposable
         }
     }
 
+    public int ClearRetainedTelemetry()
+    {
+        lock (_sync)
+        {
+            StopCapture();
+            if (!Directory.Exists(_telemetryDirectory))
+            {
+                return 0;
+            }
+
+            var files = Directory.EnumerateFiles(_telemetryDirectory, "presentmon-*.csv", SearchOption.TopDirectoryOnly).ToList();
+            foreach (var file in files)
+            {
+                File.Delete(file);
+            }
+
+            var remaining = Directory.EnumerateFiles(_telemetryDirectory, "presentmon-*.csv", SearchOption.TopDirectoryOnly).ToList();
+            if (remaining.Count > 0)
+            {
+                throw new IOException("Retained game telemetry could not be deleted.");
+            }
+
+            return files.Count;
+        }
+    }
+
     private void EnsureCapture(int processId, string processName)
     {
         var captureTargetName = ResolveCaptureTargetName(processId, processName);
@@ -137,10 +172,7 @@ public sealed class GamePerformanceService : IDisposable
             return;
         }
 
-        var telemetryDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "XenonEdgeHost",
-            "Telemetry");
+        var telemetryDirectory = _telemetryDirectory;
         Directory.CreateDirectory(telemetryDirectory);
         PruneTelemetryFiles();
         _capturePath = Path.Combine(telemetryDirectory, $"presentmon-{processId}-{Guid.NewGuid():N}.csv");
@@ -427,7 +459,7 @@ public sealed class GamePerformanceService : IDisposable
     {
         try
         {
-            var directory = GetTelemetryDirectory();
+            var directory = _telemetryDirectory;
             if (!Directory.Exists(directory))
             {
                 return;
@@ -468,14 +500,6 @@ public sealed class GamePerformanceService : IDisposable
     private bool IsDiagnosticsRetentionEnabled()
     {
         return _configStore.Snapshot().Dashboard.GameTelemetryDiagnosticsRetention;
-    }
-
-    private static string GetTelemetryDirectory()
-    {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "XenonEdgeHost",
-            "Telemetry");
     }
 
     private static void TryDeleteFile(string path)

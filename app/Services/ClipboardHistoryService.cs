@@ -16,6 +16,25 @@ public sealed class ClipboardHistoryService
         return UiDispatcher.InvokeAsync(() => BuildSnapshotAsync(privacy ?? ClipboardPrivacyOptions.Default, cancellationToken));
     }
 
+    public ClipboardHistorySnapshot GetHealthStatus(ClipboardPrivacyOptions? privacy = null)
+    {
+        var effectivePrivacy = privacy ?? ClipboardPrivacyOptions.Default;
+        return new ClipboardHistorySnapshot
+        {
+            Supported = true,
+            Configured = false,
+            Status = effectivePrivacy.WidgetPaused ? "paused" : "available",
+            SampledAt = null,
+            Stale = false,
+            Message = effectivePrivacy.WidgetPaused
+                ? "Clipboard widget is paused."
+                : "Open Clipboard History to check Windows access. Health checks never read clipboard contents.",
+            Source = "windows clipboard history",
+            Privacy = ClipboardPrivacyPayload.FromOptions(effectivePrivacy),
+            Entries = []
+        };
+    }
+
     public Task<ClipboardHistorySnapshot> CopyItemAsync(string? id, ClipboardPrivacyOptions? privacy = null, CancellationToken cancellationToken = default)
     {
         return UiDispatcher.InvokeAsync(async () =>

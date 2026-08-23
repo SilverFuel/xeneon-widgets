@@ -10,7 +10,7 @@
     <Product>Auxora</Product>
     <Company>SilverFuel</Company>
     <Authors>SilverFuel</Authors>
-    <Version>0.3.0</Version>
+    <Version>0.3.0-beta.1</Version>
     <FileVersion>0.3.0.0</FileVersion>
     <InformationalVersion>$(XenonInformationalVersion)</InformationalVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -24,6 +24,7 @@
     <SelfContained>true</SelfContained>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ApplicationIcon>Assets\XenonEdgeHost.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
   </PropertyGroup>
 
@@ -36,7 +37,6 @@
     <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
     <PackageReference Include="Polly.Core" Version="8.7.0" />
-    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -61,6 +61,70 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <None Include="$(NuGetPackageRoot)hidsharp\2.6.4\LICENSE.txt" Link="THIRD-PARTY-LICENSES\HidSharp-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)polly.core\8.7.0\LICENSE" Link="THIRD-PARTY-LICENSES\Polly.Core-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.web.webview2\1.0.3179.45\LICENSE.txt" Link="THIRD-PARTY-LICENSES\Microsoft.Web.WebView2-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.web.webview2\1.0.3179.45\NOTICE.txt" Link="THIRD-PARTY-LICENSES\Microsoft.Web.WebView2-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk\1.8.260317003\license.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk.ai\1.8.53\license.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-Component-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk.ml\1.8.2141\license.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-ML-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk\1.8.260317003\NOTICE.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.windowsappsdk.ml\1.8.2141\ThirdPartyNotices.txt" Link="THIRD-PARTY-LICENSES\Microsoft.WindowsAppSDK-ML-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64\8.0.30\LICENSE.TXT" Link="THIRD-PARTY-LICENSES\DotNet-Runtime-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64\8.0.30\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-Runtime-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)microsoft.win32.systemevents\8.0.0\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-8-Libraries-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)system.drawing.common\8.0.0\LICENSE.TXT" Link="THIRD-PARTY-LICENSES\System.Drawing.Common-LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)system.drawing.common\8.0.0\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\System.Drawing.Common-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)system.numerics.tensors\9.0.0\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-9-Libraries-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="$(NuGetPackageRoot)system.codedom\10.0.2\THIRD-PARTY-NOTICES.TXT" Link="THIRD-PARTY-LICENSES\DotNet-10-Libraries-NOTICE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
     <EmbeddedResource Include="..\dashboard.html" Link="WebAssets\dashboard.html" LogicalName="WebAssets/dashboard.html" />
     <EmbeddedResource Include="..\hosted-dashboard.html" Link="WebAssets\hosted-dashboard.html" LogicalName="WebAssets/hosted-dashboard.html" />
     <EmbeddedResource Include="..\index.html" Link="WebAssets\index.html" LogicalName="WebAssets/index.html" />
@@ -68,7 +132,14 @@
     <EmbeddedResource Include="..\refund-policy.html" Link="WebAssets\refund-policy.html" LogicalName="WebAssets/refund-policy.html" />
     <EmbeddedResource Include="..\css\**\*" Link="WebAssets\css\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/css/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\js\**\*" Link="WebAssets\js\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/js/%(RecursiveDir)%(Filename)%(Extension)" />
-    <EmbeddedResource Include="..\widgets\**\*" Link="WebAssets\widgets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/widgets/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\widgets\audio-output-panel.html" Link="WebAssets\widgets\audio-output-panel.html" LogicalName="WebAssets/widgets/audio-output-panel.html" />
+    <EmbeddedResource Include="..\widgets\calendar-widget.html" Link="WebAssets\widgets\calendar-widget.html" LogicalName="WebAssets/widgets/calendar-widget.html" />
+    <EmbeddedResource Include="..\widgets\frigate-detection-panel.html" Link="WebAssets\widgets\frigate-detection-panel.html" LogicalName="WebAssets/widgets/frigate-detection-panel.html" />
+    <EmbeddedResource Include="..\widgets\network-widget.html" Link="WebAssets\widgets\network-widget.html" LogicalName="WebAssets/widgets/network-widget.html" />
+    <EmbeddedResource Include="..\widgets\philips-hue-panel.html" Link="WebAssets\widgets\philips-hue-panel.html" LogicalName="WebAssets/widgets/philips-hue-panel.html" />
+    <EmbeddedResource Include="..\widgets\setup-guide.html" Link="WebAssets\widgets\setup-guide.html" LogicalName="WebAssets/widgets/setup-guide.html" />
+    <EmbeddedResource Include="..\widgets\system-monitor.html" Link="WebAssets\widgets\system-monitor.html" LogicalName="WebAssets/widgets/system-monitor.html" />
+    <EmbeddedResource Include="..\widgets\weather-widget.html" Link="WebAssets\widgets\weather-widget.html" LogicalName="WebAssets/widgets/weather-widget.html" />
     <EmbeddedResource Include="..\assets\**\*" Link="WebAssets\assets\%(RecursiveDir)%(Filename)%(Extension)" LogicalName="WebAssets/assets/%(RecursiveDir)%(Filename)%(Extension)" />
     <Content Include="..\assets\trusted-extension-publishers.json" Link="assets\trusted-extension-publishers.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

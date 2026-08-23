@@ -2,6 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const supportController = readWorkspaceFile("app/Controllers/SupportController.cs");
+const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
+const configController = readWorkspaceFile("app/Controllers/ConfigController.cs");
+const actionController = readWorkspaceFile("app/Controllers/ActionController.cs");
+const provisioningService = readWorkspaceFile("app/Services/ProvisioningService.cs");
 
 function readWorkspaceFile(relativePath) {
   const filePath = resolve(process.cwd(), relativePath);
@@ -59,6 +63,8 @@ for (const replacement of [
   "<calendar-feed-url>",
   "<local-ip>",
   "<unifi-user>",
+  "<frigate-endpoint>",
+  "<frigate-user>",
   "<launcher-path>",
   "<launcher-icon-path>",
   "<launcher-arguments>",
@@ -69,5 +75,16 @@ for (const replacement of [
     `support bundle redaction must include ${replacement}`
   );
 }
+
+assert(
+  /ProvisioningSummaryPayload\.FromSnapshot\(_provisioningService\.GetSnapshot\(\)\)/.test(telemetryController)
+    && /ProvisioningSummaryPayload\.FromSnapshot\(_provisioningService\.GetSnapshot\(\)\)/.test(configController),
+  "health and config APIs must expose only provisioning summary data"
+);
+assert(
+  (actionController.match(/ProvisioningPublicSnapshot\.FromSnapshot/g) || []).length === 3
+    && /class ProvisioningLauncherSuggestionSummaryPayload[\s\S]*?Id[\s\S]*?DisplayName[\s\S]*?Source/.test(provisioningService),
+  "provisioning actions must return launcher review identity without local paths or arguments"
+);
 
 console.log("checked support bundle redaction guards");

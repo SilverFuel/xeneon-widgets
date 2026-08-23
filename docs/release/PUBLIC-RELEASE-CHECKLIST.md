@@ -4,27 +4,35 @@ Use this before publishing a free beta, paid release, or public download.
 
 ## Automated Gate
 
-- Run `npm run release:gauntlet` against the latest local installer.
+- Run the gauntlet with `-InstallerPath` pointing to the exact candidate. Do not select a local installer by timestamp.
 - For a disposable Windows VM or fresh Windows profile, run:
 
 ```powershell
-powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<installer>.exe -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall
+powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath .\release-assets\<installer>.exe -ReleaseAssetsPath .\release-assets -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall -RemoveLocalData
 ```
+
+- Install smoke always requires `-ReleaseAssetsPath`; it verifies the installed `XenonEdgeHost.exe` hash, product identity, version, and commit from manifest schema 2 before any health result. A publication-bound run must also supply `-LifecycleReceiptPath`, `-FrigateQualificationReceiptPath`, and `-DisplayQualificationReceiptPath` together. The gauntlet rejects partial receipt evidence.
 
 ## Free Public Beta Must Do
 
-- Publish `support.html` and `refund-policy.html` with the release.
+- Keep `support.html` and `refund-policy.html` bundled in the app and reachable through the documented support path; they are not extra release assets.
 - Clearly label the release as a free public beta.
 - Clearly say the Windows installer is unsigned if it has not been code-signed.
-- Clearly say the macOS host is beta-only unless it was built and tested on a real Mac.
+- Publish no macOS assets; the beta workflow is Windows-only.
 - Clearly publish GitHub Issues and Security Advisories as the support path.
-- Run `npm run release:ready` and resolve every blocker.
+- Run `npm run release:ready-beta -- -InstallerPath .\app\dist\Auxora-Setup-<version>-<date>.exe` and resolve every blocker. The unsigned-beta gate requires Authenticode status exactly `NotSigned`; it rejects signed and invalidly signed files.
+- Treat `npm run release:free-beta` as a verifier, not a local-build shortcut: pass the immutable release asset directory plus all exact-candidate receipt paths. It fails closed when any are missing.
+- Create the GitHub `beta-publication` environment before dispatching publication. For this explicitly approved solo-maintainer beta, require `SilverFuel` as a User reviewer, leave **Prevent self-review** off, and disable administrator bypass. Confirm `scripts\Test-GitHubReleaseEnvironment.ps1 -Repository SilverFuel/xeneon-widgets -SoloOwnerLogin SilverFuel` passes against the live environment.
 - Confirm the product name and legal disclaimer keep the app independent from CORSAIR.
-- Test install, launch, restart, auto-start, and uninstall on a clean Windows machine when possible.
+- Require the exact manifest-bound installer to stay closed after install, pass deliberate launch, live `/api/health`, process restart, reboot with no autostart, injected failed-upgrade rollback, successful previous-beta upgrade, repair, normal uninstall, and remove-all-data on a disposable Windows VM. Require a passing schema-3 receipt.
+- Confirm customer instructions show `Get-FileHash -Algorithm SHA256`, require exact filename/hash agreement, and tell users to stop on a mismatch or policy block without disabling Windows security.
+- Require the same manifest-bound installer to pass `docs/release/FRIGATE-CERTIFICATION.md` against a physical Frigate server and real camera on the target LAN. Verify the secret-free receipt with `scripts/Test-FrigateQualificationReceipt.ps1`.
+- Require the same manifest-bound installer to pass `docs/release/DISPLAY-CERTIFICATION.md` on a physical Windows machine and physical touch companion display. Verify the privacy-safe receipt with `scripts/Test-DisplayQualificationReceipt.ps1`.
 - Confirm Reset all app data removes local settings and protected secrets for the current user.
 - Confirm the Start Menu uninstall cleanup shortcut removes local app data when selected and does not ask extra questions.
-- Confirm the in-app Updates panel can read the GitHub Releases feed and expose the latest installer download.
-- Upload release notes, installer, and SHA256 file to GitHub Releases.
+- Confirm the in-app Updates panel can read the GitHub Releases feed and open the official Releases page for a newer beta. This unsigned beta must keep direct installer links hidden because Auxora has not downloaded and verified the installer bytes itself.
+- Upload only the manifest allowlist: one Windows installer, its SHA256 file, install notes, release notes, and `release-manifest.json`.
+- Never edit a release or replace bytes under an existing tag. Increment the beta version and create a new tag.
 - Keep the app described as independent from CORSAIR, Ubiquiti, Philips Hue, OpenWeather, Microsoft, and Apple unless permission exists.
 
 ## Paid/Stable Must Do
@@ -52,3 +60,5 @@ powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<insta
 - Setup requires JSON endpoint copying for normal users.
 - The app cannot open from the Start Menu or Applications folder after reboot.
 - The support, license, reset, or update paths are missing from the customer build.
+- Camera Detection has no verified exact-candidate receipt from a physical Frigate server and real camera.
+- Companion-display behavior has no verified exact-candidate receipt covering primary-display exclusion, taskbar hiding, hot-plug recovery, role switching, scaling, touch, keyboard, and screen-reader behavior.

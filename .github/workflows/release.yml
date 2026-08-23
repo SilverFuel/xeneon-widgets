@@ -1,27 +1,62 @@
-name: Release Artifacts
+name: Windows Beta Candidate
 
 on:
-  workflow_dispatch:
   push:
     tags:
-      - "v*.*.*"
+      - "v*.*.*-beta.*"
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Successful tag-build workflow run containing the exact tested candidate"
+        required: true
+        type: string
+      tag:
+        description: "Immutable beta tag, for example v0.3.0-beta.1"
+        required: true
+        type: string
+      lifecycle_receipt_base64:
+        description: "Base64 JSON receipt from the disposable Windows VM lifecycle test"
+        required: true
+        type: string
+      frigate_qualification_receipt_base64:
+        description: "Base64 secret-free JSON receipt from physical Frigate and camera qualification"
+        required: true
+        type: string
+      display_qualification_receipt_base64:
+        description: "Base64 privacy-safe JSON receipt from physical companion-display qualification"
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  windows:
-    name: Windows installer
+  build-windows-candidate:
+    if: github.event_name == 'push'
+    name: Build immutable Windows candidate
     runs-on: windows-latest
+    permissions:
+      contents: read
 
     steps:
-      - name: Check out repository
+      - name: Check out immutable tag commit
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+
+      - name: Require candidate tag commit from main
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git fetch origin main --no-tags
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch origin/main before candidate creation." }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw "The beta tag commit must already be present on origin/main." }
 
       - name: Set up .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
-          dotnet-version: 8.0.x
+          global-json-file: ./global.json
 
       - name: Set up Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -31,103 +66,264 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Validate synchronized beta version and tag
+        id: version
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $version = (& ./scripts/Test-ReleaseVersion.ps1 -ExpectedTag $env:RELEASE_TAG).Trim()
+          [xml]$buildStamp = Get-Content -LiteralPath build/build-stamp.props
+          $informationalVersion = [string]$buildStamp.Project.PropertyGroup.XenonInformationalVersion
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "informational_version=$informationalVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Audit dependencies
         run: npm run audit:deps
 
-      - name: Validate
+      - name: Validate source and native host
         run: npm run check
 
-      - name: Build installer
+      - name: Build exact Windows installer
         run: npm run installer
 
-      - name: Verify Windows signing policy
+      - name: Stage and verify exact allowlisted candidate
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_INFORMATIONAL_VERSION: ${{ steps.version.outputs.informational_version }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT_SHA: ${{ github.sha }}
         run: |
-          $installer = Get-ChildItem -Path app/dist -Filter "*.exe" -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $installer) {
-            throw "Windows installer was not produced."
+          $version = $env:RELEASE_VERSION
+          $installers = @(Get-ChildItem -LiteralPath app/dist -Filter "Auxora-Setup-$version-*.exe" -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one Windows installer for $version; found $($installers.Count)."
           }
+          $installerPath = $installers[0].FullName
 
-          $tag = "${{ github.ref_name }}"
-          $isPublicStable = "${{ github.ref_type }}" -eq "tag" -and $tag -notmatch "(?i)(alpha|beta|preview|rc|nightly)"
-          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
-          "SignatureStatus=$($signature.Status)" | Out-File -FilePath app/dist/signature-status.txt -Encoding utf8
+          & ./scripts/Test-ReleaseArtifact.ps1 `
+            -InstallerPath $installerPath `
+            -ExpectedVersion $version `
+            -RequireUnsigned `
+            -PublishedAppPath publish/XenonEdgeHost.exe `
+            -ExpectedInformationalVersion $env:RELEASE_INFORMATIONAL_VERSION `
+            -ExpectedCommitSha $env:SOURCE_COMMIT_SHA
+          & ./scripts/assert-release-ready.ps1 `
+            -InstallerPath $installerPath `
+            -AllowGitHubSupportPath `
+            -AllowBetaVersion `
+            -RequireUnsignedInstaller
 
-          if ($isPublicStable -and $signature.Status -ne "Valid") {
-            throw "Public stable releases require a valid Authenticode signature."
-          }
+          $candidateRoot = Join-Path $PWD "release-assets"
+          New-Item -ItemType Directory -Path $candidateRoot -Force | Out-Null
+          Copy-Item -LiteralPath $installerPath -Destination $candidateRoot
+          Copy-Item -LiteralPath "$installerPath.sha256" -Destination $candidateRoot
+          Copy-Item -LiteralPath docs/release/WINDOWS-INSTALL-UNINSTALL.md -Destination $candidateRoot
+          Copy-Item -LiteralPath docs/release/FREE-BETA-RELEASE-NOTES.md -Destination $candidateRoot
 
-      - name: Upload Windows artifacts
+          & ./scripts/New-ReleaseManifest.ps1 `
+            -InstallerPath (Join-Path $candidateRoot $installers[0].Name) `
+            -Tag $env:RELEASE_TAG `
+            -Version $version `
+            -CommitSha $env:SOURCE_COMMIT_SHA `
+            -PublishedAppPath publish/XenonEdgeHost.exe `
+            -InstallNotesPath (Join-Path $candidateRoot "WINDOWS-INSTALL-UNINSTALL.md") `
+            -ReleaseNotesPath (Join-Path $candidateRoot "FREE-BETA-RELEASE-NOTES.md") `
+            -OutputPath (Join-Path $candidateRoot "release-manifest.json")
+
+          & ./scripts/Test-ReleaseManifest.ps1 `
+            -ReleaseAssetsPath $candidateRoot `
+            -ExpectedTag $env:RELEASE_TAG `
+            -ExpectedCommitSha $env:SOURCE_COMMIT_SHA `
+            -PublishedAppPath publish/XenonEdgeHost.exe
+
+      - name: Upload immutable Windows candidate for VM testing
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: windows-installer
-          path: |
-            app/dist/*.exe
-            app/dist/*.sha256
-            app/dist/*.sig
-            app/dist/signature-status.txt
-            app/dist/README-install.txt
-
-  mac:
-    name: macOS package
-    runs-on: macos-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 22
-
-      - name: Install Electron host dependencies
-        run: npm --prefix desktop/electron ci
-
-      - name: Validate Electron host
-        run: npm --prefix desktop/electron run check
-
-      - name: Build macOS package
-        run: npm run mac:dist
-
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: macos-package
-          path: |
-            desktop/electron/dist/*.dmg
-            desktop/electron/dist/*.zip
-            desktop/electron/dist/*.yml
-
-  github-release:
-    name: Free beta GitHub release
-    runs-on: ubuntu-latest
-    needs:
-      - windows
-      - mac
-    if: startsWith(github.ref, 'refs/tags/')
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-
-      - name: Download artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
+          name: auxora-windows-candidate-${{ github.sha }}
           path: release-assets
+          if-no-files-found: error
+          retention-days: 14
 
-      - name: Create or update free beta release
+  verify-publication-environment:
+    if: github.event_name == 'workflow_dispatch'
+    name: Verify protected publication environment
+    runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out publication guard
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Require explicit solo-owner publication approval
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
         run: |
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG_NAME" --jq .id)"
-            gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id/assets" --jq '.[].id' | while read asset_id; do
-              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id"
-            done
-            gh release edit "$TAG_NAME" --prerelease --title "Auxora $TAG_NAME Free Public Beta" --notes-file docs/release/FREE-BETA-RELEASE-NOTES.md
-            gh release upload "$TAG_NAME" release-assets/**/*
-          else
-            gh release create "$TAG_NAME" release-assets/**/* --prerelease --title "Auxora $TAG_NAME Free Public Beta" --notes-file docs/release/FREE-BETA-RELEASE-NOTES.md
-          fi
+          & ./scripts/Test-GitHubReleaseEnvironment.ps1 `
+            -Repository $env:GITHUB_REPOSITORY `
+            -EnvironmentName "beta-publication" `
+            -SoloOwnerLogin $env:GITHUB_REPOSITORY_OWNER
+
+  publish-tested-candidate:
+    if: github.event_name == 'workflow_dispatch'
+    name: Publish receipt-bound Windows beta
+    needs: verify-publication-environment
+    runs-on: windows-latest
+    environment: beta-publication
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Check out requested immutable tag
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Re-require publication tag commit from main
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git fetch origin main --no-tags
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch origin/main before publication verification." }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw "The beta tag commit must already be present on origin/main." }
+
+      - name: Verify candidate run and download exact artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if ($env:CANDIDATE_RUN_ID -notmatch '^\d+$') {
+            throw "candidate_run_id must be a numeric GitHub Actions run id."
+          }
+          $tagSha = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:CANDIDATE_RUN_ID" | ConvertFrom-Json
+          $candidateWorkflow = gh api "repos/$env:GITHUB_REPOSITORY/actions/workflows/release.yml" | ConvertFrom-Json
+          if ([long]$run.workflow_id -ne [long]$candidateWorkflow.id) {
+            throw "Candidate run did not come from the Windows Beta Candidate workflow."
+          }
+          if ($run.event -cne "push" -or $run.conclusion -cne "success") {
+            throw "Candidate run must be a successful tag-push build."
+          }
+          if ([string]$run.head_sha -cne $tagSha) {
+            throw "Candidate workflow SHA does not match the requested immutable tag."
+          }
+          if ([string]$run.head_branch -cne $env:RELEASE_TAG) {
+            throw "Candidate workflow was not triggered by the requested tag."
+          }
+
+          $artifactName = "auxora-windows-candidate-$tagSha"
+          gh run download $env:CANDIDATE_RUN_ID --repo $env:GITHUB_REPOSITORY --name $artifactName --dir release-assets
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download exact candidate artifact '$artifactName'." }
+          "tag_sha=$tagSha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify manifest and lifecycle, physical Frigate, and physical display receipts
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          LIFECYCLE_RECEIPT_BASE64: ${{ inputs.lifecycle_receipt_base64 }}
+          FRIGATE_QUALIFICATION_RECEIPT_BASE64: ${{ inputs.frigate_qualification_receipt_base64 }}
+          DISPLAY_QUALIFICATION_RECEIPT_BASE64: ${{ inputs.display_qualification_receipt_base64 }}
+        run: |
+          $version = (& ./scripts/Test-ReleaseVersion.ps1 -ExpectedTag $env:RELEASE_TAG).Trim()
+          & ./scripts/Test-ReleaseManifest.ps1 -ReleaseAssetsPath release-assets -ExpectedTag $env:RELEASE_TAG -ExpectedCommitSha $env:tag_sha
+          $manifest = Get-Content -LiteralPath release-assets/release-manifest.json -Raw | ConvertFrom-Json
+          $installerPath = Join-Path release-assets ([string]$manifest.installer.fileName)
+          & ./scripts/Test-ReleaseArtifact.ps1 `
+            -InstallerPath $installerPath `
+            -ExpectedVersion $version `
+            -RequireUnsigned
+          & ./scripts/assert-release-ready.ps1 `
+            -InstallerPath $installerPath `
+            -AllowGitHubSupportPath `
+            -AllowBetaVersion `
+            -RequireUnsignedInstaller `
+            -AllowDirty
+
+          try {
+            $receiptBytes = [Convert]::FromBase64String($env:LIFECYCLE_RECEIPT_BASE64)
+          } catch {
+            throw "lifecycle_receipt_base64 is not valid base64."
+          }
+          [IO.File]::WriteAllBytes((Join-Path $PWD "lifecycle-receipt.json"), $receiptBytes)
+          & ./scripts/Test-BetaLifecycleReceipt.ps1 -ReceiptPath lifecycle-receipt.json -ReleaseAssetsPath release-assets
+
+          try {
+            $frigateReceiptBytes = [Convert]::FromBase64String($env:FRIGATE_QUALIFICATION_RECEIPT_BASE64)
+          } catch {
+            throw "frigate_qualification_receipt_base64 is not valid base64."
+          }
+          [IO.File]::WriteAllBytes((Join-Path $PWD "frigate-qualification-receipt.json"), $frigateReceiptBytes)
+          & ./scripts/Test-FrigateQualificationReceipt.ps1 -ReceiptPath frigate-qualification-receipt.json -ReleaseAssetsPath release-assets
+
+          try {
+            $displayReceiptBytes = [Convert]::FromBase64String($env:DISPLAY_QUALIFICATION_RECEIPT_BASE64)
+          } catch {
+            throw "display_qualification_receipt_base64 is not valid base64."
+          }
+          [IO.File]::WriteAllBytes((Join-Path $PWD "display-qualification-receipt.json"), $displayReceiptBytes)
+          & ./scripts/Test-DisplayQualificationReceipt.ps1 -ReceiptPath display-qualification-receipt.json -ReleaseAssetsPath release-assets
+
+      - name: Publish exact assets without replacing existing bytes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $manifest = Get-Content -LiteralPath release-assets/release-manifest.json -Raw | ConvertFrom-Json
+          $remoteTagRows = @(git ls-remote origin "refs/tags/$env:RELEASE_TAG" "refs/tags/$env:RELEASE_TAG^{}")
+          if ($LASTEXITCODE -ne 0 -or $remoteTagRows.Count -eq 0) {
+            throw "Could not re-resolve remote tag $env:RELEASE_TAG immediately before publication."
+          }
+          $peeledSuffix = "refs/tags/$env:RELEASE_TAG^{}"
+          $selectedTagRow = $remoteTagRows | Where-Object { $_ -like "*$peeledSuffix" } | Select-Object -First 1
+          if (-not $selectedTagRow) {
+            $selectedTagRow = $remoteTagRows | Where-Object { $_ -like "*refs/tags/$env:RELEASE_TAG" } | Select-Object -First 1
+          }
+          $remoteTagSha = ([string]$selectedTagRow -split '\s+')[0].ToLowerInvariant()
+          if ($remoteTagSha -cne ([string]$manifest.commitSha).ToLowerInvariant()) {
+            throw "Remote tag moved after candidate verification; refusing publication."
+          }
+
+          $previousErrorActionPreference = $ErrorActionPreference
+          try {
+            $ErrorActionPreference = "Continue"
+            $releaseLookupOutput = @(& gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG" 2>&1)
+            $releaseLookupExitCode = $LASTEXITCODE
+          } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+          }
+          if ($releaseLookupExitCode -eq 0) {
+            throw "Release $env:RELEASE_TAG already exists. Published bytes are immutable; create a new version/tag."
+          }
+          if (($releaseLookupOutput -join "`n") -notmatch '(?i)\bHTTP 404\b') {
+            throw "Could not verify that release $env:RELEASE_TAG is unused; refusing publication. $($releaseLookupOutput -join ' ')"
+          }
+
+          $root = (Resolve-Path release-assets).Path
+          $assets = @(
+            (Join-Path $root ([string]$manifest.installer.fileName)),
+            (Join-Path $root ([string]$manifest.installer.sha256FileName)),
+            (Join-Path $root ([string]$manifest.installNotesFileName)),
+            (Join-Path $root ([string]$manifest.releaseNotesFileName)),
+            (Join-Path $root "release-manifest.json")
+          )
+          & ./scripts/Test-GitHubReleaseEnvironment.ps1 `
+            -Repository $env:GITHUB_REPOSITORY `
+            -EnvironmentName "beta-publication" `
+            -SoloOwnerLogin $env:GITHUB_REPOSITORY_OWNER
+          gh release create $env:RELEASE_TAG @assets `
+            --repo $env:GITHUB_REPOSITORY `
+            --verify-tag `
+            --prerelease `
+            --title "Auxora $($manifest.version) Free Public Beta" `
+            --notes-file (Join-Path $root ([string]$manifest.releaseNotesFileName))
+          if ($LASTEXITCODE -ne 0) { throw "GitHub release creation failed." }

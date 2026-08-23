@@ -74,7 +74,8 @@
 .dashboard-native-page--game-focus-active .router-inline-widget {
   inset: 0;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-gutter: auto;
 }
 
@@ -112,7 +113,7 @@
 
 .game-mode-telemetry-grid span {
   color: var(--color-text-dim);
-  font-size: 0.64rem;
+  font-size: max(12px, 0.75rem);
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -132,31 +133,29 @@
 }
 
 .product-shell:has(.game-mode-idle-grid) {
-  height: 100%;
-  min-height: 0;
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 100%;
+  grid-template-rows: auto;
+  overflow: visible;
 }
 
 .game-mode-idle-shell {
   gap: 8px;
+  min-width: 0;
 }
 
 .game-mode-idle-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(196px, 1fr);
+  grid-template-rows: none;
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: 12px;
+  max-width: 100%;
   min-height: 0;
-  overflow: hidden;
-}
-
-.game-mode-idle-grid:has(.game-mode-idle-notices) {
-  grid-template-rows: auto auto minmax(0, auto) minmax(196px, 1fr);
-}
-
-.game-mode-idle-grid:has(.game-mode-idle-notices) .game-mode-idle-launch {
-  grid-row: 4;
+  overflow: visible;
 }
 
 .game-mode-idle-top,
@@ -189,7 +188,7 @@
 
 .game-mode-idle-notices {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  overflow: hidden;
+  overflow: visible;
 }
 
 .game-mode-idle-notices .game-mode-ended-panel,
@@ -199,30 +198,31 @@
 
 .game-mode-idle-launch {
   display: grid;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .game-mode-idle-launch .game-mode-steam-panel {
-  height: 100%;
-  min-height: 196px;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  height: auto;
+  min-height: 0;
+  grid-template-rows: auto auto;
+  overflow: visible;
 }
 
 .game-mode-idle-launch .game-mode-steam-dock {
-  height: 100%;
-  min-height: 128px;
+  height: auto;
+  min-height: 0;
   align-items: stretch;
+  scrollbar-gutter: stable;
 }
 
 .game-mode-idle-launch .game-mode-steam-tile {
   flex-basis: clamp(168px, 8.4vw, 196px);
-  height: 100%;
-  min-height: 128px;
+  height: auto;
+  min-height: 160px;
 }
 
 .game-mode-idle-launch .game-mode-steam-art {
-  min-height: 0;
+  min-height: 74px;
 }
 
 .game-mode-metric--primary .metric-value {
@@ -359,7 +359,7 @@
 
 .game-face-signals span {
   color: var(--color-text-dim);
-  font-size: 0.68rem;
+  font-size: max(12px, 0.75rem);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -646,7 +646,7 @@
 
 .game-focus-hud__item span {
   color: rgba(221, 241, 229, 0.58);
-  font-size: 0.68rem;
+  font-size: max(12px, 0.75rem);
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -662,7 +662,7 @@
 .game-focus-hud__item small {
   margin-top: 5px;
   color: rgba(221, 241, 229, 0.62);
-  font-size: 0.72rem;
+  font-size: max(12px, 0.75rem);
 }
 
 .game-focus-hud__item i {
@@ -1281,7 +1281,7 @@
 
 .game-mode-ended-stats span {
   color: var(--color-text-dim);
-  font-size: 0.68rem;
+  font-size: max(12px, 0.75rem);
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1471,7 +1471,7 @@
 
 .game-mode-steam-copy small {
   color: var(--color-text-dim);
-  font-size: 0.7rem;
+  font-size: max(12px, 0.75rem);
   line-height: 1.2;
 }
 
@@ -1485,7 +1485,7 @@
 .game-mode-steam-long-actions .inline-button {
   min-height: 40px;
   padding: 8px 10px;
-  font-size: 0.7rem;
+  font-size: max(12px, 0.75rem);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1511,6 +1511,15 @@
 }
 
 @media (max-width: 1280px) {
+  .game-mode-idle-top .game-mode-performance {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .game-mode-idle-notices,
+  .game-mode-telemetry-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .game-mode-steam-head {
     grid-template-columns: 1fr;
   }
@@ -1535,8 +1544,9 @@
 
   .game-focus-shell {
     height: auto;
-    min-height: 100vh;
+    min-height: 100%;
     padding: 18px;
+    overflow: visible;
   }
 
   .game-focus-board {
@@ -1580,4 +1590,221 @@
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+@media (max-width: 600px) {
+  .game-mode-idle-top .game-mode-performance {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .game-mode-candidates-head,
+  .game-mode-candidate-row,
+  .game-mode-steam-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+/* Game Mode keeps per-game accents while inheriting the selected product theme. */
+.game-mode-steam-dock {
+  scrollbar-color: var(--game-accent) var(--theme-hover-surface);
+}
+
+.game-mode-steam-dock::-webkit-scrollbar-track {
+  background: var(--theme-hover-surface);
+}
+
+.game-mode-steam-dock::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, var(--game-accent), var(--game-secondary));
+}
+
+.game-mode-telemetry-grid div,
+.game-mode-profile-panel,
+.game-mode-steam-tile,
+.game-mode-detail-card,
+.game-mode-card {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
+}
+
+.game-mode-telemetry-card[data-tone="warn"] {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+}
+
+.game-face-panel {
+  border-color: color-mix(in srgb, var(--game-secondary) 34%, transparent);
+  background:
+    radial-gradient(circle at 12% 20%, color-mix(in srgb, var(--game-accent) 16%, transparent), transparent 34%),
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--game-secondary) 16%, transparent), transparent 32%),
+    linear-gradient(118deg, var(--theme-surface-primary), var(--theme-surface-secondary) 54%, var(--theme-surface-elevated));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--game-accent) 12%, transparent),
+    inset 0 -2px 0 color-mix(in srgb, var(--game-secondary) 24%, transparent),
+    var(--theme-panel-shadow);
+}
+
+.game-face-panel::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--game-secondary) 16%, transparent), transparent);
+}
+
+.game-face-art,
+.game-focus-emblem {
+  border-color: color-mix(in srgb, var(--game-accent) 28%, transparent);
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--game-accent) 14%, transparent), transparent 64%),
+    var(--theme-surface-secondary);
+  color: var(--game-accent);
+  box-shadow: 0 0 calc(54px * var(--theme-glow-intensity)) color-mix(in srgb, var(--game-accent) 14%, transparent);
+}
+
+.game-face-home-pill,
+.game-focus-home {
+  min-height: 44px;
+  border-color: color-mix(in srgb, var(--game-secondary) 36%, transparent);
+  background: color-mix(in srgb, var(--game-secondary) 14%, transparent);
+  color: var(--theme-text);
+}
+
+.game-focus-shell {
+  color: var(--theme-text);
+  background:
+    radial-gradient(ellipse 58% 54% at 50% 48%, color-mix(in srgb, var(--game-accent) 14%, transparent), transparent 66%),
+    radial-gradient(ellipse 35% 62% at 0% 52%, color-mix(in srgb, var(--game-secondary) 14%, transparent), transparent 72%),
+    radial-gradient(ellipse 35% 62% at 100% 52%, color-mix(in srgb, var(--game-secondary) 14%, transparent), transparent 72%),
+    var(--theme-page);
+}
+
+.game-focus-shell::before {
+  background:
+    radial-gradient(ellipse 84% 52% at 50% 52%, transparent 0 60%, color-mix(in srgb, var(--game-secondary) 14%, transparent) 74%, var(--theme-vignette) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--game-secondary) 22%, transparent), transparent 8%, transparent 92%, color-mix(in srgb, var(--game-secondary) 22%, transparent));
+  box-shadow: inset 0 0 84px var(--theme-vignette);
+  opacity: calc(0.62 * var(--theme-glow-intensity) * var(--theme-night-glow));
+}
+
+.game-focus-shell::after {
+  background:
+    linear-gradient(90deg, transparent 0 48%, color-mix(in srgb, var(--game-accent) 14%, transparent) 50%, transparent 52%),
+    repeating-linear-gradient(180deg, var(--theme-inner-highlight) 0 1px, transparent 1px 8px);
+  opacity: calc(0.24 * var(--theme-glow-intensity));
+}
+
+.game-focus-identity strong,
+.game-focus-session strong,
+.game-focus-audio strong,
+.game-focus-mic-panel strong,
+.game-focus-network strong,
+.game-focus-wake strong {
+  color: var(--theme-text);
+  text-shadow: none;
+}
+
+.game-focus-identity small,
+.game-focus-session small,
+.game-focus-metric small,
+.game-focus-audio small,
+.game-focus-mic-panel small,
+.game-focus-network small,
+.game-focus-reason,
+.game-focus-audio-row span {
+  color: var(--theme-text-muted);
+}
+
+.game-focus-metric span,
+.game-focus-audio span,
+.game-focus-mic-panel span,
+.game-focus-network span {
+  color: color-mix(in srgb, var(--game-accent) 64%, var(--theme-text-muted));
+}
+
+.game-focus-card,
+.game-focus-metric,
+.game-focus-audio,
+.game-focus-mic-panel,
+.game-focus-network,
+.game-focus-audio-row,
+.game-focus-reason {
+  border-color: color-mix(in srgb, var(--game-accent) 18%, var(--theme-border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--game-accent) 7%, transparent), transparent 40%),
+    rgba(var(--theme-surface-secondary-rgb), 0.9);
+  box-shadow: inset 0 1px 0 var(--theme-inner-highlight);
+}
+
+.game-focus-card--session.is-touch-grass {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+}
+
+.game-focus-card--session.is-touch-grass .game-focus-session strong {
+  color: var(--status-warning-text);
+}
+
+.game-focus-metric i,
+.game-focus-progress,
+.game-mode-progress {
+  background: var(--theme-hover-surface);
+}
+
+.game-focus-metric i::after,
+.game-focus-progress > span,
+.game-mode-progress > span {
+  background: linear-gradient(90deg, var(--game-accent), var(--game-secondary));
+}
+
+.game-focus-metric.is-good,
+.game-focus-audio.is-good,
+.game-focus-mic-panel.is-good,
+.game-focus-network.is-good {
+  border-color: var(--status-success-border);
+  background: var(--status-success-surface);
+}
+
+.game-focus-metric.is-warn,
+.game-focus-audio.is-warn,
+.game-focus-mic-panel.is-warn,
+.game-focus-network.is-warn {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+}
+
+.game-focus-metric.is-danger,
+.game-focus-audio.is-danger,
+.game-focus-mic-panel.is-danger,
+.game-focus-network.is-danger {
+  border-color: var(--status-danger-border);
+  background: var(--status-danger-surface);
+}
+
+.game-focus-metric.is-warn strong,
+.game-focus-audio.is-warn strong,
+.game-focus-mic-panel.is-warn strong,
+.game-focus-network.is-warn strong {
+  color: var(--status-warning-text);
+}
+
+.game-focus-metric.is-danger strong,
+.game-focus-audio.is-danger strong,
+.game-focus-mic-panel.is-danger strong,
+.game-focus-network.is-danger strong {
+  color: var(--status-danger-text);
+}
+
+.game-mode-steam-tile.is-active,
+.game-mode-steam-tile.is-expanded {
+  border-color: var(--game-accent);
+  background: color-mix(in srgb, var(--game-accent) 10%, var(--theme-surface-secondary));
+  box-shadow: inset 0 -2px 0 var(--game-accent), var(--theme-panel-shadow);
+}
+
+:root[data-theme-variant="night"] .game-focus-shell::before,
+:root[data-theme-variant="night"] .game-focus-shell::after,
+:root[data-theme-variant="night"] .game-focus-shell.is-intro .game-focus-wake,
+:root[data-theme-variant="night"] .game-focus-shell.is-intro .game-focus-wake::before,
+.dashboard-native-page--motion-off .game-focus-shell::before,
+.dashboard-native-page--motion-off .game-focus-shell::after,
+.dashboard-native-page--motion-off .game-focus-shell.is-intro .game-focus-wake,
+.dashboard-native-page--motion-off .game-focus-shell.is-intro .game-focus-wake::before {
+  animation: none;
 }

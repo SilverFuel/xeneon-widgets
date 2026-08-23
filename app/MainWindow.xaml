@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     Title="Auxora">
-    <Grid Background="#0B0F14">
+    <Grid Background="#0B0F14" RequestedTheme="Dark">
         <controls:WebView2
             x:Name="DashboardView"
             HorizontalAlignment="Stretch"
@@ -17,22 +17,111 @@
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"
             MaxWidth="640"
-            Background="#CC0B0F14"
+            Background="#FF0B0F14"
             BorderBrush="#3300E0FF"
             BorderThickness="1"
             CornerRadius="18">
             <StackPanel Spacing="10">
                 <TextBlock
                     Text="Auxora"
+                    Foreground="#FFF5F8FA"
                     FontSize="28"
                     FontWeight="SemiBold" />
                 <TextBlock
                     x:Name="StatusText"
                     Text="Starting bridge..."
+                    Foreground="#FFDCE6EC"
                     FontSize="16"
                     Opacity="0.9"
                     TextWrapping="WrapWholeWords" />
             </StackPanel>
         </Border>
+
+        <Grid
+            x:Name="DisplayPickerPanel"
+            Background="#FF070B10"
+            Visibility="Collapsed">
+            <Border
+                Margin="32"
+                Padding="32"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Stretch"
+                MaxWidth="980"
+                Background="#FF101820"
+                BorderBrush="#6600D9FF"
+                BorderThickness="1"
+                CornerRadius="24">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Spacing="8">
+                        <TextBlock
+                            Text="Choose an Auxora companion display"
+                            Foreground="#FFF5F8FA"
+                            FontSize="30"
+                            FontWeight="SemiBold"
+                            TextWrapping="WrapWholeWords" />
+                        <TextBlock
+                            Text="Auxora never uses your Windows primary display. Choose an available companion display and Auxora will remember it."
+                            Foreground="#FFB8C7D1"
+                            FontSize="16"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+
+                    <ScrollViewer
+                        Grid.Row="1"
+                        Margin="0,24,0,0"
+                        HorizontalScrollMode="Disabled"
+                        HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="DisplayPickerList" Spacing="12" />
+                    </ScrollViewer>
+
+                    <TextBlock
+                        x:Name="DisplayPickerStatus"
+                        Grid.Row="2"
+                        Margin="0,18,0,0"
+                        Text="You can change this later in Settings → Diagnostics."
+                        Foreground="#FF91A8B7"
+                        FontSize="14"
+                        TextWrapping="WrapWholeWords" />
+
+                    <StackPanel
+                        Grid.Row="3"
+                        Margin="0,20,0,0"
+                        Spacing="12">
+                        <Button
+                            Padding="18,10"
+                            Click="HandleRefreshDisplays"
+                            Foreground="#FFF5F8FA"
+                            Background="#FF1B2A34"
+                            BorderBrush="#44566A78"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center">
+                            <TextBlock Text="Refresh displays" TextWrapping="WrapWholeWords" />
+                        </Button>
+                        <Button
+                            Padding="18,10"
+                            Click="HandleOpenWindowsDisplaySettings"
+                            Foreground="#FFF5F8FA"
+                            Background="#FF1B2A34"
+                            BorderBrush="#44566A78"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center">
+                            <TextBlock Text="Open Windows display settings" TextWrapping="WrapWholeWords" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

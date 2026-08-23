@@ -5,6 +5,7 @@
   }
 
   var advancedSetupSchemas = [];
+  var RESET_CONFIRMATION_WINDOW_MS = 8000;
   var addListener = runtime.addListener;
   var buildBridgeUrl = runtime.buildBridgeUrl;
   var clamp = runtime.clamp;
@@ -15,6 +16,7 @@
   var formatAge = runtime.formatAge;
   var metricCard = runtime.metricCard;
   var optionalNumber = runtime.optionalNumber;
+  var patchStableDom = runtime.patchStableDom;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
   var saveSettings = runtime.saveSettings;
@@ -39,7 +41,7 @@
     var items = setup && setup.items ? setup.items : {};
     return [
       items.bridge || { label: "Local bridge", state: "Needs Setup", nextStep: "Waiting for bridge." },
-      items.display || { label: "Auxora display", state: "Needs Setup", nextStep: "Waiting for display diagnostics." },
+      items.display || { label: "Auxora companion display", state: "Needs Setup", nextStep: "Connect a secondary display. Auxora never opens on the Windows primary display." },
       items.provisioning || { label: "Auto provisioning", state: "Checking", nextStep: "Waiting for startup scan." },
       items.system || { label: "System Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." },
       items.network || { label: "Network Monitor", state: "Needs Setup", nextStep: "Waiting for telemetry." },
@@ -101,11 +103,20 @@
   }
 
   function renderDisplayDiagnosticsCard(display) {
-    var selected = display && display.selected ? display.selected : null;
     var displays = display && Array.isArray(display.displays) ? display.displays : [];
+    var visibleDisplays = displays.filter(function (entry) {
+      return Boolean(entry && !entry.primary);
+    });
+    var selectedDisplayId = text(display && display.selectedDisplayId, "");
+    var selected = visibleDisplays.filter(function (entry) {
+      return Boolean(entry && (entry.preferred || (selectedDisplayId && entry.id === selectedDisplayId)));
+    })[0] || null;
     var repairActions = display && Array.isArray(display.repairActions) ? display.repairActions : [];
-    var visibleDisplays = displays.slice(0, 4);
-    var edgeCount = optionalNumber(display && display.edgeCandidateCount) || 0;
+    var reportedCompanionCount = optionalNumber(display && display.companionDisplayCount);
+    var companionDisplayCount = reportedCompanionCount == null ? visibleDisplays.length : reportedCompanionCount;
+    var displayReady = text(display && display.status, "").toLowerCase() === "ready"
+      && companionDisplayCount > 0
+      && Boolean(selected);
 
     function describeDisplay(entry) {
       var width = optionalNumber(entry && (entry.boundsWidth || entry.modeWidth));
@@ -120,16 +131,19 @@
       '<article class="list-card inline-card setup-diagnostics-card">' +
         '<div class="inline-card-header">' +
           '<div>' +
-            '<div class="metric-label">Display targeting</div>' +
-            '<div class="router-inline-copy">' + escapeHtml(text(display && display.message, selected ? "Touch display selected." : "No display target selected yet.")) + '</div>' +
+            '<div class="metric-label">Companion display targeting</div>' +
+            '<div class="router-inline-copy">' + escapeHtml(text(display && display.message, selected ? "Companion display selected." : "Connect a secondary display. Auxora never uses the Windows primary display.")) + '</div>' +
           '</div>' +
-          statusPill(edgeCount ? edgeCount + " found" : "Check display", edgeCount ? "good" : "warn") +
+          statusPill(displayReady ? "Ready" : companionDisplayCount ? "Choose one" : "Waiting", displayReady ? "good" : "warn") +
         '</div>' +
         '<div class="setup-display-target">' +
-          '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected display") : "No selected touch display") + '</strong>' +
-          '<span>' + escapeHtml(selected ? describeDisplay(selected) : "Connect a touch display, then refresh diagnostics.") + '</span>' +
+          '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected companion display") : "No active companion display selected") + '</strong>' +
+          '<span>' + escapeHtml(selected ? describeDisplay(selected) : companionDisplayCount ? "Choose one of the companion displays below." : "Connect or extend a secondary display, then refresh diagnostics.") + '</span>' +
         '</div>' +
-        '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
+        '<details class="setup-diagnostics-details">' +
+          '<summary>Manage companion displays</summary>' +
+          '<div class="setup-diagnostics-details__body">' +
+          '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
           var reasons = Array.isArray(entry.reasons) ? entry.reasons.slice(0, 2).join(" / ") : "";
           return '' +
             '<div class="inline-list-item setup-display-row">' +
@@ -137,13 +151,18 @@
                 '<div class="inline-list-title">' + escapeHtml(text(entry.label || entry.friendlyName, "Display")) + '</div>' +
                 '<div class="inline-list-copy">' + escapeHtml(describeDisplay(entry) + (reasons ? " / " + reasons : "")) + '</div>' +
               '</div>' +
-              statusPill(entry.preferred ? "Pinned" : String(entry.score || 0), entry.containsXeneonName || entry.matchesEdgeResolution ? "good" : "muted") +
+              '<div class="setup-display-row__actions">' +
+                statusPill(entry.preferred ? "In use" : "Available", entry.preferred ? "good" : "muted") +
+                '<button class="inline-button' + (entry.preferred ? '' : ' is-primary') + '" type="button" data-action="select-display" data-companion-display="true" data-display-id="' + escapeHtml(text(entry.id, "")) + '"' + (entry.preferred ? ' disabled' : '') + '>' + (entry.preferred ? 'Selected' : 'Use this companion display') + '</button>' +
+              '</div>' +
             '</div>';
-        }).join("") : emptyState("No displays returned", "The local bridge did not return monitor details yet.")) + '</div>' +
+        }).join("") : emptyState("Waiting for a companion display", "Auxora stays off the Windows primary display. Connect or extend a secondary display, then refresh.")) + '</div>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="run-repair">Repair scan</button>' +
-          (repairActions.length ? '<span class="router-inline-copy">' + escapeHtml(text(repairActions[0].message, "Repair actions are available.")) + '</span>' : '') +
+          (repairActions.length ? '<span class="router-inline-copy">' + escapeHtml(text(repairActions[0], "Repair actions are available.")) + '</span>' : '') +
         '</div>' +
+          '</div>' +
+        '</details>' +
       '</article>';
   }
 
@@ -164,7 +183,10 @@
           '</div>' +
           statusPill(suggestions.length + " found", "warn") +
         '</div>' +
-        '<div class="setup-launcher-suggestions">' + visible.map(function (entry) {
+        '<details class="setup-diagnostics-details">' +
+          '<summary>Review detected apps</summary>' +
+          '<div class="setup-diagnostics-details__body">' +
+          '<div class="setup-launcher-suggestions">' + visible.map(function (entry) {
           return '' +
             '<label class="setup-launcher-suggestion">' +
               '<input type="checkbox" data-launcher-suggestion="' + escapeHtml(text(entry.id, "")) + '" checked>' +
@@ -175,6 +197,8 @@
           '<button class="inline-button is-primary" type="button" data-action="apply-launcher-suggestions">Pin selected</button>' +
           '<button class="inline-button" type="button" data-action="run-repair">Rescan</button>' +
         '</div>' +
+          '</div>' +
+        '</details>' +
       '</article>';
   }
 
@@ -184,20 +208,22 @@
     var config = state.config || env.bridgeConfig || {};
     var hue = state.hue || { bridgeIp: "", message: "" };
     var display = setup.display || config.display || {};
-    var provisioning = setup.provisioning || config.provisioning || {};
+    var provisioning = state.provisioning || setup.provisioning || config.provisioning || {};
     var items = readSetupItems(setup);
     var optionalItems = setup.items || {};
     var weatherItem = optionalItems.weather || { label: "Weather", state: "Optional", nextStep: "Add an OpenWeather key if you want weather." };
     var calendarItem = optionalItems.calendar || { label: "Calendar", state: "Optional", nextStep: "Add an ICS feed if you want the Calendar widget." };
     var hueItem = optionalItems.hue || { label: "Philips Hue", state: "Optional", nextStep: "Link Hue only if you want lighting controls." };
     var uniFiItem = optionalItems.unifi || { label: "UniFi Network", state: "Optional", nextStep: "Auxora checks for UniFi automatically." };
+    var frigateItem = optionalItems.frigate || { label: "Camera Detection", state: "Optional", nextStep: "Add a local Frigate address only if you want object detections." };
     var essentialsReady = Boolean(setup.essentialsReady);
     var onboardingCompleted = Boolean(setup.onboardingCompleted);
     var weatherConfig = config.weather || {};
     var calendarConfig = config.calendar || {};
     var calendarConfigured = Boolean(calendarConfig.configured || calendarConfig.icsUrlConfigured);
     var calendarHost = text(calendarConfig.icsHost, "");
-    var optionalNeedsAttention = [weatherItem, calendarItem, hueItem].some(function (item) {
+    var frigateConfig = config.frigate || {};
+    var optionalNeedsAttention = [weatherItem, calendarItem, hueItem, frigateItem].some(function (item) {
       return item && item.state !== "Optional";
     });
     var optionalSetupVisible = Boolean(state.showOptional || optionalNeedsAttention);
@@ -223,12 +249,12 @@
         '<div class="inline-card-header setup-optional-head">' +
           '<div>' +
             '<div class="metric-label">Optional extras</div>' +
-            '<div class="router-inline-copy">Only adjust these when you actually want Weather, Calendar, Hue, or UniFi details.</div>' +
+            '<div class="router-inline-copy">Only adjust these when you actually want Weather, Calendar, Hue, UniFi, or Camera Detection.</div>' +
           '</div>' +
           '<button class="inline-button" type="button" data-action="toggle-optional-setup">Hide extras</button>' +
         '</div>' +
-        '<div class="inline-grid inline-grid--3">' +
-          '<article class="list-card inline-card">' +
+        '<div class="inline-grid inline-grid--3 setup-optional-grid">' +
+          '<article class="list-card inline-card" data-setup-section="weather">' +
             '<div class="inline-card-header">' +
               '<div>' +
                 '<div class="metric-label">Weather</div>' +
@@ -247,7 +273,7 @@
               '<div class="inline-actions"><button class="inline-button is-primary" type="submit">Save weather</button></div>' +
             '</form>' +
           '</article>' +
-          '<article class="list-card inline-card">' +
+          '<article class="list-card inline-card" data-setup-section="calendar">' +
             '<div class="inline-card-header">' +
               '<div>' +
                 '<div class="metric-label">Calendar</div>' +
@@ -271,9 +297,32 @@
               '</div>' +
               statusPill(uniFiItem.state, toneForState(uniFiItem.state)) +
             '</div>' +
-              '<div class="router-inline-copy">Xenon checks the local UniFi console automatically.</div>' +
+              '<div class="router-inline-copy">Auxora checks the local UniFi console automatically.</div>' +
           '</article>' +
-          '<article class="list-card inline-card">' +
+          '<article class="list-card inline-card" data-setup-section="frigate">' +
+            '<div class="inline-card-header">' +
+              '<div>' +
+                '<div class="metric-label">Camera Detection</div>' +
+                '<div class="router-inline-copy">' + escapeHtml(frigateItem.nextStep) + '</div>' +
+              '</div>' +
+              statusPill(frigateItem.state, toneForState(frigateItem.state)) +
+            '</div>' +
+            '<form class="inline-form" data-form="frigate">' +
+              '<div class="inline-form-grid inline-form-grid--2">' +
+                '<label class="inline-field"><span>Local Frigate address</span><input class="inline-input" type="url" name="baseUrl" value="' + escapeHtml(text(frigateConfig.baseUrl, "")) + '" placeholder="http://192.168.1.50:5000/"></label>' +
+                '<label class="inline-field"><span>Camera filter</span><input class="inline-input" type="text" name="camera" value="' + escapeHtml(text(frigateConfig.camera, "")) + '" placeholder="Optional, for example driveway"></label>' +
+                '<label class="inline-field"><span>Username</span><input class="inline-input" type="text" name="username" autocomplete="username" value="' + escapeHtml(text(frigateConfig.username, "")) + '" placeholder="Optional for port 8971"></label>' +
+                '<label class="inline-field"><span>Password</span><input class="inline-input" type="password" name="password" autocomplete="current-password" value="" placeholder="' + (frigateConfig.authenticationConfigured ? "Saved — leave blank to keep" : "Optional Frigate password") + '"></label>' +
+              '</div>' +
+              '<div class="router-inline-copy">Use an HTTPS address with the username and password for Frigate\'s authenticated port 8971, or leave both blank for a trusted internal port. Credentials are protected by Windows. HTTPS certificates must be trusted by Windows. Leave the address blank and save to remove Camera Detection.</div>' +
+              '<div class="inline-actions setup-camera-actions"><button class="inline-button is-primary" type="submit">Save and test Camera Detection</button>' +
+                (state.frigateFeedbackText
+                  ? '<div class="setup-form-feedback" role="status" aria-live="polite" data-tone="' + escapeHtml(state.frigateFeedbackTone) + '" data-frigate-feedback>' + escapeHtml(state.frigateFeedbackText) + '</div>'
+                  : '') +
+              '</div>' +
+            '</form>' +
+          '</article>' +
+          '<article class="list-card inline-card" data-setup-section="hue">' +
             '<div class="inline-card-header">' +
               '<div>' +
                 '<div class="metric-label">Philips Hue</div>' +
@@ -294,36 +343,38 @@
           '<div class="inline-card-header">' +
             '<div>' +
               '<div class="metric-label">Optional extras</div>' +
-              '<div class="router-inline-copy">Weather, Calendar, Hue, and UniFi stay hidden until you ask for them.</div>' +
+              '<div class="router-inline-copy">Open these settings only when you want to connect Weather, Calendar, Hue, UniFi, or Camera Detection.</div>' +
             '</div>' +
             '<button class="inline-button" type="button" data-action="toggle-optional-setup">Show extras</button>' +
           '</div>' +
         '</article>';
+    var finishSetupAction = essentialsReady && !onboardingCompleted
+      ? '<button class="inline-button is-primary" type="button" data-action="finish-setup">Finish setup</button>'
+      : '';
 
     return '' +
       '<div class="inline-widget-shell">' +
         '<div class="inline-toolbar">' +
           '<div>' +
-            '<div class="eyebrow">Diagnostics</div>' +
-            '<h3 class="inline-title">Auto setup and diagnostics</h3>' +
-            '<p class="inline-copy">Xenon scans this PC and prepares the dashboard automatically. Optional extras only need permission when you want them.</p>' +
+            '<div class="eyebrow">Readiness overview</div>' +
+            '<h3 class="inline-title">System readiness</h3>' +
+            '<p class="inline-copy">Auxora scans this PC and prepares the dashboard automatically. Optional extras only need permission when you want them.</p>' +
           '</div>' +
           '<div class="inline-actions">' +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
-            '<button class="inline-button is-primary" type="button" data-action="finish-setup"' + (essentialsReady && !onboardingCompleted ? "" : " disabled") + '>' + (onboardingCompleted ? "Auto ready" : "Finish manually") + '</button>' +
+            finishSetupAction +
             '<button class="inline-button" type="button" data-action="reset-local-data"' + (state.busy ? " disabled" : "") + '>' + (state.confirmReset ? "Confirm reset" : "Reset local data") + '</button>' +
             '<a class="inline-button" href="' + escapeHtml(supportBundleUrl) + '" target="_blank" rel="noreferrer">Support bundle</a>' +
             '<a class="inline-button" href="' + escapeHtml(supportUrl) + '" target="_blank" rel="noreferrer">Support</a>' +
             statusPill(state.statusText, state.statusTone) +
           '</div>' +
         '</div>' +
-        '<div class="inline-grid inline-grid--4">' +
+        '<div class="inline-grid inline-grid--4 setup-health-grid">' +
           items.map(function (item) {
             return '' +
-              '<article class="metric-card inline-card">' +
-                '<div class="metric-label">' + escapeHtml(item.label) + '</div>' +
-                '<div class="metric-value">' + escapeHtml(item.state) + '</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(item.nextStep) + '</div>' +
+              '<article class="metric-card inline-card setup-health-card">' +
+                '<div class="inline-card-header"><div class="metric-label">' + escapeHtml(item.label) + '</div>' + statusPill(item.state, toneForState(item.state)) + '</div>' +
+                (item.state === "Ready" ? "" : '<div class="router-inline-copy">' + escapeHtml(item.nextStep) + '</div>') +
               '</article>';
           }).join("") +
         '</div>' +
@@ -335,6 +386,9 @@
 
   function mountSetupWidget(widget, container, env) {
     var cleanups = [];
+    var requestedSection = String(env.requestedSetupSection || "").trim();
+    var refreshPromise = null;
+    var resetConfirmationTimerId = 0;
     var state = {
       health: { setup: env.bridgeSetup || {} },
       config: env.bridgeConfig || {},
@@ -343,30 +397,91 @@
       statusTone: "warn",
       busy: false,
       confirmReset: false,
-      showOptional: false
+      showOptional: ["weather", "calendar", "hue", "frigate"].indexOf(requestedSection) !== -1,
+      focusSection: requestedSection,
+      initialRefreshComplete: false,
+      frigateFeedbackText: "",
+      frigateFeedbackTone: "muted"
     };
 
+    function cancelResetConfirmation() {
+      if (resetConfirmationTimerId) {
+        window.clearTimeout(resetConfirmationTimerId);
+        resetConfirmationTimerId = 0;
+      }
+      state.confirmReset = false;
+    }
+
+    function armResetConfirmation() {
+      cancelResetConfirmation();
+      state.confirmReset = true;
+      state.statusText = "Tap again within 8 seconds";
+      state.statusTone = "warn";
+      resetConfirmationTimerId = window.setTimeout(function () {
+        resetConfirmationTimerId = 0;
+        if (!state.confirmReset || state.busy) {
+          return;
+        }
+        state.confirmReset = false;
+        state.statusText = "Reset cancelled";
+        state.statusTone = "muted";
+        redraw();
+      }, RESET_CONFIRMATION_WINDOW_MS);
+    }
+
+    cleanups.push(function () {
+      if (resetConfirmationTimerId) {
+        window.clearTimeout(resetConfirmationTimerId);
+        resetConfirmationTimerId = 0;
+      }
+    });
+
     function redraw() {
-      container.innerHTML = renderSetupWidget(state, env);
+      patchStableDom(container, renderSetupWidget(state, env));
+      if (state.initialRefreshComplete && state.focusSection) {
+        var section = container.querySelector('[data-setup-section="' + state.focusSection + '"]');
+        var input = section && section.querySelector("input, select, button");
+        if (section && input) {
+          state.focusSection = "";
+          if (typeof section.scrollIntoView === "function") {
+            section.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
+          }
+          input.focus({ preventScroll: true });
+        }
+      }
     }
 
     function refresh() {
-      return Promise.all([
+      if (refreshPromise) {
+        return refreshPromise;
+      }
+      refreshPromise = Promise.all([
         requestJson(buildBridgeUrl(env, "/api/health"), {}, 5000),
         requestJson(buildBridgeUrl(env, "/api/config"), {}, 5000),
-        requestJson(buildBridgeUrl(env, "/api/hue"), {}, 5000)
+        requestJson(buildBridgeUrl(env, "/api/hue"), {}, 5000),
+        requestJson(buildBridgeUrl(env, "/api/provisioning"), {}, 5000)
       ]).then(function (results) {
         state.health = results[0] || {};
         state.config = results[1] || {};
         state.hue = results[2] || {};
-        state.statusText = state.health.setup && (!state.health.setup.onboardingCompleted || state.health.setup.needsAttention) ? "Needs Setup" : "Ready";
-        state.statusTone = state.statusText === "Ready" ? "good" : "warn";
+        state.provisioning = results[3] || {};
+        if (!state.confirmReset) {
+          state.statusText = state.health.setup && (!state.health.setup.onboardingCompleted || state.health.setup.needsAttention) ? "Needs Setup" : "Ready";
+          state.statusTone = state.statusText === "Ready" ? "good" : "warn";
+        }
+        state.initialRefreshComplete = true;
         redraw();
       }, function (error) {
-        state.statusText = error.message || "Unavailable";
-        state.statusTone = "danger";
+        if (!state.confirmReset) {
+          state.statusText = error.message || "Unavailable";
+          state.statusTone = "danger";
+        }
+        state.initialRefreshComplete = true;
         redraw();
+      }).finally(function () {
+        refreshPromise = null;
       });
+      return refreshPromise;
     }
 
     addListener(cleanups, container, "click", function (event) {
@@ -376,15 +491,20 @@
         return;
       }
 
+      if (action !== "reset-local-data" && state.confirmReset) {
+        cancelResetConfirmation();
+        state.statusText = "Reset cancelled";
+        state.statusTone = "muted";
+        redraw();
+      }
+
       if (action === "refresh") {
-        state.confirmReset = false;
         refresh();
         return;
       }
 
       if (action === "toggle-optional-setup") {
         state.showOptional = !state.showOptional;
-        state.confirmReset = false;
         redraw();
         return;
       }
@@ -404,6 +524,37 @@
         }, function (error) {
           state.busy = false;
           state.statusText = error.message || "Repair failed";
+          state.statusTone = "danger";
+          redraw();
+        });
+        return;
+      }
+
+      if (action === "select-display") {
+        var displayId = String(target.getAttribute("data-display-id") || "").trim();
+        if (!displayId || target.getAttribute("data-companion-display") !== "true") {
+          state.statusText = "Companion display unavailable";
+          state.statusTone = "danger";
+          redraw();
+          return;
+        }
+
+        state.busy = true;
+        state.statusText = "Moving Auxora";
+        state.statusTone = "warn";
+        redraw();
+        requestJson(buildBridgeUrl(env, "/api/display/preference"), {
+          method: "POST",
+          body: { displayId: displayId }
+        }, 8000).then(function () {
+          return setupUpdate(env, "display");
+        }).then(function () {
+          state.busy = false;
+          emitTouchFeedback(env, "Auxora display updated");
+          return refresh();
+        }, function (error) {
+          state.busy = false;
+          state.statusText = error.message || "Display move failed";
           state.statusTone = "danger";
           redraw();
         });
@@ -473,9 +624,7 @@
 
       if (action === "reset-local-data") {
         if (!state.confirmReset) {
-          state.confirmReset = true;
-          state.statusText = "Tap again";
-          state.statusTone = "warn";
+          armResetConfirmation();
           redraw();
           return;
         }
@@ -483,22 +632,21 @@
         if (typeof env.resetAllLocalData !== "function") {
           state.statusText = "Reset unavailable";
           state.statusTone = "danger";
-          state.confirmReset = false;
+          cancelResetConfirmation();
           redraw();
           return;
         }
 
+        cancelResetConfirmation();
         state.busy = true;
         state.statusText = "Resetting";
         state.statusTone = "warn";
         redraw();
         env.resetAllLocalData().then(function () {
           state.busy = false;
-          state.confirmReset = false;
           return refresh();
         }, function (error) {
           state.busy = false;
-          state.confirmReset = false;
           state.statusText = error.message || "Reset failed";
           state.statusTone = "danger";
           redraw();
@@ -513,15 +661,23 @@
       var payload;
       var values = {};
 
-      if (!formId || state.busy) {
+      if (!formId) {
         return;
       }
 
       event.preventDefault();
+      if (state.busy) {
+        return;
+      }
+
       formData = new FormData(form);
       state.busy = true;
       state.statusText = "Saving";
       state.statusTone = "warn";
+      if (formId === "frigate") {
+        state.frigateFeedbackText = "Saving and testing Camera Detection settings.";
+        state.frigateFeedbackTone = "warn";
+      }
       redraw();
 
       if (formId === "weather") {
@@ -568,6 +724,64 @@
         return;
       }
 
+      if (formId === "frigate") {
+        var frigateSaved = false;
+        var frigateConnection = null;
+        var frigateTestCompleted = false;
+        payload = {
+          baseUrl: String(formData.get("baseUrl") || ""),
+          camera: String(formData.get("camera") || ""),
+          username: String(formData.get("username") || ""),
+          password: String(formData.get("password") || "")
+        };
+        requestJson(buildBridgeUrl(env, "/api/config/frigate"), {
+          method: "POST",
+          body: payload
+        }, 8000).then(function () {
+          frigateSaved = true;
+          if (!payload.baseUrl.trim()) {
+            return { configured: false, connected: false, state: "Optional", message: "Camera Detection was removed." };
+          }
+          return requestJson(buildBridgeUrl(env, "/api/frigate/test"), {
+            method: "POST",
+            body: {}
+          }, 12000);
+        }).then(function (connection) {
+          frigateConnection = connection || {};
+          frigateTestCompleted = true;
+          return setupUpdate(env, "frigate");
+        }).then(function () {
+          return refresh();
+        }).then(function () {
+          state.busy = false;
+          state.statusText = frigateConnection.connected
+            ? "Camera connected"
+            : (frigateConnection.state || "Camera needs attention");
+          state.statusTone = frigateConnection.connected || !frigateConnection.configured ? "good" : "danger";
+          state.frigateFeedbackText = !frigateConnection.configured
+            ? "Camera Detection was removed."
+            : (frigateConnection.connected
+              ? "Camera connected. Settings were saved and tested."
+              : (frigateConnection.message || "Settings were saved, but Frigate needs attention."));
+          state.frigateFeedbackTone = frigateConnection.connected || !frigateConnection.configured ? "good" : "danger";
+          redraw();
+        }, function (error) {
+          state.busy = false;
+          state.statusText = !frigateSaved
+            ? (error.message || "Camera setup failed")
+            : (frigateTestCompleted ? "Camera status refresh failed" : "Camera saved; test failed");
+          state.statusTone = "danger";
+          state.frigateFeedbackText = !frigateSaved
+            ? (error.message || "Camera Detection setup failed.")
+            : (frigateTestCompleted
+              ? "Settings were saved and the connection test completed, but Diagnostics could not refresh. " + (error.message || "Try Refresh.")
+              : "Settings were saved, but the connection test failed. " + (error.message || "Check the Frigate address and authentication."));
+          state.frigateFeedbackTone = "danger";
+          redraw();
+        });
+        return;
+      }
+
       if (formId === "hue") {
         payload = {
           bridgeIp: String(formData.get("bridgeIp") || "")
@@ -608,7 +822,7 @@
       refresh: refresh,
       destroy: function () {
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -642,6 +856,7 @@
             '<p class="inline-copy">' + escapeHtml(text(data.message, configured ? "ICS feed is configured." : "Add an ICS feed in Diagnostics to enable calendar.")) + '</p>' +
           '</div>' +
           '<div class="inline-actions">' +
+            (!configured ? '<button class="inline-button is-primary" type="button" data-action="setup">Open Calendar setup</button>' : '') +
             '<button class="inline-button" type="button" data-action="refresh">Refresh</button>' +
             statusPill(state.statusText, state.statusTone) +
           '</div>' +
@@ -681,7 +896,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderCalendarWidget(state, env);
+      patchStableDom(container, renderCalendarWidget(state, env));
     }
 
     function refresh() {
@@ -698,7 +913,16 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
-      if (event.target && event.target.getAttribute("data-action") === "refresh") {
+      var action = event.target && event.target.getAttribute("data-action");
+      if (action === "setup") {
+        if (env && typeof env.openSetupSection === "function") {
+          env.openSetupSection("calendar");
+        } else if (env && typeof env.selectWidget === "function") {
+          env.selectWidget("setup", true);
+        }
+        return;
+      }
+      if (action === "refresh") {
         refresh();
       }
     });
@@ -712,7 +936,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }

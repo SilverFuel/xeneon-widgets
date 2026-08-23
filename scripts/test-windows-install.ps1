@@ -1,9 +1,13 @@
 param(
   [string]$InstallerPath = "",
+  [string]$ReleaseAssetsPath = "",
   [switch]$RunInstall,
   [switch]$RunUninstall,
   [switch]$RemoveLocalData,
   [switch]$QuietInstall,
+  [string]$PreviousInstallerPath = "",
+  [switch]$RunLaunchHealth,
+  [switch]$RunRepair,
   [int]$InstallTimeoutSeconds = 180
 )
 
@@ -11,6 +15,9 @@ $ErrorActionPreference = "Stop"
 
 if ($RemoveLocalData -and -not $RunUninstall) {
   throw "-RemoveLocalData requires -RunUninstall so local data is removed only through the product uninstaller."
+}
+if ($RunInstall -and [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
+  throw "-RunInstall requires -ReleaseAssetsPath so the installed executable can be bound to the exact candidate manifest."
 }
 
 $installRoot = Join-Path $env:LOCALAPPDATA "Programs\Auxora"
@@ -25,9 +32,28 @@ $cleanupUninstallShortcut = Join-Path $shortcutRoot "Remove Auxora and Local Dat
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Auxora"
 $userDataRoot = Join-Path $env:APPDATA "Auxora"
 $localDataRoot = Join-Path $env:LOCALAPPDATA "Auxora"
+$legacyUserDataRoot = Join-Path $env:APPDATA "XenonEdgeHost"
+$legacyLocalDataRoot = Join-Path $env:LOCALAPPDATA "XenonEdgeHost"
 $taskName = "XenonEdgeHost"
 $runValueName = "XenonEdgeHost"
+$legacyTaskName = "XeneonBridge"
+$legacyRunValueName = "XeneonBridge"
 $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$releaseManifest = $null
+
+if (-not [string]::IsNullOrWhiteSpace($ReleaseAssetsPath)) {
+  $resolvedReleaseAssets = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
+  & (Join-Path $PSScriptRoot "Test-ReleaseManifest.ps1") -ReleaseAssetsPath $resolvedReleaseAssets
+  $releaseManifest = Get-Content -LiteralPath (Join-Path $resolvedReleaseAssets "release-manifest.json") -Raw | ConvertFrom-Json
+
+  if ($RunInstall) {
+    $resolvedInstaller = (Resolve-Path -LiteralPath $InstallerPath -ErrorAction Stop).Path
+    $manifestInstaller = (Resolve-Path -LiteralPath (Join-Path $resolvedReleaseAssets ([string]$releaseManifest.installer.fileName)) -ErrorAction Stop).Path
+    if (-not $resolvedInstaller.Equals($manifestInstaller, [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "InstallerPath must be the exact installer named by release-manifest.json."
+    }
+  }
+}
 
 function Write-Step($message) {
   Write-Host ""
@@ -58,6 +84,33 @@ function Assert-Contains($value, $expected, $label) {
   Write-Host "OK: $label"
 }
 
+function Assert-InstalledCandidateIdentity {
+  if ($null -eq $releaseManifest) {
+    if ($RunInstall -or $RunLaunchHealth) {
+      throw "Exact-candidate install and health checks require release-manifest.json."
+    }
+    return
+  }
+
+  $expected = $releaseManifest.installedExecutable
+  if ([string]$expected.fileName -cne [System.IO.Path]::GetFileName($exePath)) {
+    throw "Installed executable filename does not match the release manifest."
+  }
+  $actualHash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash
+  if (-not $actualHash.Equals([string]$expected.sha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Installed executable SHA-256 does not match the release manifest."
+  }
+  $versionInfo = (Get-Item -LiteralPath $exePath).VersionInfo
+  if ([string]$versionInfo.ProductName -cne [string]$expected.productName -or
+      [string]$versionInfo.ProductVersion -cne [string]$expected.productVersion -or
+      [string]$expected.version -cne [string]$releaseManifest.version -or
+      [string]$expected.commitSha -cne [string]$releaseManifest.commitSha) {
+    throw "Installed executable product identity, version, or commit does not match the release manifest."
+  }
+
+  Write-Host "OK: installed executable matches the exact manifest hash, product, version, and commit"
+}
+
 function Get-ShortcutArguments($path) {
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut($path)
@@ -72,31 +125,94 @@ function Get-XenonStartupRunValue {
   return (Get-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue).$runValueName
 }
 
-function Assert-StartupInstalled {
-  $startupTask = Get-XenonStartupTask
-  $startupRunValue = Get-XenonStartupRunValue
-
-  if (-not $startupTask -and [string]::IsNullOrWhiteSpace($startupRunValue)) {
-    throw "Neither scheduled task nor Run key startup integration was installed."
-  }
-
-  if ($startupTask -and $startupTask.State -eq "Disabled") {
-    throw "Scheduled task '$taskName' is installed but disabled."
-  }
-
-  Write-Host "OK: startup integration installed"
-}
-
-function Assert-StartupRemoved {
+function Assert-StartupAbsent {
   if (Get-XenonStartupTask) {
-    throw "Scheduled task '$taskName' still exists after uninstall."
+    throw "Scheduled task '$taskName' exists even though automatic startup must stay disabled."
   }
 
   if (-not [string]::IsNullOrWhiteSpace((Get-XenonStartupRunValue))) {
-    throw "Run key startup entry '$runValueName' still exists after uninstall."
+    throw "Run key startup entry '$runValueName' exists even though automatic startup must stay disabled."
   }
 
-  Write-Host "OK: startup integration removed"
+  if (Get-ScheduledTask -TaskName $legacyTaskName -TaskPath "\" -ErrorAction SilentlyContinue) {
+    throw "Legacy scheduled task '$legacyTaskName' exists even though automatic startup must stay disabled."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace((Get-ItemProperty -Path $runKeyPath -Name $legacyRunValueName -ErrorAction SilentlyContinue).$legacyRunValueName)) {
+    throw "Legacy Run-key startup entry '$legacyRunValueName' exists even though automatic startup must stay disabled."
+  }
+
+  Write-Host "OK: automatic startup is absent"
+}
+
+function Assert-HostClosed([int]$ObservationSeconds = 30) {
+  $deadline = (Get-Date).AddSeconds($ObservationSeconds)
+  do {
+    if (Get-Process -Name "XenonEdgeHost" -ErrorAction SilentlyContinue) {
+      throw "Auxora was launched automatically; the public installer must leave it closed."
+    }
+    Start-Sleep -Milliseconds 250
+  } while ((Get-Date) -lt $deadline)
+
+  Write-Host "OK: installer left Auxora closed for $ObservationSeconds seconds"
+}
+
+function Invoke-Installer($path, $label) {
+  $resolvedPath = (Resolve-Path -LiteralPath $path).Path
+  Write-Step $label
+  $installerArgs = @()
+  if ($QuietInstall) { $installerArgs += "/Q" }
+  $installerProcess = if ($installerArgs.Count -gt 0) {
+    Start-Process -FilePath $resolvedPath -ArgumentList $installerArgs -PassThru
+  } else {
+    Start-Process -FilePath $resolvedPath -PassThru
+  }
+  if (-not $installerProcess.WaitForExit($InstallTimeoutSeconds * 1000)) {
+    $installMarkersPresent = (Test-Path -LiteralPath $exePath) -and (Test-Path -LiteralPath $uninstallKey)
+    Stop-Process -Id $installerProcess.Id -Force -ErrorAction SilentlyContinue
+    if (-not $installMarkersPresent) {
+      throw "$label did not exit within $InstallTimeoutSeconds seconds, and install markers were not present."
+    }
+    Write-Warning "$label wrapper did not exit within $InstallTimeoutSeconds seconds, but install markers are present; continuing validation."
+  } elseif ($installerProcess.ExitCode -ne 0) {
+    throw "$label exited with code $($installerProcess.ExitCode)."
+  }
+}
+
+function Stop-InstalledHost {
+  Get-Process -Name "XenonEdgeHost" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction Stop
+  Start-Sleep -Seconds 1
+}
+
+function Assert-LiveHealth($label) {
+  $deadline = (Get-Date).AddSeconds(45)
+  do {
+    try {
+      $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8976/api/health" -TimeoutSec 3
+      if ($response.StatusCode -eq 200) {
+        if ($null -ne $releaseManifest) {
+          $health = $response.Content | ConvertFrom-Json
+          if ([string]$health.app.name -cne [string]$releaseManifest.installedExecutable.productName -or
+              [string]$health.app.version -cne [string]$releaseManifest.version) {
+            throw "Installed host health identity does not match the release manifest."
+          }
+        }
+        Write-Host "OK: $label"
+        return
+      }
+    } catch {
+    }
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $deadline)
+  throw "$label did not return HTTP 200 within 45 seconds."
+}
+
+function Assert-LaunchAndRestartHealth {
+  Stop-InstalledHost
+  $first = Start-Process -FilePath $exePath -ArgumentList "--safe-mode" -PassThru
+  try { Assert-LiveHealth "installed host launch /api/health" } finally { Stop-InstalledHost }
+  $second = Start-Process -FilePath $exePath -ArgumentList "--safe-mode" -PassThru
+  try { Assert-LiveHealth "installed host process restart /api/health" } finally { Stop-InstalledHost }
 }
 
 if ($RunInstall) {
@@ -104,31 +220,18 @@ if ($RunInstall) {
     throw "Pass -InstallerPath when using -RunInstall."
   }
 
-  $resolvedInstaller = (Resolve-Path -LiteralPath $InstallerPath).Path
-  Write-Step "Running installer"
-  $installerArgs = @()
-  if ($QuietInstall) {
-    $installerArgs += "/Q"
+  Write-Step "Preparing a closed-state install"
+  Stop-InstalledHost
+  if (-not [string]::IsNullOrWhiteSpace($PreviousInstallerPath)) {
+    Invoke-Installer $PreviousInstallerPath "Installing previous beta for upgrade test"
+    Stop-InstalledHost
   }
-  if ($installerArgs.Count -gt 0) {
-    $installerProcess = Start-Process -FilePath $resolvedInstaller -ArgumentList $installerArgs -PassThru
-  } else {
-    $installerProcess = Start-Process -FilePath $resolvedInstaller -PassThru
-  }
-  if (-not $installerProcess.WaitForExit($InstallTimeoutSeconds * 1000)) {
-    $installMarkersPresent = (Test-Path -LiteralPath $exePath) -and (Test-Path -LiteralPath $uninstallKey)
-    Stop-Process -Id $installerProcess.Id -Force -ErrorAction SilentlyContinue
-    if (-not $installMarkersPresent) {
-      throw "Installer did not exit within $InstallTimeoutSeconds seconds, and install markers were not present."
-    }
-    Write-Warning "Installer wrapper did not exit within $InstallTimeoutSeconds seconds, but install markers are present; continuing validation."
-  } elseif ($installerProcess.ExitCode -ne 0) {
-    throw "Installer exited with code $($installerProcess.ExitCode)."
-  }
+  Invoke-Installer $InstallerPath "Installing exact candidate"
 }
 
 Write-Step "Checking installed app"
 Assert-Present $exePath "Installed executable"
+Assert-InstalledCandidateIdentity
 Assert-Present $shortcutRoot "Start Menu shortcut folder"
 Assert-Present $startMenuShortcut "Start Menu app shortcut"
 Assert-Present $safeModeShortcut "Start Menu Safe Mode shortcut"
@@ -157,12 +260,35 @@ if ([string]::IsNullOrWhiteSpace($uninstallEntry.InstallLocation) -or -not (Test
   throw "InstallLocation is missing or invalid in the uninstall entry."
 }
 Write-Host "OK: install location registered"
-Assert-StartupInstalled
+Assert-StartupAbsent
+Assert-HostClosed
+
+if ($RunLaunchHealth) {
+  Write-Step "Checking live installed host"
+  Assert-LaunchAndRestartHealth
+}
+
+if ($RunRepair) {
+  Write-Step "Running installed repair"
+  $repairScript = Join-Path $installRoot "repair.ps1"
+  Assert-Present $repairScript "Installed repair script"
+  $repairProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $repairScript, "-Quiet") -Wait -WindowStyle Hidden -PassThru
+  if ($repairProcess.ExitCode -ne 0) { throw "Repair exited with code $($repairProcess.ExitCode)." }
+  Assert-InstalledCandidateIdentity
+  Assert-StartupAbsent
+  Write-Host "OK: installed repair completed"
+}
 
 if ($RunUninstall) {
   Write-Step "Running uninstaller"
   $removeScript = Join-Path $installRoot "Remove-XenonEdgeHost.ps1"
   Assert-Present $removeScript "Uninstaller script"
+  if ($RemoveLocalData) {
+    foreach ($dataRoot in @($userDataRoot, $localDataRoot, $legacyUserDataRoot, $legacyLocalDataRoot)) {
+      New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
+      Set-Content -LiteralPath (Join-Path $dataRoot "beta-remove-all-data.marker") -Value "remove me" -Encoding ASCII
+    }
+  }
   $removeArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $removeScript, "-Quiet")
   if ($RemoveLocalData) {
     $removeArgs += "-RemoveLocalData"
@@ -178,11 +304,13 @@ if ($RunUninstall) {
   Assert-Absent $shortcutRoot "Start Menu shortcut folder"
   Assert-Absent $desktopShortcut "Desktop shortcut"
   Assert-Absent $uninstallKey "Apps and Features uninstall entry"
-  Assert-StartupRemoved
+  Assert-StartupAbsent
   if ($RemoveLocalData) {
     Write-Step "Checking local data cleanup"
     Assert-Absent $userDataRoot "Roaming local data"
     Assert-Absent $localDataRoot "Local app data"
+    Assert-Absent $legacyUserDataRoot "Legacy roaming local data"
+    Assert-Absent $legacyLocalDataRoot "Legacy local app data"
   }
 }
 

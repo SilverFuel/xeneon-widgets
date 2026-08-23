@@ -30,16 +30,20 @@ public sealed class BridgeManager : IDisposable
     private readonly ExtensionController _extensionController;
     private readonly RemoteSessionController _remoteSessionController;
     private readonly RemoteSessionService _remoteSessionService;
+    private readonly LocalDataResetService _localDataResetService;
+    private readonly RecoveryService _recoveryService;
     private readonly ApiRouter _apiRouter;
     private readonly string _dashboardAssetRevision;
     private readonly SystemMetricsService _systemMetrics;
     private readonly GpuPowerMonitorService _gpuPowerMonitor;
     private readonly NetworkMetricsService _networkMetrics;
     private readonly AudioService _audioService;
+    private readonly EqualizerApoService _equalizerApoService;
     private readonly WeatherService _weatherService;
     private readonly CalendarService _calendarService;
     private readonly HueService _hueService;
     private readonly UniFiService _uniFiService;
+    private readonly FrigateService _frigateService;
     private readonly ReleaseService _releaseService;
     private readonly SceneService _sceneService;
     private readonly MediaService _mediaService;
@@ -53,6 +57,8 @@ public sealed class BridgeManager : IDisposable
     private readonly SystemActionsService _systemActionsService;
     private readonly ClipboardHistoryService _clipboardHistoryService;
     private readonly HttpClient _weatherHttpClient;
+    private readonly HttpClient _calendarHttpClient;
+    private readonly HttpClient _frigateHttpClient;
     private readonly HashSet<string> _allowedOrigins;
     private readonly string _sessionToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
     private HttpListener? _listener;
@@ -70,18 +76,28 @@ public sealed class BridgeManager : IDisposable
         _gpuPowerMonitor = new GpuPowerMonitorService(_logger);
         _networkMetrics = new NetworkMetricsService(_logger, _configStore);
         _audioService = new AudioService(_logger, _configStore);
+        _equalizerApoService = new EqualizerApoService(_logger);
         _weatherHttpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
         _weatherService = new WeatherService(_weatherHttpClient);
-        _calendarService = new CalendarService(_weatherHttpClient, _logger);
+        _calendarHttpClient = new HttpClient(CreateCalendarHttpHandler())
+        {
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+        _calendarService = new CalendarService(_calendarHttpClient, _logger);
         _hueService = new HueService(_configStore, _logger);
         _uniFiService = new UniFiService(_configStore, _logger);
+        _frigateHttpClient = new HttpClient(CreateFrigateHttpHandler())
+        {
+            Timeout = TimeSpan.FromSeconds(8)
+        };
+        _frigateService = new FrigateService(_frigateHttpClient, _logger);
         _releaseService = new ReleaseService(_weatherHttpClient);
         _sceneService = new SceneService(_configStore);
         _mediaService = new MediaService(_logger, _configStore);
-        _launcherService = new LauncherService(_logger);
+        _launcherService = new LauncherService(_logger, _configStore);
         _steamService = new SteamService(_logger);
         _gameActivityService = new GameActivityService(_steamService, _launcherService, _configStore, _logger);
         _gamePerformanceService = new GamePerformanceService(_logger, _configStore);
@@ -104,8 +120,22 @@ public sealed class BridgeManager : IDisposable
         _remoteSessionService = new RemoteSessionService(_sceneService, actionChainService, _logger, _configStore.Current.Port);
         _remoteSessionController = new RemoteSessionController(_remoteSessionService);
         _clipboardHistoryService = new ClipboardHistoryService(_logger);
-        _configController = new ConfigController(_configStore, _provisioningService);
+        _configController = new ConfigController(
+            _configStore,
+            _provisioningService,
+            _launcherService,
+            _frigateService.ClearSensitiveState);
         _configController.DisplayPreferenceChanged += () => DisplayPreferenceChanged?.Invoke();
+        _localDataResetService = new LocalDataResetService(
+            _configStore,
+            _launcherService,
+            _gamePerformanceService,
+            _logger,
+            _frigateService.ClearSensitiveState);
+        var localDataResetController = new LocalDataResetController(_localDataResetService);
+        _recoveryService = new RecoveryService(_logger);
+        _recoveryService.QuitRequested += () => QuitRequested?.Invoke();
+        var recoveryController = new RecoveryController(_recoveryService);
         _telemetryController = new TelemetryController(
             _configStore,
             _configController,
@@ -113,14 +143,17 @@ public sealed class BridgeManager : IDisposable
             _gpuPowerMonitor,
             _networkMetrics,
             _audioService,
+            _equalizerApoService,
             _calendarService,
             _hueService,
             _uniFiService,
+            _frigateService,
             _mediaService,
             _clipboardHistoryService,
             _provisioningService,
             _launcherService,
-            _systemActionsService);
+            _systemActionsService,
+            _dashboardAssetRevision);
         _actionController = new ActionController(
             _configStore,
             _launcherService,
@@ -156,13 +189,16 @@ public sealed class BridgeManager : IDisposable
             _monitorControlController,
             _extensionController,
             _remoteSessionController,
+            localDataResetController,
+            recoveryController,
             _weatherService,
-            _calendarService);
+            _calendarService,
+            _frigateService);
 
         var baseUri = BuildBaseUri(_configStore.Current.Port);
         _allowedOrigins = BuildAllowedOrigins(_configStore.Current.Port);
-        DashboardUri = new Uri(baseUri, $"dashboard.html?v={Uri.EscapeDataString(_dashboardAssetRevision)}");
-        SettingsUri = new Uri(baseUri, $"dashboard.html?advanced=1&v={Uri.EscapeDataString(_dashboardAssetRevision)}");
+        DashboardUri = BuildDashboardUri(baseUri, _dashboardAssetRevision, advanced: false);
+        SettingsUri = BuildDashboardUri(baseUri, _dashboardAssetRevision, advanced: true);
         HealthUri = new Uri(baseUri, "api/health");
     }
 
@@ -178,6 +214,35 @@ public sealed class BridgeManager : IDisposable
 
     public event Action<string>? BridgeStopped;
 
+    public event Action? QuitRequested;
+
+    public void SetBrowserDataClearer(Func<CancellationToken, Task<ResetStepReceipt>> clearBrowserDataAsync)
+    {
+        _localDataResetService.SetBrowserDataClearer(clearBrowserDataAsync);
+    }
+
+    internal static SocketsHttpHandler CreateCalendarHttpHandler()
+    {
+        return new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseProxy = false,
+            ConnectCallback = NetworkEndpointGuard.ConnectPublicHttpsAsync
+        };
+    }
+
+    internal static SocketsHttpHandler CreateFrigateHttpHandler()
+    {
+        return new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseProxy = false,
+            UseCookies = true,
+            CookieContainer = new CookieContainer(),
+            ConnectCallback = NetworkEndpointGuard.ConnectLocalHttpAsync
+        };
+    }
+
     public event Action? DisplayPreferenceChanged;
 
     public List<DisplayTarget> ListDisplayCandidates(bool ignoreSavedPreference = false)
@@ -188,22 +253,28 @@ public sealed class BridgeManager : IDisposable
 
     public DisplayTarget SelectDisplayTarget(
         IReadOnlyList<DisplayTarget>? candidates = null,
-        bool saveSelection = true,
-        bool preferPrimary = false)
+        bool saveSelection = true)
     {
         var config = _configStore.Snapshot();
-        var displayCandidates = candidates?.Count > 0
-            ? candidates.ToList()
-            : DisplayManager.ListDisplays(config.Dashboard.PreferredDisplayId);
-
-        if (displayCandidates.Count == 0)
+        DisplayTarget selected;
+        if (candidates is not null)
         {
-            throw new InvalidOperationException("No displays were detected.");
+            if (candidates.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "No active companion display is available. Auxora will wait rather than open on the Windows primary display.");
+            }
+
+            selected = DisplayManager.ValidateActiveCompanionDisplay(candidates[0]);
+        }
+        else
+        {
+            var displayCandidates = DisplayManager.ListDisplays(config.Dashboard.PreferredDisplayId);
+            selected = displayCandidates.FirstOrDefault()
+                ?? throw new InvalidOperationException(
+                    "No active companion display is available. Auxora will wait rather than open on the Windows primary display.");
         }
 
-        var selected = preferPrimary
-            ? displayCandidates.FirstOrDefault(display => display.IsPrimary) ?? displayCandidates[0]
-            : displayCandidates[0];
         if (!saveSelection)
         {
             _sceneService.ActivateAssignedDisplayScene(selected.StableId);
@@ -215,14 +286,18 @@ public sealed class BridgeManager : IDisposable
             current.Dashboard.PreferredDisplayId = selected.StableId;
             current.Dashboard.PreferredDisplayDeviceName = selected.DeviceName;
             current.Dashboard.DisplaySelectedAt = DateTime.UtcNow.ToString("O");
-            current.Dashboard.LastKnownGoodVersion = typeof(BridgeManager).Assembly.GetName().Version?.ToString() ?? "";
-            current.Dashboard.LastKnownGoodPath = Environment.ProcessPath ?? "";
             return current;
         });
 
         _sceneService.ActivateAssignedDisplayScene(selected.StableId);
 
         return selected;
+    }
+
+    public void SetDisplayPreference(string displayId)
+    {
+        var selected = DisplayManager.ResolveCompanionDisplay(displayId);
+        _configController.SetDisplayPreference(new DisplayPreferenceRequest { DisplayId = selected.StableId });
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -281,6 +356,8 @@ public sealed class BridgeManager : IDisposable
             _launcherService.Dispose();
             _gamePerformanceService.Dispose();
             _remoteSessionService.Dispose();
+            _calendarHttpClient.Dispose();
+            _frigateHttpClient.Dispose();
             _weatherHttpClient.Dispose();
         }
     }
@@ -488,7 +565,11 @@ public sealed class BridgeManager : IDisposable
         }
         finally
         {
-            LogRequestBoundary(requestId, method, path, response.StatusCode, Stopwatch.GetElapsedTime(startedAt));
+            if (!string.Equals(path, "/api/config/reset", StringComparison.OrdinalIgnoreCase)
+                || response.StatusCode >= 400)
+            {
+                LogRequestBoundary(requestId, method, path, response.StatusCode, Stopwatch.GetElapsedTime(startedAt));
+            }
         }
     }
 
@@ -515,6 +596,18 @@ public sealed class BridgeManager : IDisposable
     private static Uri BuildBaseUri(int port)
     {
         return new Uri($"http://127.0.0.1:{port}/");
+    }
+
+    internal static Uri BuildDashboardUri(Uri baseUri, string assetRevision, bool advanced)
+    {
+        var bridgeOrigin = baseUri.GetLeftPart(UriPartial.Authority);
+        var query = $"bridge={Uri.EscapeDataString(bridgeOrigin)}&v={Uri.EscapeDataString(assetRevision)}";
+        if (advanced)
+        {
+            query = $"advanced=1&{query}";
+        }
+
+        return new Uri(baseUri, $"dashboard.html?{query}");
     }
 
     private static HashSet<string> BuildAllowedOrigins(int port)

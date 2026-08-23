@@ -104,10 +104,49 @@
   overflow: hidden;
 }
 
+@media (max-width: 1280px) {
+  .dashboard-native-page--browser .router-viewer:has(.quick-actions-shell) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .quick-actions-shell),
+  .dashboard-native-page--browser .router-inline-widget:has(> .quick-actions-shell) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
+  .dashboard-native-page--browser .quick-actions-shell,
+  .dashboard-native-page--browser .quick-actions-card {
+    height: auto;
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+}
+
 .quick-actions-card {
   height: 100%;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+@media (min-width: 1500px) and (min-height: 600px) {
+  .quick-actions-shell {
+    grid-template-rows: minmax(0, 1fr);
+    align-content: stretch;
+  }
+
+  .quick-actions-card .inline-action-grid--compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    align-content: stretch;
+  }
+
+  .quick-actions-card .inline-action-button {
+    min-height: 0;
+    padding: 20px;
+    align-content: center;
+  }
 }
 
 .action-panel-header {
@@ -228,6 +267,27 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+@media (max-width: 1280px) {
+  .dashboard-native-page--browser .router-viewer:has(.system-shortcuts-shell) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .system-shortcuts-shell),
+  .dashboard-native-page--browser .router-inline-widget:has(> .system-shortcuts-shell) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
+  .dashboard-native-page--browser .system-shortcuts-shell,
+  .dashboard-native-page--browser .system-shortcuts-grid,
+  .dashboard-native-page--browser .system-shortcuts-card {
+    height: auto;
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+}
+
 .system-shortcuts-header {
   min-height: 0;
   padding: 2px 2px 0;
@@ -297,6 +357,48 @@
   max-width: 62ch;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.inline-widget-shell--clipboard {
+  height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
+  overflow: hidden;
+}
+
+@media (max-width: 1280px) {
+  .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell--clipboard) {
+    grid-template-rows: max-content minmax(0, 1fr);
+  }
+
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--clipboard),
+  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell--clipboard) {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+  }
+
+  .dashboard-native-page--browser .inline-widget-shell--clipboard,
+  .dashboard-native-page--browser .clipboard-history-card {
+    height: auto;
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+}
+
+.inline-widget-shell--clipboard > .inline-grid--3 .metric-card {
+  padding-block: 12px;
+}
+
+.inline-widget-shell--clipboard > .inline-grid--3 .metric-value {
+  margin-top: 6px;
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+}
+
+.clipboard-history-card {
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 @media (pointer: coarse) {
@@ -519,4 +621,45 @@
   .launcher-grid--recent {
     grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
   }
+}
+
+/* Theme-aware action surfaces. Destructive and confirmation states stay semantic. */
+.inline-action-button,
+.inline-launcher-hit,
+.inline-action-chain,
+.inline-action-history,
+.inline-action-row {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-muted);
+}
+
+.inline-action-button:hover:not(:disabled),
+.inline-action-button:focus-visible:not(:disabled),
+.inline-launcher-hit:hover:not(:disabled),
+.inline-launcher-hit:focus-visible:not(:disabled) {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-hover-surface);
+}
+
+.inline-action-button[data-style="toggle"] {
+  border-color: var(--theme-accent-border);
+}
+
+.inline-action-button[data-style="danger"],
+.inline-action-button[data-style="danger"]:hover:not(:disabled),
+.inline-action-button[data-style="danger"]:focus-visible:not(:disabled) {
+  border-color: var(--status-danger-border);
+  background: var(--status-danger-surface);
+  color: var(--status-danger-text);
+}
+
+.inline-action-button[data-confirmation-required="true"],
+.inline-action-button[data-state="confirm"] {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+}
+
+.inline-action-button[data-confirmation-required="true"] .inline-action-button__state {
+  color: var(--status-warning-text);
+  background: var(--status-warning-surface);
 }

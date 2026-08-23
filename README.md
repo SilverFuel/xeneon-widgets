@@ -10,7 +10,7 @@ Auxora is the adaptive successor to XENEON Edge Host. Version 0.3.x remains a fr
 - support is handled through GitHub Issues and GitHub Security Advisories for now
 - this is independent software, not an official CORSAIR product
 
-Auxora is a native Windows companion dashboard for landscape, ultrawide, and portrait touch displays. It combines adaptive Scenes, system telemetry, network stats, audio routing, media controls, weather, calendar, lighting, recent apps, and optional home-lab panels.
+Auxora is a native Windows companion dashboard for landscape, ultrawide, and portrait touch displays. It combines adaptive Modes, system telemetry, network stats, audio routing, media controls, weather, calendar, lighting, recent apps, optional Frigate camera detection, and home-lab panels.
 
 The primary product is the native Windows host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only. A macOS beta host lives in `desktop/electron` because the Windows app uses WinUI 3 and WebView2, which do not run on macOS.
 
@@ -18,13 +18,23 @@ Auxora is independent software. It is not an official product of CORSAIR or any 
 
 The first Auxora upgrade preserves existing XENEON settings and Windows-protected secrets. The legacy internal executable name remains temporarily for rollback compatibility while public shortcuts, storage, UI, and installer assets transition to Auxora.
 
+## Windows System Requirements
+
+- 64-bit Windows 10 version 1809 (build 17763) or newer, including Windows 11
+- An x64 PC; this beta does not include ARM64 or 32-bit Windows builds
+- Microsoft Edge WebView2 Evergreen Runtime installed
+
+This beta does not bundle a fixed WebView2 runtime. Setup uses its shipped official WebView2 loader API to prove Evergreen is usable before replacing an existing Auxora installation; it does not trust a registry version string alone.
+
 ## Install And Uninstall Without Setup Questions
 
 For beta users, use the Windows setup EXE from GitHub Releases instead of the source code ZIP:
 
-1. Download `Auxora-Setup-<version>-<date>.exe`.
-2. Run it.
-3. Auxora installs for the current Windows user, creates one clear Auxora Start Menu/Desktop shortcut, registers auto-start, and launches itself.
+1. Download the five files listed in `release-manifest.json` from the official GitHub Release.
+2. In PowerShell, run `(Get-FileHash -Algorithm SHA256 '.\Auxora-Setup-<version>-<date>.exe').Hash`.
+3. Confirm the 64-character result exactly matches the manifest's SHA-256 value and the first hash field in the `.sha256` sidecar. If the filename or hash differs, do not run the installer; delete the download and stop.
+4. Run the verified installer. Auxora installs for the current Windows user and creates clear Start Menu/Desktop shortcuts, but it stays closed and does not start at login.
+5. Open Auxora deliberately from the Start Menu when the companion display is ready.
 
 After install, the normal app to click is:
 
@@ -33,7 +43,9 @@ After install, the normal app to click is:
 
 Use `Auxora Recovery (Safe Mode)` only when the dashboard is stuck on the wrong display or you need to repair a broken startup. Do not launch files from `publish`, `app\bin`, `bridge`, or `desktop\electron` for normal use.
 
-The installer is meant to be hands-free. It does not ask the user to choose folders, services, setup steps, or uninstall behavior. The free beta may still show a Windows SmartScreen warning until the installer is signed, but Auxora itself does not add extra setup questions.
+The installer is meant to be hands-free. It does not ask the user to choose folders, services, setup steps, or uninstall behavior. This free beta is unsigned, so Windows may show a SmartScreen warning. Verify the official source, exact filename, and SHA-256 before deciding whether to run it. Never disable SmartScreen, Smart App Control, antivirus, or organization policy; if Windows or your organization blocks the installer, stop.
+
+If setup does not finish, troubleshooting details are in `%LOCALAPPDATA%\Auxora\InstallerLogs\install.log`. Setup does not launch Auxora or add automatic startup. The log identifies any older startup entry that could not be removed; report it instead of repeatedly retrying the installer.
 
 On first launch, Auxora scans the PC and prepares the normal dashboard automatically:
 
@@ -42,15 +54,15 @@ On first launch, Auxora scans the PC and prepares the normal dashboard automatic
 - builds the recent-app dock from safe Start Menu shortcuts, Steam games, and live app activity
 - marks the core dashboard ready without asking the user to finish setup manually
 
-Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, Philips Hue needs the bridge link button, and UniFi needs local console credentials if you want client and AP detail.
+Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, Philips Hue needs the bridge link button, UniFi needs local console credentials if you want client and AP detail, and Camera Detection needs the address of a Frigate server on the local/private network.
 
 Uninstall is also meant to be hands-free:
 
 - Windows Settings > Apps > Installed apps > Auxora removes the app, shortcuts, auto-start, and uninstall entry.
 - Start Menu > Auxora > Uninstall Auxora does the same thing.
 - Start Menu > Auxora > Remove Auxora and Local Data also removes `%APPDATA%\Auxora`, `%LOCALAPPDATA%\Auxora`, and legacy XENEON data left for rollback.
-- Start Menu > Auxora > Auxora Recovery (Safe Mode) disables auto-start, ignores saved display placement, and opens on the primary monitor.
-- Start Menu > Auxora > Repair Auxora restores shortcuts, startup registration, uninstall registration, and runtime checks without touching local app data.
+- Start Menu > Auxora > Auxora Recovery (Safe Mode) disables auto-start, ignores saved display placement, and opens only on an active companion display. If no companion display is active, Auxora remains tray-only.
+- Start Menu > Auxora > Repair Auxora restores shortcuts, uninstall registration, and runtime checks without touching local app data or enabling automatic startup.
 
 Plain-language install/uninstall notes live in [docs/release/WINDOWS-INSTALL-UNINSTALL.md](docs/release/WINDOWS-INSTALL-UNINSTALL.md).
 
@@ -60,26 +72,30 @@ Auxora now includes:
 
 - automatic first-run provisioning with diagnostics and repair
 - normal setup that hides advanced connector plumbing
-- adaptive Work, Gaming, Media, Night, and Home Scenes with manual and automatic switching
-- Home, Scenes, Library, and Settings navigation
+- adaptive Work, Gaming, Media, and Home Modes with manual and automatic switching; Night remains a separate display variant
+- Home, Modes, Apps & Controls, and Settings navigation
 - responsive compact, standard, ultrawide, and portrait layouts
 - Smart Glance briefing and meaningful local alerts
-- temporary token-protected local phone remote
-- DDC/CI monitor controls when supported
-- safe one-tap action chains and per-display Scene assignments
-- signed extension inspection with declared permissions
-- credential-free Scene and presentation backup/restore
+- an explicit Phone Remote unavailable state; this beta opens no phone-control listener
+- Companion-only DDC/CI monitor controls when supported; the Windows primary display is excluded from discovery and commands
+- safe one-tap action chains and per-display Mode assignments
+- inspection-only signed manifest checks with declared permissions; third-party loading is disabled
+- credential-free Mode and presentation backup/restore
+- privacy-first media controls with optional local titles, artwork, and audio application labels
 - Theme Studio with accent, opacity, and animation controls
 - drag-and-drop layout ordering
 - release channel and local-hosted GitHub release checks
-- OBS/streaming panel foundation
+- local-only OBS reachability and streaming-layout preview; this beta sends no OBS commands
 - Game Mode profile and launcher handoff
-- marketplace-style widget packs
+- built-in widget packs for local dashboard layouts
+- directly discoverable, optional local Frigate object detections and event snapshots with an in-panel setup path
 - installer readiness panel
 - local-first privacy and trust screen
 - app data reset from setup/privacy and from the uninstall cleanup shortcut
 
-The update and streaming panels remain beta foundations. Signed extension verification is implemented, but no third-party publisher is trusted by default. Before charging customers, sign the Windows release, complete authenticated OBS commands, and test the installer on clean hardware.
+The update and streaming panels remain beta foundations. Streaming accepts only loopback OBS WebSocket addresses and checks reachability; it does not authenticate to OBS or send commands. Signed manifest inspection is implemented, but third-party code loading and execution are disabled in this beta even if a manifest passes inspection. Phone Remote is also not included. Before charging customers, sign the Windows release, complete authenticated OBS commands, and test the installer on clean hardware.
+
+Privacy & Backup exports Modes plus portable presentation settings such as theme, readability, layout order, pinned and hidden panels, card sizes, per-Mode layouts, and built-in pack selection. Credentials, integration and OBS endpoints, weather location, launcher paths, display identifiers, and logs remain excluded. Restore validates the browser-side presentation fields before changing native configuration and keeps the newest user-action result visible when diagnostics refresh in the background.
 
 ## Install From Source
 
@@ -88,15 +104,30 @@ The update and streaming panels remain beta foundations. Signed extension verifi
 3. Launch `..\Open Auxora.cmd`.
 4. Optional: run `powershell -File install.ps1` from the `app` folder to register auto-start at login.
 
-For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, auto-start registration, Apps & Features registration, and packaged uninstall flow without asking setup questions.
+For a real Windows install/uninstall cycle from source, build the setup EXE with `powershell -File app\build-installer.ps1` and install from `app\dist`. The setup EXE performs the full per-user install, Start Menu/Desktop shortcut creation, Apps & Features registration, and packaged uninstall flow without asking setup questions. It intentionally leaves Auxora closed and automatic startup disabled.
 
 The native host:
 
 - runs full-screen on the selected Windows display
 - serves the dashboard locally on `http://127.0.0.1:8976/`
-- owns system, network, UniFi detection, audio, calendar, media, weather, and Hue APIs directly
-- stores Weather and Hue keys with Windows per-user protection instead of plain dashboard config
+- owns system, network, UniFi detection, Frigate events and snapshots, audio, calendar, media, weather, and Hue APIs directly
+- stores Weather, Hue, UniFi, and Frigate secrets with Windows per-user protection instead of plain dashboard config
 - does not require Node.js for the normal app path
+
+## Camera Detection
+
+Camera Detection is optional but remains visible as Setup in Apps & Controls before configuration. Open the panel and choose **Set up Camera Detection** to reveal its Diagnostics form, scroll it into view, and focus the Frigate address field. Enter the base address of a Frigate server on the local/private network and, optionally, a camera name such as `driveway`. For Frigate's authenticated port `8971`, use an HTTPS address and enter a Frigate username and password; Auxora logs in through `/api/login`, keeps the issued token in memory, retries authentication once after an HTTP 401, and protects the saved password with Windows DPAPI. Authenticated non-loopback HTTP is rejected so credentials cannot cross the LAN in plaintext. Leave both credential fields blank when using a trusted internal unauthenticated endpoint such as port `5000`. HTTPS certificates must already be trusted by Windows—Auxora never disables certificate validation.
+
+Auxora reads recent object events and displays the latest available event snapshot through its localhost API. It independently enforces the configured camera and one-hour event window even if the upstream server ignores those query filters, and it only proxies snapshots belonging to the current filtered results. Public destinations, redirects, proxy routing, credentials embedded in URLs, invalid or out-of-filter event identifiers, incomplete or empty-token authentication, and untrusted TLS certificates are rejected.
+
+Saving Camera Detection from Diagnostics immediately tests the configured event API. Auxora reports **Ready** only after Frigate accepts the request, keeps saved settings when the server is temporarily unavailable, and reports **Needs Setup** with a retryable connection message when authentication or connectivity fails.
+
+Local endpoints:
+
+```text
+http://127.0.0.1:8976/api/frigate
+http://127.0.0.1:8976/api/frigate/snapshot?id=<event-id>
+```
 
 ## Network And UniFi
 
@@ -168,7 +199,7 @@ That creates:
 - `app\dist\Auxora-Setup-<version>-<date>.exe.sha256`
 - `app\dist\README-install.txt`
 
-The installer installs per-user to `%LOCALAPPDATA%\Programs\Auxora`, creates Start Menu and Desktop shortcuts, registers auto-start, launches the app, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed. The normal installer and uninstaller paths are hands-free.
+The installer installs per-user to `%LOCALAPPDATA%\Programs\Auxora`, creates Start Menu and Desktop shortcuts, leaves automatic startup disabled, leaves the app closed, and adds an Apps & Features uninstall entry. Reinstalling upgrades in-place through a staged copy so a failed file copy does not leave the app half-installed. The normal installer and uninstaller paths are hands-free.
 
 Uninstall paths:
 
@@ -195,13 +226,21 @@ Release docs now live in `docs/release`.
 
 ## Windows Free Beta Release
 
-Build the Windows free beta locally with:
+The authoritative beta candidate is built by the `Windows Beta Candidate` workflow from a fresh immutable `v<version>-beta.<number>` tag. Local installers are for preflight testing only and must not be substituted for the workflow artifact.
+
+After the exact candidate has its schema-3 disposable-VM lifecycle receipt (including injected failed-upgrade rollback), physical Frigate receipt, and physical companion-display receipt, verify the complete handoff with the public assets and private evidence kept outside the clean source checkout:
 
 ```powershell
-npm run release:free-beta
+$assets = Join-Path $env:USERPROFILE 'Downloads\Auxora-0.3.0-beta.1-assets'
+$evidence = Join-Path $env:USERPROFILE 'Downloads\Auxora-0.3.0-beta.1-evidence'
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\prepare-free-beta-release.ps1 `
+  -ReleaseAssetsPath $assets `
+  -LifecycleReceiptPath (Join-Path $evidence 'lifecycle-receipt.json') `
+  -FrigateQualificationReceiptPath (Join-Path $evidence 'frigate-qualification-receipt.json') `
+  -DisplayQualificationReceiptPath (Join-Path $evidence 'display-qualification-receipt.json')
 ```
 
-For the free beta, upload the installer only with clear "unsigned beta" wording and the SHA256 file. For a paid/stable release, sign the installer before public upload:
+Upload only the five manifest-bound files: the installer, its SHA-256 sidecar, install notes, release notes, and `release-manifest.json`. Label the release as an unsigned Windows free public beta. For a paid/stable release, sign the installer before public upload:
 
 ```powershell
 powershell -File scripts\sign-windows.ps1 -Path app\dist\<installer>.exe -CertificatePath C:\path\to\certificate.pfx
@@ -212,25 +251,28 @@ See `docs/release/WINDOWS-SIGNING.md`.
 Run the clean install smoke helper on a fresh Windows profile or VM:
 
 ```powershell
-powershell -File scripts\test-windows-install.ps1 -InstallerPath app\dist\<installer>.exe -RunInstall -QuietInstall -RunUninstall
+powershell -File scripts\test-windows-install.ps1 -InstallerPath .\release-assets\<installer>.exe -ReleaseAssetsPath .\release-assets -RunInstall -QuietInstall -RunUninstall
 ```
 
-Run the release gate separately before uploading if needed:
+Run the beta readiness gate against one explicitly named installer. This mode requires the candidate's Authenticode status to be exactly `NotSigned`; a signed or invalidly signed file does not satisfy the unsigned-beta gate.
 
 ```powershell
-npm run release:ready
+npm run release:ready-beta -- -InstallerPath .\app\dist\Auxora-Setup-<version>-<date>.exe
 ```
 
-Run the full non-destructive release gauntlet against the latest installer:
+Run the full non-destructive release gauntlet against an explicitly named installer:
 
 ```powershell
-npm run release:gauntlet
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-release-gauntlet.ps1 `
+  -InstallerPath .\app\dist\Auxora-Setup-<version>-<date>.exe `
+  -AllowGitHubSupportPath `
+  -AllowUnsignedBeta
 ```
 
 For a disposable Windows VM or fresh Windows profile, run the destructive install/uninstall smoke:
 
 ```powershell
-powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath app\dist\<installer>.exe -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall
+powershell -File scripts\run-release-gauntlet.ps1 -InstallerPath .\release-assets\<installer>.exe -ReleaseAssetsPath .\release-assets -AllowGitHubSupportPath -AllowUnsignedBeta -RunInstallSmoke -RunUninstall
 ```
 
 For the beta release asset list and wording, see `docs/release/FREE-BETA-RELEASE-NOTES.md` and `docs/release/GITHUB-RELEASE.md`.

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const files = new Map();
 
@@ -55,16 +56,40 @@ const assetRevisionPayload = readWorkspaceJson("assets/revision.json");
 const currentAssetRevision = String(assetRevisionPayload.assetRevision || "").trim();
 assert(/^20\d{6}-\d{2}$/.test(currentAssetRevision), "assets/revision.json must define the current dashboard asset revision");
 
+const dotnetSdkPin = readWorkspaceJson("global.json");
+assert(dotnetSdkPin?.sdk?.version === "8.0.424", "global.json must pin .NET SDK 8.0.424 for runtime 8.0.30");
+assert(dotnetSdkPin?.sdk?.rollForward === "disable", "global.json must disable SDK roll-forward");
+assert(dotnetSdkPin?.sdk?.allowPrerelease === false, "global.json must reject prerelease SDKs");
+
+for (const workflowPath of [
+  ".github/workflows/ci.yml",
+  ".github/workflows/release.yml",
+  ".github/workflows/commercial-release.yml"
+]) {
+  const workflow = readWorkspaceFile(workflowPath);
+  const setupDotnetSteps = [...workflow.matchAll(/uses:\s*actions\/setup-dotnet@[^\r\n]+/g)].length;
+  const pinnedSetupSteps = [...workflow.matchAll(/global-json-file:\s*[.]\/global[.]json/g)].length;
+  assert(setupDotnetSteps > 0, `${workflowPath} must set up .NET`);
+  assert(pinnedSetupSteps === setupDotnetSteps, `${workflowPath} must use global.json for every setup-dotnet step`);
+  assert(!/dotnet-version:\s*8[.]0[.](?:x|\*)/i.test(workflow), `${workflowPath} must not float across .NET 8 SDK patches`);
+}
+
 const appCsproj = readWorkspaceFile("app/XenonEdgeHost.csproj");
+assert(!/<RuntimeFrameworkVersion>/i.test(appCsproj), "app project must use the pinned SDK instead of RuntimeFrameworkVersion, which conflicts with the Windows SDK framework reference");
 const appVersion = appCsproj.match(/<Version>([^<]+)<\/Version>/)?.[1]?.trim() || "";
 assert(appVersion, "app/XenonEdgeHost.csproj must define <Version>");
 
 const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
+const appPaths = readWorkspaceFile("app/Infrastructure/AppPaths.cs");
+const renderedDashboardTest = readWorkspaceFile("scripts/test-rendered-dashboard.mjs");
+const renderedThemeTest = readWorkspaceFile("scripts/test-theme-rendered.mjs");
+const nativeHostTest = readWorkspaceFile("scripts/test-native-host-api.mjs");
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const installScript = readWorkspaceFile("app/install.ps1");
 const installerScript = readWorkspaceFile("app/installer/Install-XenonEdgeHost.ps1");
 const repairScript = readWorkspaceFile("app/repair.ps1");
 const freeBetaReleaseScript = readWorkspaceFile("scripts/prepare-free-beta-release.ps1");
+const workspaceCleanupScript = readWorkspaceFile("scripts/clean-workspace.ps1");
 const apiRouter = readWorkspaceFile("app/Controllers/ApiRouter.cs");
 const actionController = readWorkspaceFile("app/Controllers/ActionController.cs");
 const staticAssetController = readWorkspaceFile("app/Controllers/StaticAssetController.cs");
@@ -93,8 +118,10 @@ const httpReadResilience = readWorkspaceFile("app/Infrastructure/HttpReadResilie
 const monitorControlService = readWorkspaceFile("app/Services/MonitorControlService.cs");
 const nativeMethods = readWorkspaceFile("app/NativeMethods.txt");
 const thirdPartyNotices = readWorkspaceFile("THIRD-PARTY-NOTICES.md");
+const nugetAssets = readWorkspaceJson("app/obj/project.assets.json");
 const packageReferences = readEvaluatedMsbuildItems("PackageReference");
 const contentItems = readEvaluatedMsbuildItems("Content");
+const embeddedResourceItems = readEvaluatedMsbuildItems("EmbeddedResource");
 const endpointGuard = readWorkspaceFile("app/Infrastructure/NetworkEndpointGuard.cs");
 const legacyBridge = readWorkspaceFile("bridge/server.mjs");
 const electronMain = readWorkspaceFile("desktop/electron/src/main.cjs");
@@ -119,9 +146,81 @@ const launcherTargetValidator = readWorkspaceFile("app/Infrastructure/LauncherTa
 const systemActionsService = readWorkspaceFile("app/Services/SystemActionsService.cs");
 const clipboardHistoryService = readWorkspaceFile("app/Services/ClipboardHistoryService.cs");
 const releaseService = readWorkspaceFile("app/Services/ReleaseService.cs");
+const appBuildIdentity = readWorkspaceFile("app/Infrastructure/AppBuildIdentity.cs");
 const hostLogger = readWorkspaceFile("app/Infrastructure/HostLogger.cs");
 const releaseWorkflow = readWorkspaceFile(".github/workflows/release.yml");
 const buildStamp = readWorkspaceFile("build/build-stamp.props");
+
+assert(
+  !/not implemented yet/i.test(apiRouter)
+    && /No matching native endpoint is available for this request\./.test(apiRouter),
+  "unmatched native feature routes must report an unavailable endpoint without exposing internal implementation language"
+);
+
+assert(
+  /AUXORA_ENABLE_TEST_DATA_ROOTS/.test(appPaths)
+    && /AUXORA_TEST_ROAMING_ROOT/.test(appPaths)
+    && /AUXORA_TEST_LOCAL_ROOT/.test(appPaths)
+    && /throw new InvalidOperationException\("Auxora test data roots are enabled/.test(appPaths),
+  "native-host test data roots must be explicit and fail closed when incomplete"
+);
+for (const [name, source] of [["rendered dashboard", renderedDashboardTest], ["rendered themes", renderedThemeTest], ["native-host API", nativeHostTest]]) {
+  assert(
+    /AUXORA_ENABLE_TEST_DATA_ROOTS:\s*"1"/.test(source)
+      && /AUXORA_TEST_ROAMING_ROOT:\s*roaming/.test(source)
+      && /AUXORA_TEST_LOCAL_ROOT:\s*local/.test(source),
+    `${name} test must isolate Auxora data through the production path resolver`
+  );
+}
+assert(
+  /new System\.Threading\.Timer\(_ => SampleUsage\(\), null, TimeSpan\.Zero/.test(systemMetricsService)
+    && !/_started = true;\s*SampleUsage\(\);/.test(systemMetricsService)
+    && /new System\.Threading\.Timer\(_ => SampleThroughput\(\), null, TimeSpan\.Zero/.test(networkMetricsService)
+    && /new System\.Threading\.Timer\(_ => SamplePing\(\), null, TimeSpan\.Zero/.test(networkMetricsService)
+    && !/_started = true;\s*SampleThroughput\(\);\s*SamplePing\(\);/.test(networkMetricsService),
+  "native host startup must queue slow system and network telemetry instead of blocking API readiness"
+);
+assert(
+  /captureChildOutput\(host, join\(local, "Auxora", "logs", "host\.log"\)\)/.test(renderedThemeTest)
+    && /waitForHost\(host, readHostDiagnostics\)/.test(renderedThemeTest),
+  "rendered theme startup failures must preserve actionable native-host diagnostics"
+);
+assert(
+  /\["Ready", "Waiting for display"\]\.includes\(recovery\.status\)/.test(renderedDashboardTest)
+    && /Recovery picker disagreed with its panel/.test(renderedDashboardTest)
+    && /safe no-companion-display state/.test(renderedDashboardTest),
+  "rendered Recovery checks must accept and explain the safe companion-display-absent state"
+);
+assert(
+  /bridgeHydrated === 'true' && button/.test(renderedDashboardTest)
+    && /const deadline = Date\.now\(\) \+ 15000;[\s\S]*data-state/.test(renderedDashboardTest),
+  "rendered destructive-action checks must wait for native hydration and the actual action control"
+);
+assert(
+  /GetHealthStatus\(\s*ClipboardPrivacyOptions\.FromDashboard\(config\.Dashboard\)\)/.test(readWorkspaceFile("app/Controllers/TelemetryController.cs"))
+    && /Health checks never read clipboard contents/.test(clipboardHistoryService)
+    && /Entries\s*=\s*\[\]/.test(clipboardHistoryService),
+  "health checks must report clipboard capability without enumerating private clipboard entries"
+);
+
+const referencedStandaloneWidgets = Array.from(
+  dashboardJs.matchAll(/"\/(widgets\/[A-Za-z0-9._-]+\.html)"/g),
+  match => match[1]
+);
+const shippedStandaloneWidgets = embeddedResourceItems
+  .map(item => String(item.LogicalName || "").replaceAll("\\", "/"))
+  .filter(name => name.startsWith("WebAssets/widgets/"))
+  .map(name => name.slice("WebAssets/".length))
+  .sort();
+const expectedStandaloneWidgets = [...new Set(referencedStandaloneWidgets)].sort();
+assert(
+  JSON.stringify(shippedStandaloneWidgets) === JSON.stringify(expectedStandaloneWidgets),
+  `native host must embed only the dashboard's reachable standalone fallbacks; expected ${expectedStandaloneWidgets.join(", ")}, received ${shippedStandaloneWidgets.join(", ")}`
+);
+for (const relativePath of expectedStandaloneWidgets) {
+  const standaloneSource = readWorkspaceFile(relativePath);
+  assert(!/fonts\.googleapis|fonts\.gstatic/.test(standaloneSource), `${relativePath} must not depend on CSP-blocked remote fonts`);
+}
 
 assert(
   /SessionHeaderName\s*=\s*"X-Xenon-Session"/.test(bridgeManager)
@@ -138,10 +237,12 @@ assert(
 assert(
   /Content-Security-Policy/.test(staticAssetController)
     && /nonce-/.test(staticAssetController)
+    && /AddNonceToInlineScripts/.test(staticAssetController)
+    && /ScriptStartTagPattern/.test(staticAssetController)
     && /X-Content-Type-Options/.test(staticAssetController)
     && /Referrer-Policy/.test(staticAssetController)
     && !/meta name="xenon-session-token"/.test(staticAssetController),
-  "native static HTML must use CSP/security headers and must not inject the session token into a meta tag"
+  "native static HTML must nonce every inline script under CSP/security headers and must not inject the session token into a meta tag"
 );
 
 assert(
@@ -178,15 +279,21 @@ assert(
 assert(
   /<PackageReference\s+Include="Microsoft\.Windows\.CsWin32"/.test(appCsproj)
     && /^GetPhysicalMonitorsFromHMONITOR$/m.test(nativeMethods)
+    && /^GetMonitorInfo$/m.test(nativeMethods)
     && /^GetVCPFeatureAndVCPFeatureReply$/m.test(nativeMethods)
     && /^GetCapabilitiesStringLength$/m.test(nativeMethods)
     && /^CapabilitiesRequestAndCapabilitiesReply$/m.test(nativeMethods)
     && /class\s+SafePhysicalMonitorHandle\s*:\s*SafeHandleZeroOrMinusOneIsInvalid[\s\S]*?override\s+bool\s+ReleaseHandle\s*\(\s*\)\s*\{\s*return\s+PInvoke\.DestroyPhysicalMonitor\s*\(\s*\(HANDLE\)handle\s*\)\s*;\s*\}/.test(monitorControlService)
     && /MaxPhysicalMonitorsPerLogicalDisplay/.test(monitorControlService)
+    && /PInvoke\.GetMonitorInfo\(monitor,\s*ref monitorInfo\)/.test(monitorControlService)
+    && /ShouldIncludeLogicalMonitor\(monitorInfoAvailable,\s*monitorInfo\.dwFlags\)/.test(monitorControlService)
+    && /primaryExcluded\s*=\s*true/.test(monitorControlService)
+    && /scope\s*=\s*"companion-only"/.test(monitorControlService)
+    && /primary display is intentionally excluded/.test(monitorControlService)
     && /ParseVcpCapabilities/.test(monitorControlService)
     && /ScalePercentage\(request\.Value,\s*reading\.Maximum\)/.test(monitorControlService)
     && !/\[\s*DllImport(?:Attribute)?\s*\(/.test(monitorControlService),
-  "monitor controls must use generated CsWin32 bindings and owned physical-monitor handles"
+  "monitor controls must use generated bindings, owned handles, and fail-closed companion-only filtering"
 );
 
 const noticesPath = normalize(resolve(process.cwd(), "THIRD-PARTY-NOTICES.md"));
@@ -200,22 +307,169 @@ assert(
   packageReferences.some(item => item.Identity === "LibreHardwareMonitorLib" && item.Version === "0.9.6"),
   "LibreHardwareMonitorLib must remain pinned to version 0.9.6"
 );
+assert(
+  !packageReferences.some(item => item.Identity === "QRCoder"),
+  "unused QRCoder must not return to the shipped Windows dependency graph"
+);
 assert(Boolean(noticesContentItem), "publish content must source the repository THIRD-PARTY-NOTICES.md file");
 assert(noticesContentItem?.Link === "THIRD-PARTY-NOTICES.md", "third-party notices must publish at the distribution root");
 assert(
   noticesContentItem?.CopyToPublishDirectory === "PreserveNewest",
   "third-party notices must be copied into every publish output"
 );
-assert(/Mozilla Public License 2\.0/.test(thirdPartyNotices), "third-party notices must retain the MPL-2.0 notice");
-assert(/DiskInfoToolkit 1\.1\.2/.test(thirdPartyNotices), "third-party notices must list DiskInfoToolkit 1.1.2");
-assert(/HidSharp 2\.6\.4/.test(thirdPartyNotices), "third-party notices must list HidSharp 2.6.4");
-assert(/RAMSPDToolkit-NDD 1\.4\.2/.test(thirdPartyNotices), "third-party notices must list RAMSPDToolkit-NDD 1.4.2");
-assert(/System\.IO\.Ports 10\.0\.3/.test(thirdPartyNotices), "third-party notices must list System.IO.Ports 10.0.3");
-assert(/System\.Management 10\.0\.2/.test(thirdPartyNotices), "third-party notices must list System.Management 10.0.2");
+
+const expectedWinX64RuntimePackages = new Map([
+  ["BlackSharp.Core", "1.0.7"],
+  ["DiskInfoToolkit", "1.1.2"],
+  ["HidSharp", "2.6.4"],
+  ["Ical.Net", "5.2.3"],
+  ["LibreHardwareMonitorLib", "0.9.6"],
+  ["Microsoft.Web.WebView2", "1.0.3179.45"],
+  ["Microsoft.Win32.SystemEvents", "8.0.0"],
+  ["Microsoft.WindowsAppSDK", "1.8.260317003"],
+  ["Microsoft.WindowsAppSDK.AI", "1.8.53"],
+  ["Microsoft.WindowsAppSDK.Base", "1.8.251216001"],
+  ["Microsoft.WindowsAppSDK.DWrite", "1.8.25122902"],
+  ["Microsoft.WindowsAppSDK.Foundation", "1.8.260222000"],
+  ["Microsoft.WindowsAppSDK.InteractiveExperiences", "1.8.260125001"],
+  ["Microsoft.WindowsAppSDK.ML", "1.8.2141"],
+  ["Microsoft.WindowsAppSDK.Runtime", "1.8.260317003"],
+  ["Microsoft.WindowsAppSDK.Widgets", "1.8.251231004"],
+  ["Microsoft.WindowsAppSDK.WinUI", "1.8.260224000"],
+  ["Mono.Posix.NETStandard", "1.0.0"],
+  ["NodaTime", "3.2.2"],
+  ["Polly.Core", "8.7.0"],
+  ["RAMSPDToolkit-NDD", "1.4.2"],
+  ["System.CodeDom", "10.0.2"],
+  ["System.Drawing.Common", "8.0.0"],
+  ["System.IO.Ports", "10.0.3"],
+  ["System.Management", "10.0.2"],
+  ["System.Numerics.Tensors", "9.0.0"],
+  ["System.Security.Cryptography.ProtectedData", "8.0.0"],
+  ["System.Threading.AccessControl", "10.0.3"]
+]);
+
+const winX64Target = Object.entries(nugetAssets.targets || {})
+  .find(([targetName]) => /\/win-x64$/i.test(targetName));
+assert(Boolean(winX64Target), "NuGet assets must contain a resolved win-x64 target; run dotnet restore before this check");
+
+const hasRuntimeAsset = packageNode => ["runtime", "native", "runtimeTargets", "contentFiles"]
+  .some(groupName => Object.keys(packageNode?.[groupName] || {})
+    .some(assetPath => !/(?:^|\/)_[.]_$/i.test(assetPath)));
+const actualWinX64RuntimePackages = new Map();
+for (const [packageKey, packageNode] of Object.entries(winX64Target?.[1] || {})) {
+  const separator = packageKey.lastIndexOf("/");
+  const packageId = separator >= 0 ? packageKey.slice(0, separator) : packageKey;
+  const packageVersion = separator >= 0 ? packageKey.slice(separator + 1) : "";
+  if (hasRuntimeAsset(packageNode) || /^Microsoft[.]WindowsAppSDK(?:[.]|$)/.test(packageId)) {
+    actualWinX64RuntimePackages.set(packageId, packageVersion);
+  }
+}
+
+const expectedRuntimeRows = [...expectedWinX64RuntimePackages]
+  .map(([id, version]) => `${id}/${version}`)
+  .sort();
+const actualRuntimeRows = [...actualWinX64RuntimePackages]
+  .map(([id, version]) => `${id}/${version}`)
+  .sort();
 assert(
-  /System\.Threading\.AccessControl 10\.0\.3/.test(thirdPartyNotices),
-  "third-party notices must list System.Threading.AccessControl 10.0.3"
+  JSON.stringify(actualRuntimeRows) === JSON.stringify(expectedRuntimeRows),
+  `win-x64 runtime dependency inventory changed; update THIRD-PARTY-NOTICES.md and this guard together. Expected ${expectedRuntimeRows.join(", ")}; resolved ${actualRuntimeRows.join(", ")}`
 );
+
+const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+for (const [packageId, version] of expectedWinX64RuntimePackages) {
+  assert(
+    new RegExp(`^\\| ${escapeRegExp(packageId)} \\| ${escapeRegExp(version)} \\|`, "m").test(thirdPartyNotices),
+    `third-party notices must contain an exact inventory row for ${packageId} ${version}`
+  );
+}
+
+const frameworkDownloads = Object.values(nugetAssets.project?.frameworks || {})
+  .flatMap(framework => framework.downloadDependencies || []);
+const resolvedFrameworkDownload = name => frameworkDownloads.find(item => item.name === name)?.version
+  ?.replace(/^\[/, "")
+  .replace(/\]$/, "")
+  .split(",")[0]
+  .trim();
+const dotNetRuntimeVersion = resolvedFrameworkDownload("Microsoft.NETCore.App.Runtime.win-x64");
+const windowsSdkNetVersion = resolvedFrameworkDownload("Microsoft.Windows.SDK.NET.Ref");
+assert(dotNetRuntimeVersion === "8.0.30", `self-contained .NET runtime changed from noticed version 8.0.30 to ${dotNetRuntimeVersion || "missing"}`);
+assert(windowsSdkNetVersion === "10.0.19041.56", `Windows SDK .NET runtime pack changed from noticed version 10.0.19041.56 to ${windowsSdkNetVersion || "missing"}`);
+assert(
+  /^\| Microsoft [. ]NET Runtime for Windows x64 \| 8[.]0[.]30 \|/m.test(thirdPartyNotices),
+  "third-party notices must inventory the self-contained .NET runtime"
+);
+assert(
+  /^\| Microsoft[.]Windows[.]SDK[.]NET[.]Ref \| 10[.]0[.]19041[.]56 \|/m.test(thirdPartyNotices),
+  "third-party notices must inventory the shipped Windows SDK .NET runtime pack"
+);
+assert(
+  /Mozilla Public License 2[.]0/.test(thirdPartyNotices)
+    && /https:\/\/www[.]mozilla[.]org\/MPL\/2[.]0\//.test(thirdPartyNotices)
+    && /Auxora has not modified files covered by the Mozilla Public License 2[.]0/.test(thirdPartyNotices),
+  "third-party notices must retain the MPL-2.0 terms, source path, and unmodified-source statement"
+);
+assert(
+  /Permission is hereby granted, free of charge/.test(thirdPartyNotices)
+    && /Portions of Noda Time were derived from Joda Time 1[.]6[.]0/.test(thirdPartyNotices),
+  "third-party notices must retain the MIT text and Noda Time attribution"
+);
+assert(
+  /Build and test dependencies not shipped in the Windows app/.test(thirdPartyNotices)
+    && /Microsoft[.]Windows[.]CsWin32/.test(thirdPartyNotices)
+    && /runtime[.][*][.]System[.]IO[.]Ports/.test(thirdPartyNotices)
+    && /Electron and electron-builder are development-only dependencies/.test(thirdPartyNotices),
+  "third-party notices must distinguish build, test, platform, and prototype dependencies from the Windows runtime"
+);
+
+const expectedLegalFiles = [
+  ["THIRD-PARTY-LICENSES/HidSharp-LICENSE.txt", "/hidsharp/2.6.4/license.txt", "B065E07179F06490C96BF946E73F821086B2F29EFDE395F092AEA69A907EAE16"],
+  ["THIRD-PARTY-LICENSES/Polly.Core-LICENSE.txt", "/polly.core/8.7.0/license", "EAE3CCEE9064911010C23FE3D3C9FCA687A6631F8452BFB11B939AFBC89BA5A0"],
+  ["THIRD-PARTY-LICENSES/Microsoft.Web.WebView2-LICENSE.txt", "/microsoft.web.webview2/1.0.3179.45/license.txt", "0AF8F1B807512AAE39C2AC1AA4D0CAE65CABECB6FD554B8439A5162A0D6ECA55"],
+  ["THIRD-PARTY-LICENSES/Microsoft.Web.WebView2-NOTICE.txt", "/microsoft.web.webview2/1.0.3179.45/notice.txt", "106423785C5B7EBA0A8E61D1837F2132E9C828E20AD530F565D981C1DF60DD90"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-LICENSE.txt", "/microsoft.windowsappsdk/1.8.260317003/license.txt", "5B11E6347756E40FE0274BC08C97F89201B94F0D50181A09A00F1F4740840501"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-Component-LICENSE.txt", "/microsoft.windowsappsdk.ai/1.8.53/license.txt", "F9ED00147604BDC48C7E62D127D73245781CE53903CEF9C3863F8A7EF8120CC2"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-ML-LICENSE.txt", "/microsoft.windowsappsdk.ml/1.8.2141/license.txt", "656AAB74C15AA9F9964BCDCC993EB2755CBDB4822D5E0E3BC61D2E281897F758"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-NOTICE.txt", "/microsoft.windowsappsdk/1.8.260317003/notice.txt", "E25393C0D340A1821827B093FA4DBBFCCCD8FEB7BF769E7FA773E3955CD5314B"],
+  ["THIRD-PARTY-LICENSES/Microsoft.WindowsAppSDK-ML-NOTICE.txt", "/microsoft.windowsappsdk.ml/1.8.2141/thirdpartynotices.txt", "E00F828E0A33DE591A355AE6606D2625F5758DA7D2C844DB7821C9DD3E3647B6"],
+  ["THIRD-PARTY-LICENSES/DotNet-Runtime-LICENSE.txt", "/microsoft.netcore.app.runtime.win-x64/8.0.30/license.txt", "D7A68596AB69B06F51CA278A6545148E4269A9381C26D597C13DF5D88E08CF5B"],
+  ["THIRD-PARTY-LICENSES/DotNet-Runtime-NOTICE.txt", "/microsoft.netcore.app.runtime.win-x64/8.0.30/third-party-notices.txt", "B60B2912DA28EAA6518593C9E2EFB5334EE062D3C42E80D8FDFA806B3DC52977"],
+  ["THIRD-PARTY-LICENSES/DotNet-8-Libraries-NOTICE.txt", "/microsoft.win32.systemevents/8.0.0/third-party-notices.txt", "19C19DCAC9F3EE6302CFBC6745BB8E79F08EFC4C933EB8DC5509BF14B88347EC"],
+  ["THIRD-PARTY-LICENSES/System.Drawing.Common-LICENSE.txt", "/system.drawing.common/8.0.0/license.txt", "A89886665765362EB77E0F8E26602C924520041D1711B2EEDC136434FE4D01AB"],
+  ["THIRD-PARTY-LICENSES/System.Drawing.Common-NOTICE.txt", "/system.drawing.common/8.0.0/third-party-notices.txt", "093E2589A27ED137E519B9856E425EFA7982221A7B3D9E7CEA3B5153F711905E"],
+  ["THIRD-PARTY-LICENSES/DotNet-9-Libraries-NOTICE.txt", "/system.numerics.tensors/9.0.0/third-party-notices.txt", "40686C6447A7D5B5D3693068E4571B5F483D7ED335AEEE773EF662440DE4C5D5"],
+  ["THIRD-PARTY-LICENSES/DotNet-10-Libraries-NOTICE.txt", "/system.codedom/10.0.2/third-party-notices.txt", "6D15E10A101C6BFFF2AB4429ED061BF76C456FC4B23AD6B03E0D0F8377148A21"]
+];
+
+const legalFileItems = [...appCsproj.matchAll(
+  /<None\s+Include="([^"]+)"\s+Link="(THIRD-PARTY-LICENSES\\[^"]+)">([\s\S]*?)<\/None>/g
+)].map(match => ({
+  Identity: match[1],
+  Link: match[2],
+  CopyToOutputDirectory: match[3].match(/<CopyToOutputDirectory>([^<]+)<\/CopyToOutputDirectory>/)?.[1]?.trim(),
+  CopyToPublishDirectory: match[3].match(/<CopyToPublishDirectory>([^<]+)<\/CopyToPublishDirectory>/)?.[1]?.trim()
+}));
+const nugetPackageRoot = Object.keys(nugetAssets.packageFolders || {})[0];
+assert(Boolean(nugetPackageRoot), "NuGet assets must identify the restored global package folder");
+
+for (const [link, sourceSuffix, expectedSha256] of expectedLegalFiles) {
+  const legalFileItem = legalFileItems.find(item => String(item.Link || "").replaceAll("\\", "/") === link);
+  assert(Boolean(legalFileItem), `${link} must be included as a non-resource file from its resolved NuGet package`);
+  assert(legalFileItem?.CopyToOutputDirectory === "PreserveNewest", `${link} must be copied into build output`);
+  assert(legalFileItem?.CopyToPublishDirectory === "PreserveNewest", `${link} must be copied into publish output`);
+  const packageRelativePath = String(legalFileItem?.Identity || "")
+    .replace(/^\$\(NuGetPackageRoot\)[\\/]?/, "");
+  const sourcePath = normalize(resolve(nugetPackageRoot, packageRelativePath));
+  assert(
+    sourcePath.replaceAll("\\", "/").toLowerCase().endsWith(sourceSuffix),
+    `${link} must come from ${sourceSuffix}`
+  );
+  assert(existsSync(sourcePath), `${link} source file is missing; restore the pinned NuGet packages`);
+  const actualSha256 = createHash("sha256").update(readFileSync(sourcePath)).digest("hex").toUpperCase();
+  assert(actualSha256 === expectedSha256, `${link} changed; re-verify the authoritative package license text before shipping`);
+  assert(thirdPartyNotices.includes(`\`${link}\``), `${link} must be mapped in THIRD-PARTY-NOTICES.md`);
+}
 
 assert(
   /NormalizeRemoteHttpUrl\(.*Calendar ICS URL/.test(configController)
@@ -386,6 +640,30 @@ assert(
 );
 
 assert(
+  /downloadAllowed\s*=\s*updateAvailable\s*&&\s*versionRelation\s*==\s*"newer"/.test(releaseService)
+    && /HideDownloadLocations/.test(releaseService)
+    && /installerUrl\s*=\s*downloadAllowed/.test(releaseService)
+    && /state\.downloadAllowed/.test(productWidget)
+    && /canOfferInstaller\s*=\s*state\.checked\s*&&\s*state\.downloadAllowed/.test(productWidget),
+  "older, current, or uncomparable release feeds must not expose download locations through the native API or update UI"
+);
+
+assert(
+  /AssemblyInformationalVersionAttribute/.test(appBuildIdentity)
+    && /NormalizeReleaseChannel/.test(appBuildIdentity)
+    && /AppBuildIdentity\.Version/.test(releaseService)
+    && /AppBuildIdentity\.NormalizeReleaseChannel/.test(releaseService)
+    && /AppBuildIdentity\.NormalizeReleaseChannel/.test(configStore)
+    && /AppBuildIdentity\.Version/.test(telemetryController)
+    && /AppBuildIdentity\.Version/.test(supportController)
+    && /bridgeApp/.test(dashboardJs)
+    && /normalizeReleaseChannelForVersion/.test(dashboardJs)
+    && /availableChannels/.test(productWidget)
+    && /isPrereleaseBuild/.test(productWidget),
+  "release health, configuration, feed checks, and update UI must share semantic build identity and prerelease channel policy"
+);
+
+assert(
   /SupportController/.test(supportController)
     && /BuildSupportBundleAsync/.test(supportController)
     && /RunAutoRepairAsync/.test(supportController)
@@ -431,11 +709,30 @@ assert(
 );
 
 assert(
+  /"app\\tests\\bin"/.test(workspaceCleanupScript)
+    && /"app\\tests\\obj"/.test(workspaceCleanupScript)
+    && /\[switch\]\$IncludeLocalBridgeConfig/.test(workspaceCleanupScript)
+    && /if \(\$IncludeLocalBridgeConfig\) \{[\s\S]*?\$targets \+= "bridge\\config\.json"/.test(workspaceCleanupScript),
+  "workspace cleanup must remove generated test output while preserving local bridge configuration by default"
+);
+
+assert(
   buildStamp.includes(`<XenonAssetRevision>${currentAssetRevision}</XenonAssetRevision>`)
     && buildStamp.includes(`<XenonInformationalVersion>${assetRevisionPayload.informationalVersion}</XenonInformationalVersion>`)
     && appCsproj.includes("$(XenonInformationalVersion)")
     && assetRevisionPayload.informationalVersion === `${appVersion}+${currentAssetRevision.slice(0, 8)}`,
   "native informational version and asset revision must share build/build-stamp.props"
+);
+
+assert(
+  /const hostPort = await reserveLocalPort\(\);[\s\S]*?baseUrl = `http:\/\/127\.0\.0\.1:\$\{hostPort\}`;[\s\S]*?writeFileSync\(join\(configDirectory, "config\.json"\), JSON\.stringify\(\{ port: hostPort \}\)\);/.test(renderedDashboardTest)
+    && /const hostPort = await reserveLocalPort\(\);[\s\S]*?baseUrl = `http:\/\/127\.0\.0\.1:\$\{hostPort\}`;[\s\S]*?writeFileSync\(join\(configDirectory, "config\.json"\), JSON\.stringify\(\{ port: hostPort \}\)\);/.test(renderedThemeTest)
+    && /const hostPort = await reserveLocalPort\(\);[\s\S]*?hostUrl = `http:\/\/127\.0\.0\.1:\$\{hostPort\}`;[\s\S]*?writeFileSync\(join\(configDirectory, "config\.json"\), JSON\.stringify\(\{ port: hostPort \}\)\);/.test(nativeHostTest)
+    && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(renderedDashboardTest)
+    && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(renderedThemeTest)
+    && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(nativeHostTest)
+    && !/const (?:baseUrl|hostUrl) = "http:\/\/127\.0\.0\.1:8976"/.test(renderedDashboardTest + renderedThemeTest + nativeHostTest),
+  "isolated host tests must use private port and instance identities instead of colliding with installed Auxora"
 );
 
 assert(
@@ -503,7 +800,7 @@ assert(
 assert(
   /Interlocked\.Exchange\(ref _usageSampling,\s*1\)/.test(systemMetricsService)
     && /Interlocked\.Exchange\(ref _temperatureSampling,\s*1\)/.test(systemMetricsService)
-    && /_usageTimer[\s\S]*TimeSpan\.FromSeconds\(3\),\s*TimeSpan\.FromSeconds\(3\)/.test(systemMetricsService)
+    && /_usageTimer[\s\S]*TimeSpan\.Zero,\s*TimeSpan\.FromSeconds\(3\)/.test(systemMetricsService)
     && !/_usageTimer[\s\S]*TimeSpan\.FromSeconds\(2\),\s*TimeSpan\.FromSeconds\(2\)/.test(systemMetricsService),
   "native system metrics timers must guard against overlapping samples and avoid 2s WMI usage polling"
 );
@@ -611,8 +908,13 @@ assert(
     && /Interlocked\.Exchange\(ref _pingSampling,\s*1\)/.test(networkMetricsService)
     && /ResolveHealthTarget/.test(networkMetricsService)
     && /ResolvePingDelay/.test(networkMetricsService)
+    && /GetBestInterface/.test(networkMetricsService)
+    && /SelectPrimaryInterfaceId/.test(networkMetricsService)
+    && /candidate\.Ipv4Index == bestRouteInterfaceIndex\.Value/.test(networkMetricsService)
+    && /OrderByDescending\(candidate => candidate\.HasIpv4Gateway\)/.test(networkMetricsService)
+    && !/interfaces\s*\.OrderByDescending\(network => network\.Speed\)/.test(networkMetricsService)
     && !/SendPingAsync\("1\.1\.1\.1"/.test(networkMetricsService),
-  "network health checks must be configurable, prefer local targets, and guard against overlapping ping samples"
+  "network metrics must follow the Windows route instead of the fastest virtual adapter, keep a gateway fallback, and guard configurable health probes"
 );
 
 assert(
@@ -745,9 +1047,18 @@ assert(
     && unhandledRejectionHandler
     && /reportBackgroundDashboardError/.test(unhandledRejectionHandler[0])
     && !/reportFatalDashboardError/.test(unhandledRejectionHandler[0])
-    && /scheduleFatalDashboardReload/.test(dashboardJs)
-    && /window\.location\.reload/.test(dashboardJs),
-  "dashboard background promise failures must not replace the whole UI, while fatal panels self-heal"
+    && /window\.addEventListener\("error"[\s\S]+reportBackgroundDashboardError/.test(dashboardJs)
+    && /function\s+settingsContainsActiveControl/.test(dashboardJs)
+    && /settingsContainsActiveControl\(\)[\s\S]+pendingSettingsWidgetId/.test(dashboardJs)
+    && /settingsNode\.addEventListener\("focusout",\s*schedulePendingSettingsRender\)/.test(dashboardJs)
+    && !/scheduleFatalDashboardReload/.test(dashboardJs)
+    && !/window\.location\.reload/.test(dashboardJs),
+  "dashboard background failures and contained widget crashes must not create a full-page reload loop"
+);
+
+assert(
+  /function\s+mountAuxoraHomeWidget[\s\S]+function\s+redraw\(\)[\s\S]+var\s+chains\s*=\s*state\.chains[\s\S]+chains\.map/.test(productWidget),
+  "Auxora Home must derive action chains inside redraw before rendering One-tap setups"
 );
 
 assert(
@@ -826,7 +1137,8 @@ assert(
     && /runtime\.registerRenderer\("network",\s*mountNetworkWidget\)/.test(networkWidget)
     && /runtime\.registerRenderer\("audio",\s*mountAudioWidget\)/.test(audioWidget)
     && /function\s+normalizeGpuPowerPayload/.test(systemWidget)
-    && /function\s+formatMemoryMb/.test(systemWidget)
+    && /function\s+renderSystemToolsPanel/.test(systemWidget)
+    && !/topProcesses|Process ID|PID /.test(systemWidget)
     && /runtime\.registerHelpers/.test(networkWidget)
     && /runtime\.registerHelpers/.test(audioWidget)
     && !/mountSystemWidget/.test(inlineWidgets)
@@ -861,6 +1173,10 @@ assert(
     && /inline-action-grid--compact/.test(actionsWidget)
     && /data-confirmation-required="true"/.test(actionsWidget)
     && /Tap once to confirm/.test(actionsWidget)
+    && /Tap again within 8 seconds to run/.test(actionsWidget)
+    && /CLIENT_CONFIRMATION_WINDOW_MS = 8000/.test(actionsWidget)
+    && (actionsWidget.match(/function armConfirmation\(actionId\)/g) || []).length === 2
+    && /requiresConfirmation \? "Two-step"/.test(actionsWidget)
     && /system-shortcuts-unsupported/.test(actionsWidget)
     && /Only controls this PC reports as working are tappable/.test(actionsWidget)
     && /Unsupported controls are reduced to a small note/.test(actionsWidget)
@@ -908,6 +1224,15 @@ assert(
     && /runtime\.registerRenderer\("updates",\s*mountUpdatesWidget\)/.test(productWidget)
     && /runtime\.registerRenderer\("streaming",\s*mountStreamingWidget\)/.test(productWidget)
     && /runtime\.registerRenderer\("marketplace",\s*mountMarketplaceWidget\)/.test(productWidget)
+    && /Third-party loading is disabled in this beta/.test(productWidget)
+    && /Verified manifest/.test(productWidget)
+    && !/extension\.runnable|>Runnable<|Trust enforced|Signed extensions/.test(productWidget + readWorkspaceFile("js/dashboard.js"))
+    && /state\.trusted = trust\.trusted === true && state\.verificationStatus === "verified"/.test(productWidget)
+    && /Auxora has not verified the downloaded bytes/.test(productWidget)
+    && !/trustReady|hashStatus === "available" && state\.signatureStatus === "available"/.test(productWidget)
+    && /canOfferInstaller = state\.checked && state\.downloadAllowed && state\.versionRelation === "newer" && state\.updateAvailable && state\.trusted/.test(productWidget)
+    && /Downgrade links are hidden/.test(productWidget)
+    && !/\(state\.downloadUrl \? '<a class="inline-button"/.test(productWidget)
     && /runtime\.registerRenderer\("installer",\s*mountInstallerWidget\)/.test(productWidget)
     && /runtime\.registerRenderer\("privacy",\s*mountPrivacyWidget\)/.test(productWidget)
     && !/mountThemeStudioWidget/.test(inlineWidgets)
@@ -927,12 +1252,16 @@ assert(
   /HashStatus/.test(releaseService)
     && /SignatureStatus/.test(releaseService)
     && /BuildReleaseTrust/.test(releaseService)
-    && /Verify Windows signing policy/.test(releaseWorkflow)
-    && /Public stable releases require a valid Authenticode signature/.test(releaseWorkflow)
-    && /signature-status\.txt/.test(releaseWorkflow)
+    && /verificationStatus/.test(releaseService)
+    && /trusted = false/.test(releaseService)
+    && /Build immutable Windows candidate/.test(releaseWorkflow)
+    && /Publish receipt-bound Windows beta/.test(releaseWorkflow)
+    && /Test-ReleaseManifest\.ps1/.test(releaseWorkflow)
+    && /Test-BetaLifecycleReceipt\.ps1/.test(releaseWorkflow)
+    && !/macos-latest|macOS package|release edit|-X DELETE/.test(releaseWorkflow)
     && /hashStatus/.test(productWidget)
     && /signatureStatus/.test(productWidget),
-  "release payloads and CI must surface/enforce installer hash and signature status"
+  "release payloads and CI must distinguish available trust evidence from verification and preserve immutable Windows beta bytes"
 );
 
 assert(

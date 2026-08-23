@@ -27,3 +27,7 @@
 .dashboard-native-page--perf .inline-media__placeholder {
   min-height: 260px;
 }
+
+.homelab-empty-state {
+  background: rgba(var(--theme-surface-secondary-rgb), 0.84);
+}

@@ -18,6 +18,8 @@
   var metricCard = runtime.metricCard;
   var normalizeMediaPayload = runtime.normalizeMediaPayload;
   var optionalNumber = runtime.optionalNumber;
+  var patchStableDom = runtime.patchStableDom;
+  var productShell = runtime.productShell;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
   var settingValue = runtime.settingValue;
@@ -39,7 +41,7 @@
   function normalizeWeatherPayload(payload, env) {
     payload = payload || {};
     return {
-      configured: payload.configured !== false,
+      configured: payload.configured === true,
       city: text(payload.city, text(getSetting(env, "city"), "Local Weather")),
       temperature: optionalNumber(payload.temperature),
       condition: text(payload.condition, payload.message || "Weather unavailable"),
@@ -52,8 +54,16 @@
 
   function renderWeatherWidget(state) {
     var data = state.data;
+    var needsSetup = !data.configured
+      || (String(state.statusText || "").toLowerCase() === "setup"
+        && data.temperature == null
+        && !data.hourly.length
+        && !data.daily.length);
     return '' +
       '<div class="inline-widget-shell">' +
+        (needsSetup
+          ? '<div class="inline-toolbar"><div><div class="eyebrow">Optional feature</div><h3 class="inline-title">Set up Weather</h3><p class="inline-copy">Add an OpenWeather key and location in Settings to enable current and forecast conditions.</p></div><div class="inline-actions"><button class="inline-button is-primary" type="button" data-action="setup">Open Weather setup</button></div></div>'
+          : '') +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Current", data.temperature == null ? "--" : Math.round(data.temperature) + "°", /imperial/i.test(data.units) ? "Imperial" : "Metric") +
           metricCard("Source", data.source, state.statusText || "Bridge weather feed") +
@@ -95,7 +105,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderWeatherWidget(state);
+      patchStableDom(container, renderWeatherWidget(state));
     }
 
     function refresh() {
@@ -115,7 +125,16 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
-      if (event.target && event.target.getAttribute("data-action") === "refresh") {
+      var action = event.target && event.target.getAttribute("data-action");
+      if (action === "setup") {
+        if (env && typeof env.openSetupSection === "function") {
+          env.openSetupSection("weather");
+        } else if (env && typeof env.selectWidget === "function") {
+          env.selectWidget("setup", true);
+        }
+        return;
+      }
+      if (action === "refresh") {
         refresh();
       }
     });
@@ -129,7 +148,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -217,7 +236,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderHueWidget(state);
+      patchStableDom(container, renderHueWidget(state));
       initXnSlider(container);
     }
 
@@ -395,7 +414,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -453,7 +472,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderMediaWidget(state);
+      patchStableDom(container, renderMediaWidget(state));
     }
 
     function refresh() {
@@ -514,7 +533,170 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
+      }
+    };
+  }
+
+  function normalizeFrigatePayload(payload) {
+    payload = payload || {};
+    var alerts = Array.isArray(payload.alerts) ? payload.alerts.slice(0, 6) : [];
+    var lastDetection = payload.lastDetection || alerts[0] || null;
+    var counts = payload.counts || {};
+    return {
+      configured: payload.configured === true,
+      status: text(payload.status, payload.configured === true ? "idle" : "setup"),
+      source: text(payload.source, "Frigate"),
+      message: text(payload.message, ""),
+      camera: text(payload.camera, lastDetection ? text(lastDetection.camera, "All cameras") : "All cameras"),
+      snapshotUrl: text(payload.snapshotUrl, ""),
+      alerts: alerts,
+      lastDetection: lastDetection,
+      lastHour: Math.max(0, Number(counts.lastHour) || alerts.length),
+      activeCameras: Math.max(0, Number(counts.activeCameras) || 0),
+      sampledAt: text(payload.sampledAt, ""),
+      stale: Boolean(payload.stale)
+    };
+  }
+
+  function renderFrigateWidget(state) {
+    var data = state.data;
+    var latest = data.lastDetection;
+    var connectionCopy = state.connectionError
+      ? (data.sampledAt
+        ? "Frigate refresh failed. Showing the last successful local update."
+        : "Frigate could not be reached. Open Camera settings to check the address and authentication.")
+      : (data.message || "Recent Frigate object detections and snapshots.");
+    if (!data.configured) {
+      return productShell(
+        "Local cameras",
+        "Camera Detection",
+        connectionCopy,
+        state.statusText,
+        state.statusTone,
+        '<article class="list-card inline-card" data-frigate-setup-state>' +
+          '<div class="inline-card-header"><div><div class="metric-label">Setup required</div><div class="router-inline-copy">Not updated • Waiting for setup</div></div>' +
+            '<div class="inline-actions"><button class="router-settings__button" type="button" data-action="setup">Set up Camera Detection</button><button class="router-settings__button" type="button" data-action="refresh">Refresh</button></div></div>' +
+          emptyState(
+            "Camera Detection needs setup",
+            "Connect a local Frigate server to show recent detections. Auxora keeps the connection local and protects saved credentials with Windows."
+          ) +
+        '</article>'
+      );
+    }
+    var freshness = data.sampledAt ? formatAge(data.sampledAt) : "Not updated";
+    var freshnessDetail = data.stale
+      ? "Cached after connection loss"
+      : (data.sampledAt ? "Fresh Frigate sample" : (data.configured ? "Waiting for connection" : "Waiting for setup"));
+    var preview = data.snapshotUrl
+      ? '<img src="' + escapeHtml(data.snapshotUrl) + '" alt="Latest ' + escapeHtml(text(latest && latest.label, "object")) + ' detection from ' + escapeHtml(text(latest && latest.camera, data.camera)) + '">'
+      : '<div class="inline-camera-preview__empty">No event snapshot available</div>';
+    var eventList = data.alerts.length ? data.alerts.map(function (entry) {
+      var score = optionalNumber(entry.score);
+      return '' +
+        '<div class="inline-list-item inline-list-item--split">' +
+          '<div><div class="inline-list-title">' + escapeHtml(text(entry.label, "Object")) + ' on ' + escapeHtml(text(entry.camera, "Camera")) + '</div>' +
+          '<div class="inline-list-copy">' + escapeHtml(text(entry.zone, "No zone")) + ' • ' + escapeHtml(formatAge(entry.time)) + '</div></div>' +
+          '<div class="inline-list-meta">' + (score == null ? "--" : Math.round(clamp(score, 0, 1) * 100) + "%") + '</div>' +
+        '</div>';
+    }).join("") : emptyState(
+      data.configured ? "No recent detections" : "Camera Detection needs setup",
+      connectionCopy || (data.configured ? "Frigate has not reported an object detection in the last hour." : "Add a local Frigate address in Diagnostics.")
+    );
+    var settingsLabel = "Camera settings";
+    var body = '' +
+      '<div class="inline-grid inline-grid--3">' +
+        metricCard("Last hour", String(data.lastHour), data.activeCameras + " camera" + (data.activeCameras === 1 ? "" : "s")) +
+        metricCard("Latest object", text(latest && latest.label, "None"), latest ? formatAge(latest.time) : "Standby") +
+        metricCard("Updated", freshness, freshnessDetail) +
+      '</div>' +
+      '<div class="inline-camera-layout">' +
+        '<article class="list-card inline-card inline-camera-card">' +
+          '<div class="inline-card-header"><div><div class="metric-label">Latest snapshot</div><div class="router-inline-copy">' + escapeHtml(text(latest && latest.camera, data.camera)) + '</div></div></div>' +
+          '<div class="inline-camera-preview">' + preview + (latest ? '<div class="inline-camera-preview__overlay"><strong>' + escapeHtml(text(latest.label, "Object")) + '</strong><span>' + escapeHtml(text(latest.zone, "No zone")) + ' • ' + escapeHtml(formatAge(latest.time)) + '</span></div>' : '') + '</div>' +
+        '</article>' +
+        '<article class="list-card inline-card">' +
+          '<div class="inline-card-header"><div><div class="metric-label">Recent detections</div><div class="router-inline-copy">Local Frigate events</div></div><div class="inline-actions"><button class="router-settings__button" type="button" data-action="setup">' + escapeHtml(settingsLabel) + '</button><button class="router-settings__button" type="button" data-action="refresh">Refresh</button></div></div>' +
+          '<div class="inline-list">' + eventList + '</div>' +
+        '</article>' +
+      '</div>';
+    return productShell(
+      "Local cameras",
+      "Camera Detection",
+      connectionCopy,
+      state.statusText,
+      state.statusTone,
+      body
+    );
+  }
+
+  function mountFrigateWidget(widget, container, env) {
+    var cleanups = [];
+    var configured = Boolean(env.bridgeConfig && env.bridgeConfig.frigate && env.bridgeConfig.frigate.configured);
+    var state = {
+      data: normalizeFrigatePayload({
+        configured: configured,
+        status: configured ? "configured" : "setup",
+        message: configured
+          ? "Waiting for the saved Frigate connection."
+          : "Add a local Frigate address in Diagnostics to enable Camera Detection."
+      }),
+      statusText: "Loading",
+      statusTone: "warn",
+      connectionError: ""
+    };
+
+    function redraw() {
+      patchStableDom(container, renderFrigateWidget(state));
+    }
+
+    function refresh() {
+      return requestJson(buildBridgeUrl(env, "/api/frigate"), {}, 8000).then(function (payload) {
+        state.data = normalizeFrigatePayload(payload);
+        state.connectionError = "";
+        state.statusText = statusTextFromPayload(payload, state.data.configured ? "Live" : "Setup");
+        state.statusTone = statusToneFromPayload(payload, state.data.configured ? "live" : "setup");
+        redraw();
+      }, function (error) {
+        state.connectionError = error.message || "Frigate could not be reached.";
+        state.data.configured = configured || state.data.configured;
+        state.data.stale = Boolean(state.data.sampledAt);
+        state.statusText = state.data.configured ? "Connection lost" : "Unavailable";
+        state.statusTone = "danger";
+        redraw();
+      });
+    }
+
+    addListener(cleanups, container, "click", function (event) {
+      var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
+      var action = target && target.getAttribute("data-action");
+      if (action === "setup") {
+        if (typeof env.openSetupSection === "function") {
+          env.openSetupSection("frigate");
+        } else if (typeof env.selectWidget === "function") {
+          env.selectWidget("setup", true);
+        }
+        return;
+      }
+      if (action === "refresh") {
+        loop.refresh();
+      }
+    });
+
+    var loop = createTimerLoop(refresh, 30000, function () {
+      return !state.data.configured;
+    });
+    redraw();
+    loop.start();
+
+    return {
+      refresh: function () {
+        return state.data.configured ? loop.refresh() : Promise.resolve();
+      },
+      destroy: function () {
+        loop.destroy();
+        runCleanups(cleanups);
+        patchStableDom(container, "");
       }
     };
   }
@@ -522,4 +704,5 @@
   runtime.registerRenderer("weather", mountWeatherWidget);
   runtime.registerRenderer("hue", mountHueWidget);
   runtime.registerRenderer("media", mountMediaWidget);
+  runtime.registerRenderer("frigate", mountFrigateWidget);
 }());

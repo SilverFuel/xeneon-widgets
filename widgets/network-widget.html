@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Network Widget</title>
-  <link rel="stylesheet" href="../css/theme.css?v=20260712-01">
-  <link rel="stylesheet" href="../css/widgets.css?v=20260712-01">
+  <link rel="stylesheet" href="../css/theme.css?v=20260818-02">
+  <link rel="stylesheet" href="../css/widgets.css?v=20260818-02">
   <style>
     .widget-header--compact {
       justify-content: flex-end;
@@ -110,11 +110,11 @@
       </article>
     </section>
   </main>
-  <script src="../js/widget-core.js?v=20260712-01"></script>
+  <script src="../js/widget-core.js?v=20260818-02"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
-      var endpoint = params.get("endpoint") || "";
+      var endpoint = params.get("endpoint") || "/api/network";
       var unifiEndpoint = params.get("unifiEndpoint") || "/api/unifi/network";
 
       function fetchJson(url) {

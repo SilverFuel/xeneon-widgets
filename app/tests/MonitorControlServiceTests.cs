@@ -30,4 +30,18 @@ public sealed class MonitorControlServiceTests
     {
         Assert.That(MonitorControlService.ScalePercentage(percentage, (uint)maximum), Is.EqualTo((uint)expected));
     }
+
+    [TestCase(true, 0u, true)]
+    [TestCase(true, 1u, false)]
+    [TestCase(false, 0u, false)]
+    [TestCase(false, 1u, false)]
+    public void ShouldIncludeLogicalMonitor_AllowsOnlyConfirmedNonPrimaryDisplays(
+        bool monitorInfoAvailable,
+        uint monitorFlags,
+        bool expected)
+    {
+        Assert.That(
+            MonitorControlService.ShouldIncludeLogicalMonitor(monitorInfoAvailable, monitorFlags),
+            Is.EqualTo(expected));
+    }
 }

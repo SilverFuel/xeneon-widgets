@@ -4,17 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Auxora — Adaptive Touch Dashboard</title>
-    <link rel="stylesheet" href="./css/theme.css?v=20260712-01">
-    <link rel="stylesheet" href="./css\widgets.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/homelab.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/system.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/network.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/audio.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/setup.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/product.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/actions.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/integrations.css?v=20260712-01">
-    <link rel="stylesheet" href="./css/widgets/game-mode.css?v=20260712-01">
+    <link rel="stylesheet" href="./css/theme.css?v=20260818-02">
+    <link rel="stylesheet" href="./css\widgets.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/homelab.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/system.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/network.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/audio.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/setup.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/product.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/actions.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/integrations.css?v=20260818-02">
+    <link rel="stylesheet" href="./css/widgets/game-mode.css?v=20260818-02">
 </head>
 <body class="dashboard-native-page">
   <div id="dashboard-stage-shell" class="dashboard-stage-shell">
@@ -23,19 +23,19 @@
     <main id="dashboard-stage" class="dashboard-router-stage">
       <section id="dashboard-bridge-warning" class="dash-warning is-hidden">
         Real-time widgets require the localhost dashboard URL:
-        <code>http://127.0.0.1:8976/dashboard.html</code>
+        <code id="dashboard-bridge-url">http://127.0.0.1:8976/dashboard.html</code>
       </section>
 
       <aside class="router-rail">
         <div class="auxora-shell-head">
           <div class="auxora-brand">
-            <span class="auxora-brand__mark" aria-hidden="true">A</span>
+            <img class="auxora-brand__mark" src="./assets/icons/auxora-mark.svg?v=20260818-02" alt="" aria-hidden="true">
             <span><strong>Auxora</strong><small>Your controls within reach</small></span>
           </div>
           <nav id="dashboard-primary-nav" class="auxora-primary-nav" aria-label="Primary navigation">
             <button type="button" data-destination="home" aria-pressed="true">Home</button>
-            <button type="button" data-destination="scenes" aria-pressed="false">Scenes</button>
-            <button type="button" data-destination="library" aria-pressed="false">Library</button>
+            <button type="button" data-destination="scenes" aria-pressed="false">Modes</button>
+            <button type="button" data-destination="library" aria-pressed="false">Apps &amp; Controls</button>
             <button type="button" data-destination="settings" aria-pressed="false">Settings</button>
           </nav>
         </div>
@@ -43,12 +43,6 @@
           <div id="dashboard-origin-status" class="widget-status">Loading</div>
           <div id="dashboard-selection-status" class="widget-status">Selecting widget</div>
         </div>
-
-        <button id="dashboard-diagnostics-rail" class="router-diagnostics is-hidden" type="button" data-state="needs-setup">
-          <span id="dashboard-diagnostics-rail-state" class="router-diagnostics__state">Needs Setup</span>
-          <strong class="router-diagnostics__title">Diagnostics</strong>
-          <span id="dashboard-diagnostics-rail-copy" class="router-diagnostics__copy">Open the diagnostics board.</span>
-        </button>
 
         <div class="router-rail__lower">
           <div id="dashboard-widget-picker" class="router-picker"></div>
@@ -61,7 +55,7 @@
                 <p id="dashboard-settings-copy" class="router-settings__copy">Local settings for the selected widget.</p>
               </div>
               <div class="router-settings__header-actions">
-                <button id="dashboard-settings-toggle" class="router-settings__button router-settings__button--ghost" type="button" aria-expanded="false">Settings</button>
+                <button id="dashboard-settings-toggle" class="router-settings__button router-settings__button--ghost" type="button" aria-expanded="false" aria-controls="dashboard-widget-settings" aria-label="Open panel options">Panel options</button>
                 <button id="dashboard-touch-lock-toggle" class="router-settings__button router-settings__button--ghost" type="button">Touch Lock</button>
                 <button id="dashboard-diagnostics-inline" class="router-settings__button router-settings__button--ghost" type="button">Open Diagnostics</button>
                 <div id="dashboard-config-status" class="widget-status">Ready</div>
@@ -80,7 +74,19 @@
             <h2 id="dashboard-widget-title" class="router-viewer__title">Loading</h2>
             <p id="dashboard-widget-copy" class="router-viewer__copy">Preparing dashboard frame.</p>
           </div>
-          <div id="dashboard-widget-source" class="widget-status">Loading</div>
+          <div class="router-viewer__header-actions">
+            <div id="dashboard-widget-source" class="widget-status">Loading</div>
+            <button id="dashboard-quick-toggle" class="auxora-quick-toggle" type="button" aria-expanded="false" aria-haspopup="dialog" aria-controls="dashboard-quick-drawer">Quick controls</button>
+            <div id="dashboard-now-strip" class="dashboard-now-strip is-hidden" aria-live="polite">
+              <button class="dashboard-now-strip__open" type="button" data-now-strip-action="open">
+                <span class="dashboard-now-strip__label">Now</span>
+                <strong>Loading</strong>
+                <small>Checking media</small>
+              </button>
+              <button type="button" data-now-strip-action="pin" aria-label="Keep media controls visible">Keep</button>
+              <button type="button" data-now-strip-action="dismiss" aria-label="Dismiss media controls">Dismiss</button>
+            </div>
+          </div>
         </header>
 
         <div class="router-viewer__frame-shell">
@@ -90,19 +96,23 @@
             <p id="dashboard-widget-empty-copy">Start the localhost bridge to load the selected widget.</p>
             <button id="dashboard-widget-retry" class="router-settings__button is-primary" type="button">Retry connection</button>
           </div>
+          <div id="dashboard-widget-error" class="router-viewer__empty router-viewer__widget-error is-hidden" role="alert">
+            <strong id="dashboard-widget-error-title">Panel unavailable</strong>
+            <p id="dashboard-widget-error-copy">This panel stopped unexpectedly. The rest of Auxora is still available.</p>
+            <div class="inline-actions">
+              <button class="router-settings__button is-primary" type="button" data-widget-error-action="retry">Retry panel</button>
+              <button class="router-settings__button" type="button" data-widget-error-action="home">Go Home</button>
+              <button class="router-settings__button" type="button" data-widget-error-action="copy">Copy diagnostics</button>
+            </div>
+          </div>
           <div id="dashboard-launcher-dock" class="dashboard-launcher-dock is-hidden" aria-label="Recent apps"></div>
-          <div id="dashboard-inline-widget" class="router-inline-widget is-hidden" aria-live="polite"></div>
+          <div id="dashboard-inline-widget" class="router-inline-widget is-hidden"></div>
         </div>
       </section>
-      <button id="dashboard-now-strip" class="dashboard-now-strip is-hidden" type="button" aria-live="polite">
-        <span class="dashboard-now-strip__label">Now</span>
-        <strong>Loading</strong>
-        <small>Checking media</small>
-      </button>
       <div id="dashboard-touch-feedback" class="dashboard-touch-feedback is-hidden" role="status" aria-live="polite"></div>
-      <button id="dashboard-quick-toggle" class="auxora-quick-toggle" type="button" aria-expanded="false" aria-controls="dashboard-quick-drawer">Quick controls</button>
-      <aside id="dashboard-quick-drawer" class="auxora-quick-drawer is-hidden" aria-label="Quick controls">
-        <div class="auxora-quick-drawer__head"><strong>Quick controls</strong><button type="button" data-quick-close aria-label="Close quick controls">Close</button></div>
+      <div id="dashboard-quick-scrim" class="auxora-quick-scrim is-hidden" aria-hidden="true" data-quick-close></div>
+      <aside id="dashboard-quick-drawer" class="auxora-quick-drawer is-hidden" role="dialog" aria-modal="true" aria-labelledby="dashboard-quick-title" tabindex="-1">
+        <div class="auxora-quick-drawer__head"><strong id="dashboard-quick-title">Quick controls</strong><button type="button" data-quick-close aria-label="Close quick controls">Close</button></div>
         <div id="dashboard-quick-scenes" class="auxora-quick-scenes"></div>
         <div class="auxora-quick-actions">
           <button type="button" data-quick-widget="audio">Audio</button>
@@ -111,22 +121,23 @@
           <button type="button" data-quick-widget="system">System</button>
         </div>
       </aside>
+      <div id="dashboard-touch-lock-scrim" class="dashboard-touch-lock-scrim is-hidden" aria-hidden="true"></div>
       <button id="dashboard-touch-unlock" class="dashboard-touch-unlock is-hidden" type="button">Unlock Touch</button>
     </main>
   </div>
 
-  <script src="./js/widget-core.js?v=20260712-01"></script>
-  <script src="./js/layout-profile.js?v=20260712-01"></script>
-    <script src="./js/inline-widgets.js?v=20260712-01"></script>
-    <script src="./js/widgets/homelab.js?v=20260712-01"></script>
-    <script src="./js/widgets/system.js?v=20260712-01"></script>
-    <script src="./js/widgets/network.js?v=20260712-01"></script>
-    <script src="./js/widgets/audio.js?v=20260712-01"></script>
-    <script src="./js/widgets/setup.js?v=20260712-01"></script>
-    <script src="./js/widgets/product.js?v=20260712-01"></script>
-    <script src="./js/widgets/actions.js?v=20260712-01"></script>
-    <script src="./js/widgets/integrations.js?v=20260712-01"></script>
-    <script src="./js/widgets/game-mode.js?v=20260712-01"></script>
-    <script src="./js/dashboard.js?v=20260712-01"></script>
+  <script src="./js/widget-core.js?v=20260818-02"></script>
+  <script src="./js/layout-profile.js?v=20260818-02"></script>
+    <script src="./js/inline-widgets.js?v=20260818-02"></script>
+    <script src="./js/widgets/homelab.js?v=20260818-02"></script>
+    <script src="./js/widgets/system.js?v=20260818-02"></script>
+    <script src="./js/widgets/network.js?v=20260818-02"></script>
+    <script src="./js/widgets/audio.js?v=20260818-02"></script>
+    <script src="./js/widgets/setup.js?v=20260818-02"></script>
+    <script src="./js/widgets/product.js?v=20260818-02"></script>
+    <script src="./js/widgets/actions.js?v=20260818-02"></script>
+    <script src="./js/widgets/integrations.js?v=20260818-02"></script>
+    <script src="./js/widgets/game-mode.js?v=20260818-02"></script>
+    <script src="./js/dashboard.js?v=20260818-02"></script>
 </body>
 </html>

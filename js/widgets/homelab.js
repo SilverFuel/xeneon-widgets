@@ -20,6 +20,7 @@
   var initXnSlider = runtime.initXnSlider;
   var metricCard = runtime.metricCard;
   var optionalNumber = runtime.optionalNumber;
+  var patchStableDom = runtime.patchStableDom;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
   var statusPill = runtime.statusPill;
@@ -134,7 +135,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderCameraWidget(state);
+      patchStableDom(container, renderCameraWidget(state));
     }
 
     function refresh() {
@@ -173,7 +174,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -275,7 +276,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderUniFiNetworkWidget(state);
+      patchStableDom(container, renderUniFiNetworkWidget(state));
     }
 
     function refresh() {
@@ -311,7 +312,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -372,7 +373,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderPlexWidget(state, env);
+      patchStableDom(container, renderPlexWidget(state, env));
     }
 
     function refresh() {
@@ -408,7 +409,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -479,7 +480,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderNasWidget(state, env);
+      patchStableDom(container, renderNasWidget(state, env));
     }
 
     function refresh() {
@@ -515,7 +516,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -594,7 +595,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderAutomationWidget(state, env);
+      patchStableDom(container, renderAutomationWidget(state, env));
       initXnSlider(container);
     }
 
@@ -750,7 +751,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }

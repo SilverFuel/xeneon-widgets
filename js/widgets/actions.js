@@ -14,11 +14,13 @@
   var initXnSlider = runtime.initXnSlider;
   var metricCard = runtime.metricCard;
   var optionalNumber = runtime.optionalNumber;
+  var patchStableDom = runtime.patchStableDom;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
   var statusTextFromPayload = runtime.statusTextFromPayload;
   var statusToneFromPayload = runtime.statusToneFromPayload;
   var text = runtime.text;
+  var CLIENT_CONFIRMATION_WINDOW_MS = 8000;
 
   function requiresServerConfirmation(actionId) {
     return actionId === "empty-recycle-bin" || actionId === "sleep" || actionId === "restart" || actionId === "shutdown";
@@ -52,11 +54,11 @@
     var itemLabel = text(item && item.label, "Action");
     var buttonLabel = isConfirm ? "Confirm " + itemLabel : itemLabel;
     var buttonCopy = isConfirm
-      ? "Tap to run. Confirmation expires quickly."
+      ? "Tap again within 8 seconds to run."
       : requiresConfirmation
         ? "Tap once to confirm"
         : text(item && item.detail, text(item && item.state, "Ready"));
-    var stateLabel = isConfirm ? "Confirm" : requiresConfirmation ? "Confirm" : text(item && item.state, "Ready");
+    var stateLabel = isConfirm ? "Confirm" : requiresConfirmation ? "Two-step" : text(item && item.state, "Ready");
     return '' +
       '<button class="inline-action-button" type="button" data-action="' + escapeHtml(action) + '" data-id="' + escapeHtml(itemId) + '" data-style="' + escapeHtml(text(item && item.style, "command")) + '"' + (requiresConfirmation ? ' data-confirmation-required="true"' : "") + (isConfirm ? ' data-state="confirm"' : "") + (((disabled || !item || item.enabled === false) ? " disabled" : "")) + '>' +
         '<strong>' + escapeHtml(buttonLabel) + '</strong>' +
@@ -177,7 +179,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderLaunchersWidget(state);
+      patchStableDom(container, renderLaunchersWidget(state));
     }
 
     function resetForm() {
@@ -354,7 +356,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -399,6 +401,7 @@
 
   function mountQuickActionsWidget(widget, container, env) {
     var cleanups = [];
+    var confirmationTimer = 0;
     var state = {
       data: normalizeQuickActionsPayload({}),
       statusText: "Loading",
@@ -408,7 +411,31 @@
     };
 
     function redraw() {
-      container.innerHTML = renderQuickActionsWidget(state);
+      patchStableDom(container, renderQuickActionsWidget(state));
+    }
+
+    function clearConfirmationTimer() {
+      if (confirmationTimer) {
+        window.clearTimeout(confirmationTimer);
+        confirmationTimer = 0;
+      }
+    }
+
+    function armConfirmation(actionId) {
+      clearConfirmationTimer();
+      state.confirmActionId = actionId;
+      state.statusText = "Confirm";
+      state.statusTone = "warn";
+      confirmationTimer = window.setTimeout(function () {
+        confirmationTimer = 0;
+        if (state.confirmActionId === actionId) {
+          state.confirmActionId = "";
+          state.statusText = statusTextFromPayload(state.data, "Ready");
+          state.statusTone = statusToneFromPayload(state.data, "live");
+          redraw();
+        }
+      }, CLIENT_CONFIRMATION_WINDOW_MS);
+      redraw();
     }
 
     function refresh() {
@@ -425,6 +452,7 @@
     }
 
     function commit(actionId) {
+      clearConfirmationTimer();
       state.busy = true;
       state.confirmActionId = "";
       state.statusText = "Applying";
@@ -475,10 +503,7 @@
 
       actionId = String(target.getAttribute("data-id") || "");
       if (actionId === "empty-recycle-bin" && state.confirmActionId !== actionId) {
-        state.confirmActionId = actionId;
-        state.statusText = "Confirm";
-        state.statusTone = "warn";
-        redraw();
+        armConfirmation(actionId);
         return;
       }
 
@@ -495,8 +520,9 @@
       refresh: loop.refresh,
       destroy: function () {
         loop.destroy();
+        clearConfirmationTimer();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -569,6 +595,7 @@
 
   function mountSystemShortcutsWidget(widget, container, env) {
     var cleanups = [];
+    var confirmationTimer = 0;
     var state = {
       data: normalizeSystemShortcutsPayload({}),
       statusText: "Loading",
@@ -579,8 +606,32 @@
     };
 
     function redraw() {
-      container.innerHTML = renderSystemShortcutsWidget(state);
+      patchStableDom(container, renderSystemShortcutsWidget(state));
       initXnSlider(container);
+    }
+
+    function clearConfirmationTimer() {
+      if (confirmationTimer) {
+        window.clearTimeout(confirmationTimer);
+        confirmationTimer = 0;
+      }
+    }
+
+    function armConfirmation(actionId) {
+      clearConfirmationTimer();
+      state.confirmActionId = actionId;
+      state.statusText = "Confirm";
+      state.statusTone = "warn";
+      confirmationTimer = window.setTimeout(function () {
+        confirmationTimer = 0;
+        if (state.confirmActionId === actionId) {
+          state.confirmActionId = "";
+          state.statusText = statusTextFromPayload(state.data, "Ready");
+          state.statusTone = statusToneFromPayload(state.data, "live");
+          redraw();
+        }
+      }, CLIENT_CONFIRMATION_WINDOW_MS);
+      redraw();
     }
 
     function refresh() {
@@ -597,6 +648,7 @@
     }
 
     function commitShortcut(actionId) {
+      clearConfirmationTimer();
       state.busy = true;
       state.confirmActionId = "";
       state.statusText = "Applying";
@@ -672,10 +724,7 @@
 
       actionId = String(target.getAttribute("data-id") || "");
       if ((actionId === "sleep" || actionId === "restart" || actionId === "shutdown") && state.confirmActionId !== actionId) {
-        state.confirmActionId = actionId;
-        state.statusText = "Confirm";
-        state.statusTone = "warn";
-        redraw();
+        armConfirmation(actionId);
         return;
       }
 
@@ -721,8 +770,9 @@
       refresh: loop.refresh,
       destroy: function () {
         loop.destroy();
+        clearConfirmationTimer();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
@@ -738,7 +788,7 @@
       message: text(payload.message, payload.configured ? "Clipboard history is ready." : "Clipboard history is disabled in Windows."),
       source: text(payload.source, "windows clipboard history"),
       privacy: {
-        hidePreviews: Boolean(payload.privacy && payload.privacy.hidePreviews),
+        hidePreviews: payload.privacy ? payload.privacy.hidePreviews !== false : true,
         widgetPaused: Boolean(payload.privacy && payload.privacy.widgetPaused),
         excludeFromDiagnostics: payload.privacy ? payload.privacy.excludeFromDiagnostics !== false : true
       },
@@ -758,7 +808,7 @@
   function renderClipboardWidget(state) {
     var data = state.data;
     return '' +
-      '<div class="inline-widget-shell">' +
+      '<div class="inline-widget-shell inline-widget-shell--clipboard">' +
         '<div class="inline-grid inline-grid--3">' +
           metricCard("Items", String(data.entries.length), data.entries.length ? "Recent history" : (data.configured ? "Nothing recent" : "Enable clipboard history")) +
           metricCard("Privacy", data.privacy.widgetPaused ? "Paused" : data.privacy.hidePreviews ? "Hidden" : "Visible", data.privacy.excludeFromDiagnostics ? "Excluded from diagnostics" : "Diagnostics status only") +
@@ -769,7 +819,7 @@
           '<button class="inline-button" type="button" data-action="toggle-pause-widget"' + (state.busy ? " disabled" : "") + '>' + (data.privacy.widgetPaused ? "Resume widget" : "Pause widget") + '</button>' +
           '<button class="inline-button" type="button" data-action="toggle-exclude-diagnostics"' + (state.busy ? " disabled" : "") + '>' + (data.privacy.excludeFromDiagnostics ? "Diagnostics excluded" : "Exclude diagnostics") + '</button>' +
         '</div>' +
-        '<article class="list-card inline-card">' +
+        '<article class="list-card inline-card clipboard-history-card">' +
           '<div class="inline-card-header"><div><div class="metric-label">Recent Entries</div><div class="router-inline-copy">Tap an item to copy it back to the current clipboard.</div></div></div>' +
           '<div class="inline-list">' + (data.entries.length ? data.entries.map(function (entry) {
             return '' +
@@ -797,7 +847,7 @@
     };
 
     function redraw() {
-      container.innerHTML = renderClipboardWidget(state);
+      patchStableDom(container, renderClipboardWidget(state));
     }
 
     function refresh() {
@@ -907,7 +957,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }

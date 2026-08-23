@@ -14,13 +14,16 @@ internal static class HttpReadResilience
         TimeSpan? retryDelay = null,
         TimeSpan? attemptTimeout = null)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxRetryAttempts);
         var shouldRetry = new PredicateBuilder<HttpResponseMessage>()
             .Handle<HttpRequestException>()
             .Handle<TimeoutRejectedException>()
             .HandleResult(response => IsTransientStatus(response.StatusCode));
 
-        return new ResiliencePipelineBuilder<HttpResponseMessage>()
-            .AddRetry(new RetryStrategyOptions<HttpResponseMessage>
+        var builder = new ResiliencePipelineBuilder<HttpResponseMessage>();
+        if (maxRetryAttempts > 0)
+        {
+            builder.AddRetry(new RetryStrategyOptions<HttpResponseMessage>
             {
                 ShouldHandle = shouldRetry,
                 MaxRetryAttempts = maxRetryAttempts,
@@ -32,7 +35,10 @@ internal static class HttpReadResilience
                     arguments.Outcome.Result?.Dispose();
                     return default;
                 }
-            })
+            });
+        }
+
+        return builder
             .AddTimeout(attemptTimeout ?? TimeSpan.FromSeconds(8))
             .Build();
     }

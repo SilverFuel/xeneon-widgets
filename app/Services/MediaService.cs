@@ -11,6 +11,8 @@ public sealed class MediaService
     private MediaSnapshot _snapshot = MediaSnapshot.CreateStarting();
     private DateTimeOffset _lastRefresh = DateTimeOffset.MinValue;
     private Task? _refreshTask;
+    private CancellationTokenSource? _refreshCancellation;
+    private bool _refreshTimeoutReported;
 
     public MediaService(HostLogger logger, ConfigStore configStore)
     {
@@ -25,6 +27,11 @@ public sealed class MediaService
             await RefreshWithTimeoutAsync(cancellationToken);
         }
 
+        return GetCachedSnapshot();
+    }
+
+    public MediaSnapshot GetCachedSnapshot()
+    {
         lock (_sync)
         {
             var clone = _snapshot.Clone();
@@ -40,7 +47,9 @@ public sealed class MediaService
 
     public async Task<MediaSnapshot> ExecuteAsync(string action, CancellationToken cancellationToken)
     {
-        var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+        var manager = await GlobalSystemMediaTransportControlsSessionManager
+            .RequestAsync()
+            .AsTask(cancellationToken);
         var session = manager.GetCurrentSession();
         if (session is null)
         {
@@ -81,14 +90,26 @@ public sealed class MediaService
     private async Task RefreshWithTimeoutAsync(CancellationToken cancellationToken)
     {
         Task refreshTask;
+        CancellationTokenSource? refreshCancellation;
+        bool timedOutRefreshStillRunning;
         lock (_sync)
         {
             if (_refreshTask is null || _refreshTask.IsCompleted)
             {
-                _refreshTask = RefreshAsync(CancellationToken.None);
+                _refreshCancellation?.Dispose();
+                _refreshCancellation = new CancellationTokenSource();
+                _refreshTimeoutReported = false;
+                _refreshTask = RefreshAsync(_refreshCancellation.Token);
             }
 
             refreshTask = _refreshTask;
+            refreshCancellation = _refreshCancellation;
+            timedOutRefreshStillRunning = _refreshTimeoutReported && !refreshTask.IsCompleted;
+        }
+
+        if (timedOutRefreshStillRunning)
+        {
+            return;
         }
 
         var timeoutTask = Task.Delay(TimeSpan.FromMilliseconds(1800), cancellationToken);
@@ -99,11 +120,23 @@ public sealed class MediaService
             return;
         }
 
-        _logger.Warn("Windows media session refresh timed out.");
+        cancellationToken.ThrowIfCancellationRequested();
+        var reportTimeout = false;
         lock (_sync)
         {
-            _snapshot = MediaSnapshot.CreateError("Windows media session check timed out.");
-            _lastRefresh = DateTimeOffset.UtcNow;
+            if (ReferenceEquals(_refreshTask, refreshTask) && !_refreshTimeoutReported)
+            {
+                _refreshTimeoutReported = true;
+                _snapshot = MediaSnapshot.CreateError("Windows media session check timed out.");
+                _lastRefresh = DateTimeOffset.UtcNow;
+                reportTimeout = true;
+            }
+        }
+
+        if (reportTimeout)
+        {
+            _logger.Warn("Windows media session refresh timed out; canceling the shared refresh and suppressing duplicate timeout reports.");
+            refreshCancellation?.Cancel();
         }
     }
 
@@ -135,7 +168,9 @@ public sealed class MediaService
     {
         try
         {
-            var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            var manager = await GlobalSystemMediaTransportControlsSessionManager
+                .RequestAsync()
+                .AsTask(cancellationToken);
             var session = manager.GetCurrentSession();
             if (session is null)
             {
@@ -150,7 +185,9 @@ public sealed class MediaService
 
             var playback = session.GetPlaybackInfo();
             var timeline = session.GetTimelineProperties();
-            var properties = await session.TryGetMediaPropertiesAsync();
+            var properties = await session
+                .TryGetMediaPropertiesAsync()
+                .AsTask(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             var sampledAt = DateTimeOffset.UtcNow;
@@ -186,11 +223,16 @@ public sealed class MediaService
                 _lastRefresh = sampledAt;
             }
 
-            var artwork = exposeMetadata ? await TryReadArtworkAsync(properties.Thumbnail) : "";
+            var artwork = exposeMetadata
+                ? await TryReadArtworkAsync(properties.Thumbnail, cancellationToken)
+                : "";
             lock (_sync)
             {
                 _snapshot.ThumbnailDataUrl = artwork;
             }
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception error)
         {
@@ -203,7 +245,9 @@ public sealed class MediaService
         }
     }
 
-    private static async Task<string> TryReadArtworkAsync(IRandomAccessStreamReference? thumbnail)
+    private static async Task<string> TryReadArtworkAsync(
+        IRandomAccessStreamReference? thumbnail,
+        CancellationToken cancellationToken)
     {
         if (thumbnail is null)
         {
@@ -212,23 +256,83 @@ public sealed class MediaService
 
         try
         {
-            using var stream = await thumbnail.OpenReadAsync();
+            using var stream = await thumbnail.OpenReadAsync().AsTask(cancellationToken);
             if (stream is null || stream.Size == 0)
             {
                 return "";
             }
 
             using var reader = new DataReader(stream);
-            await reader.LoadAsync((uint)stream.Size);
+            await reader.LoadAsync((uint)stream.Size).AsTask(cancellationToken);
             var buffer = new byte[stream.Size];
             reader.ReadBytes(buffer);
-            var contentType = string.IsNullOrWhiteSpace(stream.ContentType) ? "image/png" : stream.ContentType;
+            var contentType = ResolveArtworkContentType(stream.ContentType, buffer);
             return $"data:{contentType};base64,{Convert.ToBase64String(buffer)}";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
             return "";
         }
+    }
+
+    internal static string ResolveArtworkContentType(string? reportedContentType, ReadOnlySpan<byte> content)
+    {
+        if (content.Length >= 3
+            && content[0] == 0xFF
+            && content[1] == 0xD8
+            && content[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        if (content.Length >= 8
+            && content[0] == 0x89
+            && content[1] == 0x50
+            && content[2] == 0x4E
+            && content[3] == 0x47
+            && content[4] == 0x0D
+            && content[5] == 0x0A
+            && content[6] == 0x1A
+            && content[7] == 0x0A)
+        {
+            return "image/png";
+        }
+
+        if (content.Length >= 6
+            && content[0] == (byte)'G'
+            && content[1] == (byte)'I'
+            && content[2] == (byte)'F'
+            && content[3] == (byte)'8'
+            && (content[4] == (byte)'7' || content[4] == (byte)'9')
+            && content[5] == (byte)'a')
+        {
+            return "image/gif";
+        }
+
+        if (content.Length >= 12
+            && content[0] == (byte)'R'
+            && content[1] == (byte)'I'
+            && content[2] == (byte)'F'
+            && content[3] == (byte)'F'
+            && content[8] == (byte)'W'
+            && content[9] == (byte)'E'
+            && content[10] == (byte)'B'
+            && content[11] == (byte)'P')
+        {
+            return "image/webp";
+        }
+
+        var normalized = (reportedContentType ?? "").Split(';', 2)[0].Trim().ToLowerInvariant();
+        if (System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^image/[a-z0-9][a-z0-9.+-]*$"))
+        {
+            return normalized;
+        }
+
+        return "image/png";
     }
 }
 
