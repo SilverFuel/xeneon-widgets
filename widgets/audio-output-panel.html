@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audio</title>
+  <link rel="stylesheet" href="../css/theme.css">
   <style>
     :root {
       color-scheme: dark;
@@ -67,7 +68,7 @@
     .eyebrow {
       margin: 0 0 4px;
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       font-weight: 800;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -138,6 +139,7 @@
 
     .volume {
       width: 100%;
+      min-height: 44px;
       margin-top: 12px;
       accent-color: var(--accent);
     }
@@ -209,6 +211,8 @@
       text-align: center;
     }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body>
   <main class="shell">
@@ -231,7 +235,7 @@
           <div class="metric">
             <p class="eyebrow">Volume</p>
             <strong id="volume-label">--</strong>
-            <input id="volume" class="volume" type="range" min="0" max="100" value="0">
+            <input id="volume" class="volume" type="range" min="0" max="100" value="0" aria-label="Master volume">
           </div>
         </div>
       </article>

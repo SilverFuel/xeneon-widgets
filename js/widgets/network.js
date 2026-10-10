@@ -13,6 +13,7 @@
   var formatRate = runtime.formatRate;
   var formatValue = runtime.formatValue;
   var getUniFiNetworkEndpoint = runtime.getUniFiNetworkEndpoint;
+  var liveRegionAttributes = runtime.liveRegionAttributes;
   var metricCard = runtime.metricCard;
   var normalizeUnifiSnapshot = runtime.normalizeUnifiSnapshot;
   var optionalNumber = runtime.optionalNumber;
@@ -222,7 +223,7 @@
           (linked || configured ? '<button class="inline-button" type="button" data-action="unifi-disconnect"' + disabled + '>Forget</button>' : '') +
           '<button class="inline-button" type="button" data-action="refresh"' + disabled + '>Refresh</button>' +
         '</div>' +
-        (state.formMessage ? '<div class="network-form-message" data-tone="' + escapeHtml(state.formTone || "muted") + '">' + escapeHtml(state.formMessage) + '</div>' : '') +
+        (state.formMessage ? '<div class="network-form-message" data-tone="' + escapeHtml(state.formTone || "muted") + '"' + liveRegionAttributes(state.formTone === "danger" ? "alert" : "status") + '>' + escapeHtml(state.formMessage) + '</div>' : '') +
       '</form>';
 
     return '' +

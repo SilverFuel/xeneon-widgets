@@ -185,7 +185,7 @@ a.is-touch-pressing,
   place-items: center;
   border-radius: 14px;
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   font-size: 24px;
 }
 
@@ -451,7 +451,7 @@ a.is-touch-pressing,
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   text-transform: uppercase;
   letter-spacing: 0.18em;
   font-size: 0.8rem;
@@ -755,14 +755,23 @@ a.is-touch-pressing,
 }
 
 .dashboard-native-page--readability-high-contrast .dashboard-ambient-canvas,
-.dashboard-native-page--readability-high-contrast .dashboard-ambient-layer,
-.dashboard-native-page--readability-high-contrast .dashboard-stage-shell::before {
-  opacity: 0.04;
+.dashboard-native-page--readability-high-contrast .dashboard-ambient-layer {
+  display: none;
   animation: none;
 }
 
+.dashboard-native-page--readability-high-contrast .dashboard-stage-shell::before,
 .dashboard-native-page--readability-high-contrast .dashboard-stage-shell::after {
-  opacity: 0.16;
+  content: none;
+  animation: none;
+}
+
+.dashboard-native-page--readability-high-contrast :where(
+  [aria-pressed="true"],
+  .is-active,
+  .is-selected
+) {
+  border-color: var(--theme-accent-text);
 }
 
 .dashboard-native-page--readability-visor .dashboard-stage-shell::before {
@@ -853,34 +862,35 @@ a.is-touch-pressing,
   overflow: visible;
 }
 
-.dashboard-native-page--layout-portrait .router-picker,
-.dashboard-native-page--layout-compact .router-picker {
+.dashboard-native-page--layout-portrait .router-rail .router-picker,
+.dashboard-native-page--layout-compact .router-rail .router-picker {
   display: flex;
   align-items: stretch;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0 0 4px;
-  scroll-snap-type: x proximity;
+  scroll-snap-type: none;
   scrollbar-gutter: auto;
   touch-action: pan-x;
 }
 
-.dashboard-native-page--layout-portrait .router-picker__category,
-.dashboard-native-page--layout-compact .router-picker__category {
+.dashboard-native-page--layout-portrait .router-rail .router-picker__category,
+.dashboard-native-page--layout-compact .router-rail .router-picker__category {
   display: contents;
 }
 
-.dashboard-native-page--layout-portrait .router-picker__category > span,
-.dashboard-native-page--layout-compact .router-picker__category > span {
+.dashboard-native-page--layout-portrait .router-rail .router-picker__category > span,
+.dashboard-native-page--layout-compact .router-rail .router-picker__category > span {
   display: none;
 }
 
-.dashboard-native-page--layout-portrait .router-picker__button,
-.dashboard-native-page--layout-compact .router-picker__button {
+.dashboard-native-page--layout-portrait .router-rail .router-picker__button,
+.dashboard-native-page--layout-compact .router-rail .router-picker__button {
   flex: 0 0 auto;
   width: auto;
-  min-width: 150px;
+  min-width: min(150px, 100%);
+  max-width: 100%;
   min-height: 44px;
   scroll-snap-align: start;
 }
@@ -897,6 +907,13 @@ a.is-touch-pressing,
   inset: 8px;
   width: auto;
   max-height: calc(100dvh - 16px);
+}
+
+/* A filtered rail becomes the containing block for fixed descendants. Release
+   it while the compact options overlay is open so the panel uses the viewport. */
+.dashboard-native-page--adaptive.dashboard-native-page--settings-open:is(.dashboard-native-page--layout-portrait, .dashboard-native-page--layout-compact) .router-rail {
+  z-index: 20;
+  backdrop-filter: none;
 }
 
 .dashboard-native-page--layout-portrait .auxora-shell-head,
@@ -998,19 +1015,19 @@ a.is-touch-pressing,
 }
 
 @media (max-width: 1280px) {
-  .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-viewer:has(.inline-widget-shell) {
     grid-template-rows: max-content minmax(0, 1fr);
   }
 
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell),
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell),
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-shell) {
     position: absolute;
     inset: 0;
     overflow: auto;
   }
 
-  .dashboard-native-page--browser .router-inline-widget > .inline-widget-mount > .inline-widget-shell,
-  .dashboard-native-page--browser .router-inline-widget > .inline-widget-shell {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget > .inline-widget-mount > .inline-widget-shell,
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget > .inline-widget-shell {
     height: auto;
     min-height: 0;
     overflow: visible;
@@ -1097,7 +1114,7 @@ a.is-touch-pressing,
 }
 
 .dashboard-native-page--perf .router-rail__copy {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.2;
 }
 
@@ -1311,6 +1328,85 @@ a.is-touch-pressing,
   justify-content: space-between;
 }
 
+.auxora-quick-media {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 8px 16px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+}
+
+.auxora-quick-media__title {
+  grid-column: 1 / -1;
+  font-size: max(13px, 0.8125rem);
+}
+
+.auxora-quick-media__audio,
+.auxora-quick-media__playback {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.auxora-quick-media__volume-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: max(12px, 0.75rem);
+  font-weight: 700;
+}
+
+.auxora-quick-media__volume-label output {
+  font-variant-numeric: tabular-nums;
+}
+
+.auxora-quick-media__volume-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.auxora-quick-media__volume-controls .inline-range {
+  min-width: 0;
+  margin: 0;
+}
+
+.auxora-quick-media button {
+  min-width: 72px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.auxora-quick-media__playback {
+  padding-top: 20px;
+}
+
+.auxora-quick-media__status {
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: max(12px, 0.75rem);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.auxora-quick-media button:disabled {
+  cursor: not-allowed;
+  color: var(--theme-text-muted);
+}
+
+.auxora-quick-media button[aria-pressed="true"] {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-selected-surface);
+  box-shadow: inset 0 -2px 0 var(--theme-accent);
+}
+
 .auxora-quick-scenes,
 .auxora-quick-actions {
   display: grid;
@@ -1344,6 +1440,8 @@ a.is-touch-pressing,
 }
 
 .router-viewer {
+  /* Header content must not widen the implicit grid column and its panel. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
 }
 
@@ -1435,7 +1533,7 @@ a.is-touch-pressing,
 }
 
 .router-diagnostics__state {
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-size: 0.66rem;
@@ -1844,7 +1942,7 @@ input[type="range"]:focus-visible {
   min-height: 30px;
   border-radius: 999px;
   background: rgba(0, 224, 255, 0.14);
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   font-size: 0.66rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -2043,9 +2141,20 @@ input[type="range"]:focus-visible {
 
 .router-viewer__header {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.router-viewer__header > div:first-child {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.router-viewer__header-actions {
+  max-width: 100%;
 }
 
 .router-viewer__title {
@@ -2055,6 +2164,7 @@ input[type="range"]:focus-visible {
 
 .router-viewer__frame-shell {
   position: relative;
+  min-width: 0;
   min-height: 0;
   border: 1px solid var(--color-border);
   border-radius: 24px;
@@ -2160,7 +2270,7 @@ input[type="range"]:focus-visible {
 }
 
 .dashboard-launcher-dock__head span {
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   font-size: 0.64rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -2237,7 +2347,7 @@ input[type="range"]:focus-visible {
   overflow: hidden;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.07);
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   font-size: 0.84rem;
   font-weight: 800;
 }
@@ -2578,7 +2688,7 @@ input[type="range"]:focus-visible {
 
 .inline-kpi span {
   color: var(--color-text-dim);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -3158,7 +3268,7 @@ input[type="range"]:focus-visible {
 }
 
 .hosted-empty-state__eyebrow {
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 0.82rem;
@@ -3667,7 +3777,7 @@ body.dashboard-native-page--adaptive {
   overflow: auto;
 }
 
-@media (max-height: 479px) and (orientation: landscape) {
+@media (max-height: 480px) and (orientation: landscape) {
   .dashboard-native-page--adaptive .dashboard-router-stage {
     gap: 6px;
     padding: 6px;
@@ -3755,6 +3865,34 @@ body.dashboard-native-page--adaptive {
 
   .dashboard-native-page--adaptive .router-viewer__header-actions {
     gap: 6px;
+  }
+
+  .dashboard-native-page--layout-compact .router-viewer__header > div:first-child {
+    min-width: 0;
+  }
+
+  .dashboard-native-page--layout-compact .router-viewer__header-actions {
+    flex-wrap: nowrap;
+  }
+
+  .dashboard-native-page--layout-compact .auxora-quick-toggle {
+    min-width: 112px;
+  }
+
+  .dashboard-native-page--layout-compact .router-viewer__header-actions .dashboard-now-strip {
+    width: 240px;
+    max-width: 240px;
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .dashboard-native-page--layout-compact .dashboard-now-strip__open {
+    min-width: 0;
+    padding: 4px 6px;
+  }
+
+  .dashboard-native-page--layout-compact .dashboard-now-strip > button:not(.dashboard-now-strip__open) {
+    min-width: 44px;
   }
 }
 
@@ -4101,7 +4239,7 @@ body.dashboard-native-page--adaptive {
 
 .dashboard-now-strip__label {
   background: var(--theme-accent-soft);
-  color: var(--theme-accent);
+  color: var(--theme-accent-text);
 }
 
 .dashboard-touch-feedback {
@@ -4208,6 +4346,10 @@ input[type="range"]:focus-visible {
     scroll-behavior: auto;
     transition-duration: 0ms;
   }
+
+  .router-picker__button::before {
+    transition: none;
+  }
 }
 
 @media (forced-colors: active) {
@@ -4281,7 +4423,7 @@ input[type="range"]:focus-visible {
   }
 }
 
-@media (max-height: 479px) and (orientation: landscape) {
+@media (max-height: 480px) and (orientation: landscape) {
   .dashboard-native-page--adaptive .auxora-primary-nav button,
   .dashboard-native-page--adaptive .router-diagnostics {
     min-height: 44px;
@@ -4454,7 +4596,7 @@ input[type="range"]:focus-visible {
 
 /* Product-wide touch and readability contracts. Component styles may change
    appearance, but they must not shrink the effective companion-display target. */
-body.dashboard-native-page :is(.inline-input, .inline-select, .inline-range) {
+body.dashboard-native-page :is(.inline-input, .inline-select, .inline-range, .router-settings__slider) {
   min-block-size: 44px;
 }
 
@@ -4509,7 +4651,10 @@ body.dashboard-native-page :where(
   .inline-input,
   .inline-select,
   .inline-range,
-  .router-settings__slider
+  .router-settings__slider,
+  .router-settings__select,
+  .router-settings__field input,
+  .router-settings__field select
 ):focus-visible {
   outline: 3px solid var(--theme-focus-ring);
   outline-offset: 3px;
@@ -4559,6 +4704,7 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
   align-items: stretch;
   gap: 6px;
   width: auto;
+  min-width: 0;
   max-width: min(720px, 100%);
   margin: 0;
   transform: none;
@@ -4570,6 +4716,7 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
 
 .dashboard-now-strip__open {
   display: grid;
+  flex: 1 1 0;
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto auto;
   gap: 1px 8px;
@@ -4588,8 +4735,31 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
 }
 
 .dashboard-now-strip > button:not(.dashboard-now-strip__open) {
+  flex: 0 0 auto;
   min-width: 56px;
   min-height: 44px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: max(12px, 0.75rem);
+  white-space: nowrap;
+}
+
+/* Live media can appear on any panel. On a phone it needs its own bounded
+   header row, not an intrinsic-width column that pushes panel controls away. */
+.dashboard-native-page--layout-portrait .router-viewer__header {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  .dashboard-native-page--layout-portrait .router-viewer__header-actions {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-native-page--layout-portrait .router-viewer__header-actions .dashboard-now-strip {
+    flex: 1 1 100%;
+  }
 }
 
 .router-viewer__widget-error {
@@ -4598,6 +4768,7 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
 
 .auxora-quick-night {
   display: grid;
+  grid-column: 1 / -1;
   grid-template-columns: auto repeat(3, minmax(88px, 1fr));
   align-items: center;
   gap: 8px;
@@ -4651,11 +4822,46 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
   }
 }
 
+@media (max-width: 560px) {
+  .auxora-quick-media {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .auxora-quick-media__playback {
+    padding-top: 0;
+  }
+}
+
+@media (min-width: 600px) and (max-height: 480px) and (orientation: landscape) {
+  .auxora-quick-drawer {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .auxora-quick-media {
+    padding: 8px 10px;
+  }
+
+  .auxora-quick-scenes {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .auxora-quick-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .auxora-quick-night {
+    grid-template-columns: auto repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* The 2560x720 companion sits farther away than a desktop monitor. Give its
    controls a distance-readable floor without inflating phones or short panels. */
 @media (min-width: 1800px) and (min-height: 600px) {
   body.dashboard-native-page--layout-ultrawide .dashboard-router-stage :where(
     button,
+    summary,
     [role="button"],
     a.inline-button,
     a.widget-link,
@@ -4775,6 +4981,9 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
     .inline-list-copy,
     .inline-list-meta,
     .inline-field > span,
+    .auxora-quick-media__title,
+    .auxora-quick-media__volume-label,
+    .auxora-quick-media__status,
     .dashboard-now-strip small,
     .dashboard-now-strip__label
   ) {
@@ -4804,5 +5013,317 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
 @media (min-width: 961px) {
   .dashboard-native-page--adaptive .auxora-primary-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A compact landscape rail spans the screen, so keep navigation on one row
+   and reserve the second row for panel selection and options. Narrow sidebars
+   and portrait layouts retain their existing, more readable navigation. */
+@media (min-width: 720px) and (max-height: 480px) and (orientation: landscape) {
+  .dashboard-native-page--adaptive.dashboard-native-page--layout-compact .router-rail {
+    grid-template-rows: auto auto;
+  }
+
+  .dashboard-native-page--adaptive.dashboard-native-page--layout-compact .auxora-primary-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dashboard-native-page--adaptive.dashboard-native-page--layout-compact .router-rail__lower {
+    grid-row: 2;
+  }
+}
+
+/* Favorites stay within reach; the complete catalog only takes space when open. */
+.dashboard-favorites-bar {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.router-favorites {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-border-strong) transparent;
+}
+
+.router-favorites .router-picker__button {
+  grid-column: auto;
+}
+
+.router-favorites .router-picker__button:focus-visible {
+  outline-offset: -3px;
+}
+
+.auxora-panels-toggle,
+.auxora-panels-drawer__head button,
+.router-picker__pin {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+  color: var(--theme-text);
+  font: inherit;
+  font-size: max(12px, 0.75rem);
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.auxora-panels-toggle {
+  white-space: nowrap;
+}
+
+.auxora-panels-toggle:hover,
+.auxora-panels-drawer__head button:hover,
+.router-picker__pin:hover {
+  border-color: var(--theme-border-strong);
+  background: var(--theme-hover-surface);
+}
+
+.auxora-panels-toggle:active,
+.auxora-panels-drawer__head button:active,
+.router-picker__pin:active {
+  background: var(--theme-pressed-surface);
+}
+
+.router-picker__pin[aria-pressed="true"] {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-selected-surface);
+  box-shadow: inset 0 -2px 0 var(--theme-accent);
+}
+
+.auxora-panels-toggle:focus-visible,
+.auxora-panels-drawer__head button:focus-visible,
+.router-picker__pin:focus-visible {
+  outline: 3px solid var(--theme-focus-ring);
+  outline-offset: 3px;
+}
+
+.auxora-panels-scrim {
+  position: fixed;
+  z-index: 29;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(2px);
+}
+
+.auxora-panels-drawer {
+  position: fixed;
+  z-index: 30;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 8px;
+  width: min(640px, calc(100vw - 32px));
+  height: min(720px, calc(100dvh - 32px));
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  border: 1px solid var(--theme-accent-border);
+  border-radius: 20px;
+  background: rgba(var(--theme-surface-elevated-rgb), 0.97);
+  box-shadow: var(--theme-panel-shadow);
+  backdrop-filter: blur(var(--theme-panel-blur));
+}
+
+.auxora-panels-drawer.is-hidden,
+.auxora-panels-scrim.is-hidden {
+  display: none;
+}
+
+.auxora-panels-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auxora-panels-drawer__copy,
+.auxora-panels-drawer__feedback {
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: max(12px, 0.75rem);
+  line-height: 1.35;
+}
+
+.auxora-panels-drawer .router-picker {
+  padding: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+
+.router-picker__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.router-picker__item .router-picker__button {
+  grid-column: auto;
+  min-width: 0;
+}
+
+.router-picker__item .router-picker__title {
+  overflow-wrap: anywhere;
+}
+
+.router-picker__pin {
+  min-width: 76px;
+}
+
+.dashboard-native-page--layout-portrait .dashboard-favorites-bar,
+.dashboard-native-page--layout-compact .dashboard-favorites-bar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.dashboard-native-page--layout-portrait .router-favorites,
+.dashboard-native-page--layout-compact .router-favorites {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x;
+}
+
+.dashboard-native-page--layout-portrait .router-favorites .router-picker__button,
+.dashboard-native-page--layout-compact .router-favorites .router-picker__button {
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  width: max-content;
+  min-width: 44px;
+  max-width: 100%;
+  min-height: 54px;
+  padding: 6px;
+}
+
+.dashboard-native-page--layout-portrait .router-favorites .router-picker__title,
+.dashboard-native-page--layout-compact .router-favorites .router-picker__title {
+  flex: 0 0 auto;
+  font-size: max(14px, 0.875rem);
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-native-page--layout-portrait .router-favorites .router-picker__meta,
+.dashboard-native-page--layout-compact .router-favorites .router-picker__meta {
+  min-height: 16px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: max(12px, 0.75rem);
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .auxora-panels-drawer {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    height: min(720px, calc(100dvh - 16px));
+    padding: 12px;
+  }
+
+  .router-picker__item .router-picker__button {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
+@media (forced-colors: active) {
+  .auxora-quick-drawer,
+  .auxora-quick-media {
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .auxora-quick-media__status {
+    color: CanvasText;
+  }
+
+  .auxora-quick-media button:disabled {
+    color: GrayText;
+    border-color: GrayText;
+  }
+
+  .auxora-quick-media button[aria-pressed="true"] {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+    box-shadow: none;
+  }
+
+  .auxora-quick-media .inline-range {
+    opacity: 1;
+    forced-color-adjust: auto;
+  }
+
+  .auxora-quick-media .inline-range::-webkit-slider-runnable-track {
+    background: CanvasText;
+  }
+
+  .auxora-quick-media .inline-range::-webkit-slider-thumb {
+    background: Highlight;
+    border: 1px solid Canvas;
+    box-shadow: none;
+  }
+
+  .auxora-quick-media .inline-range::-moz-range-track {
+    background: CanvasText;
+  }
+
+  .auxora-quick-media .inline-range::-moz-range-thumb {
+    background: Highlight;
+    border: 1px solid Canvas;
+    box-shadow: none;
+  }
+
+  .auxora-panels-drawer {
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .auxora-panels-toggle,
+  .auxora-panels-drawer__head button,
+  .router-picker__pin {
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+    box-shadow: none;
+  }
+
+  .router-picker__pin[aria-pressed="true"] {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
   }
 }

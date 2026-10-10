@@ -1862,7 +1862,7 @@
               }).join("") : '<div class="inline-empty"><strong>No diagnostics loaded</strong><span>Refresh to read the latest sanitized local events.</span></div>') + '</div>' +
             '</div>' +
           '</details>' +
-          '<details class="product-privacy-details" data-ui-key="privacy-reset"' + (state.confirmReset ? " open" : "") + '>' +
+          '<details class="product-privacy-details" data-ui-key="privacy-reset" data-preserve-open' + (state.confirmReset ? " open" : "") + '>' +
             '<summary><span><strong>Backup, restore, and reset</strong><small>Copy portable settings, restore a backup, or reset this installation.</small></span></summary>' +
             '<div class="product-privacy-details__body">' +
               '<div class="inline-actions">' +
@@ -1872,7 +1872,7 @@
                 '<button class="inline-button" type="button" data-action="reset-all-local-data">' + (state.confirmReset ? "Confirm reset" : "Reset all app data") + '</button>' +
                 '<a class="inline-button" href="/support.html" target="_blank" rel="noreferrer">Support</a>' +
               '</div>' +
-              '<label class="inline-field"><span>Restore presentation and Modes</span><textarea class="inline-input" data-settings-import rows="4" placeholder="Paste an Auxora backup. Passwords, private connections, app paths, display identifiers, and logs are never included."></textarea></label>' +
+              '<label class="inline-field"><span>Restore presentation and Modes</span><textarea class="inline-input" data-ui-key="privacy-settings-import" data-settings-import rows="4" placeholder="Paste an Auxora backup. Passwords, private connections, app paths, display identifiers, and logs are never included."></textarea></label>' +
               '<div><div class="metric-label">Current portable settings</div><div class="product-code-preview">' + escapeHtml(JSON.stringify(settings, null, 2).slice(0, 520)) + '</div></div>' +
             '</div>' +
           '</details>' +

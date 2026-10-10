@@ -6,54 +6,112 @@
   overflow: hidden;
 }
 
-@media (max-width: 1280px) {
-  .dashboard-native-page--browser .router-viewer:has(.network-command-shell) {
+@media (max-width: 2047px) {
+  body.dashboard-native-page .router-viewer:has(.network-command-shell) {
     grid-template-rows: max-content minmax(0, 1fr);
   }
 
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .network-command-shell),
-  .dashboard-native-page--browser .router-inline-widget:has(> .network-command-shell) {
+  body.dashboard-native-page .router-inline-widget:has(> .inline-widget-mount > .network-command-shell),
+  body.dashboard-native-page .router-inline-widget:has(> .network-command-shell) {
     position: absolute;
     inset: 0;
     overflow: auto;
   }
 
-  .dashboard-native-page--browser .network-command-shell {
+  body.dashboard-native-page .network-command-shell {
     grid-template-rows: auto;
     overflow: visible;
   }
 
-  .dashboard-native-page--browser .network-command-shell .network-command-grid {
+  body.dashboard-native-page .network-command-shell .network-command-grid {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
     gap: 8px;
     overflow: visible;
   }
 
-  .dashboard-native-page--browser .network-command-shell .network-quality-card,
-  .dashboard-native-page--browser .network-command-shell .network-kpi-grid,
-  .dashboard-native-page--browser .network-command-shell .network-adapter-card,
-  .dashboard-native-page--browser .network-command-shell .network-unifi-card,
-  .dashboard-native-page--browser .network-command-shell .network-list-card--clients,
-  .dashboard-native-page--browser .network-command-shell .network-list-card--aps {
+  body.dashboard-native-page .network-command-shell .network-quality-card,
+  body.dashboard-native-page .network-command-shell .network-kpi-grid,
+  body.dashboard-native-page .network-command-shell .network-adapter-card,
+  body.dashboard-native-page .network-command-shell .network-unifi-card,
+  body.dashboard-native-page .network-command-shell .network-list-card--clients,
+  body.dashboard-native-page .network-command-shell .network-list-card--aps {
     grid-column: auto;
     grid-row: auto;
     overflow: visible;
   }
 
-  .dashboard-native-page--browser .network-command-shell .network-kpi-grid,
-  .dashboard-native-page--browser .network-command-shell .network-unifi-kpis {
+  body.dashboard-native-page .network-command-shell .network-kpi-grid,
+  body.dashboard-native-page .network-command-shell .network-unifi-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .dashboard-native-page--browser .network-command-shell .network-path-grid {
+  body.dashboard-native-page .network-command-shell .network-path-grid {
     grid-template-columns: 1fr;
   }
 
-  .dashboard-native-page--browser .network-command-shell .network-compact-list {
+  body.dashboard-native-page .network-command-shell .network-compact-list {
     overflow: visible;
   }
+}
+
+body.dashboard-native-page .router-viewer:has(
+  .router-inline-widget[data-card-size="compact"] .network-command-shell
+) {
+  grid-template-rows: max-content minmax(0, 1fr);
+}
+
+body.dashboard-native-page .router-inline-widget[data-card-size="compact"]:has(
+  > .inline-widget-mount > .network-command-shell
+),
+body.dashboard-native-page .router-inline-widget[data-card-size="compact"]:has(
+  > .network-command-shell
+) {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+body.dashboard-native-page .router-inline-widget[data-card-size="compact"] .network-command-shell {
+  grid-template-rows: auto;
+  overflow: visible;
+}
+
+body.dashboard-native-page .router-inline-widget[data-card-size="compact"] .network-command-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+  gap: 8px;
+  overflow: visible;
+}
+
+body.dashboard-native-page .router-inline-widget[data-card-size="compact"] :is(
+  .network-quality-card,
+  .network-kpi-grid,
+  .network-adapter-card,
+  .network-unifi-card,
+  .network-list-card--clients,
+  .network-list-card--aps
+) {
+  grid-column: auto;
+  grid-row: auto;
+  overflow: visible;
+}
+
+body.dashboard-native-page .router-inline-widget[data-card-size="compact"] :is(
+  .network-kpi-grid,
+  .network-unifi-kpis
+) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body.dashboard-native-page .router-inline-widget[data-card-size="compact"] .network-path-grid {
+  grid-template-columns: 1fr;
+}
+
+body.dashboard-native-page .router-inline-widget[data-card-size="compact"] .network-compact-list {
+  overflow: visible;
 }
 
 .network-command-grid {

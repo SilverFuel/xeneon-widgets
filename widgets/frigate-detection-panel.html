@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Frigate Detection Panel</title>
+  <link rel="stylesheet" href="../css/theme.css">
   <style>
     :root {
       color-scheme: dark;
@@ -180,7 +181,7 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     .snapshot-frame {
@@ -298,7 +299,7 @@
     [data-size="small"] .status {
       min-height: 34px;
       padding: 8px 10px;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     [data-size="medium"] .panel,
@@ -320,6 +321,8 @@
       align-items: flex-start;
     }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body>
   <main class="widget">

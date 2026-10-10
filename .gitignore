@@ -38,6 +38,7 @@ yarn-error.log*
 coverage/
 
 # Native app build and publish output
+/.codex-sdk-*/
 bin/
 obj/
 publish/

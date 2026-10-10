@@ -21,6 +21,12 @@ public static class Program
     private static bool _ownsInstanceMutex;
     internal static string ShowDisplayEventName => $"{ShowDisplayEventBaseName}{InstanceScopeSuffix}";
     internal static AppLaunchOptions LaunchOptions { get; private set; } = AppLaunchOptions.Default;
+    internal static bool ShouldCreateTrayIcon => ResolveTrayIconCreation(
+        Environment.GetEnvironmentVariable("AUXORA_DISABLE_TRAY_ICON_FOR_TESTS"),
+        InstanceScopeSuffix);
+    internal static bool ShouldSuppressWindowForTests => ResolveWindowSuppression(
+        Environment.GetEnvironmentVariable("AUXORA_SUPPRESS_WINDOW_FOR_TESTS"),
+        InstanceScopeSuffix);
 
     [STAThread]
     public static void Main(string[] args)
@@ -107,5 +113,37 @@ public static class Program
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(testInstanceId));
         return $"-test-{Convert.ToHexString(hash.AsSpan(0, 8))}";
+    }
+
+    internal static bool ResolveTrayIconCreation(string? disableTrayIconForTests, string isolatedTestInstanceSuffix)
+    {
+        if (!string.Equals(disableTrayIconForTests, "1", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(isolatedTestInstanceSuffix))
+        {
+            throw new InvalidOperationException(
+                "Disabling the Auxora tray icon is allowed only for an isolated automated test instance.");
+        }
+
+        return false;
+    }
+
+    internal static bool ResolveWindowSuppression(string? suppressWindowForTests, string isolatedTestInstanceSuffix)
+    {
+        if (!string.Equals(suppressWindowForTests, "1", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(isolatedTestInstanceSuffix))
+        {
+            throw new InvalidOperationException(
+                "Suppressing the Auxora window is allowed only for an isolated automated test instance.");
+        }
+
+        return true;
     }
 }

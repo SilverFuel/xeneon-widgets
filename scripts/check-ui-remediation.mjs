@@ -11,6 +11,7 @@ function assert(condition, message) {
 const dashboard = read("js/dashboard.js");
 const html = read("dashboard.html");
 const css = read("css/widgets.css");
+const themeCss = read("css/theme.css");
 const widgetCore = read("js/widget-core.js");
 const productCss = read("css/widgets/product.css");
 const gameCss = read("css/widgets/game-mode.css");
@@ -37,6 +38,10 @@ const standaloneCalendar = read("widgets/calendar-widget.html");
 const standaloneNetwork = read("widgets/network-widget.html");
 const standaloneHue = read("widgets/philips-hue-panel.html");
 const standaloneWeather = read("widgets/weather-widget.html");
+const standaloneAutomation = read("widgets/home-automation-panel.html");
+const standaloneNas = read("widgets/nas-storage-monitor.html");
+const standalonePlex = read("widgets/plex-server-monitor.html");
+const audioStyles = read("css/widgets/audio.css");
 const appConfig = read("app/Models/AppConfig.cs");
 const configStore = read("app/Infrastructure/ConfigStore.cs");
 const configController = read("app/Controllers/ConfigController.cs");
@@ -80,10 +85,24 @@ assert(!/Inline migration|still being converted|Panel still moving off iframe|re
 assert(/Panel unavailable/.test(inline) && /Panel renderer unavailable/.test(inline), "renderer fallback must provide a truthful recovery state");
 
 assert(!/layout-(?:portrait|compact)[\s\S]{0,180}\.router-rail__lower[\s\S]{0,40}display:\s*none/.test(css), "compact navigation must not hide secondary panels");
-assert(/router-rail__lower[\s\S]*?overflow-x:\s*auto/.test(css), "compact secondary navigation must scroll horizontally");
+assert(/layout-compact \.router-favorites\s*\{[^}]*overflow-x:\s*auto;[^}]*touch-action:\s*pan-x;/.test(css), "compact favorites must remain horizontally scrollable with touch");
+assert(/dashboard-favorites-bar\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/.test(css), "All panels must keep a reserved position outside the scrolling favorites");
+assert(/id="dashboard-favorites"/.test(html) && /id="dashboard-panels-toggle"[^>]*aria-controls="dashboard-panels-drawer"/.test(html), "favorites must retain an accessible All panels entry point");
+assert(/id="dashboard-panels-drawer"[^>]*role="dialog"[^>]*aria-modal="true"/.test(html) && /id="dashboard-widget-picker"/.test(html), "all panels must remain accessible from their own modal catalog");
+assert(/\.auxora-panels-drawer \.router-picker\s*\{[^}]*overflow-y:\s*auto;[^}]*touch-action:\s*pan-y;/.test(css), "the full catalog must scroll vertically with touch");
 assert(/router-viewer__header-actions[\s\S]*?dashboard-quick-toggle/.test(html), "Quick controls must occupy reserved viewer chrome");
 assert(/role="dialog"[\s\S]*?aria-modal="true"/.test(html) && /event\.key === "Escape"/.test(dashboard), "Quick controls must implement dialog keyboard behavior");
 assert(/outline:\s*3px solid var\(--theme-focus-ring\)/.test(css) && /auxora-primary-nav/.test(css), "primary navigation must use themed focus rings");
+assert(/--theme-accent-text:\s*var\(--theme-accent\)/.test(themeCss), "themes must expose a semantic accent foreground token");
+assert(/contrastSafeAccentTextColor\(accent, getThemeSurfaceColors\(theme\)\)/.test(dashboard), "custom accents must derive a contrast-safe foreground without replacing the chosen accent");
+assert(/return blackContrast >= whiteContrast \? "#000000" : "#ffffff";/.test(dashboard), "on-accent text must compare and return the same black and white candidates");
+assert(!/(?:^|\n)\s*color:\s*var\(--(?:color|theme)-accent\);/.test(css), "accent-colored foregrounds must use the contrast-safe accent text token");
+assert(/dashboard-native-page--readability-high-contrast\s*\{[\s\S]*?--theme-text:\s*#ffffff;[\s\S]*?--theme-text-muted:\s*#e6edf3;[\s\S]*?--theme-border:\s*rgba\(255, 255, 255, 0\.4\);[\s\S]*?--theme-focus-ring:\s*#ffffff;[\s\S]*?--theme-panel-shadow:\s*none;/.test(themeCss), "High contrast must strengthen semantic text, boundaries, focus, and effects rather than only dim decoration");
+assert(/reducedMotionQuery\.addEventListener\("change", handleReducedMotionChange\)/.test(dashboard) && /canvas\.dataset\.ambientMotion = "paused"/.test(dashboard), "ambient graphics must stop when reduced motion changes at runtime");
+assert(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.router-picker__button::before\s*\{[\s\S]*?transition:\s*none/.test(css), "picker pseudo-element motion must stop for reduced motion");
+assert(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.product-card--button::after,[\s\S]*?\.product-swatch::after,[\s\S]*?transition:\s*none/.test(productCss), "product pseudo-element motion must stop for reduced motion");
+assert(/\.audio-album-carousel:focus-visible\s*\{[\s\S]*?outline:\s*3px solid var\(--theme-focus-ring\)/.test(audioCss), "keyboard audio carousel must expose the semantic 3px focus ring");
+assert(/body\.dashboard-native-page :where\([^{}]*\.router-settings__field input,[^{}]*\.router-settings__field select\s*\):focus-visible\s*\{[^{}]*outline:\s*3px solid var\(--theme-focus-ring\)/.test(css), "router settings controls must receive the shared visible focus ring");
 assert(/min-(?:block-size|height):\s*44px/.test(css), "touch controls must enforce the 44px minimum");
 assert(/\.inline-button\s*\{[\s\S]*?min-width:\s*44px/.test(css), "compact inline actions must enforce the 44px horizontal touch minimum");
 assert(/\.system-health-card span,[\s\S]*?font-size:\s*max\(12px, 0\.75rem\)/.test(systemCss), "System Monitor supporting text must remain at least 12px");
@@ -161,7 +180,7 @@ for (const [name, source] of [["Actions", actions], ["Home integrations", homela
 assert(!/container\.innerHTML\s*=/.test(product), "product surfaces must never replace a live container through innerHTML");
 assert((product.match(/patchStableDom\(container, productShell\(/g) || []).length >= 10, "Every interactive product renderer must preserve focused controls across redraws");
 assert(/function patchDashboardDom/.test(dashboard) && /patchStableDom/.test(dashboard), "dynamic dashboard chrome must share stable DOM reconciliation");
-assert(/function postJson\(url, body, timeoutMs\)[\s\S]*?headers\["X-Xenon-Session"\] = window\.XenonSessionToken/.test(dashboard), "dashboard background mutations must send the native session token explicitly");
+assert(/function postJson\(url, body, timeoutMs, options\)[\s\S]*?headers\["X-Xenon-Session"\] = window\.XenonSessionToken/.test(dashboard), "dashboard background mutations must send the native session token explicitly");
 assert(!/(?:pickerNode|launcherDockNode|scenesNode|inlineViewerNode|settingsNode)\.innerHTML\s*=/.test(dashboard), "picker, launcher dock, quick Modes, settings, and inline teardown must not replace focused DOM");
 assert(!/template\.innerHTML\s*=/.test(dashboard + inline) && (dashboard.match(/createContextualFragment/g) || []).length >= 1 && (inline.match(/createContextualFragment/g) || []).length >= 1, "dashboard HTML parsing must stay detached from live innerHTML mutation");
 assert(/settingsRenderInProgress[\s\S]*?function replaceSettingsMarkup[\s\S]*?patchDashboardDom\(settingsNode, html\)/.test(dashboard), "settings redraws must prevent focus-triggered reentrant DOM replacement");
@@ -177,6 +196,25 @@ assert(/params\.get\("endpoint"\) \|\| "\/api\/network"/.test(standaloneNetwork)
 assert(/params\.get\("endpoint"\) \|\| "\/api\/system"/.test(standaloneSystem) && /params\.get\("gpuPowerEndpoint"\) \|\| "\/api\/gpu-power"/.test(standaloneSystem), "standalone System Monitor must use native system and GPU telemetry by default");
 assert(!/current\.deviceType \|\| current\.id/.test(standaloneAudio) && /label\(current\.deviceType, "Windows default device"\)/.test(standaloneAudio), "standalone Audio must never expose a raw Windows device identifier as user-facing copy");
 assert(/\.action-button\s*\{\s*min-height:\s*44px;/.test(standaloneHue), "standalone Hue actions must meet the 44px touch-target minimum");
+assert(/\.action-button:focus-visible,[\s\S]*?\.toggle-button:focus-visible[\s\S]*?outline:\s*3px solid #7defff/.test(standaloneHue), "standalone Hue controls must retain a 3px keyboard focus indicator");
+assert(/\.field input:focus-visible,[\s\S]*?\.field select:focus-visible[\s\S]*?outline:\s*3px solid #7defff/.test(standaloneSetup), "standalone Diagnostics fields must retain a 3px keyboard focus indicator");
+assert(/id="volume"[^>]*aria-label="Master volume"/.test(standaloneAudio), "standalone Audio master-volume slider must expose an accessible name");
+assert(/\.dashboard-native-page--adaptive \.audio-media-controls \.inline-button\s*\{[\s\S]*?font-size:\s*max\(15px,\s*0\.9rem\)/.test(audioStyles), "wide Audio transport controls must retain 15px distance-readable labels");
+assert(/data-action="brightness"[^>]*aria-label="Light brightness for ' \+ escapeHtml\(light\.name\)/.test(standaloneAutomation), "standalone Home Automation brightness sliders must include the light name");
+assert(/data-action="brightness-light"[^>]*aria-label="Light brightness for ' \+ escapeHtml\(light\.name\)/.test(standaloneHue)
+  && /data-action="brightness-group"[^>]*aria-label="Room brightness for ' \+ escapeHtml\(group\.name\)/.test(standaloneHue), "standalone Hue brightness sliders must include the light or room name");
+assert(/id="download-detail"[^>]*>Live throughput<\/div>/.test(standaloneNetwork)
+  && /estimated:\s*Boolean\(connection\)/.test(standaloneNetwork)
+  && /download:\s*downlink === null \? null : downlink \* 1000 \* 1000 \/ 8/.test(standaloneNetwork)
+  && /snapshot\.estimated \? "Browser connection estimate"/.test(standaloneNetwork)
+  && /snapshot\.estimated \? "Not reported by browser"/.test(standaloneNetwork), "standalone Network must distinguish browser connection estimates from live throughput");
+for (const [name, source] of [["Home Automation", standaloneAutomation], ["NAS", standaloneNas], ["Plex", standalonePlex]]) {
+  assert(/html\[data-size="large"\][\s\S]*?overflow-y:\s*auto/.test(source)
+    && /\[data-size="large"\] body,[\s\S]*?height:\s*auto;[\s\S]*?overflow:\s*visible/.test(source)
+    && /\[data-size="large"\] \.widget,[\s\S]*?height:\s*auto;[\s\S]*?min-height:\s*calc\(100vh - 20px\)/.test(source)
+    && /\[data-size="large"\] \.layout,[\s\S]*?height:\s*auto/.test(source), `${name} responsive standalone layout must grow and remain vertically scrollable`);
+}
+assert(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.toggle-button,[\s\S]*?\.scene-button[\s\S]*?transition:\s*none/.test(standaloneAutomation), "standalone Home Automation controls must honor reduced motion");
 for (const [name, source] of [["Calendar", standaloneCalendar], ["System Monitor", standaloneSystem], ["Weather", standaloneWeather]]) {
   assert(!/fonts\.googleapis|fonts\.gstatic/.test(source), `${name} standalone fallback must not depend on CSP-blocked remote fonts`);
 }

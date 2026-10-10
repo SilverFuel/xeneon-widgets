@@ -74,6 +74,7 @@ Auxora now includes:
 - normal setup that hides advanced connector plumbing
 - adaptive Work, Gaming, Media, and Home Modes with manual and automatic switching; Night remains a separate display variant
 - Home, Modes, Apps & Controls, and Settings navigation
+- up to four favorite shortcuts, with the full catalog in All panels
 - responsive compact, standard, ultrawide, and portrait layouts
 - Smart Glance briefing and meaningful local alerts
 - an explicit Phone Remote unavailable state; this beta opens no phone-control listener
@@ -94,6 +95,10 @@ Auxora now includes:
 - app data reset from setup/privacy and from the uninstall cleanup shortcut
 
 The update and streaming panels remain beta foundations. Streaming accepts only loopback OBS WebSocket addresses and checks reachability; it does not authenticate to OBS or send commands. Signed manifest inspection is implemented, but third-party code loading and execution are disabled in this beta even if a manifest passes inspection. Phone Remote is also not included. Before charging customers, sign the Windows release, complete authenticated OBS commands, and test the installer on clean hardware.
+
+Favorites start with System, Audio & Media, Network, and PC actions where supported. Open **All panels** to select any available panel or use **Remove** and **Keep** to change the four shortcuts. Favorites stay the same across Modes and are saved on this dashboard, separately from portable backups. Narrow screens allow the favorites row to scroll; **All panels** stays visible. Escape or Close dismisses the catalog and returns keyboard focus to its opener.
+
+**Quick controls** adjusts system volume, mute, and playback without leaving the current panel. The volume slider sends a change when released, not on every movement. Audio and playback controls enable independently when the local service reports fresh, supported state; unavailable controls explain why. The drawer reads state only while open and visible, never retries a command automatically, and keeps track titles and app names out of this compact view. Modes, Night, and full-panel shortcuts remain in the same drawer.
 
 Privacy & Backup exports Modes plus portable presentation settings such as theme, readability, layout order, pinned and hidden panels, card sizes, per-Mode layouts, and built-in pack selection. Credentials, integration and OBS endpoints, weather location, launcher paths, display identifiers, and logs remain excluded. Restore validates the browser-side presentation fields before changing native configuration and keeps the newest user-action result visible when diagnostics refresh in the background.
 

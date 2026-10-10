@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Auxora Setup Guide</title>
+  <link rel="stylesheet" href="../css/theme.css">
   <style>
     :root {
       color-scheme: dark;
@@ -137,7 +138,7 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      font-size: 0.68rem;
+      font-size: 0.75rem;
     }
 
     h1 {
@@ -170,7 +171,7 @@
 
     .detail,
     .empty-copy {
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     .overview-strip {
@@ -195,7 +196,7 @@
     .overview-chip span {
       display: block;
       margin-top: 4px;
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -209,14 +210,14 @@
       border: 1px solid transparent;
       background: rgba(255, 255, 255, 0.06);
       white-space: nowrap;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       flex-shrink: 0;
     }
 
     .pill {
       min-height: 24px;
       padding: 4px 9px;
-      font-size: 0.66rem;
+      font-size: 0.75rem;
     }
 
     .tone-good {
@@ -238,7 +239,7 @@
     }
 
     .button {
-      min-height: 34px;
+      min-height: 44px;
       padding: 0 12px;
       border: 0;
       border-radius: 12px;
@@ -336,14 +337,14 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      font-size: 0.66rem;
+      font-size: 0.75rem;
       font-weight: 600;
     }
 
     .field input,
     .field select {
       width: 100%;
-      min-height: 36px;
+      min-height: 44px;
       padding: 0 11px;
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -358,6 +359,14 @@
       box-shadow: 0 0 0 1px rgba(0, 224, 255, 0.12);
     }
 
+    .field input:focus-visible,
+    .field select:focus-visible {
+      border-color: #7defff;
+      box-shadow: none;
+      outline: 3px solid #7defff;
+      outline-offset: 3px;
+    }
+
     .snippet-box,
     .url-box {
       padding: 10px 12px;
@@ -365,7 +374,7 @@
       border-radius: 14px;
       background: rgba(7, 14, 22, 0.66);
       color: #c8f7ff;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       line-height: 1.38;
       white-space: pre-wrap;
       word-break: break-word;
@@ -379,7 +388,7 @@
 
     .compact-note {
       color: var(--muted);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       line-height: 1.35;
     }
 
@@ -393,8 +402,40 @@
       .form-row {
         grid-template-columns: 1fr;
       }
+
+      .layout {
+        grid-auto-rows: max-content;
+        align-content: start;
+        overflow: auto;
+        padding-right: 4px;
+      }
+
+      .column {
+        grid-auto-rows: max-content;
+        min-height: auto;
+      }
+
+      .column--main {
+        grid-template-rows: max-content;
+      }
+
+      .panel {
+        min-height: auto;
+      }
+
+      .panel--fill {
+        grid-template-rows: auto max-content auto;
+      }
+
+      .row-list,
+      .optional-list {
+        overflow: visible;
+        padding-right: 0;
+      }
     }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body>
   <main class="widget">

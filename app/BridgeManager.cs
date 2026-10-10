@@ -9,6 +9,7 @@ namespace XenonEdgeHost;
 public sealed class BridgeManager : IDisposable
 {
     private const string SessionHeaderName = "X-Xenon-Session";
+    private const int MaxConcurrentRequestCount = 8;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -374,6 +375,7 @@ public sealed class BridgeManager : IDisposable
 
         if (listener is null)
         {
+            cancellation?.Dispose();
             return;
         }
 
@@ -390,6 +392,10 @@ public sealed class BridgeManager : IDisposable
         catch (Exception error)
         {
             _logger.Error("Error while stopping native dashboard server.", error);
+        }
+        finally
+        {
+            cancellation?.Dispose();
         }
 
         BridgeStopped?.Invoke("Native dashboard server stopped.");
@@ -454,6 +460,10 @@ public sealed class BridgeManager : IDisposable
 
     private async Task RunServerAsync(HttpListener listener, CancellationToken cancellationToken)
     {
+        await using var requests = new BoundedTaskDispatcher(
+            MaxConcurrentRequestCount,
+            error => _logger.Error("Unhandled native dashboard request failure.", error));
+
         try
         {
             while (listener.IsListening && !cancellationToken.IsCancellationRequested)
@@ -472,13 +482,35 @@ public sealed class BridgeManager : IDisposable
                     break;
                 }
 
-                _ = Task.Run(() => HandleRequestAsync(context, cancellationToken), cancellationToken);
+                var acceptedContext = context;
+                bool dispatched;
+                try
+                {
+                    dispatched = await requests.DispatchAsync(
+                        token => HandleRequestAsync(acceptedContext, token),
+                        cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    AbortResponse(acceptedContext.Response);
+                    break;
+                }
+
+                if (!dispatched)
+                {
+                    AbortResponse(acceptedContext.Response);
+                    break;
+                }
             }
         }
         catch (Exception error)
         {
             _logger.Error("Native dashboard server loop failed.", error);
             BridgeStopped?.Invoke("Native dashboard server stopped unexpectedly.");
+        }
+        finally
+        {
+            await requests.StopAsync();
         }
     }
 
@@ -541,6 +573,10 @@ public sealed class BridgeManager : IDisposable
             {
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            AbortResponse(response);
+        }
         catch (InvalidOperationException error)
         {
             _logger.Warn($"Request validation failed: {error.Message}");
@@ -570,6 +606,17 @@ public sealed class BridgeManager : IDisposable
             {
                 LogRequestBoundary(requestId, method, path, response.StatusCode, Stopwatch.GetElapsedTime(startedAt));
             }
+        }
+    }
+
+    private static void AbortResponse(HttpListenerResponse response)
+    {
+        try
+        {
+            response.Abort();
+        }
+        catch
+        {
         }
     }
 

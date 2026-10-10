@@ -16,9 +16,16 @@
   var lastPrimaryWidgetStorageKey = "xeneon-dashboard-last-widget";
   var primaryDestinationStorageKey = "auxora-dashboard-destination";
   var destinationPanelsStorageKey = "auxora-dashboard-panels-v1";
+  var favoritesStorageKey = "auxora-dashboard-favorites-v1";
+  var defaultFavoriteWidgetIds = ["system", "audio", "network", "quick-actions"];
+  var favoriteWidgetIds = defaultFavoriteWidgetIds.slice();
   var nowStripModeStorageKey = "auxora-now-strip-mode";
   var settingsStorageKey = "xeneon-dashboard-settings";
   var pickerNode = null;
+  var favoritesNode = null;
+  var panelsDrawerNode = null;
+  var panelsToggleNode = null;
+  var panelsDrawerOpener = null;
   var inlineViewerNode = null;
   var loadingNode = null;
   var settingsNode = null;
@@ -37,6 +44,7 @@
   var quickDrawerNode = null;
   var quickToggleNode = null;
   var quickDrawerOpener = null;
+  var quickControls = null;
   var pendingSettingsWidgetId = "";
   var pendingSettingsRenderTimerId = 0;
   var settingsRenderInProgress = false;
@@ -367,7 +375,8 @@
   function initAmbientGraphics() {
     var canvas = document.getElementById("dashboard-ambient-canvas");
     var shell = document.getElementById("dashboard-stage-shell");
-    var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var reducedMotionQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+    var reducedMotion = Boolean(reducedMotionQuery && reducedMotionQuery.matches);
     var context;
     var width = 0;
     var height = 0;
@@ -375,6 +384,8 @@
     var lanes = [];
     var pulses = [];
     var rafId = 0;
+    var frameTimerId = 0;
+    var ambientFrameIntervalMs = 1000 / 15;
     var ambientGraphicsEnabled = getPerformanceBudget() !== "battery" && getAnimationIntensityPercent() > 0;
 
     if (!ambientGraphicsEnabled && canvas) {
@@ -382,7 +393,7 @@
       return;
     }
 
-    if (!canvas || !shell || perfMode || reducedMotion || getAnimationIntensityPercent() === 0) {
+    if (!canvas || !shell || perfMode || getAnimationIntensityPercent() === 0) {
       return;
     }
 
@@ -452,7 +463,42 @@
       return "rgba(255, 255, 255, " + alpha + ")";
     }
 
+    function pauseAnimation() {
+      if (frameTimerId) {
+        window.clearTimeout(frameTimerId);
+        frameTimerId = 0;
+      }
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      canvas.dataset.ambientMotion = "paused";
+    }
+
+    function scheduleFrame(immediate) {
+      if (document.hidden || reducedMotion || frameTimerId || rafId) {
+        return;
+      }
+
+      canvas.dataset.ambientMotion = "running";
+      frameTimerId = window.setTimeout(function () {
+        frameTimerId = 0;
+        if (document.hidden || reducedMotion) {
+          return;
+        }
+        rafId = window.requestAnimationFrame(function (timestamp) {
+          rafId = 0;
+          draw(timestamp);
+        });
+      }, immediate ? 0 : ambientFrameIntervalMs);
+    }
+
     function draw(timestamp) {
+      if (document.hidden || reducedMotion) {
+        pauseAnimation();
+        return;
+      }
+
       var time = timestamp * 0.001;
       resizeCanvas();
       context.clearRect(0, 0, width, height);
@@ -504,15 +550,50 @@
       context.stroke();
 
       context.restore();
-      rafId = window.requestAnimationFrame(draw);
+      scheduleFrame(false);
+    }
+
+    function handleReducedMotionChange(event) {
+      reducedMotion = Boolean(event && event.matches);
+      if (reducedMotion) {
+        pauseAnimation();
+        context.clearRect(0, 0, width, height);
+        return;
+      }
+      if (!document.hidden) {
+        resizeCanvas();
+        scheduleFrame(true);
+      }
     }
 
     resizeCanvas();
-    rafId = window.requestAnimationFrame(draw);
+    if (reducedMotion) {
+      pauseAnimation();
+    } else {
+      scheduleFrame(true);
+    }
+    if (reducedMotionQuery) {
+      if (typeof reducedMotionQuery.addEventListener === "function") {
+        reducedMotionQuery.addEventListener("change", handleReducedMotionChange);
+      } else if (typeof reducedMotionQuery.addListener === "function") {
+        reducedMotionQuery.addListener(handleReducedMotionChange);
+      }
+    }
     window.addEventListener("resize", resizeCanvas);
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        pauseAnimation();
+        return;
+      }
+      resizeCanvas();
+      scheduleFrame(true);
+    });
     window.addEventListener("pagehide", function () {
-      if (rafId) {
-        window.cancelAnimationFrame(rafId);
+      pauseAnimation();
+    });
+    window.addEventListener("pageshow", function () {
+      if (!document.hidden && !reducedMotion) {
+        scheduleFrame(true);
       }
     });
   }
@@ -627,23 +708,120 @@
     return "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + alpha + ")";
   }
 
-  function contrastSafeTextColor(value) {
+  function rgbToHex(rgb) {
+    function toHex(value) {
+      return Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
+    }
+
+    return "#" + toHex(rgb.r) + toHex(rgb.g) + toHex(rgb.b);
+  }
+
+  function mixHexColors(value, target, amount) {
+    var sourceRgb = hexToRgb(value);
+    var targetRgb = hexToRgb(target);
+    if (!sourceRgb || !targetRgb) {
+      return null;
+    }
+
+    return rgbToHex({
+      r: sourceRgb.r + ((targetRgb.r - sourceRgb.r) * amount),
+      g: sourceRgb.g + ((targetRgb.g - sourceRgb.g) * amount),
+      b: sourceRgb.b + ((targetRgb.b - sourceRgb.b) * amount)
+    });
+  }
+
+  function relativeLuminanceForHex(value) {
     var rgb = hexToRgb(value);
     function channel(valuePart) {
       var normalized = valuePart / 255;
       return normalized <= 0.04045 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
     }
-    var luminance;
     if (!rgb) {
+      return null;
+    }
+
+    return (0.2126 * channel(rgb.r)) + (0.7152 * channel(rgb.g)) + (0.0722 * channel(rgb.b));
+  }
+
+  function contrastRatioForHex(foreground, background) {
+    var foregroundLuminance = relativeLuminanceForHex(foreground);
+    var backgroundLuminance = relativeLuminanceForHex(background);
+    var lighter;
+    var darker;
+    if (foregroundLuminance === null || backgroundLuminance === null) {
+      return 0;
+    }
+
+    lighter = Math.max(foregroundLuminance, backgroundLuminance);
+    darker = Math.min(foregroundLuminance, backgroundLuminance);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  function contrastSafeTextColor(value) {
+    var normalized = parseHexColor(value);
+    var blackContrast;
+    var whiteContrast;
+    if (!normalized) {
       return "#ffffff";
     }
-    luminance = (0.2126 * channel(rgb.r)) + (0.7152 * channel(rgb.g)) + (0.0722 * channel(rgb.b));
-    return ((luminance + 0.05) / 0.05) >= (1.05 / (luminance + 0.05)) ? "#05070a" : "#ffffff";
+
+    blackContrast = contrastRatioForHex("#000000", normalized);
+    whiteContrast = contrastRatioForHex("#ffffff", normalized);
+    return blackContrast >= whiteContrast ? "#000000" : "#ffffff";
+  }
+
+  function contrastSafeAccentTextColor(value, backgrounds) {
+    var normalized = parseHexColor(value);
+    var validBackgrounds = (backgrounds || []).map(parseHexColor).filter(Boolean);
+    var best = null;
+
+    function minimumContrast(candidate) {
+      return validBackgrounds.reduce(function (minimum, background) {
+        return Math.min(minimum, contrastRatioForHex(candidate, background));
+      }, Number.POSITIVE_INFINITY);
+    }
+
+    if (!normalized || !validBackgrounds.length) {
+      return "#ffffff";
+    }
+    if (minimumContrast(normalized) >= 4.5) {
+      return normalized;
+    }
+
+    ["#ffffff", "#000000"].forEach(function (target) {
+      var step;
+      for (step = 1; step <= 100; step += 1) {
+        var candidate = mixHexColors(normalized, target, step / 100);
+        var ratio = minimumContrast(candidate);
+        if (ratio >= 4.5) {
+          if (!best || step < best.step || (step === best.step && ratio > best.ratio)) {
+            best = { color: candidate, step: step, ratio: ratio };
+          }
+          break;
+        }
+      }
+    });
+
+    if (best) {
+      return best.color;
+    }
+    return minimumContrast("#ffffff") >= minimumContrast("#000000") ? "#ffffff" : "#000000";
+  }
+
+  function getThemeSurfaceColors(theme) {
+    var style = window.getComputedStyle(document.documentElement);
+    return [
+      style.getPropertyValue("--theme-page").trim(),
+      style.getPropertyValue("--theme-surface-primary").trim(),
+      style.getPropertyValue("--theme-surface-secondary").trim(),
+      style.getPropertyValue("--theme-surface-elevated").trim(),
+      theme && theme.background
+    ].filter(Boolean);
   }
 
   function removeInlineThemeOverrides() {
     [
-      "--theme-accent", "--theme-accent-secondary", "--theme-on-accent", "--theme-accent-soft", "--theme-accent-border", "--theme-accent-glow",
+      "--theme-accent", "--theme-accent-text", "--theme-accent-secondary", "--theme-on-accent", "--theme-accent-soft", "--theme-accent-border", "--theme-accent-glow",
       "--color-accent", "--color-accent-soft", "--dashboard-accent", "--dashboard-secondary", "--dashboard-warm",
       "--dashboard-accent-glow", "--dashboard-secondary-glow", "--dashboard-warm-glow", "--dashboard-theme-bg"
     ].forEach(function (name) {
@@ -726,8 +904,11 @@
 
     applyDashboardOpacity();
     removeInlineThemeOverrides();
+    document.documentElement.setAttribute("data-theme", theme.id);
+    document.documentElement.setAttribute("data-theme-variant", variant);
     if (customAccent || gameAccent) {
       setInlineThemeOverride("--theme-accent", accent);
+      setInlineThemeOverride("--theme-accent-text", contrastSafeAccentTextColor(accent, getThemeSurfaceColors(theme)));
       setInlineThemeOverride("--theme-on-accent", contrastSafeTextColor(accent));
       setInlineThemeOverride("--theme-accent-soft", rgbaFromHex(accent, 0.14));
       setInlineThemeOverride("--theme-accent-border", rgbaFromHex(accent, 0.58));
@@ -737,9 +918,6 @@
       setInlineThemeOverride("--theme-accent-secondary", gameSecondary);
     }
     document.documentElement.style.setProperty("--dashboard-aura-opacity", String(effectiveIntensity / 100));
-    document.documentElement.setAttribute("data-theme", theme.id);
-    document.documentElement.setAttribute("data-theme-variant", variant);
-
     if (document.body) {
       document.body.setAttribute("data-theme", theme.id);
       document.body.setAttribute("data-theme-variant", variant);
@@ -881,7 +1059,14 @@
       touchUnlockNode.setAttribute("aria-hidden", locked ? "false" : "true");
     }
 
-    [railNode, viewerNode, quickDrawerNode, quickScrimNode].forEach(function (node) {
+    var panelsOpen = isDrawerOpen(panelsDrawerNode);
+    var quickOpen = isDrawerOpen(quickDrawerNode);
+    [railNode, viewerNode].forEach(function (node) {
+      if (node) {
+        node.toggleAttribute("inert", locked || panelsOpen || quickOpen);
+      }
+    });
+    [quickDrawerNode, quickScrimNode, panelsDrawerNode, document.getElementById("dashboard-panels-scrim")].forEach(function (node) {
       if (node) {
         node.toggleAttribute("inert", locked);
       }
@@ -909,7 +1094,9 @@
   function setTouchLockEnabled(enabled) {
     if (enabled) {
       quickDrawerOpener = null;
+      panelsDrawerOpener = null;
       setQuickDrawerOpen(false);
+      setPanelsDrawerOpen(false);
     }
     dashboardSettings.touchLockMode = enabled ? "1" : "0";
     storedSettings.touchLockMode = dashboardSettings.touchLockMode;
@@ -1057,46 +1244,94 @@
     return url.toString();
   }
 
-  function withTimeout(promise, timeoutMs) {
+  function fetchWithTimeout(url, options, timeoutMs, readResponse) {
+    var fetchOptions = Object.assign({}, options || {});
+    var callerSignal = fetchOptions.signal;
+    var controller = new AbortController();
+
+    fetchOptions.signal = controller.signal;
+
     return new Promise(function (resolve, reject) {
+      var settled = false;
       var timerId = window.setTimeout(function () {
-        reject(new Error("Request timed out"));
+        abortRequest(new Error("Request timed out"));
       }, timeoutMs);
 
-      Promise.resolve(promise).then(function (value) {
+      function finish(callback, value) {
+        if (settled) {
+          return;
+        }
+        settled = true;
         window.clearTimeout(timerId);
-        resolve(value);
+        if (callerSignal) {
+          callerSignal.removeEventListener("abort", forwardCallerAbort);
+        }
+        callback(value);
+      }
+
+      function abortRequest(reason) {
+        if (settled) {
+          return;
+        }
+        controller.abort(reason);
+        finish(reject, reason === undefined ? controller.signal.reason : reason);
+      }
+
+      function forwardCallerAbort() {
+        abortRequest(callerSignal.reason);
+      }
+
+      if (callerSignal) {
+        if (callerSignal.aborted) {
+          forwardCallerAbort();
+          return;
+        }
+        callerSignal.addEventListener("abort", forwardCallerAbort, { once: true });
+      }
+
+      Promise.resolve().then(function () {
+        if (settled) {
+          return;
+        }
+        return fetch(url, fetchOptions);
+      }).then(function (response) {
+        if (!settled) {
+          // Keep the deadline and caller signal active until the response body is consumed.
+          return readResponse ? readResponse(response) : response;
+        }
+      }).then(function (value) {
+        finish(resolve, value);
       }, function (error) {
-        window.clearTimeout(timerId);
-        reject(error);
+        finish(reject, error);
       });
     });
   }
 
-  function fetchJson(url, timeoutMs) {
-    return withTimeout(fetch(url, {
+  function fetchJson(url, timeoutMs, options) {
+    return fetchWithTimeout(url, Object.assign({
       cache: "no-store"
-    }).then(function (response) {
+    }, options || {}), timeoutMs || 5000, function (response) {
       if (!response.ok) {
         throw new Error("Request failed with status " + response.status);
       }
       return response.json();
-    }), timeoutMs || 5000);
+    });
   }
 
-  function postJson(url, body, timeoutMs) {
-    var headers = {
+  function postJson(url, body, timeoutMs, options) {
+    var requestOptions = options || {};
+    var headers = Object.assign({
       "Content-Type": "application/json"
-    };
+    }, requestOptions.headers || {});
     if (typeof window.XenonSessionToken === "string" && window.XenonSessionToken) {
       headers["X-Xenon-Session"] = window.XenonSessionToken;
     }
-    return withTimeout(fetch(url, {
+    return fetchWithTimeout(url, Object.assign({}, requestOptions, {
       method: "POST",
       cache: "no-store",
       headers: headers,
       body: JSON.stringify(body || {})
-    }).then(function (response) {
+    }), timeoutMs || 8000, function (response) {
       if (!response.ok) {
         return response.json().catch(function () {
           return {};
@@ -1107,7 +1342,7 @@
       return response.json().catch(function () {
         return {};
       });
-    }), timeoutMs || 8000);
+    });
   }
 
   function fetchBridgeHealth() {
@@ -1279,7 +1514,8 @@
   }
 
   function isDashboardBusyForGameFaceAutoOpen() {
-    return dashboardInteractionActive || settingsDrawerOpen || isTouchLockEnabled();
+    return dashboardInteractionActive || settingsDrawerOpen || isTouchLockEnabled()
+      || isDrawerOpen(panelsDrawerNode) || isDrawerOpen(quickDrawerNode);
   }
 
   function openGameFaceForActiveId(activeId) {
@@ -2135,25 +2371,19 @@
   }
 
   function updatePickerSurfaceStatus(widgetId) {
-    var button;
-    var meta;
-    var state;
-
-    if (!pickerNode || !widgetId) {
+    if (!widgetId) {
       return;
     }
-
-    button = Array.prototype.slice.call(pickerNode.querySelectorAll("[data-widget-id]")).filter(function (candidate) {
-      return candidate.getAttribute("data-widget-id") === widgetId;
-    })[0] || null;
-    meta = button && button.querySelector(".router-picker__meta");
-    if (!meta) {
-      return;
-    }
-
-    state = getWidgetState(widgetId);
-    meta.textContent = state;
-    meta.setAttribute("data-state", state.toLowerCase().replace(/\s+/g, "-"));
+    [pickerNode, favoritesNode].forEach(function (node) {
+      if (!node) { return; }
+      Array.prototype.forEach.call(node.querySelectorAll("[data-widget-id]"), function (button) {
+        var meta = button.querySelector(".router-picker__meta");
+        if (button.getAttribute("data-widget-id") !== widgetId || !meta || button.disabled) { return; }
+        var state = getWidgetState(widgetId);
+        meta.textContent = state;
+        meta.setAttribute("data-state", state.toLowerCase().replace(/\s+/g, "-"));
+      });
+    });
   }
 
   function publishSurfaceStatus(widgetId, status, tone, detail) {
@@ -2742,36 +2972,142 @@
     });
   }
 
+  function readFavoriteWidgets() {
+    try {
+      var raw = window.localStorage.getItem(favoritesStorageKey);
+      if (raw === null) { return defaultFavoriteWidgetIds.slice(); }
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) { return defaultFavoriteWidgetIds.slice(); }
+      var valid = parsed.map(function (id) { return typeof id === "string" ? getWidgetById(id) : null; })
+        .filter(Boolean).map(function (widget) { return widget.id; })
+        .filter(function (id, index, list) { return list.indexOf(id) === index; }).slice(0, 4);
+      return parsed.length && !valid.length ? defaultFavoriteWidgetIds.slice() : valid;
+    } catch (error) {
+      return defaultFavoriteWidgetIds.slice();
+    }
+  }
+
+  function updateFavoritesFeedback(message) {
+    setText("dashboard-favorites-feedback", message || favoriteWidgetIds.length + " of 4 favorites. Remove one to make room for another.");
+  }
+
+  function toggleFavoriteWidget(widgetId) {
+    var widget = getWidgetById(widgetId);
+    if (!widget || isTouchLockEnabled()) { return; }
+    var index = favoriteWidgetIds.indexOf(widget.id);
+    if (index === -1 && favoriteWidgetIds.length >= 4) {
+      updateFavoritesFeedback("Four favorites already saved. Remove one before keeping another.");
+      return;
+    }
+    if (index !== -1) {
+      favoriteWidgetIds.splice(index, 1);
+    } else if (shouldShowWidget(widget)) {
+      favoriteWidgetIds.push(widget.id);
+    } else {
+      updateFavoritesFeedback("This panel is not available to add yet.");
+      return;
+    }
+    var saved = true;
+    try {
+      window.localStorage.setItem(favoritesStorageKey, JSON.stringify(favoriteWidgetIds));
+    } catch (error) {
+      saved = false;
+    }
+    var activeControl = document.activeElement;
+    renderPicker();
+    if (isDrawerOpen(panelsDrawerNode) && activeControl && !activeControl.isConnected) {
+      (drawerFocusableControls(panelsDrawerNode)[0] || panelsDrawerNode).focus({ preventScroll: true });
+    }
+    updateFavoritesFeedback(getWidgetTitle(widget) + (index === -1 ? " added. " : " removed. ")
+      + favoriteWidgetIds.length + " of 4 favorites."
+      + (saved ? "" : " Storage is unavailable; this change lasts until you reload."));
+  }
+
   function renderPicker() {
-    var destinationWidgets = getDestinationWidgets();
-    var categories = ["System", "Media", "Productivity", "Gaming", "Smart Home", "More"];
-    var pickerHtml;
+    var catalogWidgets = getVisibleWidgets();
+    // Keep unavailable/hidden favorites removable without changing their saved
+    // visibility or losing them during capability discovery and reconnection.
+    favoriteWidgetIds.map(getWidgetById).filter(Boolean).forEach(function (widget) {
+      if (catalogWidgets.indexOf(widget) === -1) { catalogWidgets.push(widget); }
+    });
+    var categories = ["Home", "Modes", "System", "Media", "Productivity", "Gaming", "Smart Home", "Settings", "More"];
     function categoryFor(widget) {
+      if (widget.destination === "settings") { return "Settings"; }
       return widget.category || "More";
     }
-    function buttonFor(widget) {
+    function buttonFor(widget, favorite) {
       var activeClass = widget.id === currentWidgetId ? " is-active" : "";
-      var state = getWidgetState(widget.id);
+      var available = shouldShowWidget(widget);
+      var hidden = String(getSetting("hiddenWidgets") || "").split(",").indexOf(widget.id) !== -1;
+      var state = available ? getWidgetState(widget.id) : hidden ? "Hidden in layout" : "Unavailable";
       var cardSize = getCardSize(widget.id);
+      var favoriteLabels = { system: "System", audio: "Audio & Media", network: "Network", "quick-actions": "PC actions" };
+      var title = getWidgetTitle(widget);
+      var label = favorite && favoriteLabels[widget.id] || title;
       return '' +
-        '<button class="router-picker__button router-picker__button--' + cardSize + activeClass + '" data-ui-key="widget-' + widget.id + '" data-widget-id="' + widget.id + '" data-card-size="' + cardSize + '" aria-pressed="' + (widget.id === currentWidgetId ? "true" : "false") + '" title="' + escapeHtml(getWidgetCopy(widget)) + '">' +
-          '<span class="router-picker__title">' + escapeHtml(getWidgetTitle(widget)) + '</span>' +
+        '<button type="button" class="router-picker__button router-picker__button--' + cardSize + activeClass + '" data-ui-key="widget-' + widget.id + '" data-widget-id="' + widget.id + '" data-card-size="' + cardSize + '" aria-pressed="' + (widget.id === currentWidgetId ? "true" : "false") + '" aria-label="' + escapeHtml(title) + '" title="' + escapeHtml(getWidgetCopy(widget)) + '"' + (available ? '' : ' disabled') + '>' +
+          '<span class="router-picker__title">' + escapeHtml(label) + '</span>' +
           '<span class="router-picker__meta" data-state="' + escapeHtml(state.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(state) + '</span>' +
         '</button>';
     }
-    pickerHtml = primaryDestination === "library"
-      ? categories.map(function (category) {
-          var items = destinationWidgets.filter(function (widget) { return categoryFor(widget) === category; });
-          return items.length ? '<div class="router-picker__category"><span>' + escapeHtml(category) + '</span>' + items.map(buttonFor).join("") + '</div>' : '';
-        }).join("")
-      : destinationWidgets.map(buttonFor).join("");
-    patchDashboardDom(pickerNode, pickerHtml);
-
-    pickerNode.querySelectorAll("[data-widget-id]").forEach(function (button) {
-      button.onclick = function () {
-        selectWidget(button.getAttribute("data-widget-id"), true);
-      };
+    patchDashboardDom(pickerNode, categories.map(function (category) {
+      var items = catalogWidgets.filter(function (widget) { return categoryFor(widget) === category; });
+      return items.length ? '<div class="router-picker__category" data-ui-key="category-' + category + '"><span>' + escapeHtml(category) + '</span>' + items.map(function (widget) {
+        var favorite = favoriteWidgetIds.indexOf(widget.id) !== -1;
+        return '<div class="router-picker__item" data-ui-key="item-' + widget.id + '">' + buttonFor(widget)
+          + '<button type="button" class="router-picker__pin" data-ui-key="favorite-' + widget.id + '" data-favorite-widget="' + widget.id + '" aria-pressed="' + favorite + '" aria-label="' + escapeHtml((favorite ? "Remove " : "Keep ") + getWidgetTitle(widget) + (favorite ? " from favorites" : " in favorites")) + '">' + (favorite ? "Remove" : "Keep") + '</button></div>';
+      }).join("") + '</div>' : '';
+    }).join(""));
+    patchDashboardDom(favoritesNode, favoriteWidgetIds.map(getWidgetById).filter(shouldShowWidget).map(function (widget) { return buttonFor(widget, true); }).join(""));
+    [pickerNode, favoritesNode].forEach(function (node) {
+      if (!node) { return; }
+      node.querySelectorAll("[data-widget-id]").forEach(function (button) {
+        button.onclick = function () {
+          setPanelsDrawerOpen(false);
+          selectWidget(button.getAttribute("data-widget-id"), true);
+        };
+      });
     });
+    if (!pickerNode) { return; }
+    pickerNode.querySelectorAll("[data-favorite-widget]").forEach(function (button) {
+      button.onclick = function () { toggleFavoriteWidget(button.getAttribute("data-favorite-widget")); };
+    });
+  }
+
+  function isDrawerOpen(node) {
+    return !!node && !node.classList.contains("is-hidden");
+  }
+
+  function drawerFocusableControls(node) {
+    return Array.prototype.slice.call(node.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"))
+      .filter(function (control) { return !control.closest("[hidden], [inert], .is-hidden") && control.getClientRects().length && window.getComputedStyle(control).visibility !== "hidden"; });
+  }
+
+  function setPanelsDrawerOpen(open) {
+    if (!panelsDrawerNode || !panelsToggleNode || (open && isTouchLockEnabled())) { return; }
+    var wasOpen = isDrawerOpen(panelsDrawerNode);
+    if (open && !wasOpen) {
+      setQuickDrawerOpen(false);
+      panelsDrawerOpener = document.activeElement || panelsToggleNode;
+      renderPicker();
+      updateFavoritesFeedback();
+    }
+    panelsDrawerNode.classList.toggle("is-hidden", !open);
+    panelsDrawerNode.setAttribute("aria-hidden", open ? "false" : "true");
+    panelsToggleNode.setAttribute("aria-expanded", open ? "true" : "false");
+    var scrim = document.getElementById("dashboard-panels-scrim");
+    if (scrim) { scrim.classList.toggle("is-hidden", !open); }
+    renderDashboardChromeState();
+    if (open && !wasOpen) {
+      window.setTimeout(function () {
+        if (isDrawerOpen(panelsDrawerNode)) { (drawerFocusableControls(panelsDrawerNode)[0] || panelsDrawerNode).focus(); }
+      }, 0);
+    } else if (!open && wasOpen) {
+      var opener = panelsDrawerOpener;
+      panelsDrawerOpener = null;
+      if (opener && opener.isConnected && !opener.closest("[inert]")) { opener.focus({ preventScroll: true }); }
+      markDashboardInteractionIdleSoon();
+    }
   }
 
   function renderPrimaryNavigation() {
@@ -2860,13 +3196,13 @@
       return scene && scene.themeVariant !== "night" && scene.id !== "scene-night";
     });
     patchDashboardDom(scenesNode, profiles.map(function (scene) {
-      return '<button type="button" data-quick-scene="' + escapeHtml(scene.id) + '" class="' + (scene.id === sceneConfig.activeSceneId ? "is-active" : "") + '">' + escapeHtml(scene.name) + '</button>';
+      return '<button type="button" data-quick-scene="' + escapeHtml(scene.id) + '" class="' + (scene.id === sceneConfig.activeSceneId ? "is-active" : "") + '" aria-pressed="' + (scene.id === sceneConfig.activeSceneId ? "true" : "false") + '">' + escapeHtml(scene.name) + '</button>';
     }).join("") +
       '<div class="auxora-quick-night" role="group" aria-label="Night display variant">' +
         '<span>Night</span>' +
         ["auto", "standard", "night"].map(function (variant) {
           var label = variant === "auto" ? "Automatic" : variant === "night" ? "On" : "Off";
-          return '<button type="button" data-quick-night="' + variant + '" class="' + (normalizeThemeVariantPreference(getSetting("themeVariant")) === variant ? "is-active" : "") + '">' + label + '</button>';
+          return '<button type="button" data-quick-night="' + variant + '" class="' + (normalizeThemeVariantPreference(getSetting("themeVariant")) === variant ? "is-active" : "") + '" aria-pressed="' + (normalizeThemeVariantPreference(getSetting("themeVariant")) === variant ? "true" : "false") + '">' + label + '</button>';
         }).join("") +
       '</div>');
 
@@ -2885,11 +3221,13 @@
   }
 
   function setQuickDrawerOpen(open) {
-    if (!quickDrawerNode || !quickToggleNode) {
+    if (!quickDrawerNode || !quickToggleNode || (open && isTouchLockEnabled())) {
       return;
     }
     var scrim = document.getElementById("dashboard-quick-scrim");
+    var wasOpen = isDrawerOpen(quickDrawerNode);
     if (open) {
+      setPanelsDrawerOpen(false);
       quickDrawerOpener = document.activeElement || quickToggleNode;
     }
     quickDrawerNode.classList.toggle("is-hidden", !open);
@@ -2901,16 +3239,23 @@
       scrim.classList.toggle("is-hidden", !open);
       scrim.setAttribute("aria-hidden", open ? "false" : "true");
     }
+    renderDashboardChromeState();
     if (open) {
       renderQuickDrawer();
+      if (quickControls) { quickControls.open(); }
       window.setTimeout(function () {
-        var first = quickDrawerNode.querySelector("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])");
-        (first || quickDrawerNode).focus();
+        if (isDrawerOpen(quickDrawerNode)) {
+          (drawerFocusableControls(quickDrawerNode)[0] || quickDrawerNode).focus();
+        }
       }, 0);
-    } else if (quickDrawerOpener && typeof quickDrawerOpener.focus === "function") {
-      quickDrawerOpener.focus();
-      quickDrawerOpener = null;
+    } else {
+      if (quickControls) { quickControls.close(); }
+      if (quickDrawerOpener && typeof quickDrawerOpener.focus === "function") {
+        quickDrawerOpener.focus();
+        quickDrawerOpener = null;
+      }
     }
+    if (!open && wasOpen) { markDashboardInteractionIdleSoon(); }
   }
 
   function widgetRequiresBridge(widget) {
@@ -3090,6 +3435,7 @@
       console.warn("Unable to clear dashboard browser storage", error);
     }
 
+    favoriteWidgetIds = defaultFavoriteWidgetIds.slice();
     storedSettings = {};
     dashboardSettings = Object.assign({}, defaultSettings);
     currentWidgetId = "setup";
@@ -3416,51 +3762,52 @@
         initXnSlider(slider);
       }
 
-      slider.addEventListener("input", function () {
+      // Stable DOM updates retain these controls, so replace their owned handlers.
+      slider.oninput = function () {
         updateOpacity(slider.value, false);
-      });
+      };
 
-      slider.addEventListener("change", function () {
+      slider.onchange = function () {
         updateOpacity(slider.value, true);
-      });
+      };
     }
 
     if (resetButton) {
-      resetButton.addEventListener("click", function () {
+      resetButton.onclick = function () {
         updateOpacity(defaultSettings.dashboardOpacity, true);
-      });
+      };
     }
 
     if (readabilitySelect) {
-      readabilitySelect.addEventListener("change", function () {
+      readabilitySelect.onchange = function () {
         saveDashboardSettings({
           themeReadability: normalizeChoice(readabilitySelect.value, "normal", ["normal", "clean", "high-contrast", "visor"])
         });
-      });
+      };
     }
 
     if (budgetSelect) {
-      budgetSelect.addEventListener("change", function () {
+      budgetSelect.onchange = function () {
         saveDashboardSettings({
           performanceBudget: normalizeChoice(budgetSelect.value, "balanced", ["balanced", "battery", "game", "max"])
         });
-      });
+      };
     }
 
     if (autoTuneToggle) {
-      autoTuneToggle.addEventListener("change", function () {
+      autoTuneToggle.onchange = function () {
         saveDashboardSettings({
           gameModeAutoTune: autoTuneToggle.checked ? "1" : "0"
         });
-      });
+      };
     }
 
     if (autoFaceToggle) {
-      autoFaceToggle.addEventListener("change", function () {
+      autoFaceToggle.onchange = function () {
         saveDashboardSettings({
           gameModeAutoFace: autoFaceToggle.checked ? "1" : "0"
         });
-      });
+      };
     }
   }
 
@@ -3607,7 +3954,7 @@
       return;
     }
 
-    toggle.addEventListener("change", function () {
+    toggle.onchange = function () {
       var enabled = Boolean(toggle.checked);
       toggle.disabled = true;
       status.textContent = enabled ? "Enabling foreground tracking..." : "Disabling tracking and clearing recent history...";
@@ -3622,7 +3969,7 @@
       }).finally(function () {
         toggle.disabled = false;
       });
-    });
+    };
   }
 
   function bindSettingsForm(widget, schema) {
@@ -3633,7 +3980,8 @@
       return;
     }
 
-    form.addEventListener("submit", function (event) {
+    // Refresh the schema closure when the stable form is reused for another panel.
+    form.onsubmit = function (event) {
       event.preventDefault();
       var formData = new FormData(form);
 
@@ -3644,9 +3992,9 @@
       persistSettings();
       renderPicker();
       selectWidget(widget.id, false);
-    });
+    };
 
-    resetButton.addEventListener("click", function () {
+    resetButton.onclick = function () {
       schema.fields.forEach(function (field) {
         dashboardSettings[field.key] = getDefaultSettingValue(field.key);
       });
@@ -3654,7 +4002,7 @@
       persistSettings();
       renderPicker();
       selectWidget(widget.id, false);
-    });
+    };
   }
 
   function renderCurrentSelection(reloadFrame) {
@@ -4147,6 +4495,9 @@
       var preferredWidgetId = getParam("widget") || readStoredWidget(widgetStorageKey) || "";
 
       pickerNode = document.getElementById("dashboard-widget-picker");
+      favoritesNode = document.getElementById("dashboard-favorites");
+      panelsDrawerNode = document.getElementById("dashboard-panels-drawer");
+      panelsToggleNode = document.getElementById("dashboard-panels-toggle");
       primaryNavNode = document.getElementById("dashboard-primary-nav");
       inlineViewerNode = document.getElementById("dashboard-inline-widget");
       loadingNode = document.getElementById("dashboard-widget-loading");
@@ -4165,6 +4516,17 @@
       touchFeedbackNode = document.getElementById("dashboard-touch-feedback");
       quickDrawerNode = document.getElementById("dashboard-quick-drawer");
       quickToggleNode = document.getElementById("dashboard-quick-toggle");
+      if (quickDrawerNode && window.AuxoraQuickControls) {
+        quickControls = window.AuxoraQuickControls.create({
+          root: quickDrawerNode,
+          available: function (kind) {
+            return bridgeReachable === true && !isLocalBridgeBlockedByPageOrigin()
+              && !isTouchLockEnabled() && bridgeCapabilities[kind] === true;
+          },
+          get: function (path, signal) { return fetchJson(buildUrl(bridgeOrigin, path), 5000, { signal: signal }); },
+          post: function (path, body) { return postJson(buildUrl(bridgeOrigin, path), body, 8000); }
+        });
+      }
       setText("dashboard-bridge-url", buildUrl(bridgeOrigin, "/dashboard.html").toString());
       if (settingsNode) {
         settingsNode.addEventListener("focusout", schedulePendingSettingsRender);
@@ -4184,6 +4546,7 @@
       document.body.classList.toggle("dashboard-native-page--perf", perfMode);
       dashboardSettings = buildInitialSettings();
       widgets = createWidgets();
+      favoriteWidgetIds = readFavoriteWidgets();
       applyDashboardPresentation();
 
       document.addEventListener("pointerdown", markDashboardInteractionActive, { passive: true });
@@ -4249,6 +4612,17 @@
         quickToggleNode.addEventListener("click", function () { setQuickDrawerOpen(true); });
       }
 
+      if (panelsToggleNode) {
+        panelsToggleNode.addEventListener("click", function () { setPanelsDrawerOpen(true); });
+      }
+      document.querySelectorAll("[data-panels-close]").forEach(function (button) {
+        button.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          setPanelsDrawerOpen(false);
+        });
+      });
+
       if (quickDrawerNode) {
         quickDrawerNode.addEventListener("click", function (event) {
           var close = event.target && event.target.closest ? event.target.closest("[data-quick-close]") : null;
@@ -4291,29 +4665,31 @@
       }
 
       document.addEventListener("keydown", function (event) {
-        if (!quickDrawerNode || quickDrawerNode.classList.contains("is-hidden")) {
+        var drawer = isDrawerOpen(panelsDrawerNode) ? panelsDrawerNode : isDrawerOpen(quickDrawerNode) ? quickDrawerNode : null;
+        if (!drawer) {
           return;
         }
         if (event.key === "Escape") {
           event.preventDefault();
-          setQuickDrawerOpen(false);
+          if (drawer === panelsDrawerNode) { setPanelsDrawerOpen(false); }
+          else { setQuickDrawerOpen(false); }
           return;
         }
         if (event.key !== "Tab") {
           return;
         }
-        var focusable = Array.from(quickDrawerNode.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])"));
+        var focusable = drawerFocusableControls(drawer);
         if (!focusable.length) {
           event.preventDefault();
-          quickDrawerNode.focus();
+          drawer.focus();
           return;
         }
         var first = focusable[0];
         var last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
+        if (event.shiftKey && (document.activeElement === first || !drawer.contains(document.activeElement) || document.activeElement === drawer)) {
           event.preventDefault();
           last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
+        } else if (!event.shiftKey && (document.activeElement === last || !drawer.contains(document.activeElement) || document.activeElement === drawer)) {
           event.preventDefault();
           first.focus();
         }

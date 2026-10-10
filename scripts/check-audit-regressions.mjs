@@ -83,6 +83,7 @@ const bridgeManager = readWorkspaceFile("app/BridgeManager.cs");
 const appPaths = readWorkspaceFile("app/Infrastructure/AppPaths.cs");
 const renderedDashboardTest = readWorkspaceFile("scripts/test-rendered-dashboard.mjs");
 const renderedThemeTest = readWorkspaceFile("scripts/test-theme-rendered.mjs");
+const visibleWindowGuard = readWorkspaceFile("scripts/lib/visible-window-guard.mjs");
 const nativeHostTest = readWorkspaceFile("scripts/test-native-host-api.mjs");
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const installScript = readWorkspaceFile("app/install.ps1");
@@ -195,6 +196,31 @@ assert(
   /bridgeHydrated === 'true' && button/.test(renderedDashboardTest)
     && /const deadline = Date\.now\(\) \+ 15000;[\s\S]*data-state/.test(renderedDashboardTest),
   "rendered destructive-action checks must wait for native hydration and the actual action control"
+);
+assert(
+  renderedDashboardTest.includes('const surfaceAuditViewportNames = viewports.map(viewport => viewport.name)')
+    && /async function validateAllVisibleProductSurfaces\(cdp, viewport\)/.test(renderedDashboardTest)
+    && /for \(const viewport of surfaceAuditViewports\) \{[\s\S]*validateAllVisibleProductSurfaces\(cdp, viewport\)/.test(renderedDashboardTest)
+    && /Page\.addScriptToEvaluateOnNewDocument[\s\S]*__auxoraRenderedRuntimeErrors/.test(renderedDashboardTest)
+    && /selectionFocus\?\.accepted && result\.selectionFocus\?\.reachable/.test(renderedDashboardTest)
+    && /contentFocusAccepted && result\.contentFocusReachable/.test(renderedDashboardTest)
+    && /'summary',[\s\S]*'\[tabindex\]:not\(\[tabindex="-1"\]\)'/.test(renderedDashboardTest)
+    && /panelVerticalScrollReachable/.test(renderedDashboardTest)
+    && /if \(viewport\.width >= 1800 && viewport\.height >= 600\)/.test(renderedDashboardTest)
+    && /network-stack-boundary", width: 2047/.test(renderedDashboardTest)
+    && /wide-companion", width: 2048/.test(renderedDashboardTest)
+    && /async function validateEmbeddedNetworkCss\(\)/.test(renderedDashboardTest)
+    && /await validateEmbeddedNetworkCss\(\)/.test(renderedDashboardTest)
+    && renderedDashboardTest.includes("for (const density of ['compact', 'comfortable', 'spacious'])")
+    && /networkLayoutAudits\.length === 9/.test(renderedDashboardTest)
+    && /expectedGridColumnCount = innerWidth <= 2047 \|\| cardSize === 'compact' \? 1 : 4/.test(renderedDashboardTest)
+    && /shellCap = cardSize === 'compact' \? 1040 : cardSize === 'standard' \? 1680/.test(renderedDashboardTest)
+    && /expectedPadding = density === 'compact' \? 10 : density === 'spacious' \? 18 : 16/.test(renderedDashboardTest)
+    && /enabledControlCount:[\s\S]*focusableControlCount:[\s\S]*focusAuditedCount:/.test(renderedDashboardTest)
+    && /networkStateAudits\.length === 2[\s\S]*"linked,review"/.test(renderedDashboardTest)
+    && /async function validateNetworkLayoutEditorPersistence\(cdp\)/.test(renderedDashboardTest)
+    && /await validateNetworkLayoutEditorPersistence\(cdp\)/.test(renderedDashboardTest),
+  "rendered product-surface checks must cover all 23 surfaces at every representative viewport with early runtime, focus, scroll, wide-only distance gates, and the full Network boundary/state/persistence matrix"
 );
 assert(
   /GetHealthStatus\(\s*ClipboardPrivacyOptions\.FromDashboard\(config\.Dashboard\)\)/.test(readWorkspaceFile("app/Controllers/TelemetryController.cs"))
@@ -731,8 +757,27 @@ assert(
     && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(renderedDashboardTest)
     && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(renderedThemeTest)
     && /AUXORA_TEST_INSTANCE_ID:\s*profileRoot/.test(nativeHostTest)
+    && /AUXORA_DISABLE_TRAY_ICON_FOR_TESTS:\s*"1"/.test(renderedDashboardTest)
+    && /AUXORA_DISABLE_TRAY_ICON_FOR_TESTS:\s*"1"/.test(renderedThemeTest)
+    && /AUXORA_DISABLE_TRAY_ICON_FOR_TESTS:\s*"1"/.test(nativeHostTest)
+    && /ResolveTrayIconCreation/.test(mainWindow + programCs)
+    && /AUXORA_SUPPRESS_WINDOW_FOR_TESTS:\s*"1"/.test(renderedDashboardTest)
+    && /AUXORA_SUPPRESS_WINDOW_FOR_TESTS:\s*"1"/.test(renderedThemeTest)
+    && /ShouldSuppressWindowForTests/.test(mainWindow + programCs)
+    && /ResolveWindowSuppression/.test(programCs)
+    && /ResolveWebViewUserDataPath\([\s\S]+_suppressWindowForTests \? AppPaths\.LocalDataDirectory : null/.test(mainWindow)
+    && /return Path\.Combine\(isolatedLocalDataDirectory, "WebView2"\)/.test(mainWindow)
+    && /return Path\.Combine\(productionLocalApplicationDataRoot, "XenonEdgeHost", "WebView2"\)/.test(mainWindow)
+    && /spawnWithVisibleWindowGuard/.test(renderedDashboardTest)
+    && /stopVisibleWindowGuard\(hostWindowGuard, "rendered native host"\)/.test(renderedDashboardTest)
+    && /spawnWithVisibleWindowGuard/.test(renderedThemeTest)
+    && /stopVisibleWindowGuard\(hostWindowGuard, "theme native host"\)/.test(renderedThemeTest)
+    && /EnumWindows/.test(visibleWindowGuard)
+    && /IsWindowVisible/.test(visibleWindowGuard)
+    && /DwmGetWindowAttribute/.test(visibleWindowGuard)
+    && /Stop-Process -Id \$targetProcessId -Force/.test(visibleWindowGuard)
     && !/const (?:baseUrl|hostUrl) = "http:\/\/127\.0\.0\.1:8976"/.test(renderedDashboardTest + renderedThemeTest + nativeHostTest),
-  "isolated host tests must use private port and instance identities instead of colliding with installed Auxora"
+  "isolated host tests must use private ports, instance identities, and WebView data roots, and rendered tests must fail closed if their native host exposes a visible window"
 );
 
 assert(

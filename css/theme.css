@@ -15,6 +15,7 @@
   --theme-text: #edf4fa;
   --theme-text-muted: #a5b3c0;
   --theme-accent: #4bc7e8;
+  --theme-accent-text: var(--theme-accent);
   --theme-accent-secondary: #79aee8;
   --theme-on-accent: #06141a;
   --theme-accent-soft: rgba(75, 199, 232, 0.12);
@@ -161,6 +162,21 @@
   --theme-inner-highlight: rgba(255, 255, 255, 0.025);
 }
 
+.dashboard-native-page--readability-high-contrast {
+  --theme-text: #ffffff;
+  --theme-text-muted: #e6edf3;
+  --theme-border: rgba(255, 255, 255, 0.4);
+  --theme-border-strong: rgba(255, 255, 255, 0.7);
+  --theme-accent-border: var(--theme-accent-text) !important;
+  --theme-focus-ring: #ffffff;
+  --status-success-border: var(--status-success-text);
+  --status-warning-border: var(--status-warning-text);
+  --status-danger-border: var(--status-danger-text);
+  --theme-panel-shadow: none;
+  --theme-panel-blur: 0px;
+  --theme-glow-intensity: 0;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -193,5 +209,41 @@ button {
     --theme-motion-scale: 0;
     --theme-motion-duration: 0ms;
     --theme-glow-intensity: 0.18;
+  }
+}
+
+/* Standalone accessibility overrides share the canonical token owner. */
+html[data-standalone-ui][data-readability="high-contrast"] {
+  --theme-text: #ffffff;
+  --theme-text-muted: #e6edf3;
+  --theme-border: rgba(255, 255, 255, 0.4);
+  --theme-border-strong: rgba(255, 255, 255, 0.7);
+  --theme-accent-border: var(--theme-accent-text);
+  --theme-focus-ring: #ffffff;
+  --status-success-border: var(--status-success-text);
+  --status-warning-border: var(--status-warning-text);
+  --status-danger-border: var(--status-danger-text);
+  --theme-panel-shadow: none;
+  --theme-panel-blur: 0px;
+  --theme-glow-intensity: 0;
+}
+
+@media (forced-colors: active) {
+  html[data-standalone-ui] {
+    --theme-page: Canvas;
+    --theme-surface-primary: Canvas;
+    --theme-surface-secondary: Canvas;
+    --theme-surface-elevated: Canvas;
+    --theme-surface-muted: Canvas;
+    --theme-border: CanvasText;
+    --theme-border-strong: CanvasText;
+    --theme-text: CanvasText;
+    --theme-text-muted: CanvasText;
+    --theme-accent: LinkText;
+    --theme-accent-text: LinkText;
+    --theme-on-accent: Canvas;
+    --theme-focus-ring: Highlight;
+    --theme-panel-shadow: none;
+    --theme-glow-intensity: 0;
   }
 }
