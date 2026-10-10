@@ -560,7 +560,7 @@
                 '<div class="inline-list-item">' +
                   '<div class="inline-list-item--split">' +
                     '<div><div class="inline-list-title">' + escapeHtml(text(light.name, "Light")) + '</div><div class="inline-list-copy">' + escapeHtml(light.on ? "On" : "Off") + '</div></div>' +
-                    '<button class="inline-button' + (light.on ? " is-primary" : "") + '" type="button" data-action="toggle-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (writable ? "" : " disabled") + '>' + (light.on ? "On" : "Off") + '</button>' +
+                    '<button class="inline-button' + (light.on ? " is-primary" : "") + '" type="button" data-action="toggle-light" data-id="' + escapeHtml(text(light.id, "")) + '" aria-label="' + escapeHtml((light.on ? "Turn off " : "Turn on ") + text(light.name, "light")) + '"' + (writable ? "" : " disabled") + '>' + (light.on ? "On" : "Off") + '</button>' +
                   '</div>' +
                   '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(light.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(light.name, "light")) + '" value="' + Math.round(optionalNumber(light.brightness) || 0) + '" data-action="brightness-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (writable ? "" : " disabled") + '></div>' +
                 '</div>';
@@ -569,7 +569,7 @@
           '<article class="list-card inline-card">' +
             '<div class="inline-card-header"><div><div class="metric-label">Switches</div><div class="router-inline-copy">Binary controls</div></div></div>' +
             '<div class="inline-list">' + (data.switches.length ? data.switches.map(function (item) {
-              return '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">' + escapeHtml(text(item.name, "Switch")) + '</div><div class="inline-list-copy">' + escapeHtml(text(item.detail, item.on ? "On" : "Off")) + '</div></div><button class="inline-button' + (item.on ? " is-primary" : "") + '" type="button" data-action="toggle-switch" data-id="' + escapeHtml(text(item.id, "")) + '"' + (writable ? "" : " disabled") + '>' + (item.on ? "On" : "Off") + '</button></div>';
+              return '<div class="inline-list-item inline-list-item--split"><div><div class="inline-list-title">' + escapeHtml(text(item.name, "Switch")) + '</div><div class="inline-list-copy">' + escapeHtml(text(item.detail, item.on ? "On" : "Off")) + '</div></div><button class="inline-button' + (item.on ? " is-primary" : "") + '" type="button" data-action="toggle-switch" data-id="' + escapeHtml(text(item.id, "")) + '" aria-label="' + escapeHtml((item.on ? "Turn off " : "Turn on ") + text(item.name, "switch")) + '"' + (writable ? "" : " disabled") + '>' + (item.on ? "On" : "Off") + '</button></div>';
             }).join("") : emptyState("No switches", getSetting(env, "automationEndpoint") ? "No switch state was returned by this connector." : "Switch controls will light up after the native connector is added.")) + '</div>' +
           '</article>' +
           '<article class="list-card inline-card">' +

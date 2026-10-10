@@ -105,19 +105,19 @@
 }
 
 @media (max-width: 1280px) {
-  .dashboard-native-page--browser .router-viewer:has(.quick-actions-shell) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-viewer:has(.quick-actions-shell) {
     grid-template-rows: max-content minmax(0, 1fr);
   }
 
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .quick-actions-shell),
-  .dashboard-native-page--browser .router-inline-widget:has(> .quick-actions-shell) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-mount > .quick-actions-shell),
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .quick-actions-shell) {
     position: absolute;
     inset: 0;
     overflow: auto;
   }
 
-  .dashboard-native-page--browser .quick-actions-shell,
-  .dashboard-native-page--browser .quick-actions-card {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .quick-actions-shell,
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .quick-actions-card {
     height: auto;
     grid-template-rows: auto;
     overflow: visible;
@@ -268,20 +268,20 @@
 }
 
 @media (max-width: 1280px) {
-  .dashboard-native-page--browser .router-viewer:has(.system-shortcuts-shell) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-viewer:has(.system-shortcuts-shell) {
     grid-template-rows: max-content minmax(0, 1fr);
   }
 
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .system-shortcuts-shell),
-  .dashboard-native-page--browser .router-inline-widget:has(> .system-shortcuts-shell) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-mount > .system-shortcuts-shell),
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .system-shortcuts-shell) {
     position: absolute;
     inset: 0;
     overflow: auto;
   }
 
-  .dashboard-native-page--browser .system-shortcuts-shell,
-  .dashboard-native-page--browser .system-shortcuts-grid,
-  .dashboard-native-page--browser .system-shortcuts-card {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .system-shortcuts-shell,
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .system-shortcuts-grid,
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .system-shortcuts-card {
     height: auto;
     grid-template-rows: auto;
     overflow: visible;
@@ -367,19 +367,19 @@
 }
 
 @media (max-width: 1280px) {
-  .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell--clipboard) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-viewer:has(.inline-widget-shell--clipboard) {
     grid-template-rows: max-content minmax(0, 1fr);
   }
 
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--clipboard),
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell--clipboard) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--clipboard),
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-shell--clipboard) {
     position: absolute;
     inset: 0;
     overflow: auto;
   }
 
-  .dashboard-native-page--browser .inline-widget-shell--clipboard,
-  .dashboard-native-page--browser .clipboard-history-card {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .inline-widget-shell--clipboard,
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .clipboard-history-card {
     height: auto;
     grid-template-rows: auto;
     overflow: visible;

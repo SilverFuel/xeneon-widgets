@@ -599,6 +599,7 @@ const child = spawn(executable, ["--safe-mode"], {
     AUXORA_TEST_ROAMING_ROOT: roaming,
     AUXORA_TEST_LOCAL_ROOT: local,
     AUXORA_TEST_INSTANCE_ID: profileRoot,
+    AUXORA_DISABLE_TRAY_ICON_FOR_TESTS: "1",
     TEMP: profileRoot,
     TMP: profileRoot
   },

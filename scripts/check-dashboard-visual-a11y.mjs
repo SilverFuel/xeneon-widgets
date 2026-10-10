@@ -102,6 +102,7 @@ const telemetryController = readWorkspaceFile("app/Controllers/TelemetryControll
 const supportController = readWorkspaceFile("app/Controllers/SupportController.cs");
 const configController = readWorkspaceFile("app/Controllers/ConfigController.cs");
 const dashboardJs = readWorkspaceFile("js/dashboard.js");
+const inlineWidgets = readWorkspaceFile("js/inline-widgets.js");
 const actionWidget = readWorkspaceFile("js/widgets/actions.js");
 const audioWidget = readWorkspaceFile("js/widgets/audio.js");
 const homelabWidgetJs = readWorkspaceFile("js/widgets/homelab.js");
@@ -141,6 +142,7 @@ const expectedJsAssets = [
   "js/widgets/actions.js",
   "js/widgets/integrations.js",
   "js/widgets/game-mode.js",
+  "js/quick-controls.js",
   "js/dashboard.js"
 ];
 
@@ -183,8 +185,8 @@ assert(
     && /@media\s*\(max-width:\s*1800px\)/.test(sharedCss)
     && /@media\s*\(max-width:\s*1280px\)/.test(sharedCss)
     && /@media\s*\(max-width:\s*900px\)/.test(sharedCss)
-    && /@media\s*\(max-height:\s*479px\)\s*and\s*\(orientation:\s*landscape\)/.test(sharedCss),
-  "dashboard visual smoke must protect the 2560x720 shell plus 1800/1280/900 responsive breakpoints"
+    && /@media\s*\(max-height:\s*480px\)\s*and\s*\(orientation:\s*landscape\)/.test(sharedCss),
+  "dashboard visual smoke must protect the 2560x720 shell, 1800/1280/900 width breakpoints, and inclusive 480px landscape layout"
 );
 
 assert(
@@ -321,6 +323,20 @@ assert(
     && /role="status"/.test(dashboardHtml)
     && /title="'\s*\+\s*escapeHtml\(getWidgetCopy\(widget\)\)/.test(readWorkspaceFile("js/dashboard.js")),
   "dashboard dynamic status and picker controls must expose assistive semantics"
+);
+
+assert(
+  /function statusPill\(textValue, tone, liveMode\)[\s\S]*?liveRegionAttributes\(liveMode\)/.test(inlineWidgets)
+    && /statusPill\(state\.statusText, state\.statusTone, state\.statusLiveMode\)/.test(setupWidget)
+    && /state\.statusLiveMode = formId === "frigate" \? "" : "status"/.test(setupWidget)
+    && /state\.statusText = error\.message \|\| "Save failed";\s*state\.statusTone = "danger";\s*state\.statusLiveMode = "alert"/.test(setupWidget)
+    && /function redraw\(\)[\s\S]*?state\.statusLiveMode = "";/.test(setupWidget),
+  "setup save feedback must opt into one-shot polite status or alert semantics"
+);
+
+assert(
+  /data-frigate-feedback' \+ liveRegionAttributes\(state\.frigateFeedbackTone === "danger" \? "alert" : "status"\)/.test(setupWidget),
+  "Camera Detection save feedback must announce errors as alerts and other results as polite status updates"
 );
 
 assert(

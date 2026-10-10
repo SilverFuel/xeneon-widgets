@@ -570,6 +570,7 @@
 
     return visible.map(function (session) {
       var isGame = gameName && text(session && session.name, "").toLowerCase().indexOf(gameName) !== -1;
+      var sessionTargetLabel = isGame ? text(game && game.name, "Game") + " audio" : getAudioSessionLabel(session);
       return '' +
         '<div class="game-focus-audio-row' + (isGame ? " is-game" : "") + (session.muted ? " is-muted" : "") + '">' +
           '<div>' +
@@ -577,7 +578,7 @@
             '<span>' + escapeHtml(session.muted ? "Muted" : "Live") + '</span>' +
           '</div>' +
           '<b>' + escapeHtml(formatPercent(session.volume)) + '</b>' +
-          '<button class="inline-button" type="button" data-action="game-session-mute" data-session-id="' + escapeHtml(text(session.id, "")) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
+          '<button class="inline-button" type="button" data-action="game-session-mute" data-session-id="' + escapeHtml(text(session.id, "")) + '" aria-label="' + escapeHtml((session.muted ? "Unmute " : "Mute ") + sessionTargetLabel) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
         '</div>';
     }).join("");
   }
@@ -686,7 +687,7 @@
                 '<strong>' + escapeHtml(audioState) + '</strong>' +
                 '<small>' + escapeHtml(audioName) + '</small>' +
               '</div>' +
-              '<button class="inline-button game-focus-mute" type="button" data-action="game-master-mute">' + (audioData.muted ? "Unmute" : "Mute") + '</button>' +
+              '<button class="inline-button game-focus-mute" type="button" data-action="game-master-mute" aria-label="' + (audioData.muted ? "Unmute master audio" : "Mute master audio") + '">' + (audioData.muted ? "Unmute" : "Mute") + '</button>' +
             '</div>' +
             '<div class="game-focus-audio-list">' + renderGameFocusAudioRows(audioSessions, game) + '</div>' +
             adminAction +
@@ -777,6 +778,10 @@
     setGameFocusText(container, ".game-focus-audio strong", audioState);
     setGameFocusText(container, ".game-focus-audio small", audioName);
     setGameFocusText(container, ".game-focus-mute", audioData.muted ? "Unmute" : "Mute");
+    var masterMuteButton = container.querySelector(".game-focus-mute");
+    if (masterMuteButton) {
+      masterMuteButton.setAttribute("aria-label", audioData.muted ? "Unmute master audio" : "Mute master audio");
+    }
     setGameFocusToneClass(container.querySelector(".game-focus-mic-panel"), "game-focus-mic-panel", micState.tone);
     setGameFocusText(container, "[data-game-mic-state]", micState.label);
     setGameFocusText(container, "[data-game-mic-detail]", micState.detail);

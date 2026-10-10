@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UniFi Network Dashboard</title>
+  <link rel="stylesheet" href="../css/theme.css">
   <style>
     :root {
       color-scheme: dark;
@@ -93,8 +94,8 @@
     }
 
     .rail, .board { min-height: 0; overflow: auto; padding-right: 6px; }
-    .rail { display: grid; gap: 12px; align-content: start; }
-    .board { display: grid; gap: 12px; align-content: start; }
+    .rail { display: grid; grid-auto-rows: max-content; gap: 12px; align-content: start; }
+    .board { display: grid; grid-auto-rows: max-content; gap: 12px; align-content: start; }
 
     .card {
       border: 1px solid var(--border);
@@ -111,7 +112,7 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       font-weight: 600;
     }
 
@@ -174,6 +175,7 @@
     .toggle button, .range button {
       display: inline-flex;
       align-items: center;
+      min-height: 44px;
       gap: 8px;
       border-color: rgba(255, 255, 255, 0.08);
       transition: background 160ms ease, border-color 160ms ease;
@@ -249,7 +251,7 @@
     .list-item__badge {
       padding: 6px 10px;
       border-radius: 999px;
-      font-size: 0.74rem;
+      font-size: 0.75rem;
       background: rgba(255, 255, 255, 0.08);
     }
     .list-item__badge[data-tone="good"] { color: #c8ffe4; background: rgba(73, 209, 125, 0.15); }
@@ -275,7 +277,7 @@
       border-radius: 10px;
       background: rgba(62, 181, 255, 0.14);
       color: var(--accent);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       font-weight: 700;
       letter-spacing: 0.06em;
     }
@@ -303,6 +305,8 @@
       *, *::before, *::after { animation: none !important; transition: none !important; }
     }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body>
   <main class="widget">

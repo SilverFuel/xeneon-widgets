@@ -401,6 +401,14 @@
 .audio-album-carousel:focus-visible {
   border-color: var(--audio-accent-border);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--audio-accent) 24%, transparent);
+  outline: 3px solid var(--theme-focus-ring);
+  outline-offset: 3px;
+}
+
+@media (forced-colors: active) {
+  .audio-album-carousel:focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 .audio-album-carousel__track {
@@ -1113,6 +1121,10 @@
   padding-top: 8px;
 }
 
+.audio-equalizer-fine-tune:not([open]) > .audio-eq-bands {
+  display: none;
+}
+
 .audio-eq-bands.is-bypassed {
   opacity: 0.52;
 }
@@ -1371,19 +1383,28 @@
   }
 }
 
+@media (min-width: 1501px) and (max-width: 1999px) {
+  .audio-command-grid {
+    grid-template-columns: minmax(320px, 0.8fr) minmax(480px, 1.2fr);
+    grid-template-areas:
+      "playback playback"
+      "output equalizer";
+  }
+}
+
 @media (max-width: 1280px) {
-  .dashboard-native-page--browser .router-viewer:has(.inline-widget-shell--audio) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-viewer:has(.inline-widget-shell--audio) {
     grid-template-rows: max-content minmax(0, 1fr);
   }
 
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--audio),
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-shell--audio) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-mount > .inline-widget-shell--audio),
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-shell--audio) {
     position: absolute;
     inset: 0;
     overflow: auto;
   }
 
-  .dashboard-native-page--browser .inline-widget-shell--audio {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .inline-widget-shell--audio {
     height: auto;
     min-height: 0;
     overflow: visible;
@@ -1548,6 +1569,10 @@
     min-height: 54px !important;
   }
 
+  .dashboard-native-page--adaptive .audio-media-controls .inline-button {
+    font-size: max(15px, 0.9rem);
+  }
+
   .dashboard-native-page--adaptive .audio-master-mute {
     min-width: 54px;
   }
@@ -1618,6 +1643,37 @@
 
   .audio-now-apps .inline-list-copy {
     display: none;
+  }
+}
+
+@media (min-width: 1800px) and (min-height: 600px) {
+  body.dashboard-native-page--layout-ultrawide .audio-equalizer-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.dashboard-native-page--layout-ultrawide .audio-equalizer-actions {
+    justify-content: stretch;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .audio-equalizer-actions .inline-button {
+    flex: 1 1 0;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .audio-playback-card .audio-media-controls {
+    gap: 6px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .audio-playback-card .audio-media-controls .inline-button {
+    min-width: 54px !important;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .audio-equalizer-fine-tune > summary {
+    min-height: 54px;
+  }
+
+  body.dashboard-native-page--layout-ultrawide .audio-now-apps .inline-button,
+  body.dashboard-native-page--layout-ultrawide .audio-now-apps .inline-range {
+    min-height: 54px !important;
   }
 }
 

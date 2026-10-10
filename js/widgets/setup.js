@@ -14,6 +14,7 @@
   var emitTouchFeedback = runtime.emitTouchFeedback;
   var escapeHtml = runtime.escapeHtml;
   var formatAge = runtime.formatAge;
+  var liveRegionAttributes = runtime.liveRegionAttributes;
   var metricCard = runtime.metricCard;
   var optionalNumber = runtime.optionalNumber;
   var patchStableDom = runtime.patchStableDom;
@@ -317,7 +318,7 @@
               '<div class="router-inline-copy">Use an HTTPS address with the username and password for Frigate\'s authenticated port 8971, or leave both blank for a trusted internal port. Credentials are protected by Windows. HTTPS certificates must be trusted by Windows. Leave the address blank and save to remove Camera Detection.</div>' +
               '<div class="inline-actions setup-camera-actions"><button class="inline-button is-primary" type="submit">Save and test Camera Detection</button>' +
                 (state.frigateFeedbackText
-                  ? '<div class="setup-form-feedback" role="status" aria-live="polite" data-tone="' + escapeHtml(state.frigateFeedbackTone) + '" data-frigate-feedback>' + escapeHtml(state.frigateFeedbackText) + '</div>'
+                  ? '<div class="setup-form-feedback" data-tone="' + escapeHtml(state.frigateFeedbackTone) + '" data-frigate-feedback' + liveRegionAttributes(state.frigateFeedbackTone === "danger" ? "alert" : "status") + '>' + escapeHtml(state.frigateFeedbackText) + '</div>'
                   : '') +
               '</div>' +
             '</form>' +
@@ -366,7 +367,7 @@
             '<button class="inline-button" type="button" data-action="reset-local-data"' + (state.busy ? " disabled" : "") + '>' + (state.confirmReset ? "Confirm reset" : "Reset local data") + '</button>' +
             '<a class="inline-button" href="' + escapeHtml(supportBundleUrl) + '" target="_blank" rel="noreferrer">Support bundle</a>' +
             '<a class="inline-button" href="' + escapeHtml(supportUrl) + '" target="_blank" rel="noreferrer">Support</a>' +
-            statusPill(state.statusText, state.statusTone) +
+            statusPill(state.statusText, state.statusTone, state.statusLiveMode) +
           '</div>' +
         '</div>' +
         '<div class="inline-grid inline-grid--4 setup-health-grid">' +
@@ -395,6 +396,7 @@
       hue: (env.bridgeConfig && env.bridgeConfig.hue) || {},
       statusText: "Loading",
       statusTone: "warn",
+      statusLiveMode: "",
       busy: false,
       confirmReset: false,
       showOptional: ["weather", "calendar", "hue", "frigate"].indexOf(requestedSection) !== -1,
@@ -438,6 +440,7 @@
 
     function redraw() {
       patchStableDom(container, renderSetupWidget(state, env));
+      state.statusLiveMode = "";
       if (state.initialRefreshComplete && state.focusSection) {
         var section = container.querySelector('[data-setup-section="' + state.focusSection + '"]');
         var input = section && section.querySelector("input, select, button");
@@ -601,6 +604,7 @@
         state.busy = true;
         state.statusText = "Saving";
         state.statusTone = "warn";
+        state.statusLiveMode = "status";
         redraw();
         requestJson(buildBridgeUrl(env, "/api/config/dashboard"), {
           method: "POST",
@@ -612,11 +616,13 @@
           return setupUpdate(env, "dashboard");
         }).then(function () {
           state.busy = false;
+          state.statusLiveMode = "status";
           return refresh();
         }, function (error) {
           state.busy = false;
           state.statusText = error.message || "Save failed";
           state.statusTone = "danger";
+          state.statusLiveMode = "alert";
           redraw();
         });
         return;
@@ -674,6 +680,7 @@
       state.busy = true;
       state.statusText = "Saving";
       state.statusTone = "warn";
+      state.statusLiveMode = formId === "frigate" ? "" : "status";
       if (formId === "frigate") {
         state.frigateFeedbackText = "Saving and testing Camera Detection settings.";
         state.frigateFeedbackTone = "warn";
@@ -693,11 +700,13 @@
           return setupUpdate(env, "weather");
         }).then(function () {
           state.busy = false;
+          state.statusLiveMode = "status";
           return refresh();
         }, function (error) {
           state.busy = false;
           state.statusText = error.message || "Save failed";
           state.statusTone = "danger";
+          state.statusLiveMode = "alert";
           redraw();
         });
         return;
@@ -714,11 +723,13 @@
           return setupUpdate(env, "calendar");
         }).then(function () {
           state.busy = false;
+          state.statusLiveMode = "status";
           return refresh();
         }, function (error) {
           state.busy = false;
           state.statusText = error.message || "Save failed";
           state.statusTone = "danger";
+          state.statusLiveMode = "alert";
           redraw();
         });
         return;
@@ -793,11 +804,13 @@
           return setupUpdate(env, "hue");
         }).then(function () {
           state.busy = false;
+          state.statusLiveMode = "status";
           return refresh();
         }, function (error) {
           state.busy = false;
           state.statusText = error.message || "Link failed";
           state.statusTone = "danger";
+          state.statusLiveMode = "alert";
           redraw();
         });
         return;
@@ -811,6 +824,7 @@
         state.busy = false;
         state.statusText = "Saved";
         state.statusTone = "good";
+        state.statusLiveMode = "status";
         redraw();
       }
     });

@@ -211,21 +211,25 @@ public sealed class SystemMetricsService : IDisposable
 
             var graphicsMaximum = double.MinValue;
             var fallbackMaximum = double.MinValue;
-            foreach (ManagementObject item in searcher.Get())
+            using var results = searcher.Get();
+            foreach (ManagementObject item in results)
             {
-                var name = Convert.ToString(item["Name"]) ?? "";
-                var utilization = Convert.ToDouble(item["UtilizationPercentage"] ?? 0);
-                if (name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("engtype_Graphics", StringComparison.OrdinalIgnoreCase))
+                using (item)
                 {
-                    graphicsMaximum = Math.Max(graphicsMaximum, utilization);
-                    continue;
-                }
+                    var name = Convert.ToString(item["Name"]) ?? "";
+                    var utilization = Convert.ToDouble(item["UtilizationPercentage"] ?? 0);
+                    if (name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase)
+                        || name.Contains("engtype_Graphics", StringComparison.OrdinalIgnoreCase))
+                    {
+                        graphicsMaximum = Math.Max(graphicsMaximum, utilization);
+                        continue;
+                    }
 
-                if (name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("engtype_Copy", StringComparison.OrdinalIgnoreCase))
-                {
-                    fallbackMaximum = Math.Max(fallbackMaximum, utilization);
+                    if (name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase)
+                        || name.Contains("engtype_Copy", StringComparison.OrdinalIgnoreCase))
+                    {
+                        fallbackMaximum = Math.Max(fallbackMaximum, utilization);
+                    }
                 }
             }
 
@@ -258,30 +262,34 @@ public sealed class SystemMetricsService : IDisposable
                 "SELECT Name, Identifier, Parent, Value, SensorType FROM Sensor WHERE SensorType = 'Temperature'");
 
             double? bestValue = null;
-            foreach (ManagementObject sensor in searcher.Get())
+            using var results = searcher.Get();
+            foreach (ManagementObject sensor in results)
             {
-                var combined = string.Join(" ",
-                    Convert.ToString(sensor["Name"]) ?? "",
-                    Convert.ToString(sensor["Identifier"]) ?? "",
-                    Convert.ToString(sensor["Parent"]) ?? "");
-
-                if (!patterns.Any(pattern => combined.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
+                using (sensor)
                 {
-                    continue;
-                }
+                    var combined = string.Join(" ",
+                        Convert.ToString(sensor["Name"]) ?? "",
+                        Convert.ToString(sensor["Identifier"]) ?? "",
+                        Convert.ToString(sensor["Parent"]) ?? "");
 
-                if (sensor["Value"] is null)
-                {
-                    continue;
-                }
+                    if (!patterns.Any(pattern => combined.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
 
-                var value = Convert.ToDouble(sensor["Value"]);
-                if (value <= 0 || value > 130)
-                {
-                    continue;
-                }
+                    if (sensor["Value"] is null)
+                    {
+                        continue;
+                    }
 
-                bestValue = bestValue.HasValue ? Math.Max(bestValue.Value, value) : value;
+                    var value = Convert.ToDouble(sensor["Value"]);
+                    if (value <= 0 || value > 130)
+                    {
+                        continue;
+                    }
+
+                    bestValue = bestValue.HasValue ? Math.Max(bestValue.Value, value) : value;
+                }
             }
 
             return bestValue.HasValue ? Round(bestValue.Value) : null;

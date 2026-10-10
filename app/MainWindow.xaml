@@ -29,6 +29,7 @@
                     FontWeight="SemiBold" />
                 <TextBlock
                     x:Name="StatusText"
+                    AutomationProperties.LiveSetting="Polite"
                     Text="Starting bridge..."
                     Foreground="#FFDCE6EC"
                     FontSize="16"
@@ -84,6 +85,7 @@
 
                     <TextBlock
                         x:Name="DisplayPickerStatus"
+                        AutomationProperties.LiveSetting="Polite"
                         Grid.Row="2"
                         Margin="0,18,0,0"
                         Text="You can change this later in Settings → Diagnostics."

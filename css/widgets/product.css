@@ -104,12 +104,12 @@
 }
 
 @media (max-width: 1280px) {
-  .dashboard-native-page--browser .router-viewer:has(.product-shell) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-viewer:has(.product-shell) {
     grid-template-rows: max-content minmax(0, 1fr);
   }
 
-  .dashboard-native-page--browser .router-inline-widget:has(> .inline-widget-mount > .product-shell),
-  .dashboard-native-page--browser .router-inline-widget:has(> .product-shell) {
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .inline-widget-mount > .product-shell),
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .router-inline-widget:has(> .product-shell) {
     position: absolute;
     inset: 0;
     overflow: auto;
@@ -509,6 +509,20 @@
   transform: scaleX(1);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .product-card--button::after,
+  .product-swatch::after,
+  .product-layout-row::after {
+    transition: none;
+  }
+}
+
+.dashboard-native-page--motion-off .product-card--button::after,
+.dashboard-native-page--motion-off .product-swatch::after,
+.dashboard-native-page--motion-off .product-layout-row::after {
+  transition: none;
+}
+
 .product-card.is-selected,
 .product-swatch.is-selected {
   border-color: rgba(255, 255, 255, 0.22);
@@ -701,7 +715,7 @@
 .product-layout-row__width > span {
   padding-left: 2px;
   color: var(--color-text-dim);
-  font-size: 0.62rem;
+  font-size: max(12px, 0.62rem);
   font-weight: 700;
   letter-spacing: 0.06em;
   line-height: 1;
@@ -863,8 +877,18 @@
 
 .product-privacy-details__body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   padding-top: 10px;
+}
+
+.product-privacy-details__body textarea.inline-input {
+  min-width: 0;
+}
+
+.product-privacy-details__body > .inline-field {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .product-privacy-permissions-label {

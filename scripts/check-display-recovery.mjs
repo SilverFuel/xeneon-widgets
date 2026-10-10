@@ -4,6 +4,7 @@ import { extname, resolve } from "node:path";
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
 const mainWindowXaml = readWorkspaceFile("app/MainWindow.xaml");
 const appXaml = readWorkspaceFile("app/App.xaml.cs");
+const program = readWorkspaceFile("app/Program.cs");
 const appProject = readWorkspaceFile("app/XenonEdgeHost.csproj");
 const appManifest = readWorkspaceFile("app/app.manifest");
 const trayIcon = readWorkspaceFile("app/TrayIcon.cs");
@@ -15,6 +16,9 @@ const supportController = readWorkspaceFile("app/Controllers/SupportController.c
 const setupWidget = readWorkspaceFile("js/widgets/setup.js");
 const systemWidget = readWorkspaceFile("js/widgets/system.js");
 const nativeHostApiTest = readWorkspaceFile("scripts/test-native-host-api.mjs");
+const renderedDashboardTest = readWorkspaceFile("scripts/test-rendered-dashboard.mjs");
+const renderedThemeTest = readWorkspaceFile("scripts/test-theme-rendered.mjs");
+const visibleWindowGuard = readWorkspaceFile("scripts/lib/visible-window-guard.mjs");
 const installScript = readWorkspaceFile("app/install.ps1");
 const displayReceipt = readWorkspaceFile("scripts/Test-DisplayQualificationReceipt.ps1");
 const displayReceiptFixtures = readWorkspaceFile("scripts/test-display-qualification-receipt.ps1");
@@ -93,14 +97,21 @@ assert(
 );
 
 assert(
+  /x:Name="StatusText"[\s\S]{0,160}AutomationProperties\.LiveSetting="Polite"/.test(mainWindowXaml)
+    && /x:Name="DisplayPickerStatus"[\s\S]{0,160}AutomationProperties\.LiveSetting="Polite"/.test(mainWindowXaml),
+  "native startup and asynchronous display-picker status must be exposed as polite accessibility live regions"
+);
+
+assert(
   /\$trigger\.Delay\s*=\s*"PT20S"/.test(installScript),
   "installed startup task must delay launch so display topology can settle after reboot"
 );
 
 assert(
-  /HandleActivated[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow)
-    && /ShowDisplayWindow[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow),
-  "automatic launch and tray show must revalidate companion placement without saving display preference"
+  /internal void Start\(\)[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow)
+    && /ShowDisplayWindow[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow)
+    && !/Activated\s*\+=/.test(mainWindow),
+  "automatic launch must not depend on window activation, and tray show must revalidate companion placement without saving display preference"
 );
 
 assert(
@@ -124,11 +135,29 @@ assert(
 
 assert(
   /HandleBridgeReady[\s\S]+_bridgeReady = true[\s\S]+BeginDashboardStartupIfReady/.test(mainWindow)
-    && /BeginDashboardStartupIfReady[\s\S]+!_windowHasBeenShown[\s\S]+_companionDisplayUnavailable[\s\S]+return/.test(mainWindow)
+    && /BeginDashboardStartupIfReady[\s\S]+!_windowHasBeenShown && !_suppressWindowForTests[\s\S]+_companionDisplayUnavailable && !_suppressWindowForTests[\s\S]+return/.test(mainWindow)
     && /BeginDashboardStartupIfReady[\s\S]+_dashboardLoaded \|\| DashboardView\.CoreWebView2 is not null[\s\S]+return/.test(mainWindow)
     && /EnsureWebViewReadyAsync[\s\S]+if \(DashboardView\.CoreWebView2 is null\)[\s\S]+CreateWithOptionsAsync[\s\S]+EnsureCoreWebView2Async/.test(mainWindow)
     && /RevealConfiguredWindow[\s\S]+ShowWindowNoActivate\(\);[\s\S]+BeginDashboardStartupIfReady\(\)/.test(mainWindow),
-  "native services may start while Auxora is hidden, but WebView2 must initialize only once after a verified companion window is revealed"
+  "native services may start while Auxora is hidden, but WebView2 must initialize only once after a verified companion reveal or an isolated window-suppressed test launch"
+);
+
+assert(
+  /ShouldSuppressWindowForTests\s*=>\s*ResolveWindowSuppression/.test(program)
+    && /ResolveWindowSuppression[\s\S]+Suppressing the Auxora window is allowed only for an isolated automated test instance/.test(program)
+    && /if \(_suppressWindowForTests\)[\s\S]+ShowWindow\(_windowHandle, SwHide\);[\s\S]+InitializeHostAsync\(\);[\s\S]+return;/.test(mainWindow)
+    && /RevealConfiguredWindow\(\)[\s\S]+if \(_suppressWindowForTests\)[\s\S]+ShowWindow\(_windowHandle, SwHide\);[\s\S]+return false;/.test(mainWindow)
+    && /ScheduleDisplayRecovery\(string reason\)[\s\S]+_suppressWindowForTests/.test(mainWindow)
+    && /ResolveWebViewUserDataPath\([\s\S]+_suppressWindowForTests \? AppPaths\.LocalDataDirectory : null/.test(mainWindow)
+    && /return Path\.Combine\(isolatedLocalDataDirectory, "WebView2"\)/.test(mainWindow)
+    && /return Path\.Combine\(productionLocalApplicationDataRoot, "XenonEdgeHost", "WebView2"\)/.test(mainWindow)
+    && /AUXORA_SUPPRESS_WINDOW_FOR_TESTS:\s*"1"/.test(renderedDashboardTest)
+    && /AUXORA_SUPPRESS_WINDOW_FOR_TESTS:\s*"1"/.test(renderedThemeTest)
+    && /spawnWithVisibleWindowGuard/.test(renderedDashboardTest)
+    && /spawnWithVisibleWindowGuard/.test(renderedThemeTest)
+    && /IsWindowVisible/.test(visibleWindowGuard)
+    && /Stop-Process -Id \$targetProcessId -Force/.test(visibleWindowGuard),
+  "headless rendered tests must suppress every native reveal, isolate WebView data, and terminate on any visible top-level window"
 );
 
 assert(
@@ -140,6 +169,7 @@ assert(
 
 assert(
   !/\bActivate\(\);/.test(mainWindow)
+    && !/SetForegroundWindow/.test(mainWindow)
     && /if \(_waitingForEdgeDisplay\)[\s\S]+ShowWindow\(windowHandle, SwShowNoActivate\)/.test(mainWindow)
     && /ShowWindowNoActivate\(\);[\s\S]+_windowHasBeenShown = true;/.test(mainWindow),
   "automatic startup, recovery, and display-picker reveals must never take foreground focus"
@@ -163,10 +193,17 @@ assert(
 );
 
 assert(
-  /HandleDisplaySettingsChanged[\s\S]+ShowWindow\(windowHandle, SwHide\)[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow)
+  /HandleDisplaySettingsChanged[\s\S]+ScheduleDisplayTopologyRevalidation\(\)/.test(mainWindow)
+    && /DisplayTopologyDebounceDelay\s*=\s*TimeSpan\.FromMilliseconds\(750\)/.test(mainWindow)
+    && /ScheduleDisplayTopologyRevalidation[\s\S]+firstInBurst[\s\S]+ShowWindow\(_windowHandle, SwHide\)[\s\S]+RevalidateDisplayTopologyAfterQuietPeriodAsync/.test(mainWindow)
+    && /RevalidateDisplayTopologyAfterQuietPeriodAsync[\s\S]+var cancellationToken = request\.Token[\s\S]+Task\.Delay\(DisplayTopologyDebounceDelay, cancellationToken\)[\s\S]+ConfigureWindow\(saveSelection:\s*false\)[\s\S]+RevealConfiguredWindow\(\)/.test(mainWindow)
+    && /completion\.Task\.WaitAsync\(cancellationToken\)/.test(mainWindow)
+    && /CancelCancellationSource\(previousRequest\)/.test(mainWindow)
+    && /CancelCancellationSource\(displayTopologyChangeCancellation\)/.test(mainWindow)
+    && /CancelCancellationSource[\s\S]+catch \(ObjectDisposedException\)/.test(mainWindow)
     && /TryRecoverDisplayPlacementAsync[\s\S]+var recovered = ConfigureWindow\(saveSelection:\s*false\)[\s\S]+if\s*\(recovered\)[\s\S]+RevealConfiguredWindow\(\)/.test(mainWindow)
     && /ShowDisplayWindow\(\)[\s\S]+SwHide[\s\S]+ConfigureWindow\(saveSelection:\s*false\)[\s\S]+RevealConfiguredWindow\(\)/.test(mainWindow),
-  "hot-plug recovery and tray show must hide first and reveal only after companion placement succeeds"
+  "display-event storms must hide once and debounce reconfiguration, while recovery and tray show reveal only after companion placement succeeds"
 );
 
 assert(
@@ -272,10 +309,17 @@ assert(
 assert(
   /HandleProcessFailed[\s\S]+ScheduleWebViewRecovery/.test(mainWindow)
     && /ScheduleWebViewRecovery[\s\S]+NavigateDashboard\(forceReload:\s*true\)/.test(mainWindow)
-    && /ScheduleWebViewRecovery[\s\S]+_webViewDiagnosticsAttached = false;[\s\S]+await EnsureWebViewReadyAsync/.test(mainWindow)
+    && /ScheduleWebViewRecovery[\s\S]+await EnsureWebViewReadyAsync\(\)/.test(mainWindow)
+    && !/EnsureWebViewReadyAsync\(resetDiagnostics/.test(mainWindow)
+    && /AttachWebViewDiagnosticsAsync[\s\S]+ReferenceEquals\(_webViewDiagnosticsWebView, webView\)[\s\S]+return;/.test(mainWindow)
+    && /DetachWebViewDiagnostics[\s\S]+WebMessageReceived -= HandleWebMessageReceived[\s\S]+ProcessFailed -= HandleProcessFailed[\s\S]+RemoveWebViewDiagnosticsScript/.test(mainWindow)
+    && /RemoveScriptToExecuteOnDocumentCreated\(scriptId\)/.test(mainWindow)
+    && /_webViewDiagnosticsWebView/.test(mainWindow)
+    && /_webViewDiagnosticsScriptId/.test(mainWindow)
+    && /DisposeResources[\s\S]+DetachWebViewDiagnostics\(\)/.test(mainWindow)
     && /if\s*\(!DispatcherQueue\.TryEnqueue/.test(mainWindow)
     && /Failed to enqueue WebView recovery[\s\S]+Interlocked\.Exchange\(ref _webViewRecoveryScheduled,\s*0\)/.test(mainWindow),
-  "WebView process failures must schedule dashboard recovery, reattach diagnostics, and clear the gate when enqueue fails"
+  "WebView process failures must reuse an existing diagnostics registration, clean it up on replacement or disposal, and clear the gate when enqueue fails"
 );
 
 assert(

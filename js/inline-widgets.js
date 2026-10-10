@@ -207,6 +207,69 @@
     return getSetting(env, "unifiNetworkEndpoint") || buildBridgeUrl(env, "/api/unifi/network");
   }
 
+  function fetchWithTimeout(url, options, timeoutMs, readResponse) {
+    var fetchOptions = Object.assign({}, options || {});
+    var callerSignal = fetchOptions.signal;
+    var controller = new AbortController();
+
+    fetchOptions.signal = controller.signal;
+
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timerId = window.setTimeout(function () {
+        abortRequest(new Error("Request timed out"));
+      }, timeoutMs);
+
+      function finish(callback, value) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timerId);
+        if (callerSignal) {
+          callerSignal.removeEventListener("abort", forwardCallerAbort);
+        }
+        callback(value);
+      }
+
+      function abortRequest(reason) {
+        if (settled) {
+          return;
+        }
+        controller.abort(reason);
+        finish(reject, reason === undefined ? controller.signal.reason : reason);
+      }
+
+      function forwardCallerAbort() {
+        abortRequest(callerSignal.reason);
+      }
+
+      if (callerSignal) {
+        if (callerSignal.aborted) {
+          forwardCallerAbort();
+          return;
+        }
+        callerSignal.addEventListener("abort", forwardCallerAbort, { once: true });
+      }
+
+      Promise.resolve().then(function () {
+        if (settled) {
+          return;
+        }
+        return fetch(url, fetchOptions);
+      }).then(function (response) {
+        if (!settled) {
+          // Keep the deadline and caller signal active until the response body is consumed.
+          return readResponse ? readResponse(response) : response;
+        }
+      }).then(function (value) {
+        finish(resolve, value);
+      }, function (error) {
+        finish(reject, error);
+      });
+    });
+  }
+
   function requestJson(url, options, timeoutMs) {
     var settings = options || {};
     var headers = Object.assign({}, settings.headers || {});
@@ -222,30 +285,21 @@
       }
       fetchOptions.body = typeof settings.body === "string" ? settings.body : JSON.stringify(settings.body);
     }
+    if (settings.signal) {
+      fetchOptions.signal = settings.signal;
+    }
 
-    return new Promise(function (resolve, reject) {
-      var timerId = window.setTimeout(function () {
-        reject(new Error("Request timed out"));
-      }, timeoutMs || 5000);
-
-      fetch(url, fetchOptions).then(function (response) {
-        if (!response.ok) {
-          return response.json().catch(function () {
-            return {};
-          }).then(function (payload) {
-            throw new Error(payload.error || payload.message || ("Request failed with status " + response.status));
-          });
-        }
-
+    return fetchWithTimeout(url, fetchOptions, timeoutMs || 5000, function (response) {
+      if (!response.ok) {
         return response.json().catch(function () {
           return {};
+        }).then(function (payload) {
+          throw new Error(payload.error || payload.message || ("Request failed with status " + response.status));
         });
-      }).then(function (payload) {
-        window.clearTimeout(timerId);
-        resolve(payload);
-      }, function (error) {
-        window.clearTimeout(timerId);
-        reject(error);
+      }
+
+      return response.json().catch(function () {
+        return {};
       });
     });
   }
@@ -647,8 +701,18 @@
     return sliders;
   }
 
-  function statusPill(textValue, tone) {
-    return '<div class="widget-status" data-tone="' + escapeHtml(tone || "muted") + '">' + escapeHtml(textValue || "--") + "</div>";
+  function liveRegionAttributes(mode) {
+    if (mode === "alert") {
+      return ' role="alert" aria-live="assertive" aria-atomic="true"';
+    }
+    if (mode === "status") {
+      return ' role="status" aria-live="polite" aria-atomic="true"';
+    }
+    return "";
+  }
+
+  function statusPill(textValue, tone, liveMode) {
+    return '<div class="widget-status" data-tone="' + escapeHtml(tone || "muted") + '"' + liveRegionAttributes(liveMode) + '>' + escapeHtml(textValue || "--") + "</div>";
   }
 
   function emptyState(title, copy) {
@@ -835,6 +899,7 @@
     formatWhen: formatWhen,
     getUniFiNetworkEndpoint: getUniFiNetworkEndpoint,
     initXnSlider: initXnSlider,
+    liveRegionAttributes: liveRegionAttributes,
     metricCard: metricCard,
     normalizeMediaPayload: normalizeMediaPayload,
     nullableNumber: nullableNumber,

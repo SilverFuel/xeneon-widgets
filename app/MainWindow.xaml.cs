@@ -26,6 +26,7 @@ public sealed partial class MainWindow : Window
     private const int SwShowNoActivate = 4;
     private const int WaitingWindowWidth = 1120;
     private const int WaitingWindowHeight = 720;
+    private static readonly TimeSpan DisplayTopologyDebounceDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan PersistentDisplayRecoveryDelay = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan[] DisplayRecoveryDelays =
     [
@@ -39,6 +40,9 @@ public sealed partial class MainWindow : Window
 
     private readonly BridgeManager _bridgeManager;
     private readonly IntPtr _windowHandle;
+    private readonly bool _suppressWindowForTests = Program.ShouldSuppressWindowForTests;
+    private readonly object _displayTopologyChangeSync = new();
+    private readonly SemaphoreSlim _webViewDiagnosticsGate = new(1, 1);
     private TrayIcon? _trayIcon;
     private readonly HostLogger _logger = App.Logger;
     private readonly Uri _dashboardUri;
@@ -47,7 +51,6 @@ public sealed partial class MainWindow : Window
     private bool _initialized;
     private bool _disposed;
     private bool _webViewInitializationFailed;
-    private bool _webViewDiagnosticsAttached;
     private bool _dashboardLoaded;
     private bool _bridgeReady;
     private bool _taskbarStyleApplied;
@@ -66,6 +69,9 @@ public sealed partial class MainWindow : Window
     private int _lockedPresentationGeneration;
     private EventWaitHandle? _showDisplayEvent;
     private RegisteredWaitHandle? _showDisplayWaitHandle;
+    private CoreWebView2? _webViewDiagnosticsWebView;
+    private string? _webViewDiagnosticsScriptId;
+    private CancellationTokenSource? _displayTopologyChangeCancellation;
     private CancellationTokenSource? _displayRecoveryCancellation;
 
     public MainWindow()
@@ -76,10 +82,10 @@ public sealed partial class MainWindow : Window
         _bridgeManager = new BridgeManager();
         _dashboardUri = _bridgeManager.DashboardUri;
         _settingsUri = _bridgeManager.SettingsUri;
-        _webViewUserDataPath = Path.Combine(
+        _webViewUserDataPath = ResolveWebViewUserDataPath(
+            _suppressWindowForTests,
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "XenonEdgeHost",
-            "WebView2");
+            _suppressWindowForTests ? AppPaths.LocalDataDirectory : null);
 
         _bridgeManager.StatusChanged += HandleBridgeStatusChanged;
         _bridgeManager.BridgeReady += HandleBridgeReady;
@@ -90,12 +96,37 @@ public sealed partial class MainWindow : Window
 
         AppWindow.Closing += HandleAppWindowClosing;
         AppWindow.Changed += HandleAppWindowChanged;
-        Activated += HandleActivated;
         Closed += HandleClosed;
         DashboardView.NavigationStarting += HandleNavigationStarting;
         DashboardView.NavigationCompleted += HandleNavigationCompleted;
-        SystemEvents.DisplaySettingsChanged += HandleDisplaySettingsChanged;
-        StartShowDisplaySignalListener();
+        if (!_suppressWindowForTests)
+        {
+            SystemEvents.DisplaySettingsChanged += HandleDisplaySettingsChanged;
+            StartShowDisplaySignalListener();
+        }
+    }
+
+    internal static string ResolveWebViewUserDataPath(
+        bool suppressWindowForTests,
+        string productionLocalApplicationDataRoot,
+        string? isolatedLocalDataDirectory)
+    {
+        if (suppressWindowForTests)
+        {
+            if (string.IsNullOrWhiteSpace(isolatedLocalDataDirectory))
+            {
+                throw new InvalidOperationException("A suppressed test window requires an isolated WebView data directory.");
+            }
+
+            return Path.Combine(isolatedLocalDataDirectory, "WebView2");
+        }
+
+        if (string.IsNullOrWhiteSpace(productionLocalApplicationDataRoot))
+        {
+            throw new InvalidOperationException("The production WebView data root is unavailable.");
+        }
+
+        return Path.Combine(productionLocalApplicationDataRoot, "XenonEdgeHost", "WebView2");
     }
 
     internal void Start()
@@ -106,16 +137,32 @@ public sealed partial class MainWindow : Window
         }
 
         _initialized = true;
-        _trayIcon ??= new TrayIcon(
-            _windowHandle,
-            onOpenSettings: () => DispatcherQueue.TryEnqueue(() => _ = OpenSettingsAsync()),
-            onRestartBridge: () => DispatcherQueue.TryEnqueue(() => _ = RestartBridgeAsync()),
-            onShowDisplay: () => DispatcherQueue.TryEnqueue(ShowDisplayWindow),
-            onMoveDisplay: () => DispatcherQueue.TryEnqueue(BeginDisplayMoveMode),
-            onOpenLogs: () => DispatcherQueue.TryEnqueue(OpenLogs),
-            onResetDashboard: () => DispatcherQueue.TryEnqueue(() => _ = ResetDashboardStateAsync()),
-            onQuit: RequestQuitFromTray,
-            logger: _logger);
+        if (Program.ShouldCreateTrayIcon)
+        {
+            _trayIcon ??= new TrayIcon(
+                _windowHandle,
+                onOpenSettings: () => DispatcherQueue.TryEnqueue(() => _ = OpenSettingsAsync()),
+                onRestartBridge: () => DispatcherQueue.TryEnqueue(() => _ = RestartBridgeAsync()),
+                onShowDisplay: () => DispatcherQueue.TryEnqueue(ShowDisplayWindow),
+                onMoveDisplay: () => DispatcherQueue.TryEnqueue(BeginDisplayMoveMode),
+                onOpenLogs: () => DispatcherQueue.TryEnqueue(OpenLogs),
+                onResetDashboard: () => DispatcherQueue.TryEnqueue(() => _ = ResetDashboardStateAsync()),
+                onQuit: RequestQuitFromTray,
+                logger: _logger);
+        }
+        else
+        {
+            _logger.Info("Tray icon disabled for isolated automated UI testing.");
+        }
+
+        if (_suppressWindowForTests)
+        {
+            ShowWindow(_windowHandle, SwHide);
+            _logger.Info("Window suppressed for isolated automated UI testing; native services and WebView2 remain available.");
+            _ = InitializeHostAsync();
+            return;
+        }
+
         var placementReady = ConfigureWindow(saveSelection: false);
         if (placementReady)
         {
@@ -123,12 +170,6 @@ public sealed partial class MainWindow : Window
         }
         ScheduleDisplayRecovery("startup display backoff");
         _ = InitializeHostAsync();
-    }
-
-    private void HandleActivated(object sender, WindowActivatedEventArgs args)
-    {
-        // Startup is explicit so a later user-initiated activation remains harmless.
-        Start();
     }
 
     private bool ConfigureWindow(bool saveSelection)
@@ -434,32 +475,113 @@ public sealed partial class MainWindow : Window
 
     private void HandleDisplaySettingsChanged(object? sender, EventArgs args)
     {
-        // Windows can promote a surviving monitor to primary before the delayed
-        // recovery pass runs. Hide synchronously, then revalidate on the UI thread.
-        if (_windowHandle != IntPtr.Zero)
-        {
-            ShowWindow(_windowHandle, SwHide);
-        }
+        ScheduleDisplayTopologyRevalidation();
+    }
 
-        _logger.Info("Display topology changed; hiding Auxora until companion placement is revalidated.");
-        DispatcherQueue.TryEnqueue(() =>
+    private void ScheduleDisplayTopologyRevalidation()
+    {
+        CancellationTokenSource request;
+        CancellationTokenSource? previousRequest;
+        bool firstInBurst;
+
+        lock (_displayTopologyChangeSync)
         {
             if (_disposed)
             {
                 return;
             }
 
-            _displayMoveMode = false;
-            if (ConfigureWindow(saveSelection: false))
+            previousRequest = _displayTopologyChangeCancellation;
+            firstInBurst = previousRequest is null;
+            request = new CancellationTokenSource();
+            _displayTopologyChangeCancellation = request;
+        }
+
+        CancelCancellationSource(previousRequest);
+
+        // Windows can emit a burst of equivalent topology notifications. Hide once
+        // at the start of the burst, then wait for a quiet period before doing the
+        // expensive placement and fullscreen work on the UI thread.
+        if (firstInBurst)
+        {
+            if (_windowHandle != IntPtr.Zero)
             {
-                RevealConfiguredWindow();
+                ShowWindow(_windowHandle, SwHide);
             }
-        });
-        ScheduleDisplayRecovery("display topology changed");
+
+            _logger.Info("Display topology changed; coalescing notifications before companion placement is revalidated.");
+        }
+
+        _ = RevalidateDisplayTopologyAfterQuietPeriodAsync(request);
+    }
+
+    private async Task RevalidateDisplayTopologyAfterQuietPeriodAsync(CancellationTokenSource request)
+    {
+        var cancellationToken = request.Token;
+        try
+        {
+            await Task.Delay(DisplayTopologyDebounceDelay, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    if (_disposed || cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    _displayMoveMode = false;
+                    if (ConfigureWindow(saveSelection: false))
+                    {
+                        RevealConfiguredWindow();
+                    }
+
+                    ScheduleDisplayRecovery("display topology changed");
+                }
+                catch (Exception error)
+                {
+                    _logger.Warn($"Coalesced display topology revalidation failed: {error.Message}");
+                    ScheduleDisplayRecovery("display topology revalidation failed");
+                }
+                finally
+                {
+                    completion.TrySetResult();
+                }
+            }))
+            {
+                _logger.Warn("Display topology changed, but the coalesced revalidation could not be queued.");
+                return;
+            }
+
+            await completion.Task.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            lock (_displayTopologyChangeSync)
+            {
+                if (ReferenceEquals(_displayTopologyChangeCancellation, request))
+                {
+                    _displayTopologyChangeCancellation = null;
+                }
+            }
+
+            request.Dispose();
+        }
     }
 
     private void HandleDisplayPreferenceChanged()
     {
+        if (_suppressWindowForTests)
+        {
+            return;
+        }
+
         DispatcherQueue.TryEnqueue(() =>
         {
             _displayMoveMode = false;
@@ -474,7 +596,9 @@ public sealed partial class MainWindow : Window
 
     private void ScheduleDisplayRecovery(string reason)
     {
-        if (_disposed || Interlocked.Exchange(ref _displayRecoveryScheduled, 1) == 1)
+        if (_suppressWindowForTests
+            || _disposed
+            || Interlocked.Exchange(ref _displayRecoveryScheduled, 1) == 1)
         {
             return;
         }
@@ -592,24 +716,41 @@ public sealed partial class MainWindow : Window
             throw;
         }
 
-        if (DashboardView.CoreWebView2 is null)
+        var webView = DashboardView.CoreWebView2
+            ?? throw new InvalidOperationException("WebView2 did not initialize correctly.");
+
+        webView.Settings.AreDefaultContextMenusEnabled = false;
+        webView.Settings.AreBrowserAcceleratorKeysEnabled = false;
+        webView.Settings.IsStatusBarEnabled = false;
+        webView.Settings.IsZoomControlEnabled = false;
+
+        await _webViewDiagnosticsGate.WaitAsync();
+        try
         {
-            throw new InvalidOperationException("WebView2 did not initialize correctly.");
+            await AttachWebViewDiagnosticsAsync(webView);
         }
+        finally
+        {
+            _webViewDiagnosticsGate.Release();
+        }
+    }
 
-        DashboardView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-        DashboardView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
-        DashboardView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-        DashboardView.CoreWebView2.Settings.IsZoomControlEnabled = false;
-
-        if (_webViewDiagnosticsAttached)
+    private async Task AttachWebViewDiagnosticsAsync(CoreWebView2 webView)
+    {
+        if (ReferenceEquals(_webViewDiagnosticsWebView, webView)
+            && !string.IsNullOrWhiteSpace(_webViewDiagnosticsScriptId))
         {
             return;
         }
 
-        DashboardView.CoreWebView2.WebMessageReceived += HandleWebMessageReceived;
-        DashboardView.CoreWebView2.ProcessFailed += HandleProcessFailed;
-        await DashboardView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+        DetachWebViewDiagnostics();
+        webView.WebMessageReceived += HandleWebMessageReceived;
+        webView.ProcessFailed += HandleProcessFailed;
+        _webViewDiagnosticsWebView = webView;
+
+        try
+        {
+            var scriptId = await webView.AddScriptToExecuteOnDocumentCreatedAsync(
             """
             (() => {
               if (!window.chrome || !window.chrome.webview || window.__xenonDiagnosticsInstalled) {
@@ -650,7 +791,68 @@ public sealed partial class MainWindow : Window
               });
             })();
             """);
-        _webViewDiagnosticsAttached = true;
+
+            if (_disposed
+                || !ReferenceEquals(DashboardView.CoreWebView2, webView)
+                || !ReferenceEquals(_webViewDiagnosticsWebView, webView))
+            {
+                webView.WebMessageReceived -= HandleWebMessageReceived;
+                webView.ProcessFailed -= HandleProcessFailed;
+                RemoveWebViewDiagnosticsScript(webView, scriptId);
+                if (ReferenceEquals(_webViewDiagnosticsWebView, webView))
+                {
+                    _webViewDiagnosticsWebView = null;
+                    _webViewDiagnosticsScriptId = null;
+                }
+                return;
+            }
+
+            _webViewDiagnosticsScriptId = scriptId;
+        }
+        catch
+        {
+            webView.WebMessageReceived -= HandleWebMessageReceived;
+            webView.ProcessFailed -= HandleProcessFailed;
+            if (ReferenceEquals(_webViewDiagnosticsWebView, webView))
+            {
+                _webViewDiagnosticsWebView = null;
+                _webViewDiagnosticsScriptId = null;
+            }
+
+            throw;
+        }
+    }
+
+    private void DetachWebViewDiagnostics()
+    {
+        var webView = _webViewDiagnosticsWebView;
+        var scriptId = _webViewDiagnosticsScriptId;
+        _webViewDiagnosticsWebView = null;
+        _webViewDiagnosticsScriptId = null;
+
+        if (webView is null)
+        {
+            return;
+        }
+
+        webView.WebMessageReceived -= HandleWebMessageReceived;
+        webView.ProcessFailed -= HandleProcessFailed;
+        if (!string.IsNullOrWhiteSpace(scriptId))
+        {
+            RemoveWebViewDiagnosticsScript(webView, scriptId);
+        }
+    }
+
+    private void RemoveWebViewDiagnosticsScript(CoreWebView2 webView, string scriptId)
+    {
+        try
+        {
+            webView.RemoveScriptToExecuteOnDocumentCreated(scriptId);
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Removing the previous WebView diagnostics script failed: {error.Message}");
+        }
     }
 
     private static string BuildWebView2HelpText()
@@ -877,7 +1079,6 @@ public sealed partial class MainWindow : Window
                     return;
                 }
 
-                _webViewDiagnosticsAttached = false;
                 await EnsureWebViewReadyAsync();
                 _navigationFailures = 0;
                 NavigateDashboard(forceReload: true);
@@ -916,7 +1117,10 @@ public sealed partial class MainWindow : Window
 
     private void BeginDashboardStartupIfReady()
     {
-        if (_disposed || !_bridgeReady || !_windowHasBeenShown || _companionDisplayUnavailable)
+        if (_disposed
+            || !_bridgeReady
+            || (!_windowHasBeenShown && !_suppressWindowForTests)
+            || (_companionDisplayUnavailable && !_suppressWindowForTests))
         {
             _logger.Info("Native dashboard server is ready; WebView2 remains deferred until a verified companion display is revealed.");
             return;
@@ -1428,6 +1632,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        if (_suppressWindowForTests)
+        {
+            ShowWindow(windowHandle, SwHide);
+            return;
+        }
+
         if (_companionDisplayUnavailable)
         {
             ShowWindow(windowHandle, SwHide);
@@ -1446,6 +1656,13 @@ public sealed partial class MainWindow : Window
 
     private bool RevealConfiguredWindow()
     {
+        if (_suppressWindowForTests)
+        {
+            ShowWindow(_windowHandle, SwHide);
+            BeginDashboardStartupIfReady();
+            return false;
+        }
+
         if (_companionDisplayUnavailable || string.IsNullOrWhiteSpace(_configuredDisplayId))
         {
             ShowWindow(_windowHandle, SwHide);
@@ -1585,17 +1802,20 @@ public sealed partial class MainWindow : Window
         }
 
         _disposed = true;
+        CancellationTokenSource? displayTopologyChangeCancellation;
+        lock (_displayTopologyChangeSync)
+        {
+            displayTopologyChangeCancellation = _displayTopologyChangeCancellation;
+            _displayTopologyChangeCancellation = null;
+        }
+        CancelCancellationSource(displayTopologyChangeCancellation);
         DashboardView.NavigationCompleted -= HandleNavigationCompleted;
         DashboardView.NavigationStarting -= HandleNavigationStarting;
         SystemEvents.DisplaySettingsChanged -= HandleDisplaySettingsChanged;
         _bridgeManager.DisplayPreferenceChanged -= HandleDisplayPreferenceChanged;
         AppWindow.Closing -= HandleAppWindowClosing;
         AppWindow.Changed -= HandleAppWindowChanged;
-        if (DashboardView.CoreWebView2 is not null && _webViewDiagnosticsAttached)
-        {
-            DashboardView.CoreWebView2.WebMessageReceived -= HandleWebMessageReceived;
-            DashboardView.CoreWebView2.ProcessFailed -= HandleProcessFailed;
-        }
+        DetachWebViewDiagnostics();
         _bridgeManager.StatusChanged -= HandleBridgeStatusChanged;
         _bridgeManager.BridgeReady -= HandleBridgeReady;
         _bridgeManager.BridgeStopped -= HandleBridgeStopped;
@@ -1607,6 +1827,24 @@ public sealed partial class MainWindow : Window
         _trayIcon?.Dispose();
         _bridgeManager.Dispose();
         _logger.Info("Resources disposed. Exiting.");
+    }
+
+    private static void CancelCancellationSource(CancellationTokenSource? source)
+    {
+        if (source is null)
+        {
+            return;
+        }
+
+        try
+        {
+            source.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // A superseded debounce can finish and dispose itself between the
+            // ownership swap and cancellation. It is already stopped in that case.
+        }
     }
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]

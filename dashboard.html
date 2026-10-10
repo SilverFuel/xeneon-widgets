@@ -45,7 +45,10 @@
         </div>
 
         <div class="router-rail__lower">
-          <div id="dashboard-widget-picker" class="router-picker"></div>
+          <div class="dashboard-favorites-bar">
+            <nav id="dashboard-favorites" class="router-favorites" aria-label="Favorite panels"></nav>
+            <button id="dashboard-panels-toggle" class="auxora-panels-toggle" type="button" aria-haspopup="dialog" aria-controls="dashboard-panels-drawer" aria-expanded="false">All panels</button>
+          </div>
 
           <section id="dashboard-settings-panel" class="router-settings is-collapsed">
             <header class="router-settings__header">
@@ -110,9 +113,37 @@
         </div>
       </section>
       <div id="dashboard-touch-feedback" class="dashboard-touch-feedback is-hidden" role="status" aria-live="polite"></div>
+      <div id="dashboard-panels-scrim" class="auxora-panels-scrim is-hidden" aria-hidden="true" data-panels-close></div>
+      <aside id="dashboard-panels-drawer" class="auxora-panels-drawer is-hidden" role="dialog" aria-modal="true" aria-labelledby="dashboard-panels-title" aria-describedby="dashboard-panels-copy" tabindex="-1">
+        <div class="auxora-panels-drawer__head">
+          <strong id="dashboard-panels-title">All panels</strong>
+          <button type="button" data-panels-close aria-label="Close all panels">Close</button>
+        </div>
+        <p id="dashboard-panels-copy" class="auxora-panels-drawer__copy">Keep up to four favorites within reach.</p>
+        <p id="dashboard-favorites-feedback" class="auxora-panels-drawer__feedback" role="status" aria-live="polite"></p>
+        <div id="dashboard-widget-picker" class="router-picker"></div>
+      </aside>
       <div id="dashboard-quick-scrim" class="auxora-quick-scrim is-hidden" aria-hidden="true" data-quick-close></div>
       <aside id="dashboard-quick-drawer" class="auxora-quick-drawer is-hidden" role="dialog" aria-modal="true" aria-labelledby="dashboard-quick-title" tabindex="-1">
         <div class="auxora-quick-drawer__head"><strong id="dashboard-quick-title">Quick controls</strong><button type="button" data-quick-close aria-label="Close quick controls">Close</button></div>
+        <section id="dashboard-quick-media" class="auxora-quick-media" aria-labelledby="dashboard-quick-media-title">
+          <strong id="dashboard-quick-media-title" class="auxora-quick-media__title">Sound &amp; playback</strong>
+          <div class="auxora-quick-media__audio">
+            <div class="auxora-quick-media__volume-label">
+              <label for="dashboard-quick-volume">Volume</label>
+              <output id="dashboard-quick-volume-value" for="dashboard-quick-volume">—</output>
+            </div>
+            <div class="auxora-quick-media__volume-controls">
+              <input id="dashboard-quick-volume" class="inline-range" type="range" min="0" max="100" step="1" aria-describedby="dashboard-quick-audio-status" disabled>
+              <button id="dashboard-quick-mute" type="button" aria-describedby="dashboard-quick-audio-status" disabled>Mute</button>
+            </div>
+            <p id="dashboard-quick-audio-status" class="auxora-quick-media__status" role="status" aria-live="polite">Checking audio controls…</p>
+          </div>
+          <div class="auxora-quick-media__playback">
+            <button id="dashboard-quick-playback" type="button" aria-describedby="dashboard-quick-media-status" disabled>Play / pause</button>
+            <p id="dashboard-quick-media-status" class="auxora-quick-media__status" role="status" aria-live="polite">Checking playback controls…</p>
+          </div>
+        </section>
         <div id="dashboard-quick-scenes" class="auxora-quick-scenes"></div>
         <div class="auxora-quick-actions">
           <button type="button" data-quick-widget="audio">Audio</button>
@@ -138,6 +169,7 @@
     <script src="./js/widgets/actions.js?v=20260818-02"></script>
     <script src="./js/widgets/integrations.js?v=20260818-02"></script>
     <script src="./js/widgets/game-mode.js?v=20260818-02"></script>
+    <script src="./js/quick-controls.js?v=20260818-02"></script>
     <script src="./js/dashboard.js?v=20260818-02"></script>
 </body>
 </html>

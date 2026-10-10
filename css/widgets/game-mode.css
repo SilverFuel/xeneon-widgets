@@ -213,6 +213,7 @@
   min-height: 0;
   align-items: stretch;
   scrollbar-gutter: stable;
+  scroll-snap-type: none;
 }
 
 .game-mode-idle-launch .game-mode-steam-tile {
@@ -223,6 +224,7 @@
 
 .game-mode-idle-launch .game-mode-steam-art {
   min-height: 74px;
+  aspect-ratio: 16 / 9;
 }
 
 .game-mode-metric--primary .metric-value {
@@ -1508,6 +1510,13 @@
   .game-mode-steam-tile {
     min-height: 150px;
   }
+}
+
+@media (max-height: 480px) and (orientation: landscape) {
+  body.dashboard-native-page--layout-ultrawide .game-mode-idle-launch .game-mode-steam-tile {
+    height: 216px;
+  }
+
 }
 
 @media (max-width: 1280px) {
