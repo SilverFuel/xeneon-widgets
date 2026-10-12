@@ -27,6 +27,12 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Validate Electron dependency compatibility
+        run: |
+          npm --prefix desktop/electron ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix desktop/electron run check
+
       - name: Audit dependencies
         run: npm run audit:deps
 

@@ -6,7 +6,7 @@
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main.cjs",
+    "check": "node --check src/main.cjs && node scripts/check-dependencies.cjs",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac dmg zip",
     "dist:win": "electron-builder --win nsis"
@@ -79,10 +79,15 @@
     }
   },
   "devDependencies": {
-    "electron": "41.10.5",
+    "electron": "41.10.7",
     "electron-builder": "26.15.3"
   },
+  "overrides": {
+    "global-agent@3.0.0": {
+      "roarr": "3.3.0"
+    }
+  },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   }
 }
