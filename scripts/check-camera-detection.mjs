@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import vm from "node:vm";
 
 function read(relativePath) {
   const path = resolve(process.cwd(), relativePath);
@@ -25,6 +26,7 @@ const telemetry = read("app/Controllers/TelemetryController.cs");
 const dashboard = read("js/dashboard.js");
 const integrations = read("js/widgets/integrations.js");
 const setup = read("js/widgets/setup.js");
+const inlineWidgets = read("js/inline-widgets.js");
 const panel = read("widgets/frigate-detection-panel.html");
 const tests = read("app/tests/FrigateServiceTests.cs");
 const receiptVerifier = read("scripts/Test-FrigateQualificationReceipt.ps1");
@@ -76,7 +78,7 @@ assert(/showOptional: \["weather", "calendar", "hue", "frigate"\]\.indexOf\(requ
 assert(/var refreshPromise = null/.test(setup) && /if \(refreshPromise\)/.test(setup), "Diagnostics refreshes must serialize instead of racing older health and Camera Detection state");
 assert(/data-form="frigate"/.test(setup) && /\/api\/config\/frigate/.test(setup), "Diagnostics must configure or remove Camera Detection");
 assert(/\/api\/frigate\/test/.test(setup) && /Camera connected/.test(setup) && /Camera saved; test failed/.test(setup), "Diagnostics must test saved Frigate settings and distinguish saved configuration from verified connectivity");
-assert(/data-frigate-feedback/.test(setup) && /aria-live="polite"/.test(setup) && /Settings were saved and tested/.test(setup), "Camera Detection setup must show and announce form-local save, test, and error feedback");
+assert(/data-frigate-feedback' \+ liveRegionAttributes\(state\.frigateFeedbackTone === "danger" \? "alert" : "status"\)/.test(setup) && /Settings were saved and tested/.test(setup), "Camera Detection setup must show and announce form-local save, test, and error feedback");
 assert(/frigateTestCompleted/.test(setup) && /Camera status refresh failed/.test(setup), "Camera Detection must not mislabel a post-test Diagnostics refresh failure as a failed connection test");
 assert(/event\.preventDefault\(\);\s*if \(state\.busy\)/.test(setup), "Diagnostics must cancel duplicate form submissions before rejecting them while busy");
 assert(/name="username"/.test(setup) && /name="password"/.test(setup) && /authenticationConfigured/.test(setup), "Diagnostics must support authenticated Frigate without redisplaying the saved password");
@@ -99,4 +101,84 @@ assert(/secret-bearing receipt/.test(receiptFixtures) && /plaintext authenticate
 assert(/Qualification sequence/.test(certification) && /(?:expire|revoke).+Frigate session/i.test(certification) && /events from a different camera/i.test(certification), "Frigate certification must cover authentication renewal and camera filtering on physical hardware");
 assert(/ConnectionTest_ReportsReadyAfterAuthenticatedEventsRequest/.test(tests) && /ConnectionTest_PreservesSettingsAndReportsRejectedCredentials/.test(tests), "camera connector regressions must cover truthful connection success and saved-setting failure states");
 
-console.log("checked local-only authenticated Frigate camera detection, protected credentials, production UI wiring, snapshot safety, and regression coverage");
+// Exercise the production renderer, shared live-region helper, and submit flow.
+// Only transport and DOM insertion are replaced; no native app or network runs.
+async function checkSetupFeedback(scenario) {
+  const window = {};
+  const context = vm.createContext({
+    window,
+    FormData: class {
+      constructor(form) { this.values = form.values; }
+      get(name) { return this.values[name] || ""; }
+    }
+  });
+  vm.runInContext(inlineWidgets, context, { filename: "js/inline-widgets.js" });
+  const runtime = window.InlineWidgets.runtime;
+  const listeners = new Map();
+  const requests = [];
+  const container = { html: "", querySelector: () => null };
+  let mountSetup;
+  Object.assign(runtime, {
+    registerRenderer: (id, renderer) => { if (id === "setup") mountSetup = renderer; },
+    addListener: (_cleanups, _target, type, listener) => listeners.set(type, listener),
+    patchStableDom: (target, html) => { target.html = html; },
+    buildBridgeUrl: (_env, path) => path,
+    requestJson: async (path, options) => {
+      requests.push({ path, options });
+      if (path === "/api/config/frigate") {
+        if (scenario.saveError) throw new Error(scenario.saveError);
+        return {};
+      }
+      if (path === "/api/frigate/test") {
+        if (scenario.testError) throw new Error(scenario.testError);
+        return scenario.connection || { configured: true, connected: true, state: "Ready" };
+      }
+      assert(["/api/health", "/api/config", "/api/hue", "/api/provisioning"].includes(path), `unexpected Camera Detection request: ${path}`);
+      return {};
+    }
+  });
+  vm.runInContext(setup, context, { filename: "js/widgets/setup.js" });
+  assert(typeof mountSetup === "function", "Diagnostics renderer must register before feedback can be tested");
+  const controller = mountSetup({ id: "setup" }, container, { requestedSetupSection: "frigate" });
+  await controller.refresh();
+
+  function assertFeedback(expected, role) {
+    const form = container.html.match(/<form\b[^>]*data-form="frigate"[^>]*>[\s\S]*?<\/form>/)?.[0];
+    const feedback = form?.match(/<div\b([^>]*\bdata-frigate-feedback\b[^>]*)>([\s\S]*?)<\/div>/);
+    assert(feedback, `${scenario.name}: feedback must be rendered inside the Camera Detection form`);
+    const [, attributes, message] = feedback;
+    assert(attributes.includes(`role="${role}"`) && attributes.includes(`aria-live="${role === "alert" ? "assertive" : "polite"}"`) && attributes.includes('aria-atomic="true"'), `${scenario.name}: form feedback must expose ${role} announcement semantics`);
+    assert(expected.test(message), `${scenario.name}: incorrect form feedback: ${message}`);
+    assert((container.html.match(/aria-live="(?:assertive|polite)"/g) || []).length === 1, `${scenario.name}: Camera Detection must announce feedback in one place only`);
+  }
+
+  let prevented = 0;
+  const event = {
+    target: {
+      getAttribute: name => name === "data-form" ? "frigate" : null,
+      values: { baseUrl: scenario.remove ? "" : "https://frigate.example.test", camera: "garage" }
+    },
+    preventDefault: () => { prevented += 1; }
+  };
+  listeners.get("submit")(event);
+  assertFeedback(/Saving and testing Camera Detection settings\./, "status");
+  listeners.get("submit")(event);
+  assert(prevented === 2, `${scenario.name}: active and duplicate form submissions must both be cancelled`);
+  await new Promise(resolve => setImmediate(resolve));
+  assertFeedback(scenario.expected, scenario.role);
+  assert(requests.filter(request => request.path === "/api/config/frigate").length === 1, `${scenario.name}: duplicate submission must not save twice`);
+  assert(requests.filter(request => request.path === "/api/frigate/test").length === (scenario.remove || scenario.saveError ? 0 : 1), `${scenario.name}: connection tests must follow a successful nonempty save only`);
+  controller.destroy();
+}
+
+for (const scenario of [
+  { name: "saved and connected", expected: /Camera connected\. Settings were saved and tested\./, role: "status" },
+  { name: "removed", remove: true, expected: /Camera Detection was removed\./, role: "status" },
+  { name: "save rejected", saveError: "Use a local/private address <only>", expected: /Use a local\/private address &lt;only&gt;/, role: "alert" },
+  { name: "test request failed", testError: "Connection refused", expected: /Settings were saved, but the connection test failed\. Connection refused/, role: "alert" },
+  { name: "test reports disconnected", connection: { configured: true, connected: false, message: "Authentication rejected" }, expected: /Authentication rejected/, role: "alert" }
+]) {
+  await checkSetupFeedback(scenario);
+}
+
+console.log("checked local-only authenticated Frigate camera detection, protected credentials, production UI wiring, snapshot safety, and five setup feedback scenarios");
