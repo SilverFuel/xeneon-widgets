@@ -359,35 +359,91 @@ function findBrowserExecutable() {
   return "";
 }
 
-async function waitForBrowser(profileDirectory, child, diagnostics) {
+async function readOwnedBrowserEndpoint(profileDirectory) {
   const activePortPath = join(profileDirectory, "DevToolsActivePort");
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) {
+  try {
+    const [portText, browserPath] = readFileSync(activePortPath, "utf8").trim().split(/\r?\n/);
+    const port = Number(portText);
+    if (!Number.isInteger(port) || port < 1 || port > 65535 || !/^\/devtools\/browser\/[a-z0-9-]+$/i.test(browserPath || "")) {
+      return null;
+    }
+    const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) });
+    if (!response.ok) return null;
+    const version = await response.json();
+    const webSocketUrl = `ws://127.0.0.1:${port}${browserPath}`;
+    // Match the random browser identity as well as the port from our new profile.
+    // Never close a reused port belonging to another browser during cleanup.
+    return version.webSocketDebuggerUrl === webSocketUrl ? { port, webSocketUrl } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function waitForBrowser(profileDirectory, child, diagnostics, testClock = {}) {
+  const now = testClock.now || Date.now;
+  const pause = testClock.delay || delay;
+  const endpointFor = testClock.readEndpoint || readOwnedBrowserEndpoint;
+  const deadline = now() + 30000;
+  while (now() < deadline) {
+    if ((child.exitCode !== null && child.exitCode !== 0) || child.signalCode) {
       throw new Error(`headless browser exited before its debugging endpoint was ready:\n${diagnostics()}`);
     }
-    if (existsSync(activePortPath)) {
-      let port = 0;
-      try {
-        port = Number.parseInt(readFileSync(activePortPath, "utf8").split(/\r?\n/, 1)[0], 10);
-      } catch {
-        await delay(100);
-        continue;
-      }
-      if (Number.isInteger(port) && port > 0) {
-        try {
-          const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) });
-          if (response.ok) {
-            return port;
-          }
-        } catch {
-          // The debugging endpoint is still starting.
-        }
-      }
-    }
-    await delay(100);
+    // Edge can exit its launcher successfully after a compatibility-layer
+    // relaunch. Readiness belongs to the isolated profile, not the launcher PID.
+    const endpoint = await endpointFor(profileDirectory);
+    if (endpoint) return endpoint.port;
+    await pause(100);
   }
   throw new Error(`headless browser debugging endpoint did not start within 30 seconds:\n${diagnostics()}`);
+}
+
+async function checkBrowserLifecycle() {
+  for (const exitCode of [null, 0]) {
+    let clock = 0;
+    let reads = 0;
+    const port = await waitForBrowser("fixture-profile", { exitCode, signalCode: null }, () => "fixture", {
+      now: () => clock,
+      delay: async milliseconds => { clock += milliseconds; },
+      readEndpoint: async () => ++reads === 2 ? { port: 12345 } : null
+    });
+    assert(port === 12345 && reads === 2, `browser readiness must survive launcher exit ${exitCode}`);
+  }
+  for (const child of [{ exitCode: 1, signalCode: null }, { exitCode: null, signalCode: "SIGTERM" }, { exitCode: 0, signalCode: null }]) {
+    let clock = 0;
+    let failure;
+    try {
+      await waitForBrowser("fixture-profile", child, () => "fixture", {
+        now: () => clock,
+        delay: async milliseconds => { clock += milliseconds; },
+        readEndpoint: async () => null
+      });
+    } catch (error) {
+      failure = error;
+    }
+    assert(failure && (child.exitCode === 0 ? /within 30 seconds/.test(failure.message) && clock === 30000 : /exited before/.test(failure.message) && clock === 0), "browser abnormal exit and startup timeout must fail closed");
+  }
+  console.log("headless browser lifecycle: live launcher, clean handoff, abnormal exit, signal, and timeout passed");
+}
+
+async function closeOwnedBrowser(profileDirectory, requireEndpoint) {
+  const endpoint = await readOwnedBrowserEndpoint(profileDirectory);
+  if (!endpoint) {
+    assert(!requireEndpoint, `browser launcher handed off without a reachable owned endpoint; preserving profile: ${profileDirectory}`);
+    return;
+  }
+  const connection = await connectCdp(endpoint.webSocketUrl, readBrowserDiagnostics);
+  try {
+    await connection.send("Browser.close");
+  } catch {
+    // A successful close may disconnect before its response arrives.
+  } finally {
+    connection.close();
+  }
+  const deadline = Date.now() + 5000;
+  while (await readOwnedBrowserEndpoint(profileDirectory)) {
+    assert(Date.now() < deadline, "owned headless browser endpoint did not close");
+    await delay(100);
+  }
 }
 
 async function connectCdp(webSocketUrl, diagnostics) {
@@ -530,6 +586,8 @@ async function cleanup() {
   }
   cleanupPromise = (async () => {
     const cleanupErrors = [];
+    let ownedBrowserStopped = true;
+    const browserWasConnected = Boolean(cdp);
     if (cdp) {
       try {
         await cdp.send("Browser.close");
@@ -544,13 +602,22 @@ async function cleanup() {
     } catch (error) {
       cleanupErrors.push(error);
     }
+    if (profileRoot) {
+      try {
+        assert(isContainedPath(tmpdir(), profileRoot) && relative(tmpdir(), profileRoot).startsWith("auxora-standalone-theme-rendered-"), "refusing cleanup outside the isolated standalone browser profile");
+        await closeOwnedBrowser(join(profileRoot, "browser"), !browserWasConnected && browser?.exitCode === 0);
+      } catch (error) {
+        ownedBrowserStopped = false;
+        cleanupErrors.push(error);
+      }
+    }
     browser = undefined;
     try {
       await closeServer();
     } catch (error) {
       cleanupErrors.push(error);
     }
-    if (profileRoot) {
+    if (profileRoot && ownedBrowserStopped) {
       const profileToRemove = profileRoot;
       try {
         await delay(250);
@@ -1473,6 +1540,8 @@ function configureRuntimeExceptionCapture() {
 }
 
 async function main() {
+  await checkBrowserLifecycle();
+  if (process.argv.includes("--check-browser-lifecycle")) return;
   assert(standalonePages.length === 19 && new Set(standalonePages).size === 19, "standalone rendered test must cover exactly 19 unique pages");
   for (const page of standalonePages) {
     const path = resolve(repoRoot, page);
@@ -1585,7 +1654,7 @@ try {
 
 if (primaryFailure) {
   if (cleanupFailure) {
-    console.error(`standalone rendered cleanup also failed: ${cleanupFailure.stack || cleanupFailure}`);
+    console.error("standalone rendered cleanup also failed:", cleanupFailure);
   }
   throw primaryFailure;
 }
