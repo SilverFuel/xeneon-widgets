@@ -2,6 +2,8 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, resolve } from "node:path";
 
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
+const displayPresentationGate = readWorkspaceFile("app/Infrastructure/DisplayPresentationGate.cs");
+const displayPresentationGateTests = readWorkspaceFile("app/tests/DisplayPresentationGateTests.cs");
 const mainWindowXaml = readWorkspaceFile("app/MainWindow.xaml");
 const appXaml = readWorkspaceFile("app/App.xaml.cs");
 const program = readWorkspaceFile("app/Program.cs");
@@ -138,7 +140,7 @@ assert(
     && /BeginDashboardStartupIfReady[\s\S]+!_windowHasBeenShown && !_suppressWindowForTests[\s\S]+_companionDisplayUnavailable && !_suppressWindowForTests[\s\S]+return/.test(mainWindow)
     && /BeginDashboardStartupIfReady[\s\S]+_dashboardLoaded \|\| DashboardView\.CoreWebView2 is not null[\s\S]+return/.test(mainWindow)
     && /EnsureWebViewReadyAsync[\s\S]+if \(DashboardView\.CoreWebView2 is null\)[\s\S]+CreateWithOptionsAsync[\s\S]+EnsureCoreWebView2Async/.test(mainWindow)
-    && /RevealConfiguredWindow[\s\S]+ShowWindowNoActivate\(\);[\s\S]+BeginDashboardStartupIfReady\(\)/.test(mainWindow),
+    && /RevealConfiguredWindow[\s\S]+if \(!ShowWindowNoActivate\(topologyGeneration, topologyRequest\)\)[\s\S]+return false;[\s\S]+BeginDashboardStartupIfReady\(\)/.test(mainWindow),
   "native services may start while Auxora is hidden, but WebView2 must initialize only once after a verified companion reveal or an isolated window-suppressed test launch"
 );
 
@@ -146,7 +148,7 @@ assert(
   /ShouldSuppressWindowForTests\s*=>\s*ResolveWindowSuppression/.test(program)
     && /ResolveWindowSuppression[\s\S]+Suppressing the Auxora window is allowed only for an isolated automated test instance/.test(program)
     && /if \(_suppressWindowForTests\)[\s\S]+ShowWindow\(_windowHandle, SwHide\);[\s\S]+InitializeHostAsync\(\);[\s\S]+return;/.test(mainWindow)
-    && /RevealConfiguredWindow\(\)[\s\S]+if \(_suppressWindowForTests\)[\s\S]+ShowWindow\(_windowHandle, SwHide\);[\s\S]+return false;/.test(mainWindow)
+    && /RevealConfiguredWindow\(CancellationTokenSource\? topologyRequest = null\)[\s\S]+if \(_suppressWindowForTests\)[\s\S]+ShowWindow\(_windowHandle, SwHide\);[\s\S]+return false;/.test(mainWindow)
     && /ScheduleDisplayRecovery\(string reason\)[\s\S]+_suppressWindowForTests/.test(mainWindow)
     && /ResolveWebViewUserDataPath\([\s\S]+_suppressWindowForTests \? AppPaths\.LocalDataDirectory : null/.test(mainWindow)
     && /return Path\.Combine\(isolatedLocalDataDirectory, "WebView2"\)/.test(mainWindow)
@@ -170,8 +172,9 @@ assert(
 assert(
   !/\bActivate\(\);/.test(mainWindow)
     && !/SetForegroundWindow/.test(mainWindow)
-    && /if \(_waitingForEdgeDisplay\)[\s\S]+ShowWindow\(windowHandle, SwShowNoActivate\)/.test(mainWindow)
-    && /ShowWindowNoActivate\(\);[\s\S]+_windowHasBeenShown = true;/.test(mainWindow),
+    && /return _displayPresentation\.TryReveal\(\s*topologyGeneration,\s*topologyRequest,\s*\(\) => ShowWindow\(windowHandle, SwShowNoActivate\)\);/.test(mainWindow)
+    && (mainWindow.match(/ShowWindow\(windowHandle, SwShowNoActivate\)/g) || []).length === 1
+    && /if \(!ShowWindowNoActivate\(topologyGeneration, topologyRequest\)\)[\s\S]+return false;[\s\S]+_windowHasBeenShown = true;/.test(mainWindow),
   "automatic startup, recovery, and display-picker reveals must never take foreground focus"
 );
 
@@ -196,7 +199,7 @@ assert(
   /HandleDisplaySettingsChanged[\s\S]+ScheduleDisplayTopologyRevalidation\(\)/.test(mainWindow)
     && /DisplayTopologyDebounceDelay\s*=\s*TimeSpan\.FromMilliseconds\(750\)/.test(mainWindow)
     && /ScheduleDisplayTopologyRevalidation[\s\S]+firstInBurst[\s\S]+ShowWindow\(_windowHandle, SwHide\)[\s\S]+RevalidateDisplayTopologyAfterQuietPeriodAsync/.test(mainWindow)
-    && /RevalidateDisplayTopologyAfterQuietPeriodAsync[\s\S]+var cancellationToken = request\.Token[\s\S]+Task\.Delay\(DisplayTopologyDebounceDelay, cancellationToken\)[\s\S]+ConfigureWindow\(saveSelection:\s*false\)[\s\S]+RevealConfiguredWindow\(\)/.test(mainWindow)
+    && /RevalidateDisplayTopologyAfterQuietPeriodAsync[\s\S]+var cancellationToken = request\.Token[\s\S]+Task\.Delay\(DisplayTopologyDebounceDelay, cancellationToken\)[\s\S]+IsCurrentTopologyRequest\(request\)[\s\S]+ConfigureWindow\(saveSelection:\s*false\)[\s\S]+RevealConfiguredWindow\(request\)/.test(mainWindow)
     && /completion\.Task\.WaitAsync\(cancellationToken\)/.test(mainWindow)
     && /CancelCancellationSource\(previousRequest\)/.test(mainWindow)
     && /CancelCancellationSource\(displayTopologyChangeCancellation\)/.test(mainWindow)
@@ -229,9 +232,27 @@ assert(
     && /TimeSpan\.FromMilliseconds\(120\)/.test(mainWindow)
     && /TimeSpan\.FromMilliseconds\(850\)/.test(mainWindow)
     && /ReassertLockedPresentationAsync[\s\S]+KeepDisplayWindowOnTop\(_windowHandle\)/.test(mainWindow)
-    && /generation != Volatile\.Read\(ref _lockedPresentationGeneration\)/.test(mainWindow)
+    && /!_displayPresentation\.IsCurrentPresentation\(generation\)/.test(mainWindow)
     && /_displayMoveMode[\s\S]+_waitingForEdgeDisplay[\s\S]+_companionDisplayUnavailable/.test(mainWindow),
   "locked placement must reassert topmost z-order after Windows finishes raising the companion taskbar, while move and waiting modes cancel the reassertion"
+);
+
+assert(
+  /ScheduleDisplayTopologyRevalidation[\s\S]+TryBeginTopologyChange\(request, out var previousRequest\)[\s\S]+ShowWindow\(_windowHandle, SwHide\)/.test(mainWindow)
+    && /TryBeginTopologyChange[\s\S]+_topologyRequest = request;[\s\S]+_topologyGeneration\+\+;[\s\S]+_presentationGeneration\+\+;/.test(displayPresentationGate)
+    && /CompleteTopologyChange[\s\S]+ReferenceEquals\(_topologyRequest, request\)/.test(displayPresentationGate)
+    && /TryCaptureReveal\(topologyRequest, out var topologyGeneration\)/.test(mainWindow)
+    && /ShowWindowNoActivate[\s\S]+_displayPresentation\.TryReveal\([\s\S]+\(\) => ShowWindow\(windowHandle, SwShowNoActivate\)/.test(mainWindow)
+    && /TryReveal[\s\S]+lock \(_sync\)[\s\S]+generation != _topologyGeneration \|\| !CanReveal\(topologyRequest\)[\s\S]+showWindow\(\)/.test(displayPresentationGate)
+    && /CanReveal\(CancellationTokenSource\? topologyRequest\)[\s\S]+!_stopped && ReferenceEquals\(_topologyRequest, topologyRequest\)/.test(displayPresentationGate)
+    && /KeepDisplayWindowOnTop[\s\S]+DisplayPresentationGate\.BuildTopmostFlags\(includeFrameChanged\)/.test(mainWindow)
+    && !/SwpShowWindow|bool showWindow/.test(mainWindow)
+    && /QueuedReassertion_IsInvalidatedBeforeDispatcherDelivery/.test(displayPresentationGateTests)
+    && /AlreadyCheckedReassertion_CannotShowAfterTopologyHide/.test(displayPresentationGateTests)
+    && /SupersededRequestBeforeCancellation_CannotRevealOrClearCurrentRequest/.test(displayPresentationGateTests)
+    && /FinalShowAndTopologyRegistration_AreSerializedBeforeTheUnlockedHide/.test(displayPresentationGateTests)
+    && /TopologyChangeAfterRevealBeforeCleanup_StartsNewHiddenBurst/.test(displayPresentationGateTests),
+  "topology ownership must gate the final reveal, invalidate stale presentation work, and keep z-order maintenance non-revealing, with deterministic race coverage"
 );
 
 assert(

@@ -21,7 +21,6 @@ public sealed partial class MainWindow : Window
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpFrameChanged = 0x0020;
-    private const uint SwpShowWindow = 0x0040;
     private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
     private const int WaitingWindowWidth = 1120;
@@ -41,7 +40,7 @@ public sealed partial class MainWindow : Window
     private readonly BridgeManager _bridgeManager;
     private readonly IntPtr _windowHandle;
     private readonly bool _suppressWindowForTests = Program.ShouldSuppressWindowForTests;
-    private readonly object _displayTopologyChangeSync = new();
+    private readonly DisplayPresentationGate _displayPresentation = new();
     private readonly SemaphoreSlim _webViewDiagnosticsGate = new(1, 1);
     private TrayIcon? _trayIcon;
     private readonly HostLogger _logger = App.Logger;
@@ -66,12 +65,10 @@ public sealed partial class MainWindow : Window
     private int _webViewRecoveryScheduled;
     private int _displayRecoveryScheduled;
     private int _displayMoveConstraintQueued;
-    private int _lockedPresentationGeneration;
     private EventWaitHandle? _showDisplayEvent;
     private RegisteredWaitHandle? _showDisplayWaitHandle;
     private CoreWebView2? _webViewDiagnosticsWebView;
     private string? _webViewDiagnosticsScriptId;
-    private CancellationTokenSource? _displayTopologyChangeCancellation;
     private CancellationTokenSource? _displayRecoveryCancellation;
 
     public MainWindow()
@@ -480,23 +477,14 @@ public sealed partial class MainWindow : Window
 
     private void ScheduleDisplayTopologyRevalidation()
     {
-        CancellationTokenSource request;
-        CancellationTokenSource? previousRequest;
-        bool firstInBurst;
-
-        lock (_displayTopologyChangeSync)
+        var request = new CancellationTokenSource();
+        if (!_displayPresentation.TryBeginTopologyChange(request, out var previousRequest))
         {
-            if (_disposed)
-            {
-                return;
-            }
-
-            previousRequest = _displayTopologyChangeCancellation;
-            firstInBurst = previousRequest is null;
-            request = new CancellationTokenSource();
-            _displayTopologyChangeCancellation = request;
+            request.Dispose();
+            return;
         }
 
+        var firstInBurst = previousRequest is null;
         CancelCancellationSource(previousRequest);
 
         // Windows can emit a burst of equivalent topology notifications. Hide once
@@ -528,7 +516,8 @@ public sealed partial class MainWindow : Window
             {
                 try
                 {
-                    if (_disposed || cancellationToken.IsCancellationRequested)
+                    if (_disposed || cancellationToken.IsCancellationRequested
+                        || !_displayPresentation.IsCurrentTopologyRequest(request))
                     {
                         return;
                     }
@@ -536,7 +525,7 @@ public sealed partial class MainWindow : Window
                     _displayMoveMode = false;
                     if (ConfigureWindow(saveSelection: false))
                     {
-                        RevealConfiguredWindow();
+                        RevealConfiguredWindow(request);
                     }
 
                     ScheduleDisplayRecovery("display topology changed");
@@ -563,14 +552,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
-            lock (_displayTopologyChangeSync)
-            {
-                if (ReferenceEquals(_displayTopologyChangeCancellation, request))
-                {
-                    _displayTopologyChangeCancellation = null;
-                }
-            }
-
+            _displayPresentation.CompleteTopologyChange(request);
             request.Dispose();
         }
     }
@@ -1277,7 +1259,7 @@ public sealed partial class MainWindow : Window
 
     private void BeginDisplayMoveMode()
     {
-        Interlocked.Increment(ref _lockedPresentationGeneration);
+        _displayPresentation.InvalidatePresentation();
         ShowWindow(_windowHandle, SwHide);
         try
         {
@@ -1585,7 +1567,7 @@ public sealed partial class MainWindow : Window
             ShowWindow(windowHandle, SwHide);
         }
 
-        KeepDisplayWindowOnTop(windowHandle, includeFrameChanged: styleChanged, showWindow: false);
+        KeepDisplayWindowOnTop(windowHandle, includeFrameChanged: styleChanged);
         _taskbarStyleApplied = true;
         if (styleChanged || !_taskbarStyleApplied)
         {
@@ -1600,7 +1582,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        Interlocked.Increment(ref _lockedPresentationGeneration);
+        _displayPresentation.InvalidatePresentation();
 
         var currentStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
         var nextStyle = (currentStyle | WsExAppWindow) & ~WsExToolWindow & ~WsExNoActivate;
@@ -1624,37 +1606,38 @@ public sealed partial class MainWindow : Window
         _logger.Info("Restored normal taskbar-visible window style while selecting an Auxora display.");
     }
 
-    private void ShowWindowNoActivate()
+    private bool ShowWindowNoActivate(long topologyGeneration, CancellationTokenSource? topologyRequest)
     {
         var windowHandle = _windowHandle;
         if (windowHandle == IntPtr.Zero)
         {
-            return;
+            return false;
         }
 
         if (_suppressWindowForTests)
         {
             ShowWindow(windowHandle, SwHide);
-            return;
+            return false;
         }
 
         if (_companionDisplayUnavailable)
         {
             ShowWindow(windowHandle, SwHide);
-            return;
+            return false;
         }
 
-        if (_waitingForEdgeDisplay)
+        if (!_waitingForEdgeDisplay)
         {
-            ShowWindow(windowHandle, SwShowNoActivate);
-            return;
+            KeepDisplayWindowOnTop(windowHandle);
         }
 
-        KeepDisplayWindowOnTop(windowHandle);
-        ShowWindow(windowHandle, SwShowNoActivate);
+        return _displayPresentation.TryReveal(
+            topologyGeneration,
+            topologyRequest,
+            () => ShowWindow(windowHandle, SwShowNoActivate));
     }
 
-    private bool RevealConfiguredWindow()
+    private bool RevealConfiguredWindow(CancellationTokenSource? topologyRequest = null)
     {
         if (_suppressWindowForTests)
         {
@@ -1666,6 +1649,11 @@ public sealed partial class MainWindow : Window
         if (_companionDisplayUnavailable || string.IsNullOrWhiteSpace(_configuredDisplayId))
         {
             ShowWindow(_windowHandle, SwHide);
+            return false;
+        }
+
+        if (!_displayPresentation.TryCaptureReveal(topologyRequest, out var topologyGeneration))
+        {
             return false;
         }
 
@@ -1714,7 +1702,10 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        ShowWindowNoActivate();
+        if (!ShowWindowNoActivate(topologyGeneration, topologyRequest))
+        {
+            return false;
+        }
         _windowHasBeenShown = true;
         BeginDashboardStartupIfReady();
         if (!_waitingForEdgeDisplay)
@@ -1726,7 +1717,7 @@ public sealed partial class MainWindow : Window
 
     private void ScheduleLockedPresentationReassert()
     {
-        var generation = Interlocked.Increment(ref _lockedPresentationGeneration);
+        var generation = _displayPresentation.InvalidatePresentation();
         _ = ReassertLockedPresentationAsync(generation);
     }
 
@@ -1735,7 +1726,7 @@ public sealed partial class MainWindow : Window
         foreach (var delay in new[] { TimeSpan.FromMilliseconds(120), TimeSpan.FromMilliseconds(850) })
         {
             await Task.Delay(delay);
-            if (_disposed || generation != Volatile.Read(ref _lockedPresentationGeneration))
+            if (_disposed || !_displayPresentation.IsCurrentPresentation(generation))
             {
                 return;
             }
@@ -1743,7 +1734,7 @@ public sealed partial class MainWindow : Window
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (_disposed
-                    || generation != Volatile.Read(ref _lockedPresentationGeneration)
+                    || !_displayPresentation.IsCurrentPresentation(generation)
                     || _displayMoveMode
                     || _waitingForEdgeDisplay
                     || _companionDisplayUnavailable)
@@ -1761,18 +1752,9 @@ public sealed partial class MainWindow : Window
 
     private static void KeepDisplayWindowOnTop(
         IntPtr windowHandle,
-        bool includeFrameChanged = false,
-        bool showWindow = true)
+        bool includeFrameChanged = false)
     {
-        var flags = SwpNoMove | SwpNoSize | SwpNoActivate;
-        if (showWindow)
-        {
-            flags |= SwpShowWindow;
-        }
-        if (includeFrameChanged)
-        {
-            flags |= SwpFrameChanged;
-        }
+        var flags = DisplayPresentationGate.BuildTopmostFlags(includeFrameChanged);
 
         SetWindowPos(
             windowHandle,
@@ -1802,12 +1784,7 @@ public sealed partial class MainWindow : Window
         }
 
         _disposed = true;
-        CancellationTokenSource? displayTopologyChangeCancellation;
-        lock (_displayTopologyChangeSync)
-        {
-            displayTopologyChangeCancellation = _displayTopologyChangeCancellation;
-            _displayTopologyChangeCancellation = null;
-        }
+        var displayTopologyChangeCancellation = _displayPresentation.Stop();
         CancelCancellationSource(displayTopologyChangeCancellation);
         DashboardView.NavigationCompleted -= HandleNavigationCompleted;
         DashboardView.NavigationStarting -= HandleNavigationStarting;
