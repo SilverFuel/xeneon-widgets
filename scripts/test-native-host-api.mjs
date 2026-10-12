@@ -579,6 +579,7 @@ assert(existsSync(executable), `Release host executable is missing: ${executable
 const profileRoot = mkdtempSync(join(tmpdir(), "auxora-native-host-test-"));
 const roaming = join(profileRoot, "Roaming");
 const local = join(profileRoot, "Local");
+const webViewProfile = join(profileRoot, "WebView2");
 mkdirSync(roaming, { recursive: true });
 mkdirSync(local, { recursive: true });
 const hostPort = await reserveLocalPort();
@@ -595,6 +596,8 @@ const child = spawn(executable, ["--safe-mode"], {
     ...process.env,
     APPDATA: roaming,
     LOCALAPPDATA: local,
+    // WebView2 can resolve Windows known folders independently of these app roots.
+    WEBVIEW2_USER_DATA_FOLDER: webViewProfile,
     AUXORA_ENABLE_TEST_DATA_ROOTS: "1",
     AUXORA_TEST_ROAMING_ROOT: roaming,
     AUXORA_TEST_LOCAL_ROOT: local,
@@ -633,6 +636,7 @@ try {
     );
   } else {
     assert(embeddedBoot.dashboardLoads === 1 && embeddedBoot.dashboardConfigRequests >= 1, `embedded dashboard boot evidence was incomplete: ${JSON.stringify(embeddedBoot)}`);
+    assert(existsSync(webViewProfile), "companion dashboard boot did not create the explicit isolated WebView2 profile");
   }
 
   const configResponse = await fetchWithTimeout("/api/config");
