@@ -296,13 +296,43 @@ function relativeLuminance(color) {
   return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
 }
 
+function backgroundFromLayers(values) {
+  let background = null;
+  for (const value of [...values].reverse()) {
+    if (value === "transparent") continue;
+    const layer = parseColor(value);
+    if (layer.a === 0) continue;
+    background = background ? composite(layer, background) : layer;
+  }
+  assert(background && background.a === 1, "contrast measurement requires an opaque ancestor or measured system Canvas");
+  return background;
+}
+
 function contrastRatio(foregroundValue, backgroundValue, underlayValue = "#000000") {
   const underlay = parseColor(underlayValue);
-  const background = composite(parseColor(backgroundValue), underlay);
+  const background = Array.isArray(backgroundValue)
+    ? backgroundFromLayers(backgroundValue)
+    : composite(parseColor(backgroundValue), underlay);
   const foreground = composite(parseColor(foregroundValue), background);
   const lighter = Math.max(relativeLuminance(foreground), relativeLuminance(background));
   const darker = Math.min(relativeLuminance(foreground), relativeLuminance(background));
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+function checkBackgroundContrast() {
+  for (const transparent of ["rgba(255, 255, 255, 0)", "rgba(0, 0, 0, 0)", "transparent"]) {
+    assert(contrastRatio("#000000", [transparent, "#ffffff"]) === 21, "transparent backgrounds must reveal the measured light Canvas");
+    assert(contrastRatio("#ffffff", [transparent, "#000000"]) === 21, "transparent backgrounds must reveal the measured dark Canvas");
+  }
+  const partial = backgroundFromLayers(["rgba(255, 255, 255, 0.5)", "rgba(255, 0, 0, 0.5)", "#000000"]);
+  assert(partial.r === 191.25 && partial.g === 127.5 && partial.b === 127.5, "partial-alpha ancestors must composite from the Canvas toward the control");
+  assert(contrastRatio("#000000", ["rgba(255, 255, 255, 0.5)", "#000000"]) > 5.2, "partial-alpha contrast must use the composited surface");
+  assert(contrastRatio("#777777", ["rgba(255, 255, 255, 0)", "#ffffff"]) < 4.5, "insufficient text contrast must still fail the unchanged threshold");
+  assert(contrastRatio("#000000", ["rgba(255, 255, 255, 0)", "#000000"]) === 1, "genuinely invisible controls must not pass contrast checks");
+  let rejectedUnresolved = false;
+  try { backgroundFromLayers(["rgba(255, 255, 255, 0)"]); } catch { rejectedUnresolved = true; }
+  assert(rejectedUnresolved, "unresolved transparent backgrounds must not receive an invented underlay");
+  console.log("contrast regression checks: transparent light/dark, nested alpha, insufficient contrast, and unresolved backgrounds passed");
 }
 
 function colorsEqual(leftValue, rightValue) {
@@ -616,12 +646,20 @@ async function probeForcedColorsQuickControls() {
   const controls = [volume, document.getElementById("dashboard-quick-mute"), document.getElementById("dashboard-quick-playback")];
   const fixture = window.__quickControlsForcedColorsFixture;
   if (!drawer || !toggle || !media || !fixture || controls.some(control => !control)) throw new Error("Quick controls forced-colors fixture or markup is missing");
+  const canvasProbe = document.createElement("span");
+  canvasProbe.hidden = true;
+  canvasProbe.style.backgroundColor = "Canvas";
+  document.body.appendChild(canvasProbe);
+  const canvasColor = getComputedStyle(canvasProbe).backgroundColor;
+  canvasProbe.remove();
   const backgroundFor = element => {
+    const layers = [];
     for (let ancestor = element; ancestor; ancestor = ancestor.parentElement) {
-      const color = getComputedStyle(ancestor).backgroundColor;
-      if (color !== "transparent" && color !== "rgba(0, 0, 0, 0)") return color;
+      layers.push(getComputedStyle(ancestor).backgroundColor);
     }
-    return getComputedStyle(document.body).backgroundColor;
+    // Forced colors preserve alpha: transparent white and transparent black
+    // both reveal their real ancestors, not an assumed black background.
+    return [...layers, canvasColor];
   };
   const labelFits = element => {
     const range = document.createRange();
@@ -710,13 +748,13 @@ async function readForcedColorSliderMarkers(cdp) {
   return { track: trackStyle.color, thumb: thumbStyle.color, trackHeight: trackStyle.height, thumbWidth: thumbStyle.width, thumbHeight: thumbStyle.height };
 }
 
-async function assertForcedColors(cdp, label) {
+async function assertForcedColorsPalette(cdp, label, palette) {
   const fixtureUrl = await evaluate(cdp, `(() => { const url = new URL(location.href); url.searchParams.set('quickControlsForcedColors', '1'); return url.href; })()`);
   await navigateAndWait(cdp, fixtureUrl);
   await waitForCondition(cdp, "document.body?.dataset.bridgeHydrated === 'true' && window.__quickControlsForcedColorsFixture", `${label} read-only fixture hydration`);
   await cdp.send("Emulation.setEmulatedMedia", {
     media: "screen",
-    features: [{ name: "forced-colors", value: "active" }]
+    features: [{ name: "forced-colors", value: "active" }, { name: "prefers-color-scheme", value: palette }]
   });
   await delay(100);
   await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
@@ -746,6 +784,7 @@ async function assertForcedColors(cdp, label) {
     const focusStyle = focusTarget ? getComputedStyle(focusTarget) : null;
     return {
       mediaActive: matchMedia('(forced-colors: active)').matches,
+      palette: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
       ambientHidden: Array.from(document.querySelectorAll('.dashboard-ambient-canvas, .dashboard-ambient-layer')).every(element => getComputedStyle(element).display === 'none'),
       controlBorders,
       activeDistinct: !!activeStyle && !!inactiveStyle && (activeStyle.backgroundColor !== inactiveStyle.backgroundColor || activeStyle.color !== inactiveStyle.color),
@@ -813,6 +852,7 @@ async function assertForcedColors(cdp, label) {
   }
   await cdp.send("Emulation.setEmulatedMedia", { media: "screen", features: [{ name: "forced-colors", value: "none" }] });
   assert(probe.mediaActive, `${label}: forced-colors emulation did not activate`);
+  assert(probe.palette === palette, `${label}: requested forced-colors palette was not emulated`);
   assert(probe.ambientHidden, `${label}: decorative ambient layers remained visible in forced colors`);
   assert(probe.controlBorders.length >= 8, `${label}: forced-colors control inventory was incomplete: ${JSON.stringify(probe)}`);
   assert(probe.controlBorders.every(control => control.style !== "none" && control.width >= 1), `${label}: controls lost their visible boundary in forced colors: ${JSON.stringify(probe.controlBorders)}`);
@@ -821,6 +861,13 @@ async function assertForcedColors(cdp, label) {
   assert(probe.forcedColorOptOuts.length === 0, `${label}: elements opted out of Windows forced colors: ${JSON.stringify(probe.forcedColorOptOuts)}`);
   assert(!probe.overflow && !probe.fatal, `${label}: forced colors created overflow or a fatal state: ${JSON.stringify(probe)}`);
   assert(catalogProbe.panelCount === 23 && catalogProbe.buttonCount === 47 && catalogProbe.borderless.length === 0 && catalogProbe.selectionDistinct && catalogProbe.focusContained && catalogProbe.focusOutlined && catalogProbe.focusReturned, `${label}: All panels lost inventory, control boundaries, kept state, or keyboard focus in forced colors: ${JSON.stringify(catalogProbe)}`);
+  console.log(`${label}: four Quick-control viewports and catalog accessibility passed`);
+}
+
+async function assertForcedColors(cdp, label) {
+  for (const palette of ["light", "dark"]) {
+    await assertForcedColorsPalette(cdp, `${label}-${palette}`, palette);
+  }
 }
 
 async function runThemeMatrix(cdp) {
@@ -1089,6 +1136,8 @@ async function runThemeSelectionState(cdp) {
   console.log("theme preset reset and explicit custom accent state: passed");
 }
 
+checkBackgroundContrast();
+if (process.argv.includes("--check-contrast")) process.exit(0);
 assert(process.platform === "win32", "rendered theme test requires Windows");
 assert(existsSync(hostExecutable), "Release native host is missing; build app/XenonEdgeHost.sln first");
 assert(browserExecutable, "System Edge or Chrome is required for rendered theme testing");
