@@ -101,6 +101,28 @@ public sealed class LocalDataResetServiceTests
     }
 
     [Test]
+    public async Task ResetAll_WithoutInitializedBrowserReportsOptionalProfileUnavailable()
+    {
+        var store = new ConfigStore(_logger!, Path.Combine(_root, "config"));
+        using var launcher = new LauncherService(_logger!, store, Path.Combine(_root, "recent-apps.json"), () => null, startTimer: false);
+        using var performance = new GamePerformanceService(_logger!, store, Path.Combine(_root, "telemetry"));
+        var service = new LocalDataResetService(
+            store, launcher, performance, _logger!, Path.Combine(_root, "legacy-roaming"), Path.Combine(_root, "legacy-local"));
+
+        var receipt = await service.ResetAllAsync(CancellationToken.None);
+        var browserStep = receipt.Steps.Single(step => step.Id == "webview-data");
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(receipt.Ok, Is.True);
+            Assert.That(receipt.Steps.Where(step => step.Required).Select(step => step.Status), Is.All.EqualTo("cleared"));
+            Assert.That(browserStep.Required, Is.False);
+            Assert.That(browserStep.Status, Is.EqualTo("unavailable"));
+            Assert.That(browserStep.Message, Is.EqualTo("The WebView profile was not initialized, so no profile deletion was claimed."));
+        }));
+    }
+
+    [Test]
     public async Task ResetAll_RequiredDeletionFailureIsVisibleAndFailsReceipt()
     {
         var store = new ConfigStore(_logger!, Path.Combine(_root, "config"));
