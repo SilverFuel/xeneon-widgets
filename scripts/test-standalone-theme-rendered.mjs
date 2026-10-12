@@ -422,27 +422,125 @@ async function checkBrowserLifecycle() {
     }
     assert(failure && (child.exitCode === 0 ? /within 30 seconds/.test(failure.message) && clock === 30000 : /exited before/.test(failure.message) && clock === 0), "browser abnormal exit and startup timeout must fail closed");
   }
-  console.log("headless browser lifecycle: live launcher, clean handoff, abnormal exit, signal, and timeout passed");
+  const endpoint = { port: 12345, webSocketUrl: "ws://127.0.0.1:12345/devtools/browser/fixture" };
+  for (const scenario of ["connect-race", "delayed-connect-race", "still-live", "uncertain", "normal-close", "close-disconnect"]) {
+    let clock = 0;
+    let probes = 0;
+    let sends = 0;
+    let closes = 0;
+    let failure;
+    const connectionFailure = new Error("fixture connection failed");
+    try {
+      await closeOwnedBrowser("fixture-profile", false, {
+        now: () => clock,
+        delay: async milliseconds => { clock += milliseconds; },
+        readEndpoint: async () => endpoint,
+        connect: async url => {
+          assert(url === endpoint.webSocketUrl, "cleanup must connect only to the verified browser identity");
+          if (!["normal-close", "close-disconnect"].includes(scenario)) throw connectionFailure;
+          return {
+            send: async method => {
+              assert(method === "Browser.close", "cleanup must only request browser shutdown");
+              sends++;
+              if (scenario === "close-disconnect") throw connectionFailure;
+            },
+            close: () => { closes++; }
+          };
+        },
+        endpointClosed: async ownedEndpoint => {
+          assert(ownedEndpoint === endpoint, "shutdown must recheck the same verified endpoint");
+          probes++;
+          if (scenario === "uncertain") throw new Error("fixture probe timeout");
+          return scenario !== "still-live" && (scenario !== "delayed-connect-race" || probes === 3);
+        }
+      });
+    } catch (error) {
+      failure = error;
+    }
+    if (["still-live", "uncertain"].includes(scenario)) {
+      assert(failure instanceof AggregateError && failure.errors.includes(connectionFailure) && clock === 5000,
+        `${scenario}: failed connection must not hide a live or uncertain endpoint`);
+    } else {
+      assert(!failure, `${scenario}: confirmed endpoint shutdown must succeed: ${failure}`);
+      assert(clock === (scenario === "delayed-connect-race" ? 200 : 0), `${scenario}: unexpected shutdown wait`);
+    }
+    assert(sends === (scenario === "normal-close" || scenario === "close-disconnect" ? 1 : 0)
+      && closes === sends, `${scenario}: cleanup must close each opened connection exactly once`);
+  }
+  for (const state of ["live", "refused", "timeout", "identity-mismatch", "http-error"]) {
+    let closed;
+    let failure;
+    try {
+      closed = await ownedBrowserEndpointClosed(endpoint, async url => {
+        assert(url === "http://127.0.0.1:12345/json/version", "shutdown probe must stay on the owned loopback port");
+        if (state === "refused" || state === "timeout") {
+          throw new Error("fixture fetch failure", { cause: { code: state === "refused" ? "ECONNREFUSED" : "ETIMEDOUT" } });
+        }
+        return { ok: state !== "http-error", json: async () => ({ webSocketDebuggerUrl: state === "identity-mismatch" ? `${endpoint.webSocketUrl}-other` : endpoint.webSocketUrl }) };
+      });
+    } catch (error) {
+      failure = error;
+    }
+    assert(state === "refused" ? closed === true && !failure
+      : state === "live" ? closed === false && !failure : !!failure,
+    `${state}: endpoint shutdown evidence must distinguish closed, live, and uncertain`);
+  }
+  console.log("headless browser lifecycle: startup/handoff, abnormal exit, timeout, shutdown races, and fail-closed endpoint checks passed");
 }
 
-async function closeOwnedBrowser(profileDirectory, requireEndpoint) {
-  const endpoint = await readOwnedBrowserEndpoint(profileDirectory);
+async function ownedBrowserEndpointClosed(endpoint, request = fetch) {
+  let response;
+  try {
+    response = await request(`http://127.0.0.1:${endpoint.port}/json/version`, { signal: AbortSignal.timeout(1000) });
+  } catch (error) {
+    // Only a refused loopback connection proves the endpoint has retired. A
+    // timeout/reset or unreadable response is uncertainty, not safe cleanup.
+    if (error.cause?.code === "ECONNREFUSED" || error.code === "ECONNREFUSED") return true;
+    throw error;
+  }
+  assert(response.ok, "owned browser shutdown probe returned an unsuccessful response");
+  const version = await response.json();
+  assert(version.webSocketDebuggerUrl === endpoint.webSocketUrl, "browser endpoint identity changed during shutdown");
+  return false;
+}
+
+async function closeOwnedBrowser(profileDirectory, requireEndpoint, testClock = {}) {
+  const now = testClock.now || Date.now;
+  const pause = testClock.delay || delay;
+  const endpointFor = testClock.readEndpoint || readOwnedBrowserEndpoint;
+  const connect = testClock.connect || connectCdp;
+  const endpointClosed = testClock.endpointClosed || ownedBrowserEndpointClosed;
+  const endpoint = await endpointFor(profileDirectory);
   if (!endpoint) {
     assert(!requireEndpoint, `browser launcher handed off without a reachable owned endpoint; preserving profile: ${profileDirectory}`);
     return;
   }
-  const connection = await connectCdp(endpoint.webSocketUrl, readBrowserDiagnostics);
+  let connection;
+  let closeFailure;
   try {
+    connection = await connect(endpoint.webSocketUrl, readBrowserDiagnostics);
     await connection.send("Browser.close");
-  } catch {
-    // A successful close may disconnect before its response arrives.
+  } catch (error) {
+    // An earlier Browser.close can retire the endpoint between discovery and
+    // this connection; a close may also disconnect before acknowledging. Both
+    // are acceptable only after the exact owned endpoint is confirmed closed.
+    closeFailure = error;
   } finally {
-    connection.close();
+    connection?.close();
   }
-  const deadline = Date.now() + 5000;
-  while (await readOwnedBrowserEndpoint(profileDirectory)) {
-    assert(Date.now() < deadline, "owned headless browser endpoint did not close");
-    await delay(100);
+  const deadline = now() + 5000;
+  while (true) {
+    let probeFailure;
+    try {
+      if (await endpointClosed(endpoint)) return;
+    } catch (error) {
+      probeFailure = error;
+    }
+    if (now() >= deadline) {
+      throw new AggregateError([closeFailure, probeFailure].filter(Boolean),
+        `owned headless browser endpoint shutdown was not confirmed; preserving profile: ${profileDirectory}`);
+    }
+    await pause(100);
   }
 }
 
