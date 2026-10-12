@@ -178,6 +178,17 @@ async function waitForHost(child, readDiagnostics) {
   throw new Error(`native host did not become responsive within 60 seconds: ${JSON.stringify(diagnostics)}`);
 }
 
+async function waitForNativeWebView(child, readDiagnostics) {
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    const diagnostics = readDiagnostics();
+    assert(child.exitCode === null, `native host exited before its isolated WebView initialized: ${JSON.stringify(diagnostics)}`);
+    if (diagnostics.hostLog.includes("Dashboard loaded successfully.")) return;
+    await delay(400);
+  }
+  throw new Error(`native host did not initialize its isolated WebView within 60 seconds: ${JSON.stringify(readDiagnostics())}`);
+}
+
 function captureChildOutput(child, logPath) {
   let stdout = "";
   let stderr = "";
@@ -3993,6 +4004,7 @@ try {
   await waitForHost(host, readHostDiagnostics);
   assert(existsSync(join(local, "Auxora", "logs", "host.log")), "rendered host did not use the explicit isolated local-data root");
   assert(existsSync(join(roaming, "Auxora", "config.json")), "rendered host did not use the explicit isolated roaming-data root");
+  await waitForNativeWebView(host, readHostDiagnostics);
   await validateEmbeddedProductCss();
   await validateEmbeddedNetworkCss();
   browser = spawn(browserExecutable, [
@@ -4121,22 +4133,18 @@ try {
     const webViewStep = resetResult?.receipt?.steps?.find(step => step.id === "webview-data");
     assert(resetResult?.status === 200 && resetResult?.receipt?.ok === true, `initialized-host reset must complete successfully: ${JSON.stringify(resetResult || null)}`);
     assert(resetResult?.recoveryHttpStatus === 200, `native host recovery state was unavailable before reset: ${JSON.stringify(resetResult || null)}`);
-    if (resetResult?.recovery?.status === "waiting-for-companion-display") {
-      assert(
-        webViewStep?.status === "unavailable"
-          && webViewStep?.message === "The WebView profile was not initialized, so no profile deletion was claimed.",
-        `display-deferred WebView reset was not reported truthfully: ${JSON.stringify(webViewStep || null)}`
-      );
-      console.log("display-deferred WebView browsing data reset receipt: passed");
-    } else {
-      assert(resetResult?.recovery?.status === "ready", `native host published an unexpected recovery state before reset: ${JSON.stringify(resetResult?.recovery || null)}`);
-      assert(
-        webViewStep?.status === "cleared"
-          && webViewStep?.message === "Cleared the active WebView profile browsing data.",
-        `initialized WebView reset was not cleared: ${JSON.stringify(webViewStep || null)}`
-      );
-      console.log("initialized WebView browsing data reset: passed");
-    }
+    assert(
+      ["ready", "waiting-for-companion-display"].includes(resetResult?.recovery?.status),
+      `native host published an unexpected recovery state before reset: ${JSON.stringify(resetResult?.recovery || null)}`
+    );
+    // This isolated hidden-host fixture initializes WebView2 even without a companion
+    // display. Recovery reports display availability, not WebView profile readiness.
+    assert(
+      webViewStep?.status === "cleared"
+        && webViewStep?.message === "Cleared the active WebView profile browsing data.",
+      `initialized WebView reset was not cleared: ${JSON.stringify(webViewStep || null)}`
+    );
+    console.log("initialized WebView browsing data reset: passed");
     await cdp.send("Emulation.setDeviceMetricsOverride", {
       width: 2560,
       height: 720,
