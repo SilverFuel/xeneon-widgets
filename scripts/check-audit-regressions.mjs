@@ -862,8 +862,13 @@ assert(
 );
 
 assert(
-  /SystemEvents\.DisplaySettingsChanged\s*\+=\s*HandleDisplaySettingsChanged/.test(mainWindow)
-    && /SystemEvents\.DisplaySettingsChanged\s*-=\s*HandleDisplaySettingsChanged/.test(mainWindow)
+  /StartDisplayWindowGuard\(\);[\s\S]+ConfigureWindow\(saveSelection:\s*false\)/.test(mainWindow)
+    && /new DisplayWindowNativeGuard\([\s\S]+HandleNativeDisplayChange, QueueNativeDisplayRecovery/.test(mainWindow)
+    && /HandleNativeDisplayChange[\s\S]+ScheduleDisplayTopologyRevalidation\(forceHide:\s*true\)/.test(mainWindow)
+    && /private void DisposeResources\(\)[\s\S]+DisposeWindowHooks\(\)/.test(mainWindow)
+    && /private void DisposeWindowHooks\(\)[\s\S]+_displayWindowGuard\?\.Dispose\(\)/.test(mainWindow)
+    && /SetWindowSubclass\(window, _callback/.test(readWorkspaceFile("app/Infrastructure/DisplayWindowNativeGuard.cs"))
+    && /RemoveWindowSubclass\(_window, _callback/.test(readWorkspaceFile("app/Infrastructure/DisplayWindowNativeGuard.cs"))
     && /ScheduleDisplayRecovery\("startup display backoff"\)/.test(mainWindow)
     && /ScheduleDisplayRecovery\("display topology changed"\)/.test(mainWindow)
     && /TryRecoverDisplayPlacementAsync/.test(mainWindow)

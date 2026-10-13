@@ -2,6 +2,9 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, resolve } from "node:path";
 
 const mainWindow = readWorkspaceFile("app/MainWindow.xaml.cs");
+const nativeDisplayGuard = readWorkspaceFile("app/Infrastructure/DisplayWindowNativeGuard.cs");
+const nativePlacementPolicy = readWorkspaceFile("app/Infrastructure/DisplayWindowPlacementPolicy.cs");
+const nativePlacementPolicyTests = readWorkspaceFile("app/tests/DisplayWindowPlacementPolicyTests.cs");
 const displayPresentationGate = readWorkspaceFile("app/Infrastructure/DisplayPresentationGate.cs");
 const displayPresentationGateTests = readWorkspaceFile("app/tests/DisplayPresentationGateTests.cs");
 const mainWindowXaml = readWorkspaceFile("app/MainWindow.xaml");
@@ -71,8 +74,12 @@ function assert(condition, message) {
 }
 
 assert(
-  /SystemEvents\.DisplaySettingsChanged\s*\+=\s*HandleDisplaySettingsChanged/.test(mainWindow)
-    && /SystemEvents\.DisplaySettingsChanged\s*-=\s*HandleDisplaySettingsChanged/.test(mainWindow)
+  /StartDisplayWindowGuard\(\)/.test(mainWindow)
+    && /new DisplayWindowNativeGuard\([\s\S]+HandleNativeDisplayChange, QueueNativeDisplayRecovery/.test(mainWindow)
+    && /SetWindowSubclass\(window, _callback, SubclassId/.test(nativeDisplayGuard)
+    && /RemoveWindowSubclass\(_window, _callback, SubclassId/.test(nativeDisplayGuard)
+    && !/DisplayArea\.CreateWatcher/.test(mainWindow)
+    && !/SystemEvents\.DisplaySettingsChanged/.test(mainWindow)
     && /ScheduleDisplayRecovery\("startup display backoff"\)/.test(mainWindow)
     && /ScheduleDisplayRecovery\("display topology changed"\)/.test(mainWindow)
     && /DisplayRecoveryDelays/.test(mainWindow)
@@ -172,18 +179,27 @@ assert(
 assert(
   !/\bActivate\(\);/.test(mainWindow)
     && !/SetForegroundWindow/.test(mainWindow)
-    && /return _displayPresentation\.TryReveal\(\s*topologyGeneration,\s*topologyRequest,\s*\(\) => ShowWindow\(windowHandle, SwShowNoActivate\)\);/.test(mainWindow)
+    && /var revealed = _displayPresentation\.TryReveal\(\s*topologyGeneration,\s*topologyRequest,\s*\(\) => _displayWindowGuard\.Reveal\(\(\) => ShowWindow\(windowHandle, SwShowNoActivate\)\)\);\s*return revealed && IsWindowVisible\(windowHandle\);/.test(mainWindow)
     && (mainWindow.match(/ShowWindow\(windowHandle, SwShowNoActivate\)/g) || []).length === 1
     && /if \(!ShowWindowNoActivate\(topologyGeneration, topologyRequest\)\)[\s\S]+return false;[\s\S]+_windowHasBeenShown = true;/.test(mainWindow),
   "automatic startup, recovery, and display-picker reveals must never take foreground focus"
 );
 
 assert(
-  /MoveAndResize\(new RectInt32\([\s\S]+SetPresenter\(AppWindowPresenterKind\.FullScreen\);[\s\S]+EnsureDisplayWindowStaysOffTaskbar\(windowHandle\)/.test(mainWindow)
-    && /if \(!_waitingForEdgeDisplay\)[\s\S]+SetPresenter\(AppWindowPresenterKind\.FullScreen\);[\s\S]+EnsureDisplayWindowStaysOffTaskbar\(_windowHandle\)/.test(mainWindow)
+  /MoveAndResize\(new RectInt32\([\s\S]+targetDisplay\.Bounds\.Width,[\s\S]+targetDisplay\.Bounds\.Height[\s\S]+EnsureDisplayWindowStaysOffTaskbar\(windowHandle\)/.test(mainWindow)
+    && /if \(!_waitingForEdgeDisplay\)[\s\S]+EnsureDisplayWindowStaysOffTaskbar\(_windowHandle\)/.test(mainWindow)
+    && !/AppWindowPresenterKind\.FullScreen/.test(mainWindow)
+    && /if \(appWindow\.Presenter is not OverlappedPresenter\)[\s\S]+SetPresenter\(AppWindowPresenterKind\.Overlapped\)/.test(mainWindow)
+    && /presenter\.State != OverlappedPresenterState\.Restored[\s\S]+presenter\.Restore\(false\);[\s\S]+presenter\.SetBorderAndTitleBar\(false, false\)/.test(mainWindow)
+    && /presenter\.SetBorderAndTitleBar\(_waitingForEdgeDisplay, _waitingForEdgeDisplay\)/.test(mainWindow)
+    && /DisplayWindowPlacementPolicy\.LockedWindowStyle\(currentWindowStyle\)/.test(mainWindow)
+    && /DisplayWindowPlacementPolicy\.LockedExtendedStyle\(currentStyle\)/.test(mainWindow)
+    && /actualWindowStyle != DisplayWindowPlacementPolicy\.LockedWindowStyle\(actualWindowStyle\)/.test(mainWindow)
+    && /actualExtendedStyle != DisplayWindowPlacementPolicy\.LockedExtendedStyle\(actualExtendedStyle\)/.test(mainWindow)
+    && /var positionApplied = KeepDisplayWindowOnTop[\s\S]+IsLockedPresentationApplied\(positionApplied,[\s\S]+GetWindowLongPtr\(windowHandle, GwlStyle\)[\s\S]+GetWindowLongPtr\(windowHandle, GwlExStyle\)/.test(mainWindow)
     && /EnsureDisplayWindowStaysOffTaskbar[\s\S]+if \(windowHandle == IntPtr\.Zero\)[\s\S]+KeepDisplayWindowOnTop/.test(mainWindow)
     && !/windowHandle == IntPtr\.Zero \|\| _taskbarStyleApplied/.test(mainWindow),
-  "dashboard placement must enter fullscreen first, then reassert taskbar-free topmost styles after every topology or mode change"
+  "dashboard placement must restore without activation, fill exact companion bounds as a borderless overlapped window without fullscreen transitions, and reassert taskbar-free topmost styles"
 );
 
 assert(
@@ -196,7 +212,7 @@ assert(
 );
 
 assert(
-  /HandleDisplaySettingsChanged[\s\S]+ScheduleDisplayTopologyRevalidation\(\)/.test(mainWindow)
+  /HandleNativeDisplayChange[\s\S]+ScheduleDisplayTopologyRevalidation\(forceHide:\s*true\)/.test(mainWindow)
     && /DisplayTopologyDebounceDelay\s*=\s*TimeSpan\.FromMilliseconds\(750\)/.test(mainWindow)
     && /ScheduleDisplayTopologyRevalidation[\s\S]+firstInBurst[\s\S]+ShowWindow\(_windowHandle, SwHide\)[\s\S]+RevalidateDisplayTopologyAfterQuietPeriodAsync/.test(mainWindow)
     && /RevalidateDisplayTopologyAfterQuietPeriodAsync[\s\S]+var cancellationToken = request\.Token[\s\S]+Task\.Delay\(DisplayTopologyDebounceDelay, cancellationToken\)[\s\S]+IsCurrentTopologyRequest\(request\)[\s\S]+ConfigureWindow\(saveSelection:\s*false\)[\s\S]+RevealConfiguredWindow\(request\)/.test(mainWindow)
@@ -207,6 +223,42 @@ assert(
     && /TryRecoverDisplayPlacementAsync[\s\S]+var recovered = ConfigureWindow\(saveSelection:\s*false\)[\s\S]+if\s*\(recovered\)[\s\S]+RevealConfiguredWindow\(\)/.test(mainWindow)
     && /ShowDisplayWindow\(\)[\s\S]+SwHide[\s\S]+ConfigureWindow\(saveSelection:\s*false\)[\s\S]+RevealConfiguredWindow\(\)/.test(mainWindow),
   "display-event storms must hide once and debounce reconfiguration, while recovery and tray show reveal only after companion placement succeeds"
+);
+
+assert(
+  /HandleAppWindowChanged[\s\S]+if \(!_waitingForEdgeDisplay\)[\s\S]+RevalidateVisibleLockedPlacement\(\)/.test(mainWindow)
+    && /RevalidateVisibleLockedPlacement[\s\S]+!IsWindowVisible\(_windowHandle\)/.test(mainWindow)
+    && /RevalidateVisibleLockedPlacement[\s\S]+ResolveCompanionDisplay\(_configuredDisplayId\)/.test(mainWindow)
+    && /DisplayWindowPlacementPolicy\.IsContainedByCompanion/.test(mainWindow)
+    && /Visible locked window moved outside its verified companion; hiding before display recovery\.[\s\S]+ScheduleDisplayTopologyRevalidation\(forceHide:\s*true\)/.test(mainWindow)
+    && /if \(firstInBurst \|\| forceHide\)[\s\S]+ShowWindow\(_windowHandle, SwHide\)/.test(mainWindow)
+    && /if \(!_suppressWindowForTests && _displayWindowGuard is null\)/.test(mainWindow)
+    && /if \(_displayWindowGuard is null \|\| _companionDisplayUnavailable/.test(mainWindow),
+  "visible fullscreen moves must fail closed outside the current companion, and failed/stopped topology monitoring must block reveal"
+);
+
+assert(
+  /_trayIcon \?\?= new TrayIcon[\s\S]+StartDisplayWindowGuard\(\)/.test(mainWindow)
+    && /_displayWindowGuard\?\.Dispose\(\);[\s\S]+_trayIcon\?\.Dispose\(\)/.test(mainWindow)
+    && /private void QuitApplication\(\)[\s\S]+DisposeWindowHooks\(\);[\s\S]+Close\(\)/.test(mainWindow)
+    && /private void DisposeResources\(\)[\s\S]+DisposeWindowHooks\(\);/.test(mainWindow)
+    && /private void DisposeWindowHooks\(\)[\s\S]+IsAttached == true\)[\s\S]+return;[\s\S]+_displayWindowGuard = null/.test(mainWindow)
+    && /_topologyChanged\(message\)[\s\S]+DefSubclassProc\(window, message, wParam, lParam\)/.test(nativeDisplayGuard)
+    && /DefSubclassProc\(window, message, wParam, lParam\)[\s\S]+FilterNativePositionFlags/.test(nativeDisplayGuard)
+    && /readonly SubclassProc _callback/.test(nativeDisplayGuard)
+    && /HandleMessageCore[\s\S]+catch \(Exception error\)[\s\S]+HideAndRejectPosition/.test(nativeDisplayGuard)
+    && /using var placement = _displayWindowGuard\?\.BeginPlacement\(\)/.test(mainWindow)
+    && /private void ApplyDisplaySelectionWindow[\s\S]+using var placement = _displayWindowGuard\?\.BeginPlacement\(\);[\s\S]+SetVerifiedTarget\(pickerDisplay, locked: false\)/.test(mainWindow)
+    && /_displayWindowGuard\.Reveal\(\(\) => ShowWindow\(windowHandle, SwShowNoActivate\)\)/.test(mainWindow)
+    && /return revealed && IsWindowVisible\(windowHandle\)/.test(mainWindow)
+    && /QueueNativeDisplayRecovery[\s\S]+DispatcherQueue\.TryEnqueue/.test(mainWindow)
+    && /message == 0x007E/.test(nativePlacementPolicy)
+    && /message == 0x02E0 && !placementInProgress && visible/.test(nativePlacementPolicy)
+    && /HiddenPresenterImplicitShow_IsSuppressed/.test(nativePlacementPolicyTests)
+    && /VisiblePrimaryRelocation_IsHiddenAndMoveResizeRejected/.test(nativePlacementPolicyTests)
+    && /ExplicitFinalReveal_RequiresVerifiedBounds/.test(nativePlacementPolicyTests)
+    && /NestedHideDuringTopologyNotification/.test(nativePlacementPolicyTests),
+  "independent native subclass must hide before topology processing and filter presenter/window-position visibility before commit, without recursive recovery or lost delegate lifetime"
 );
 
 assert(
