@@ -728,6 +728,7 @@ public sealed partial class MainWindow : Window
         DetachWebViewDiagnostics();
         webView.WebMessageReceived += HandleWebMessageReceived;
         webView.ProcessFailed += HandleProcessFailed;
+        webView.DOMContentLoaded += HandleDashboardDOMContentLoaded;
         _webViewDiagnosticsWebView = webView;
 
         try
@@ -780,6 +781,7 @@ public sealed partial class MainWindow : Window
             {
                 webView.WebMessageReceived -= HandleWebMessageReceived;
                 webView.ProcessFailed -= HandleProcessFailed;
+                webView.DOMContentLoaded -= HandleDashboardDOMContentLoaded;
                 RemoveWebViewDiagnosticsScript(webView, scriptId);
                 if (ReferenceEquals(_webViewDiagnosticsWebView, webView))
                 {
@@ -795,6 +797,7 @@ public sealed partial class MainWindow : Window
         {
             webView.WebMessageReceived -= HandleWebMessageReceived;
             webView.ProcessFailed -= HandleProcessFailed;
+            webView.DOMContentLoaded -= HandleDashboardDOMContentLoaded;
             if (ReferenceEquals(_webViewDiagnosticsWebView, webView))
             {
                 _webViewDiagnosticsWebView = null;
@@ -819,6 +822,7 @@ public sealed partial class MainWindow : Window
 
         webView.WebMessageReceived -= HandleWebMessageReceived;
         webView.ProcessFailed -= HandleProcessFailed;
+        webView.DOMContentLoaded -= HandleDashboardDOMContentLoaded;
         if (!string.IsNullOrWhiteSpace(scriptId))
         {
             RemoveWebViewDiagnosticsScript(webView, scriptId);
@@ -908,8 +912,28 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        var previousNavigationId = _dashboardNavigationId;
         _dashboardNavigationId = args.NavigationId;
         _dashboardLoaded = false;
+        _logger.Info($"Dashboard navigation starting: navigationId={args.NavigationId}; previousNavigationId={previousNavigationId}.");
+    }
+
+    private void HandleDashboardDOMContentLoaded(CoreWebView2 sender, CoreWebView2DOMContentLoadedEventArgs args)
+    {
+        if (!ReferenceEquals(sender, _webViewDiagnosticsWebView))
+        {
+            return;
+        }
+
+        var matchesDashboardNavigation = _dashboardNavigationId != 0
+            && args.NavigationId == _dashboardNavigationId;
+        var sourceIsDashboard = IsDashboardAddress(sender.Source);
+        if (matchesDashboardNavigation || sourceIsDashboard)
+        {
+            // IDs and booleans diagnose event delivery without exposing URLs,
+            // query strings, or session tokens in the support log.
+            _logger.Info($"Dashboard DOM content loaded: navigationId={args.NavigationId}; trackedNavigationId={_dashboardNavigationId}; navigationMatchesDashboard={matchesDashboardNavigation}; sourceMatchesDashboard={sourceIsDashboard}.");
+        }
     }
 
     private bool IsDashboardAddress(string? address)
@@ -934,6 +958,13 @@ public sealed partial class MainWindow : Window
         var matchesDashboardNavigation = _dashboardNavigationId != 0
             && args.NavigationId == _dashboardNavigationId;
         var sourceIsDashboard = IsDashboardSource(sender.Source);
+
+        if (matchesDashboardNavigation || sourceIsDashboard)
+        {
+            // Log before UI updates so a missing success receipt can be separated
+            // from an event that never arrived. Do not log the navigation URL.
+            _logger.Info($"Dashboard navigation completed event: navigationId={args.NavigationId}; trackedNavigationId={_dashboardNavigationId}; success={args.IsSuccess}; status={args.WebErrorStatus}; navigationMatchesDashboard={matchesDashboardNavigation}; sourceMatchesDashboard={sourceIsDashboard}.");
+        }
 
         if (args.IsSuccess && matchesDashboardNavigation && sourceIsDashboard)
         {
