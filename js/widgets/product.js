@@ -1260,26 +1260,59 @@
 
   function mountDisplayControlsWidget(widget, container, env) {
     var cleanups = [];
-    var state = { payload: null, busy: false, confirmPowerIndex: -1, message: "Checking monitor controls", tone: "warn" };
+    var state = { payload: null, busy: false, confirmPowerIndex: -1, message: "Checking monitor controls", tone: "warn", pendingPaused: false, failed: false };
+    var destroyed = false;
+    var retryTimer = 0;
+    var pendingChecks = 0;
+    var pendingDeadline = Date.now() + 15000;
+    var activeRequest = null;
+    var requestController = null;
+    var pendingFocus = null;
+
+    function isPending(payload) {
+      return payload && payload.status === "pending";
+    }
+
+    function clearRetry() {
+      window.clearTimeout(retryTimer);
+      retryTimer = 0;
+    }
 
     function publishControlStatus(payload, fallbackMessage) {
       var displays = payload && Array.isArray(payload.displays) ? payload.displays : [];
-      var status = payload && payload.supported ? "Ready" : displays.length ? "Limited" : "Unavailable";
-      var tone = status === "Ready" ? "good" : status === "Limited" ? "warn" : "muted";
+      var status = isPending(payload) ? (state.pendingPaused ? "Still checking" : "Checking") : payload && payload.supported ? "Ready" : displays.length ? "Limited" : "Unavailable";
+      var tone = isPending(payload) ? "warn" : status === "Ready" ? "good" : status === "Limited" ? "warn" : "muted";
       if (typeof env.publishStatus === "function") {
         env.publishStatus(status, tone, text(payload && payload.message, fallbackMessage || "Monitor controls checked"));
       }
     }
 
     function redraw() {
-      var displays = state.payload && Array.isArray(state.payload.displays) ? state.payload.displays : [];
+      if (destroyed) {
+        return;
+      }
+      var checking = !!activeRequest || state.payload === null || isPending(state.payload);
+      var unavailable = !checking && (state.failed || (state.payload && state.payload.status === "unavailable"));
+      var displays = !checking && state.payload && Array.isArray(state.payload.displays) ? state.payload.displays : [];
+      var retryButton = '<button class="inline-button" type="button" data-monitor-retry' + (activeRequest ? ' disabled' : '') + '>Try again</button>';
+      var active = container.ownerDocument && container.ownerDocument.activeElement;
+      var ownsFocus = active && container.contains(active);
+      var focusedControl = ownsFocus && (active.hasAttribute("data-monitor-control") || active.hasAttribute("data-monitor-power"));
+      var moveFocus = ownsFocus && ((checking && focusedControl) || active.hasAttribute("data-monitor-retry") || active.hasAttribute("data-monitor-status"));
+      if (checking && focusedControl) {
+        pendingFocus = {
+          control: active.getAttribute("data-monitor-control"),
+          index: active.getAttribute("data-monitor-index"),
+          power: active.getAttribute("data-monitor-power")
+        };
+      }
       patchStableDom(container, productShell(
         "Monitor control",
         "Display Controls",
         "Control only non-primary companion displays through Windows DDC/CI. The Windows primary display is excluded.",
         state.message,
         state.tone,
-        state.payload === null ? '<div class="inline-empty"><strong>Checking companion controls</strong><span>Reading DDC/CI capabilities from non-primary displays.</span></div>' : displays.length ? '<div class="inline-list">' + displays.map(function (display) {
+        unavailable ? '<div class="inline-empty" role="status" aria-live="polite" tabindex="-1" data-monitor-status><strong>Companion controls unavailable</strong><span>' + escapeHtml(state.message) + '</span>' + retryButton + '</div>' : checking ? '<div class="inline-empty" role="status" aria-live="polite" tabindex="-1" data-monitor-status><strong>' + (state.busy ? 'Applying monitor change' : state.pendingPaused ? 'Still checking companion controls' : 'Checking companion controls') + '</strong><span>' + (state.busy ? 'Please wait while the companion monitor applies this change.' : state.pendingPaused ? 'Detection is still running. Automatic checks have paused; try again when you are ready.' : 'Reading DDC/CI capabilities from non-primary displays. The Windows primary display is excluded.') + '</span>' + (state.pendingPaused && !activeRequest ? retryButton : '') + '</div>' : displays.length ? '<div class="inline-list">' + displays.map(function (display) {
           return '<article class="list-card inline-card"><div class="inline-card-header"><div><div class="metric-label">Display ' + escapeHtml(String(display.index + 1)) + '</div><h3 class="inline-title">' + escapeHtml(display.name) + '</h3></div>' + statusPill(display.brightnessSupported || display.contrastSupported ? "DDC/CI" : "Limited", display.brightnessSupported || display.contrastSupported ? "good" : "warn") + '</div>' +
             '<div class="inline-form-grid inline-form-grid--2">' +
               (display.brightnessSupported ? '<label class="inline-field product-range-field"><span>Brightness ' + escapeHtml(String(display.brightness)) + '%</span><input class="inline-range" type="range" min="0" max="100" value="' + escapeHtml(String(display.brightness)) + '" aria-label="Brightness for ' + escapeHtml(display.name) + '" data-monitor-control="brightness" data-monitor-index="' + display.index + '"></label>' : '') +
@@ -1289,48 +1322,138 @@
               (display.inputSupported ? '<label class="inline-field"><span>Input source: ' + escapeHtml(monitorInputLabel(display.inputSource)) + '</span><input class="inline-input" type="number" min="1" max="31" value="' + escapeHtml(String(display.inputSource)) + '" aria-label="Input source code for ' + escapeHtml(display.name) + '; current source ' + escapeHtml(monitorInputLabel(display.inputSource)) + '" data-monitor-control="input" data-monitor-index="' + display.index + '"></label>' : '') +
               (display.powerSupported ? '<button class="inline-button" type="button" aria-label="' + (state.confirmPowerIndex === display.index ? "Confirm turning off " : "Turn off ") + escapeHtml(display.name) + '" data-monitor-power="' + display.index + '">' + (state.confirmPowerIndex === display.index ? "Confirm display off" : "Turn display off") + '</button>' : '') +
             '</div></article>';
-        }).join("") + '</div>' : '<div class="inline-empty"><strong>No companion DDC/CI controls found</strong><span>The Windows primary display is excluded. Enable DDC/CI in the companion monitor menu if it is supported.</span></div>'
+        }).join("") + '</div>' : '<div class="inline-empty" tabindex="-1" data-monitor-status><strong>No companion DDC/CI controls found</strong><span>The Windows primary display is excluded. Enable DDC/CI in the companion monitor menu if it is supported.</span></div>'
       ));
       initXnSlider(container);
+      if (moveFocus) {
+        var focusTarget = !checking && pendingFocus ? Array.prototype.filter.call(container.querySelectorAll("[data-monitor-control], [data-monitor-power]"), function (control) {
+          return control.getAttribute("data-monitor-control") === pendingFocus.control
+            && control.getAttribute("data-monitor-index") === pendingFocus.index
+            && control.getAttribute("data-monitor-power") === pendingFocus.power;
+        })[0] : null;
+        focusTarget = focusTarget || container.querySelector("[data-monitor-retry], [data-monitor-status], [data-monitor-control], [data-monitor-power]");
+        if (focusTarget && focusTarget !== container.ownerDocument.activeElement) {
+          focusTarget.focus({ preventScroll: true });
+        }
+      }
+      if (!checking) {
+        pendingFocus = null;
+      }
     }
 
-    function refresh() {
-      return requestJson(buildBridgeUrl(env, "/api/displays/controls"), {}, 8000).then(function (payload) {
-        state.payload = payload;
-        state.message = text(payload.message, "Monitor controls checked");
-        state.tone = payload.supported ? "good" : "warn";
-        publishControlStatus(payload, state.message);
+    function schedulePendingRetry() {
+      if (destroyed || !isPending(state.payload) || state.pendingPaused || retryTimer) {
+        return;
+      }
+      if (Date.now() >= pendingDeadline || pendingChecks >= 15) {
+        state.pendingPaused = true;
+        state.message = "Still checking monitor controls";
+        publishControlStatus(state.payload, state.message);
         redraw();
+        return;
+      }
+      retryTimer = window.setTimeout(function () {
+        retryTimer = 0;
+        pendingChecks += 1;
+        refresh();
+      }, Math.min(1000, pendingDeadline - Date.now()));
+    }
+
+    function applyPayload(payload, successMessage) {
+      state.payload = payload;
+      state.failed = false;
+      state.message = isPending(payload) ? "Checking monitor controls" : text(successMessage, text(payload.message, "Monitor controls checked"));
+      state.tone = payload.supported && !isPending(payload) ? "good" : "warn";
+      publishControlStatus(payload, state.message);
+    }
+
+    function finishRequest() {
+      activeRequest = null;
+      requestController = null;
+      if (destroyed) {
+        return;
+      }
+      state.busy = false;
+      schedulePendingRetry();
+      redraw();
+    }
+
+    function refresh(manualRetry) {
+      if (destroyed) {
+        return Promise.resolve();
+      }
+      if (activeRequest) {
+        return activeRequest;
+      }
+      if (manualRetry === true || (state.payload !== null && !isPending(state.payload))) {
+        pendingChecks = 0;
+        pendingDeadline = Date.now() + 15000;
+        state.pendingPaused = false;
+      } else if (state.pendingPaused) {
+        return Promise.resolve();
+      }
+      clearRetry();
+      state.message = "Checking monitor controls";
+      state.tone = "warn";
+      publishControlStatus({ status: "pending" }, state.message);
+      requestController = new AbortController();
+      activeRequest = requestJson(buildBridgeUrl(env, "/api/displays/controls"), { signal: requestController.signal }, 8000).then(function (payload) {
+        if (!destroyed) {
+          applyPayload(payload);
+        }
       }, function (error) {
+        if (destroyed) {
+          return;
+        }
+        state.payload = { status: "unavailable", supported: false, displays: [] };
+        state.failed = true;
         state.message = error.message || "Monitor controls unavailable";
         state.tone = "danger";
         if (typeof env.publishStatus === "function") {
           env.publishStatus("Unavailable", "danger", state.message);
         }
-        redraw();
-      });
+      }).finally(finishRequest);
+      redraw();
+      return activeRequest;
     }
 
     function setControl(index, control, value) {
+      if (destroyed || activeRequest || isPending(state.payload)) {
+        return;
+      }
+      clearRetry();
+      pendingChecks = 0;
+      pendingDeadline = Date.now() + 15000;
+      state.pendingPaused = false;
       state.busy = true;
-      return requestJson(buildBridgeUrl(env, "/api/displays/controls"), {
+      state.message = "Applying monitor change";
+      state.tone = "warn";
+      if (typeof env.publishStatus === "function") {
+        env.publishStatus("Updating", "warn", state.message);
+      }
+      requestController = new AbortController();
+      activeRequest = requestJson(buildBridgeUrl(env, "/api/displays/controls"), {
+        signal: requestController.signal,
         method: "POST", body: { displayIndex: Number(index), control: control, value: Number(value) }
       }, 8000).then(function (payload) {
-        state.payload = payload;
-        state.message = control + " updated";
-        state.tone = "good";
-        publishControlStatus(payload, state.message);
+        if (!destroyed) {
+          applyPayload(payload, control + " updated");
+        }
       }, function (error) {
+        if (destroyed) {
+          return;
+        }
         state.message = error.message || "Monitor update failed";
         state.tone = "danger";
         if (typeof env.publishStatus === "function") {
           env.publishStatus("Degraded", "warn", state.message);
         }
       }).finally(function () {
-        state.busy = false;
         state.confirmPowerIndex = -1;
-        redraw();
+        finishRequest();
       });
+      redraw();
+      return activeRequest;
     }
 
     addListener(cleanups, container, "change", function (event) {
@@ -1340,6 +1463,11 @@
       }
     });
     addListener(cleanups, container, "click", function (event) {
+      var retry = event.target && event.target.closest ? event.target.closest("[data-monitor-retry]") : null;
+      if (retry) {
+        refresh(true);
+        return;
+      }
       var target = event.target && event.target.closest ? event.target.closest("[data-monitor-power]") : null;
       var index;
       if (!target) {
@@ -1358,7 +1486,15 @@
 
     redraw();
     refresh();
-    return { refresh: refresh, destroy: function () { runCleanups(cleanups); patchStableDom(container, ""); } };
+    return { refresh: refresh, destroy: function () {
+      destroyed = true;
+      clearRetry();
+      if (requestController) {
+        requestController.abort();
+      }
+      runCleanups(cleanups);
+      patchStableDom(container, "");
+    } };
   }
 
   function mountRemoteWidget(widget, container, env) {

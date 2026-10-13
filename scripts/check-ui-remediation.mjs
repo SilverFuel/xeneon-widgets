@@ -233,7 +233,7 @@ assert(/statusText:\s*"Not checked"/.test(product) && /env\.publishStatus/.test(
 assert(/"display-controls": \{ destination: "library", category: "System", defaultStatus: "Available"/.test(dashboard), "Display Controls rail must stay truthfully Available until the user opens the panel and native capability discovery finishes");
 assert(/function publishControlStatus/.test(product) && /Windows primary display is excluded/.test(product), "Display Controls must publish terminal status and explain its companion-only scope");
 assert(/aria-label="Input source code for /.test(product) && /Confirm turning off /.test(product), "Display Controls must uniquely name monitor-specific input and power controls");
-assert(/state\.payload === null \? '<div class="inline-empty"><strong>Checking companion controls/.test(product), "Display Controls must show a truthful loading state before DDC\/CI discovery completes");
+assert(/var checking = !!activeRequest \|\| state\.payload === null \|\| isPending\(state\.payload\)/.test(product) && /payload\.status === "pending"/.test(product) && /Checking companion controls/.test(product), "Display Controls must show a truthful loading state both before and during DDC\/CI discovery");
 assert(/"Release checks"/.test(product) && /does not install updates automatically/.test(product) && !/Auto-update foundation/.test(product), "Updates must describe release checking without claiming automatic installation");
 assert(/Automatic rollback is not included in this beta/.test(product) && /Manual rollback only/.test(product) && !/data-action="check-rollback"/.test(product), "Updates must not advertise an automatic rollback action that this beta cannot perform");
 for (const [name, source] of [["app config", appConfig], ["config normalization", configStore], ["config API", configController], ["display selection", bridgeManager], ["support API", supportController], ["dashboard defaults", dashboard]]) {
@@ -289,4 +289,5 @@ assert(/product-layout-row__handle" draggable="true"/.test(product) && !/<li cla
 assert(/game-mode-idle-grid[\s\S]*?grid-template-rows:\s*none;[\s\S]*?grid-auto-rows:\s*max-content/.test(gameCss), "Game Mode idle layout must use natural vertical rows");
 assert(/game-mode-steam-dock[\s\S]*?overflow-x:\s*auto/.test(gameCss), "Steam dock must retain intentional horizontal scrolling");
 
+await import("./check-display-controls.mjs");
 console.log("checked exhaustive Auxora UI remediation contracts");

@@ -2922,9 +2922,31 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
         '[tabindex]:not([tabindex="-1"])'
       ].join(', ');
 
+      const displayPausedState = (panelRoot, status) => {
+        const statusRegion = panelRoot?.querySelector('[data-monitor-status]');
+        const retry = statusRegion?.querySelector('[data-monitor-retry]');
+        const details = {
+          exactStatus: status === 'Still checking',
+          statusRegionVisible: visible(statusRegion),
+          pausedHeading: renderedText(statusRegion?.querySelector('strong')) === 'Still checking companion controls',
+          automaticChecksPaused: renderedText(statusRegion).includes('Automatic checks have paused; try again when you are ready.'),
+          retryVisible: visible(retry),
+          retryEnabled: Boolean(retry && !retry.matches(':disabled') && retry.getAttribute('aria-disabled') !== 'true'
+            && !retry.closest('[inert]') && retry.tabIndex >= 0 && renderedText(retry) === 'Try again'),
+          hardwareControlCount: panelRoot?.querySelectorAll('[data-monitor-control], [data-monitor-power]').length ?? -1
+        };
+        details.passed = details.exactStatus && details.statusRegionVisible && details.pausedHeading
+          && details.automaticChecksPaused && details.retryVisible && details.retryEnabled && details.hardwareControlCount === 0;
+        return details;
+      };
+      const surfaceStatusSettled = (id, panelRoot, status) => Boolean(status && (!transientStatus.test(status)
+        || (id === 'display-controls' && displayPausedState(panelRoot, status).passed)));
+
       async function auditCurrentSurface(expectedId, selectionFocus) {
-        const settleDeadline = Date.now() + 5000;
         let state = currentSurface();
+        // Monitor discovery may use its 15s polling window and final 8s read
+        // deadline before presenting the explicit, manually retryable pause.
+        const settleDeadline = Date.now() + ((expectedId || state.id) === 'display-controls' ? 25000 : 5000);
         let root = document.getElementById('dashboard-inline-widget');
         let status = document.getElementById('dashboard-widget-source')?.textContent?.trim() || '';
         let settled = false;
@@ -2937,8 +2959,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
               && (!expectedId || state.id === expectedId)
               && loadingHidden
               && visible(root)
-              && status
-              && !transientStatus.test(status)) {
+              && surfaceStatusSettled(state.id, root, status)) {
             settled = true;
             break;
           }
@@ -2952,6 +2973,8 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
 
         root = document.getElementById('dashboard-inline-widget');
         status = document.getElementById('dashboard-widget-source')?.textContent?.trim() || '';
+        const displayPausedDetails = id === 'display-controls' ? displayPausedState(root, status) : null;
+        const displayDetectionPaused = Boolean(displayPausedDetails?.passed);
         const disclosureAudit = await openVisibleDisclosures(root);
         let controls = root ? Array.from(root.querySelectorAll(interactiveSelector)).filter(visible) : [];
         const focusableControls = controls.filter(element => !element.matches(':disabled')
@@ -2968,6 +2991,148 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
         const contentFocusReachable = contentFocusAudits.every(audit => audit.viewportContained
           && audit.rootContained
           && audit.clippingAncestorsContained);
+        const displayControlStateAudits = [];
+        if (id === 'display-controls' && root) {
+          const originalFetch = window.fetch;
+          const fixtureOrigin = 'https://auxora-display-controls-fixture.invalid';
+          const nativeMounts = Array.from(root.querySelectorAll(':scope > .inline-widget-mount'));
+          const nativeMountDisplays = nativeMounts.map(mount => mount.style.display);
+          let fixture = null;
+          let mutationCount = 0;
+          const pendingPayload = {
+            status: 'pending', supported: false, displays: [], primaryExcluded: true,
+            scope: 'companion-only', message: 'Checking companion monitor controls.'
+          };
+          const readyPayload = {
+            status: 'ready', supported: true, primaryExcluded: true, scope: 'companion-only',
+            message: 'Companion controls ready.', displays: [{
+              index: 0, name: 'Rendered companion', brightnessSupported: true, brightness: 55,
+              contrastSupported: true, contrast: 65, inputSupported: true, inputSource: 17,
+              powerSupported: true
+            }]
+          };
+          const unavailablePayload = {
+            status: 'unavailable', supported: false, displays: [], primaryExcluded: true,
+            scope: 'companion-only', message: 'No companion DDC/CI controls found.'
+          };
+          const captureDisplayState = async (mount, expectedStatus) => {
+            await nextFrames();
+            const fixtureControls = Array.from(mount.querySelectorAll(interactiveSelector)).filter(visible);
+            const enabled = fixtureControls.filter(element => !element.matches(':disabled')
+              && element.getAttribute('aria-disabled') !== 'true' && !element.closest('[inert]'));
+            const focus = [];
+            for (let index = 0; index < enabled.length; index += 1) {
+              focus.push(await auditFocusableControl(enabled[index], index, root));
+            }
+            const targetMinimum = innerWidth >= 1800 && innerHeight >= 600 ? 54 : 44;
+            const undersized = fixtureControls.filter(element => {
+              const size = effectiveTargetSize(element);
+              return size.width < targetMinimum || size.height < targetMinimum;
+            }).map(describeControl);
+            const unnamed = fixtureControls.filter(element => !(element.getAttribute('aria-label')
+              || labelledByText(element) || associatedLabelText(element) || renderedText(element)
+              || element.getAttribute('title'))).map(describeControl);
+            const smallText = Array.from(mount.querySelectorAll('*')).filter(element => visible(element)
+              && !['SCRIPT', 'STYLE', 'SVG', 'PATH', 'DEFS', 'USE', 'OPTION'].includes(element.tagName)
+              && element.children.length === 0 && renderedText(element)
+              && Number.parseFloat(getComputedStyle(element).fontSize) < 12).map(describeElement);
+            const smallControlText = targetMinimum === 54 ? fixtureControls.filter(element =>
+              hasRenderedControlText(element) && Number.parseFloat(getComputedStyle(element).fontSize) < 15
+            ).map(describeControl) : [];
+            const clipped = fixtureControls.filter(element => element.matches('button, a[href], summary, [role="button"], [role="link"]')
+              && renderedText(element) && (element.scrollWidth > element.clientWidth + 1
+                || element.scrollHeight > element.clientHeight + 1)).map(describeControl);
+            const horizontalOverflow = document.documentElement.scrollWidth > innerWidth + 1
+              || root.scrollWidth > root.clientWidth + 1 || mount.scrollWidth > mount.clientWidth + 1;
+            const initialScroll = root.scrollTop;
+            const maximumScroll = Math.max(0, root.scrollHeight - root.clientHeight);
+            root.scrollTop = maximumScroll;
+            const verticalReachable = maximumScroll <= 1 || (['auto', 'scroll', 'overlay'].includes(getComputedStyle(root).overflowY)
+              && Math.abs(root.scrollTop - maximumScroll) < 1);
+            root.scrollTop = initialScroll;
+            const status = fixture.statuses.at(-1)?.status || '';
+            const text = renderedText(mount);
+            const pendingHonest = expectedStatus !== 'Checking' || (/Checking companion controls/.test(text)
+              && !/No companion.*controls found|Monitor controls unavailable|No controls/i.test(text)
+              && fixtureControls.length === 0 && fixture.statuses.every(entry => entry.status === 'Checking'));
+            const expectedControlCount = expectedStatus === 'Ready' ? 4 : expectedStatus === 'Unavailable' ? 1 : 0;
+            const retryAvailable = expectedStatus !== 'Unavailable' || (enabled.length === 1
+              && enabled[0].matches('[data-monitor-retry]') && renderedText(enabled[0]) === 'Try again');
+            const settlementAccepted = surfaceStatusSettled('display-controls', mount, status);
+            const settlementCorrect = expectedStatus === 'Checking' ? !settlementAccepted : settlementAccepted;
+            return {
+              expectedStatus, status, pendingHonest, controlCount: fixtureControls.length, expectedControlCount,
+              enabledControlCount: enabled.length, retryAvailable, settlementAccepted, settlementCorrect,
+              statuses: fixture.statuses.slice(), undersized, unnamed, smallText, smallControlText, clipped,
+              focusFailures: focus.filter(entry => !entry.passed), horizontalOverflow, verticalReachable,
+              passed: status === expectedStatus && pendingHonest && fixtureControls.length === expectedControlCount
+                && enabled.length === expectedControlCount && retryAvailable && settlementCorrect
+                && undersized.length === 0 && unnamed.length === 0 && smallText.length === 0
+                && smallControlText.length === 0 && clipped.length === 0 && focus.every(entry => entry.passed)
+                && !horizontalOverflow && verticalReachable
+            };
+          };
+          try {
+            nativeMounts.forEach(mount => { mount.style.display = 'none'; });
+            window.fetch = async function (input, init) {
+              const url = new URL(String(input && input.url ? input.url : input), location.href);
+              const method = String(init?.method || input?.method || 'GET').toUpperCase();
+              if (url.pathname === '/api/displays/controls' && method !== 'GET') {
+                mutationCount += 1;
+                return new Response(JSON.stringify({ error: 'Rendered display fixture blocks all monitor writes.' }), { status: 405 });
+              }
+              if (url.origin !== fixtureOrigin) return originalFetch.call(window, input, init);
+              if (url.pathname !== '/api/displays/controls' || method !== 'GET' || !fixture) {
+                throw new Error('Unexpected rendered display fixture request');
+              }
+              fixture.reads += 1;
+              return new Response(JSON.stringify(fixture.payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            };
+            for (const scenario of ['ready', 'unavailable', 'destroy-pending']) {
+              fixture = { payload: pendingPayload, reads: 0, statuses: [] };
+              let controller = null;
+              let mount = null;
+              try {
+                const existingMounts = new Set(Array.from(root.querySelectorAll(':scope > .inline-widget-mount')));
+                controller = window.InlineWidgets.mountWidget({ id: 'display-controls', title: 'Display Controls' }, root, {
+                  bridgeOrigin: fixtureOrigin,
+                  publishStatus(status, tone, message) { fixture.statuses.push({ status, tone, message }); }
+                });
+                mount = Array.from(root.querySelectorAll(':scope > .inline-widget-mount')).find(candidate => !existingMounts.has(candidate));
+                const pendingDeadline = Date.now() + 2000;
+                while (Date.now() < pendingDeadline && fixture.statuses.at(-1)?.status !== 'Checking') await wait(25);
+                const pending = await captureDisplayState(mount, 'Checking');
+                let terminal = null;
+                let destroyCancelledRetry = true;
+                if (scenario === 'destroy-pending') {
+                  const readsAtDestroy = fixture.reads;
+                  const statusesAtDestroy = fixture.statuses.length;
+                  controller.destroy();
+                  await wait(1150);
+                  destroyCancelledRetry = fixture.reads === readsAtDestroy && fixture.statuses.length === statusesAtDestroy && !mount.isConnected;
+                } else {
+                  fixture.payload = scenario === 'ready' ? readyPayload : unavailablePayload;
+                  const expectedStatus = scenario === 'ready' ? 'Ready' : 'Unavailable';
+                  const terminalDeadline = Date.now() + 3000;
+                  while (Date.now() < terminalDeadline && fixture.statuses.at(-1)?.status !== expectedStatus) await wait(25);
+                  terminal = await captureDisplayState(mount, expectedStatus);
+                }
+                controller.destroy();
+                displayControlStateAudits.push({
+                  scenario, pending, terminal, reads: fixture.reads, mutationCount, destroyCancelledRetry,
+                  mountRemoved: !mount.isConnected,
+                  passed: pending.passed && (terminal ? terminal.passed && fixture.reads >= 2 : destroyCancelledRetry)
+                    && mutationCount === 0 && !mount.isConnected
+                });
+              } finally {
+                controller?.destroy?.();
+              }
+            }
+          } finally {
+            window.fetch = originalFetch;
+            nativeMounts.forEach((mount, index) => { mount.style.display = nativeMountDisplays[index]; });
+          }
+        }
         const networkLayoutAudits = [];
         const networkStateAudits = [];
         if (id === 'network' && root && (innerWidth === 2047 || innerWidth === 2048)) {
@@ -3292,6 +3457,8 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
           title,
           status,
           settled,
+          displayDetectionPaused,
+          displayPausedDetails,
           selectionMatches: !expectedId || id === expectedId,
           selectionFocus,
           disclosureAuditedCount: disclosureAudit.auditedCount,
@@ -3306,6 +3473,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
           contentFocusReachable,
           networkLayoutAudits,
           networkStateAudits,
+          displayControlStateAudits,
           focusTarget: describeControl(focusTarget),
           contentFocusFailures,
           layoutDiagnostics: contentFocusFailures.length ? ['.router-viewer', '.router-viewer__header', '.router-viewer__header > div:first-child', '.router-viewer__header-actions', '#dashboard-widget-source', '.router-viewer__frame-shell', '#dashboard-inline-widget', '.network-unifi-form'].map(selector => {
@@ -3418,7 +3586,15 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
   assert(audit.runtimeCaptureReady, `${viewportLabel}: early runtime error capture was not installed`);
   for (const result of audit.results || []) {
     const surfaceLabel = `${viewport.name}/${result.id}`;
-    assert(result.settled && result.status && !/Loading|Refreshing|Checking|Measuring|Monitoring/i.test(result.status), `${surfaceLabel}: surface status did not reach a terminal state: ${JSON.stringify(result)}`);
+    const displayPaused = result.id === "display-controls" && result.status === "Still checking"
+      && result.displayDetectionPaused === true && result.displayPausedDetails?.passed === true;
+    assert(result.settled && result.status && (!/Loading|Refreshing|Checking|Measuring|Monitoring/i.test(result.status) || displayPaused), `${surfaceLabel}: surface status did not reach a terminal state or explicit monitor-discovery pause: ${JSON.stringify(result)}`);
+    if (displayPaused) {
+      const details = result.displayPausedDetails;
+      assert(details.exactStatus && details.statusRegionVisible && details.pausedHeading && details.automaticChecksPaused
+        && details.retryVisible && details.retryEnabled && details.hardwareControlCount === 0,
+      `${surfaceLabel}: paused discovery must explain the pause, expose an enabled visible retry, and hide hardware controls: ${JSON.stringify(details)}`);
+    }
     assert(result.selectionMatches, `${surfaceLabel}: the requested product surface did not become active: ${JSON.stringify(result)}`);
     assert(result.selectionFocus?.accepted && result.selectionFocus?.reachable, `${surfaceLabel}: surface selector was not keyboard-focusable and reachable: ${JSON.stringify(result.selectionFocus || null)}`);
     assert(result.selectionFocus?.returnedToOpener !== false && result.selectionFocus?.drawerClosed !== false, `${surfaceLabel}: catalog selection did not close its dialog and recover focus: ${JSON.stringify(result.selectionFocus || null)}`);
@@ -3446,6 +3622,11 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
     if (result.id === "clipboard") {
       assert(result.clipboardPrivacyToggle === "Show previews", `${surfaceLabel}: previews were not hidden by default: ${JSON.stringify(result)}`);
       assert(result.clipboardUnsafePreviews.length === 0, `${surfaceLabel}: private preview text rendered before opt-in: ${JSON.stringify(result.clipboardUnsafePreviews)}`);
+    }
+    if (result.id === "display-controls") {
+      assert(result.displayControlStateAudits.length === 3
+        && result.displayControlStateAudits.map(state => state.scenario).join(",") === "ready,unavailable,destroy-pending"
+        && result.displayControlStateAudits.every(state => state.passed), `${surfaceLabel}: pending monitor discovery failed status honesty, transition, readability, control reachability, cancellation, or no-write coverage: ${JSON.stringify(result.displayControlStateAudits)}`);
     }
     if (result.id === "network" && (viewport.width === 2047 || viewport.width === 2048)) {
       const expectedVariants = ["compact", "comfortable", "spacious"].flatMap(density =>
