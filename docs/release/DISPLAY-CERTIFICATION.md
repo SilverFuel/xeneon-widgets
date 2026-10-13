@@ -26,6 +26,8 @@ Also verify all of these exact-candidate behaviors:
 - Physical tap, long-press, and scrolling work; dialogs remain contained and readable at every required scale.
 - Refreshes do not cause visible periodic flicker, duplicated layers, stale overlays, or focus loss.
 
+The locked dashboard uses a borderless overlapped window sized to the full monitor bounds, not the Windows fullscreen presenter. Verify both outer and client bounds and taskbar coverage after startup, picker cancellation (including a maximized picker), and HDMI removal/reconnection. A sampled window-position log cannot rule out a visible flash between samples; a human-observed primary-screen flash fails this gate even when the sampled positions look safe.
+
 Record only privacy-safe screenshot identifiers. Do not put local paths, URLs, serial numbers, EDID/device-instance data, credentials, or other private device data in the receipt.
 
 The schema-1 receipt is intentionally strict and fails closed:

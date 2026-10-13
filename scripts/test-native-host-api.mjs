@@ -420,7 +420,7 @@ async function checkNativeShutdown() {
   console.log("native host shutdown: graceful quit, owned fallback, exact-profile WebView2 exit, bounded probes, profile retention, and failure preservation passed");
 }
 
-const windowPlacementProbe = String.raw`
+const windowPlacementProbeDefinition = String.raw`
 $ErrorActionPreference = "Stop"
 Add-Type -TypeDefinition @'
 using System;
@@ -444,6 +444,10 @@ public sealed class AuxoraWindowSample : AuxoraRectSample
     public bool IntersectsPrimary { get; set; }
     public bool ContainedByCompanion { get; set; }
     public bool IsForeground { get; set; }
+    public AuxoraRectSample ClientBounds { get; set; }
+    public uint Style { get; set; }
+    public uint ExtendedStyle { get; set; }
+    public bool HasLockedCompanionPresentation { get; set; }
 }
 
 public sealed class AuxoraMonitorSample : AuxoraRectSample
@@ -482,6 +486,13 @@ public static class AuxoraWindowProbe
         public int Bottom;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct MonitorInfo
     {
@@ -505,6 +516,18 @@ public static class AuxoraWindowProbe
 
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr window, out NativeRect bounds);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetClientRect(IntPtr window, out NativeRect bounds);
+
+    [DllImport("user32.dll")]
+    private static extern bool ClientToScreen(IntPtr window, ref NativePoint point);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr window, int index);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowLong32(IntPtr window, int index);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -548,6 +571,16 @@ public static class AuxoraWindowProbe
     }
 
     public static AuxoraPlacementSample Capture(int targetProcessId)
+    {
+        return CaptureCore(targetProcessId, false);
+    }
+
+    public static AuxoraPlacementSample CaptureDetailed(int targetProcessId)
+    {
+        return CaptureCore(targetProcessId, true);
+    }
+
+    private static AuxoraPlacementSample CaptureCore(int targetProcessId, bool detailed)
     {
         var sample = new AuxoraPlacementSample();
         EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate(IntPtr monitor, IntPtr hdc, ref NativeRect bounds, IntPtr parameter)
@@ -597,7 +630,7 @@ public static class AuxoraWindowProbe
 
             var title = new StringBuilder(256);
             GetWindowText(window, title, title.Capacity);
-            sample.Windows.Add(new AuxoraWindowSample
+            var windowSample = new AuxoraWindowSample
             {
                 Handle = window.ToInt64(),
                 Title = title.ToString(),
@@ -609,11 +642,54 @@ public static class AuxoraWindowProbe
                 IntersectsPrimary = sample.Primary != null && Intersects(bounds, sample.Primary),
                 ContainedByCompanion = IsContainedByCompanion(bounds, sample.Monitors),
                 IsForeground = window == foregroundWindow
-            });
+            };
+            if (detailed)
+            {
+                windowSample.Style = ReadWindowStyle(window, -16);
+                windowSample.ExtendedStyle = ReadWindowStyle(window, -20);
+                NativeRect client;
+                if (GetClientRect(window, out client))
+                {
+                    var origin = new NativePoint { X = client.Left, Y = client.Top };
+                    var end = new NativePoint { X = client.Right, Y = client.Bottom };
+                    if (ClientToScreen(window, ref origin) && ClientToScreen(window, ref end))
+                    {
+                        windowSample.ClientBounds = new AuxoraRectSample
+                        {
+                            Left = origin.X, Top = origin.Y, Right = end.X, Bottom = end.Y
+                        };
+                    }
+                }
+                const uint borderCaptionResize = 0x00C40000;
+                const uint requiredExtendedStyle = 0x08000088; // NOACTIVATE | TOOLWINDOW | TOPMOST
+                const uint appWindowStyle = 0x00040000;
+                windowSample.HasLockedCompanionPresentation = !windowSample.IsForeground
+                    && !windowSample.IntersectsPrimary
+                    && (windowSample.Style & borderCaptionResize) == 0
+                    && (windowSample.ExtendedStyle & requiredExtendedStyle) == requiredExtendedStyle
+                    && (windowSample.ExtendedStyle & appWindowStyle) == 0
+                    && SameBounds(windowSample, windowSample.ClientBounds)
+                    && sample.Monitors.Exists(monitor => !monitor.Primary && SameBounds(windowSample, monitor));
+            }
+            sample.Windows.Add(windowSample);
             return true;
         }, IntPtr.Zero);
 
         return sample;
+    }
+
+    private static uint ReadWindowStyle(IntPtr window, int index)
+    {
+        return IntPtr.Size == 8
+            ? unchecked((uint)GetWindowLongPtr64(window, index).ToInt64())
+            : unchecked((uint)GetWindowLong32(window, index));
+    }
+
+    private static bool SameBounds(AuxoraRectSample first, AuxoraRectSample second)
+    {
+        return first != null && second != null
+            && first.Left == second.Left && first.Top == second.Top
+            && first.Right == second.Right && first.Bottom == second.Bottom;
     }
 
     private static AuxoraRectSample CopyRect(NativeRect bounds)
@@ -651,6 +727,9 @@ public static class AuxoraWindowProbe
     }
 }
 '@
+`;
+
+const windowPlacementProbe = windowPlacementProbeDefinition + String.raw`
 
 [AuxoraWindowProbe]::EnablePhysicalCoordinates()
 Write-Output "AUXORA_WINDOW_WATCHER_READY"
@@ -729,6 +808,88 @@ $durationMs = [int]([DateTimeOffset]::UtcNow - $startedAt).TotalMilliseconds
   violations = $violations.ToArray()
 } | ConvertTo-Json -Compress -Depth 8
 `;
+
+// A separate end-of-test probe does not add style/client queries to the tight
+// startup watcher. It observes a bounded, settled interval after dashboard boot;
+// hidden/intermediate startup placements keep their existing safety assertions.
+const settledWindowPlacementProbe = windowPlacementProbeDefinition + String.raw`
+[AuxoraWindowProbe]::EnablePhysicalCoordinates()
+try {
+  $request = [Console]::In.ReadLine() | ConvertFrom-Json
+  $targetProcessId = [int]$request.processId
+  $expectVisible = [bool]$request.expectVisible
+  $elapsed = [System.Diagnostics.Stopwatch]::StartNew()
+  $stableSinceMs = -1
+  $previousKey = ""
+  $sampleCount = 0
+  $settled = $false
+  do {
+    $sample = [AuxoraWindowProbe]::CaptureDetailed($targetProcessId)
+    $sampleCount++
+    $valid = $null -ne $sample.Primary -and (
+      ($expectVisible -and $sample.Windows.Count -eq 1 -and $sample.Windows[0].HasLockedCompanionPresentation) -or
+      (-not $expectVisible -and $sample.Windows.Count -eq 0)
+    )
+    $sampleKey = $sample | ConvertTo-Json -Compress -Depth 8
+    if (-not $valid -or $sampleKey -ne $previousKey) { $stableSinceMs = -1 }
+    if ($valid -and $stableSinceMs -lt 0) { $stableSinceMs = $elapsed.ElapsedMilliseconds }
+    $previousKey = $sampleKey
+    if ($valid -and $elapsed.ElapsedMilliseconds - $stableSinceMs -ge 1000) {
+      $settled = $true
+      break
+    }
+    [System.Threading.Thread]::Sleep(50)
+  } while ($elapsed.ElapsedMilliseconds -lt 5000)
+  [ordered]@{
+    settled = $settled
+    stableDurationMs = if ($stableSinceMs -ge 0) { $elapsed.ElapsedMilliseconds - $stableSinceMs } else { 0 }
+    sampleCount = $sampleCount
+    sample = $sample
+  } | ConvertTo-Json -Compress -Depth 8
+} finally {
+  [AuxoraWindowProbe]::RestoreTimerResolution()
+}
+`;
+
+function assertSettledLockedPlacement(result, expectVisible) {
+  assert(result?.settled === true && result.stableDurationMs >= 1000 && result.sampleCount >= 2,
+    `native presentation did not remain settled for one second within the five-second deadline: ${JSON.stringify(result)}`);
+  const sample = result.sample;
+  assert(sample?.Primary, "settled placement snapshot must identify the primary monitor");
+  const windows = Array.isArray(sample.Windows) ? sample.Windows : [];
+  assert(windows.length === (expectVisible ? 1 : 0),
+    `settled safe-mode host must show exactly ${expectVisible ? "one locked companion window" : "zero windows"}: ${JSON.stringify(sample)}`);
+  if (!expectVisible) return;
+
+  const window = windows[0];
+  const sameBounds = (first, second) => first && second
+    && ["Left", "Top", "Right", "Bottom"].every(key => Number.isInteger(first[key]) && first[key] === second[key]);
+  const monitors = Array.isArray(sample.Monitors) ? sample.Monitors : [];
+  assert(monitors.some(monitor => monitor.Primary === false && sameBounds(window, monitor)),
+    `settled locked window must cover one entire non-primary monitor, not its work area: ${JSON.stringify(sample)}`);
+  assert(sameBounds(window, window.ClientBounds),
+    `settled locked client area must fill the entire outer window without borders or taskbar-sized gaps: ${JSON.stringify(window)}`);
+  assert(Number.isInteger(window.Style) && (window.Style & 0x00c40000) === 0,
+    `settled locked window retained a caption, border, or resize frame: ${JSON.stringify(window)}`);
+  assert(Number.isInteger(window.ExtendedStyle)
+    && (window.ExtendedStyle & 0x08000088) === 0x08000088
+    && (window.ExtendedStyle & 0x00040000) === 0,
+    `settled locked window must be topmost, no-activate, tool-window, and absent from the taskbar: ${JSON.stringify(window)}`);
+  assert(window.IsForeground === false && window.IntersectsPrimary === false && window.ContainedByCompanion === true,
+    `settled locked presentation violated companion-only or no-focus policy: ${JSON.stringify(window)}`);
+}
+
+function captureSettledWindowPlacement(processId, expectVisible) {
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", settledWindowPlacementProbe], {
+    input: `${JSON.stringify({ processId, expectVisible })}\n`,
+    encoding: "utf8", windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024
+  });
+  assert(!result.error && result.status === 0,
+    `settled native placement probe failed: ${result.error?.message || result.stderr?.trim() || result.status}`);
+  const snapshot = JSON.parse(result.stdout.trim());
+  assertSettledLockedPlacement(snapshot, expectVisible);
+  return snapshot;
+}
 
 async function startWindowPlacementWatcher() {
   const watcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", windowPlacementProbe], {
@@ -1060,6 +1221,13 @@ try {
     body: "{}"
   });
   assert(rejectedMutation.status === 403, `mutation without session token must be rejected; received HTTP ${rejectedMutation.status}`);
+
+  // Safe Mode deliberately chooses and locks the best companion even when the
+  // fresh profile's preference diagnostics still report selection-required.
+  const settledPlacement = captureSettledWindowPlacement(child.pid, displayDiagnostics.companionDisplayCount > 0);
+  console.log(displayDiagnostics.companionDisplayCount > 0
+    ? `settled native presentation verified exact outer/client companion bounds and borderless, tool-window, no-activate, topmost styles over ${settledPlacement.stableDurationMs} ms`
+    : `settled primary-only native presentation remained hidden over ${settledPlacement.stableDurationMs} ms`);
 
   placementResult = await stopWindowPlacementWatcher(placementWatcher);
   assert(placementResult.primaryFound === true, "window placement watcher must enumerate the Windows primary monitor bounds");

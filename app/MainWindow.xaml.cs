@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
-using Microsoft.Win32;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using WinRT.Interop;
@@ -14,6 +13,7 @@ namespace XenonEdgeHost;
 public sealed partial class MainWindow : Window
 {
     private const int GwlExStyle = -20;
+    private const int GwlStyle = -16;
     private const long WsExToolWindow = 0x00000080L;
     private const long WsExAppWindow = 0x00040000L;
     private const long WsExNoActivate = 0x08000000L;
@@ -70,6 +70,8 @@ public sealed partial class MainWindow : Window
     private CoreWebView2? _webViewDiagnosticsWebView;
     private string? _webViewDiagnosticsScriptId;
     private CancellationTokenSource? _displayRecoveryCancellation;
+    private DisplayWindowNativeGuard? _displayWindowGuard;
+    private int _nativeDisplayRecoveryQueued;
 
     public MainWindow()
     {
@@ -98,7 +100,6 @@ public sealed partial class MainWindow : Window
         DashboardView.NavigationCompleted += HandleNavigationCompleted;
         if (!_suppressWindowForTests)
         {
-            SystemEvents.DisplaySettingsChanged += HandleDisplaySettingsChanged;
             StartShowDisplaySignalListener();
         }
     }
@@ -160,6 +161,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // TrayIcon installs a legacy window-procedure wrapper. Install our
+        // independent subclass after it, and detach before disposing the tray.
+        StartDisplayWindowGuard();
         var placementReady = ConfigureWindow(saveSelection: false);
         if (placementReady)
         {
@@ -171,11 +175,18 @@ public sealed partial class MainWindow : Window
 
     private bool ConfigureWindow(bool saveSelection)
     {
+        using var placement = _displayWindowGuard?.BeginPlacement();
         _displayMoveMode = false;
         var windowHandle = _windowHandle;
         if (windowHandle != IntPtr.Zero)
         {
             ShowWindow(windowHandle, SwHide);
+        }
+
+        if (!_suppressWindowForTests && _displayWindowGuard is null)
+        {
+            EnterCompanionDisplayWaitingState(windowHandle, "Display-change monitoring is unavailable. Restart Auxora before showing the dashboard.");
+            return false;
         }
 
         var safeMode = Program.LaunchOptions.SafeMode;
@@ -222,11 +233,19 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
+        _displayWindowGuard?.SetVerifiedTarget(targetDisplay, locked: !needsDisplaySelection);
         var appWindow = AppWindow;
 
-        appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        if (appWindow.Presenter is not OverlappedPresenter)
+        {
+            appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        }
         if (appWindow.Presenter is OverlappedPresenter presenter)
         {
+            if (presenter.State != OverlappedPresenterState.Restored)
+            {
+                presenter.Restore(false);
+            }
             presenter.SetBorderAndTitleBar(false, false);
             presenter.IsResizable = false;
             presenter.IsMaximizable = false;
@@ -245,8 +264,13 @@ public sealed partial class MainWindow : Window
             targetDisplay.Bounds.Y,
             targetDisplay.Bounds.Width,
             targetDisplay.Bounds.Height));
-        appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-        EnsureDisplayWindowStaysOffTaskbar(windowHandle);
+        // Fill the monitor without FullScreen presenter transitions. The native
+        // placement guard retains control of visibility throughout recovery.
+        if (!EnsureDisplayWindowStaysOffTaskbar(windowHandle))
+        {
+            EnterCompanionDisplayWaitingState(windowHandle, "Auxora could not verify borderless companion-window styles.");
+            return false;
+        }
         _companionDisplayUnavailable = false;
         _waitingForEdgeDisplay = false;
         DisplayPickerPanel.Visibility = Visibility.Collapsed;
@@ -270,6 +294,7 @@ public sealed partial class MainWindow : Window
 
     private void EnterCompanionDisplayWaitingState(IntPtr windowHandle, string message)
     {
+        _displayWindowGuard?.InvalidateTarget();
         if (windowHandle != IntPtr.Zero)
         {
             ShowWindow(windowHandle, SwHide);
@@ -292,9 +317,20 @@ public sealed partial class MainWindow : Window
         DisplayTarget pickerDisplay,
         IReadOnlyList<DisplayTarget> displayCandidates)
     {
-        appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        // Refresh and tray Move reach this helper outside ConfigureWindow.
+        // Their presenter changes must stay hidden until the same final reveal.
+        using var placement = _displayWindowGuard?.BeginPlacement();
+        _displayWindowGuard?.SetVerifiedTarget(pickerDisplay, locked: false);
+        if (appWindow.Presenter is not OverlappedPresenter)
+        {
+            appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        }
         if (appWindow.Presenter is OverlappedPresenter presenter)
         {
+            if (presenter.State != OverlappedPresenterState.Restored)
+            {
+                presenter.Restore(false);
+            }
             presenter.SetBorderAndTitleBar(true, true);
             presenter.IsResizable = true;
             presenter.IsMaximizable = true;
@@ -470,12 +506,55 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void HandleDisplaySettingsChanged(object? sender, EventArgs args)
+    private void StartDisplayWindowGuard()
     {
-        ScheduleDisplayTopologyRevalidation();
+        try
+        {
+            _displayWindowGuard = new DisplayWindowNativeGuard(
+                _windowHandle, HandleNativeDisplayChange, QueueNativeDisplayRecovery, _logger);
+            _logger.Info("Native companion-window message and pre-position guard installed.");
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Native companion-window guard could not start; keeping the dashboard hidden.", error);
+        }
     }
 
-    private void ScheduleDisplayTopologyRevalidation()
+    private void HandleNativeDisplayChange(uint message)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _logger.Info($"Native display message 0x{message:X4} received; hiding before default window processing.");
+        ScheduleDisplayTopologyRevalidation(forceHide: true);
+    }
+
+    private void QueueNativeDisplayRecovery()
+    {
+        if (_disposed || Interlocked.Exchange(ref _nativeDisplayRecoveryQueued, 1) == 1)
+        {
+            return;
+        }
+
+        // A WINDOWPOS callback can run inside the final reveal lock. Queue only:
+        // no display enumeration, nested hide, or callbacks under that lock.
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            Interlocked.Exchange(ref _nativeDisplayRecoveryQueued, 0);
+            if (!_disposed)
+            {
+                _logger.Warn("Native guard rejected an implicit reveal or unsafe position; revalidating companion placement.");
+                ScheduleDisplayTopologyRevalidation(forceHide: true);
+            }
+        }))
+        {
+            Interlocked.Exchange(ref _nativeDisplayRecoveryQueued, 0);
+        }
+    }
+
+    private void ScheduleDisplayTopologyRevalidation(bool forceHide = false)
     {
         var request = new CancellationTokenSource();
         if (!_displayPresentation.TryBeginTopologyChange(request, out var previousRequest))
@@ -486,11 +565,12 @@ public sealed partial class MainWindow : Window
 
         var firstInBurst = previousRequest is null;
         CancelCancellationSource(previousRequest);
+        _displayWindowGuard?.InvalidateTarget();
 
         // Windows can emit a burst of equivalent topology notifications. Hide once
         // at the start of the burst, then wait for a quiet period before doing the
         // expensive placement and fullscreen work on the UI thread.
-        if (firstInBurst)
+        if (firstInBurst || forceHide)
         {
             if (_windowHandle != IntPtr.Zero)
             {
@@ -1425,12 +1505,11 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            _trayIcon?.Dispose();
-            _trayIcon = null;
+            DisposeWindowHooks();
         }
         catch (Exception error)
         {
-            _logger.Warn($"Tray icon cleanup failed during quit: {error.Message}");
+            _logger.Warn($"Window hook cleanup failed during quit: {error.Message}");
         }
 
         try
@@ -1485,10 +1564,18 @@ public sealed partial class MainWindow : Window
 
     private void HandleAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
-        if (!_waitingForEdgeDisplay
-            || _disposed
-            || (!args.DidPositionChange && !args.DidSizeChange)
-            || Interlocked.Exchange(ref _displayMoveConstraintQueued, 1) == 1)
+        if (_disposed || (!args.DidPositionChange && !args.DidSizeChange))
+        {
+            return;
+        }
+
+        if (!_waitingForEdgeDisplay)
+        {
+            RevalidateVisibleLockedPlacement();
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _displayMoveConstraintQueued, 1) == 1)
         {
             return;
         }
@@ -1507,6 +1594,38 @@ public sealed partial class MainWindow : Window
         {
             Interlocked.Exchange(ref _displayMoveConstraintQueued, 0);
         }
+    }
+
+    private void RevalidateVisibleLockedPlacement()
+    {
+        // Programmatic placement is performed while hidden. Ignore those
+        // intermediate bounds so this fallback cannot re-enter its own moves.
+        if (!_initialized || _suppressWindowForTests || _companionDisplayUnavailable
+            || _displayMoveMode || !IsWindowVisible(_windowHandle))
+        {
+            return;
+        }
+
+        try
+        {
+            var position = AppWindow.Position;
+            var size = AppWindow.Size;
+            var target = DisplayManager.ResolveCompanionDisplay(_configuredDisplayId);
+            if (_displayWindowGuard is not null && DisplayWindowPlacementPolicy.IsContainedByCompanion(
+                new System.Drawing.Rectangle(position.X, position.Y, size.Width, size.Height), target))
+            {
+                return;
+            }
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Visible display placement could not be verified: {error.Message}");
+        }
+
+        _logger.Warn("Visible locked window moved outside its verified companion; hiding before display recovery.");
+        // Windows may move/reveal us while a topology burst is already pending.
+        // That unsafe visible geometry must hide again, not wait for debounce.
+        ScheduleDisplayTopologyRevalidation(forceHide: true);
     }
 
     private void ConstrainDisplayPickerToCompanion()
@@ -1581,29 +1700,53 @@ public sealed partial class MainWindow : Window
         StatusText.Text = message;
     }
 
-    private void EnsureDisplayWindowStaysOffTaskbar(IntPtr windowHandle)
+    private bool EnsureDisplayWindowStaysOffTaskbar(IntPtr windowHandle)
     {
         if (windowHandle == IntPtr.Zero)
         {
-            return;
+            return false;
         }
 
+        var currentWindowStyle = GetWindowLongPtr(windowHandle, GwlStyle).ToInt64();
+        var nextWindowStyle = DisplayWindowPlacementPolicy.LockedWindowStyle(currentWindowStyle);
         var currentStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
-        var nextStyle = (currentStyle | WsExToolWindow | WsExNoActivate) & ~WsExAppWindow;
+        var nextStyle = DisplayWindowPlacementPolicy.LockedExtendedStyle(currentStyle);
 
-        var styleChanged = nextStyle != currentStyle;
+        var styleChanged = nextStyle != currentStyle || nextWindowStyle != currentWindowStyle;
         if (styleChanged)
         {
-            SetWindowLongPtr(windowHandle, GwlExStyle, new IntPtr(nextStyle));
             ShowWindow(windowHandle, SwHide);
+            SetWindowLongPtr(windowHandle, GwlStyle, new IntPtr(nextWindowStyle));
+            SetWindowLongPtr(windowHandle, GwlExStyle, new IntPtr(nextStyle));
         }
 
-        KeepDisplayWindowOnTop(windowHandle, includeFrameChanged: styleChanged);
-        _taskbarStyleApplied = true;
+        // Presenter border settings can leave a dialog frame/client inset.
+        // Read back the native styles before permitting the final reveal.
+        var actualWindowStyle = GetWindowLongPtr(windowHandle, GwlStyle).ToInt64();
+        var actualExtendedStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
+        if (actualWindowStyle != DisplayWindowPlacementPolicy.LockedWindowStyle(actualWindowStyle)
+            || actualExtendedStyle != DisplayWindowPlacementPolicy.LockedExtendedStyle(actualExtendedStyle))
+        {
+            ShowWindow(windowHandle, SwHide);
+            _logger.Error("Borderless companion-window styles could not be verified; keeping the dashboard hidden.");
+            return false;
+        }
+
+        var positionApplied = KeepDisplayWindowOnTop(windowHandle, includeFrameChanged: styleChanged);
+        if (!DisplayWindowPlacementPolicy.IsLockedPresentationApplied(positionApplied,
+            GetWindowLongPtr(windowHandle, GwlStyle).ToInt64(),
+            GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64()))
+        {
+            ShowWindow(windowHandle, SwHide);
+            _logger.Error("Companion-window frame or topmost placement failed; keeping the dashboard hidden.");
+            return false;
+        }
         if (styleChanged || !_taskbarStyleApplied)
         {
             _logger.Info("Applied no-activate topmost tool-window style so the Auxora display stays visible, stays off the taskbar, and does not steal audio focus.");
         }
+        _taskbarStyleApplied = true;
+        return true;
     }
 
     private void RestoreDisplayWindowToTaskbar(IntPtr windowHandle)
@@ -1657,19 +1800,28 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        if (!_waitingForEdgeDisplay)
+        if (!_waitingForEdgeDisplay && !KeepDisplayWindowOnTop(windowHandle))
         {
-            KeepDisplayWindowOnTop(windowHandle);
+            ShowWindow(windowHandle, SwHide);
+            return false;
         }
 
-        return _displayPresentation.TryReveal(
+        if (_displayWindowGuard is null)
+        {
+            ShowWindow(windowHandle, SwHide);
+            return false;
+        }
+
+        var revealed = _displayPresentation.TryReveal(
             topologyGeneration,
             topologyRequest,
-            () => ShowWindow(windowHandle, SwShowNoActivate));
+            () => _displayWindowGuard.Reveal(() => ShowWindow(windowHandle, SwShowNoActivate)));
+        return revealed && IsWindowVisible(windowHandle);
     }
 
     private bool RevealConfiguredWindow(CancellationTokenSource? topologyRequest = null)
     {
+        using var placement = _displayWindowGuard?.BeginPlacement();
         if (_suppressWindowForTests)
         {
             ShowWindow(_windowHandle, SwHide);
@@ -1677,7 +1829,7 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        if (_companionDisplayUnavailable || string.IsNullOrWhiteSpace(_configuredDisplayId))
+        if (_displayWindowGuard is null || _companionDisplayUnavailable || string.IsNullOrWhiteSpace(_configuredDisplayId))
         {
             ShowWindow(_windowHandle, SwHide);
             return false;
@@ -1690,6 +1842,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
+            ShowWindow(_windowHandle, SwHide);
             // Resolve against the current topology immediately before showing so
             // a former companion that was promoted to primary can never be used.
             var currentTarget = DisplayManager.ResolveCompanionDisplay(_configuredDisplayId);
@@ -1699,9 +1852,17 @@ public sealed partial class MainWindow : Window
             }
 
             _configuredDisplayId = currentTarget.StableId;
-            AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+            _displayWindowGuard.SetVerifiedTarget(currentTarget, locked: !_waitingForEdgeDisplay);
+            if (AppWindow.Presenter is not OverlappedPresenter)
+            {
+                AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+            }
             if (AppWindow.Presenter is OverlappedPresenter presenter)
             {
+                if (presenter.State != OverlappedPresenterState.Restored)
+                {
+                    presenter.Restore(false);
+                }
                 presenter.SetBorderAndTitleBar(_waitingForEdgeDisplay, _waitingForEdgeDisplay);
                 presenter.IsResizable = _waitingForEdgeDisplay;
                 presenter.IsMaximizable = _waitingForEdgeDisplay;
@@ -1718,11 +1879,12 @@ public sealed partial class MainWindow : Window
 
             if (!_waitingForEdgeDisplay)
             {
-                AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-                // FullScreen presentation can rewrite extended window styles. Reapply
-                // the tool-window/topmost policy afterwards so the companion taskbar
-                // cannot cover the bottom of Auxora after a mode or topology change.
-                EnsureDisplayWindowStaysOffTaskbar(_windowHandle);
+                // Keep the borderless window above the companion taskbar without
+                // handing geometry or visibility to a fullscreen presenter.
+                if (!EnsureDisplayWindowStaysOffTaskbar(_windowHandle))
+                {
+                    throw new InvalidOperationException("Borderless companion-window styles could not be verified.");
+                }
             }
         }
         catch (Exception error)
@@ -1781,13 +1943,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static void KeepDisplayWindowOnTop(
+    private static bool KeepDisplayWindowOnTop(
         IntPtr windowHandle,
         bool includeFrameChanged = false)
     {
         var flags = DisplayPresentationGate.BuildTopmostFlags(includeFrameChanged);
 
-        SetWindowPos(
+        return SetWindowPos(
             windowHandle,
             HwndTopmost,
             0,
@@ -1807,6 +1969,22 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private void DisposeWindowHooks()
+    {
+        // Reverse installation order on both explicit Quit and window close.
+        // The tray restores a raw WndProc, so its outer subclass must go first.
+        _displayWindowGuard?.Dispose();
+        if (_displayWindowGuard?.IsAttached == true)
+        {
+            // Keep the callback rooted and the tray chain intact until window
+            // destruction; DisposeResources retries after Close completes.
+            return;
+        }
+        _displayWindowGuard = null;
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+    }
+
     private void DisposeResources()
     {
         if (_disposed)
@@ -1819,7 +1997,7 @@ public sealed partial class MainWindow : Window
         CancelCancellationSource(displayTopologyChangeCancellation);
         DashboardView.NavigationCompleted -= HandleNavigationCompleted;
         DashboardView.NavigationStarting -= HandleNavigationStarting;
-        SystemEvents.DisplaySettingsChanged -= HandleDisplaySettingsChanged;
+        DisposeWindowHooks();
         _bridgeManager.DisplayPreferenceChanged -= HandleDisplayPreferenceChanged;
         AppWindow.Closing -= HandleAppWindowClosing;
         AppWindow.Changed -= HandleAppWindowChanged;
@@ -1832,7 +2010,6 @@ public sealed partial class MainWindow : Window
         _showDisplayEvent?.Dispose();
         _displayRecoveryCancellation?.Cancel();
         _displayRecoveryCancellation?.Dispose();
-        _trayIcon?.Dispose();
         _bridgeManager.Dispose();
         _logger.Info("Resources disposed. Exiting.");
     }
