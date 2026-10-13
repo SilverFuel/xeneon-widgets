@@ -835,6 +835,10 @@
   function mountAuxoraHomeWidget(widget, container, env) {
     var cleanups = [];
     var longPressTimer = 0;
+    var longPress = null;
+    var downPointers = new Set();
+    // Keep stationary finger jitter below the shared 7px scroll-intent threshold.
+    var longPressTolerancePx = 6;
     var state = {
       scenes: null,
       system: null,
@@ -973,19 +977,101 @@
       }
     });
 
+    function cancelLongPress() {
+      window.clearTimeout(longPressTimer);
+      longPressTimer = 0;
+      longPress = null;
+    }
+
+    function cancelGesture() {
+      cancelLongPress();
+      downPointers.clear();
+    }
+
+    function cancelPointerHold(event) {
+      if (longPress && event.pointerId === longPress.pointerId) {
+        cancelLongPress();
+      }
+    }
+
+    function endPointer(event) {
+      downPointers.delete(event.pointerId);
+      cancelPointerHold(event);
+    }
+
+    function isSinglePrimaryContact(event) {
+      return event.button === 0 && event.isPrimary !== false
+        && ((event.pointerType !== "mouse" && event.pointerType !== "pen") || event.buttons === 1);
+    }
+
+    function cancelRelatedScroll(event) {
+      var target = event.target;
+      if (longPress && target && (container.contains(target) || (target.contains && target.contains(container)))) {
+        cancelLongPress();
+      }
+    }
+
+    // Observe the whole document so another finger, or release outside Home,
+    // cannot leave a hold armed. Do not capture pointers or suppress scrolling.
+    addListener(cleanups, document, "pointerdown", function (event) {
+      downPointers.add(event.pointerId);
+      if (downPointers.size > 1 || !isSinglePrimaryContact(event)) {
+        cancelLongPress();
+      }
+    }, { capture: true, passive: true });
     addListener(cleanups, container, "pointerdown", function (event) {
-      if (event.target && event.target.closest && event.target.closest("button,a,input,select,textarea")) {
+      if (downPointers.size !== 1 || !isSinglePrimaryContact(event)
+          || (event.target && event.target.closest && event.target.closest("button,a,input,select,textarea,summary,[role='button'],[contenteditable]"))) {
         return;
       }
-      window.clearTimeout(longPressTimer);
+      cancelLongPress();
+      var scrollPositions = [];
+      for (var node = container; node; node = node.parentElement) {
+        scrollPositions.push({ node: node, top: node.scrollTop, left: node.scrollLeft });
+      }
+      longPress = { pointerId: event.pointerId, pointerType: event.pointerType, x: event.clientX, y: event.clientY };
       longPressTimer = window.setTimeout(function () {
-        if (typeof env.selectWidget === "function") {
+        cancelLongPress();
+        var scrolled = scrollPositions.some(function (position) {
+          return position.node.scrollTop !== position.top || position.node.scrollLeft !== position.left;
+        });
+        if (container.isConnected && !document.hidden && !container.closest("[inert]")
+            && !scrolled && typeof env.selectWidget === "function") {
           env.selectWidget("layout-editor", true);
         }
       }, 700);
+    }, { passive: true });
+    addListener(cleanups, document, "pointermove", function (event) {
+      if (!longPress || event.pointerId !== longPress.pointerId) {
+        return;
+      }
+      // Chorded mouse/pen buttons report pointermove, not another pointerdown.
+      if ((longPress.pointerType === "mouse" || longPress.pointerType === "pen") && event.buttons !== 1) {
+        if (event.buttons === 0) {
+          downPointers.delete(event.pointerId);
+        }
+        cancelLongPress();
+        return;
+      }
+      var deltaX = event.clientX - longPress.x;
+      var deltaY = event.clientY - longPress.y;
+      if (deltaX * deltaX + deltaY * deltaY > longPressTolerancePx * longPressTolerancePx) {
+        cancelLongPress();
+      }
+    }, { capture: true, passive: true });
+    ["pointerup", "pointercancel"].forEach(function (type) {
+      addListener(cleanups, document, type, endPointer, { capture: true, passive: true });
     });
-    ["pointerup", "pointercancel", "pointermove"].forEach(function (type) {
-      addListener(cleanups, container, type, function () { window.clearTimeout(longPressTimer); });
+    // Losing capture cancels the gesture, but the contact can still be down.
+    addListener(cleanups, document, "lostpointercapture", cancelPointerHold, { capture: true, passive: true });
+    ["scroll", "wheel"].forEach(function (type) {
+      addListener(cleanups, document, type, cancelRelatedScroll, { capture: true, passive: true });
+    });
+    addListener(cleanups, window, "blur", cancelGesture);
+    addListener(cleanups, document, "visibilitychange", function () {
+      if (document.hidden) {
+        cancelGesture();
+      }
     });
 
     redraw();
@@ -993,7 +1079,7 @@
     return {
       refresh: refresh,
       destroy: function () {
-        window.clearTimeout(longPressTimer);
+        cancelGesture();
         runCleanups(cleanups);
         patchStableDom(container, "");
       }
