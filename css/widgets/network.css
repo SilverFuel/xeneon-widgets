@@ -316,7 +316,7 @@ body.dashboard-native-page .router-inline-widget[data-card-size="compact"] .netw
 
 .network-certificate-review span {
   color: var(--color-text-dim);
-  font-size: 0.66rem;
+  font-size: max(12px, 0.66rem);
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -331,13 +331,13 @@ body.dashboard-native-page .router-inline-widget[data-card-size="compact"] .netw
 .network-certificate-review strong {
   color: #ffc46b;
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  font-size: 0.78rem;
+  font-size: max(12px, 0.78rem);
   line-height: 1.25;
 }
 
 .network-certificate-review small {
   color: var(--color-text-dim);
-  font-size: 0.74rem;
+  font-size: max(12px, 0.74rem);
   line-height: 1.2;
 }
 

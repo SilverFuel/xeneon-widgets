@@ -3009,6 +3009,16 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
             const grid = queryRoot.querySelector('.network-command-grid');
             const unifiCard = queryRoot.querySelector('.network-unifi-card');
             const form = queryRoot.querySelector('.network-unifi-form');
+            // Inspect certificate text while the deterministic review mount is
+            // still present, rather than relying on a later native refresh.
+            const certificateText = Array.from(queryRoot.querySelectorAll('.network-certificate-review > span, .network-certificate-review > strong, .network-certificate-review > small')).map(element => ({
+              text: element.textContent.trim(),
+              visible: visible(element),
+              fontSize: Number.parseFloat(getComputedStyle(element).fontSize)
+            }));
+            const certificateTextPresent = stateLabel !== 'review' || certificateText.length === 3;
+            const certificateTextReadable = certificateText.every(entry => entry.visible && entry.text
+              && Number.isFinite(entry.fontSize) && entry.fontSize >= 12);
             const gridStyle = grid ? getComputedStyle(grid) : null;
             const gridColumns = gridStyle?.gridTemplateColumns || '';
             const gridColumnCount = gridColumns.trim() ? gridColumns.trim().split(/\\s+/).length : 0;
@@ -3075,6 +3085,9 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
               cardSize,
               stateLabel,
               linkState: unifiCard?.getAttribute('data-link-state') || '',
+              certificateText,
+              certificateTextPresent,
+              certificateTextReadable,
               documentHorizontalOverflow,
               documentVerticalOverflow,
               panelHorizontalOverflow,
@@ -3109,6 +3122,8 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
               clippedControls,
               focusFailures,
               passed: !documentHorizontalOverflow
+                && certificateTextPresent
+                && certificateTextReadable
                 && !documentVerticalOverflow
                 && !panelHorizontalOverflow
                 && panelVerticalScrollReachable
@@ -3440,7 +3455,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
       assert(JSON.stringify(actualVariants) === JSON.stringify(expectedVariants), `${surfaceLabel}: Network density/card-size matrix changed: ${JSON.stringify(result.networkLayoutAudits)}`);
       assert(result.networkLayoutAudits.length === 9 && result.networkLayoutAudits.every(audit => audit.passed), `${surfaceLabel}: Network boundary layout, caps, padding, overflow, or enabled-control coverage failed: ${JSON.stringify(result.networkLayoutAudits)}`);
       assert(result.networkLayoutAudits.every(audit => audit.gridColumnCount === (viewport.width === 2047 || audit.cardSize === "compact" ? 1 : 4)), `${surfaceLabel}: Network grid did not switch from stacked to the exact four-column standard/wide contract at 2048px: ${JSON.stringify(result.networkLayoutAudits)}`);
-      assert(result.networkStateAudits.length === 2 && result.networkStateAudits.map(audit => audit.linkState).join(",") === "linked,review" && result.networkStateAudits.every(audit => audit.passed), `${surfaceLabel}: deterministic linked or certificate-review Network state failed geometry, control-count, or focus coverage: ${JSON.stringify(result.networkStateAudits)}`);
+      assert(result.networkStateAudits.length === 2 && result.networkStateAudits.map(audit => audit.linkState).join(",") === "linked,review" && result.networkStateAudits.every(audit => audit.passed), `${surfaceLabel}: deterministic linked or certificate-review Network state failed typography, geometry, control-count, or focus coverage: ${JSON.stringify(result.networkStateAudits)}`);
     }
   }
   assert((audit.errors || []).length === 0, `${viewportLabel}: product-surface audit emitted runtime errors: ${JSON.stringify(audit.errors)}`);
