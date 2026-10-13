@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, win32 } from "node:path";
 
 let hostUrl = "";
 const executable = resolve(
@@ -44,10 +44,14 @@ async function reserveLocalPort() {
 }
 
 async function fetchWithTimeout(path, options = {}, timeoutMs = 3000) {
-  return fetch(`${hostUrl}${path}`, {
-    ...options,
-    signal: AbortSignal.timeout(timeoutMs)
-  });
+  try {
+    return await fetch(`${hostUrl}${path}`, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+  } catch (error) {
+    throw new Error(`native test ${options.method || "GET"} ${path} failed (deadline ${timeoutMs} ms)`, { cause: error });
+  }
 }
 
 async function assertStandaloneScriptPolicy(path) {
@@ -160,20 +164,260 @@ async function waitForEmbeddedDashboardBoot(timeoutMs = 15000) {
 
   const response = await fetchWithTimeout("/api/support/bundle", {}, 3000);
   const bundle = response.ok ? await response.json() : {};
-  throw new Error(`embedded dashboard did not complete a real companion-display boot within ${timeoutMs} ms; display=${JSON.stringify(display)}; log tail=${JSON.stringify(Array.isArray(bundle.log) ? bundle.log.slice(-30) : [])}`);
+  const hostLog = Array.isArray(bundle.log) ? bundle.log : [];
+  const navigationLog = hostLog.filter(line => /Dashboard navigation|Dashboard DOM content loaded|Dashboard loaded successfully|WebView.*failed/.test(line));
+  throw new Error(`embedded dashboard did not complete a real companion-display boot within ${timeoutMs} ms; display=${JSON.stringify(display)}; navigation=${JSON.stringify(navigationLog)}; log tail=${JSON.stringify(hostLog.slice(-30))}`);
 }
 
-async function stopChild(child) {
-  if (child.exitCode !== null) return;
-  spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
-    stdio: "ignore",
-    windowsHide: true,
-    timeout: 10000
+async function stopChild(child, sessionToken, hooks = {}) {
+  const stopped = () => child.exitCode !== null || child.signalCode !== null;
+  if (stopped()) return;
+  const now = hooks.now || Date.now;
+  const pause = hooks.delay || (milliseconds => new Promise(resolvePromise => setTimeout(resolvePromise, milliseconds)));
+  const request = hooks.request || fetchWithTimeout;
+  const terminate = hooks.terminate || (pid => spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
+    stdio: "ignore", windowsHide: true, timeout: 10000
+  }));
+  const waitForExit = async timeoutMs => {
+    const deadline = now() + timeoutMs;
+    while (!stopped() && now() < deadline) await pause(100);
+    return stopped();
+  };
+  const shutdownErrors = [];
+  if (sessionToken) {
+    try {
+      const response = await request("/api/recovery/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: hostUrl, "X-Xenon-Session": sessionToken },
+        body: JSON.stringify({ action: "quit" })
+      }, 3000);
+      assert(response.ok, `owned native host quit returned HTTP ${response.status}`);
+      const result = await response.json();
+      assert(result.ok === true && result.action === "quit", "owned native host did not acknowledge quit");
+    } catch (error) {
+      // The host can close its listener before acknowledging a successful quit.
+      shutdownErrors.push(error);
+    }
+    if (await waitForExit(8000)) return;
+  }
+  // Only the child spawned by this test (and its tree) may be forced to stop.
+  assert(Number.isInteger(child.pid) && child.pid > 0, "cannot terminate an unidentified native test child; preserving profile");
+  if (stopped()) return;
+  try {
+    const result = terminate(child.pid);
+    if (result.error || result.status !== 0) shutdownErrors.push(result.error || new Error("owned native host fallback termination failed"));
+  } catch (error) {
+    shutdownErrors.push(error);
+  }
+  if (!(await waitForExit(5000))) {
+    throw new AggregateError(shutdownErrors, "owned native host did not exit; preserving profile");
+  }
+}
+
+function matchingWebViewProcesses(processes, profileDirectory) {
+  assert(Array.isArray(processes) && win32.isAbsolute(profileDirectory), "invalid WebView2 profile process probe");
+  const normalize = path => win32.normalize(path).replace(/[\\/]+$/, "").toLowerCase();
+  // WebView2's browser process can use its EBWebView subfolder as --user-data-dir.
+  const expectedPaths = new Set([profileDirectory, win32.join(profileDirectory, "EBWebView")].map(normalize));
+  return processes.filter(process => {
+    assert(Number.isInteger(process.ProcessId) && process.ProcessId > 0 && typeof process.CommandLine === "string"
+      && process.CommandLine.trim(), "WebView2 process identity could not be read; preserving profile");
+    const argumentsFound = [...process.CommandLine.matchAll(/(?:^|\s)(?:"--user-data-dir=([^"]+)"|--user-data-dir(?:=|\s+)(?:"([^"]+)"|([^\s"]+)))(?=\s|$)/gi)];
+    assert(!/--user-data-dir/i.test(process.CommandLine) || argumentsFound.length,
+      "WebView2 profile argument could not be identified; preserving profile");
+    return argumentsFound.some(match => {
+      const path = match[1] || match[2] || match[3];
+      assert(win32.isAbsolute(path), "WebView2 profile argument was not absolute; preserving profile");
+      return expectedPaths.has(normalize(path));
+    });
+  }).map(process => process.ProcessId);
+}
+
+function readProfileWebViewProcesses(profileDirectory, run = spawnSync) {
+  const result = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+    "$ErrorActionPreference = 'Stop'; $items = @(Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Select-Object ProcessId, CommandLine); ConvertTo-Json -InputObject $items -Compress"
+  ], { encoding: "utf8", windowsHide: true, timeout: 3000 });
+  assert(!result.error && result.status === 0, "WebView2 process probe failed; preserving profile");
+  // Only exact-profile PIDs leave this probe; unrelated command lines are never logged.
+  let processes;
+  try {
+    processes = JSON.parse(result.stdout);
+  } catch {
+    throw new Error("WebView2 process probe returned invalid data; preserving profile");
+  }
+  return matchingWebViewProcesses(processes, profileDirectory);
+}
+
+async function waitForProfileWebViewExit(profileDirectory, hooks = {}) {
+  const now = hooks.now || Date.now;
+  const pause = hooks.delay || (milliseconds => new Promise(resolvePromise => setTimeout(resolvePromise, milliseconds)));
+  const readProcesses = hooks.readProfileProcesses || readProfileWebViewProcesses;
+  const deadline = now() + 15000;
+  while (true) {
+    let failure;
+    try {
+      const processes = await readProcesses(join(profileDirectory, "WebView2"));
+      assert(Array.isArray(processes) && processes.every(pid => Number.isInteger(pid) && pid > 0), "invalid WebView2 process probe result");
+      if (processes.length === 0) return;
+    } catch (error) {
+      failure = error;
+    }
+    if (now() >= deadline) {
+      throw new Error(`isolated WebView2 process exit was not confirmed; preserving profile: ${profileDirectory}`, { cause: failure });
+    }
+    await pause(250);
+  }
+}
+
+async function cleanupNativeProfile(child, sessionToken, profileDirectory, hooks = {}) {
+  await stopChild(child, sessionToken, hooks);
+  await waitForProfileWebViewExit(profileDirectory, hooks);
+  const remove = hooks.removeProfile || (directory => {
+    rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+    assert(!existsSync(directory), `native host test profile was not removed: ${directory}`);
   });
-  await Promise.race([
-    new Promise(resolvePromise => child.once("exit", resolvePromise)),
-    new Promise(resolvePromise => setTimeout(resolvePromise, 5000))
-  ]);
+  remove(profileDirectory);
+}
+
+async function finishNativeTest(primaryFailure, cleanupWork, report = console.error) {
+  let cleanupFailure;
+  try {
+    await cleanupWork();
+  } catch (error) {
+    cleanupFailure = error;
+  }
+  if (primaryFailure) {
+    if (cleanupFailure) report("native host cleanup also failed:", cleanupFailure);
+    throw primaryFailure;
+  }
+  if (cleanupFailure) throw cleanupFailure;
+}
+
+async function checkNativeShutdown() {
+  for (const scenario of ["already-exited", "graceful", "quit-disconnect", "quit-stalls", "quit-rejected", "no-token", "fallback-fails"]) {
+    const child = { pid: 12345, exitCode: scenario === "already-exited" ? 0 : null, signalCode: null };
+    let clock = 0;
+    let exitAt = scenario === "already-exited" ? 0 : Infinity;
+    let requests = 0;
+    let forced = 0;
+    let removed = false;
+    let failure;
+    try {
+      await cleanupNativeProfile(child, scenario === "no-token" ? "" : "fixture-token", "fixture-profile", {
+        now: () => clock,
+        delay: async milliseconds => { clock += milliseconds; if (clock >= exitAt) child.exitCode = 0; },
+        request: async (path, options, timeoutMs) => {
+          requests++;
+          assert(path === "/api/recovery/action" && options.method === "POST" && timeoutMs === 3000
+            && options.headers["X-Xenon-Session"] === "fixture-token" && options.headers.Origin === hostUrl
+            && JSON.parse(options.body).action === "quit", "graceful shutdown must use the isolated authenticated quit action");
+          if (scenario === "graceful" || scenario === "quit-disconnect") exitAt = clock + 300;
+          if (scenario !== "graceful" && scenario !== "quit-stalls") throw new Error("fixture quit response failed");
+          return { ok: true, json: async () => ({ ok: true, action: "quit" }) };
+        },
+        terminate: pid => {
+          assert(pid === child.pid, "fallback must target only the spawned child");
+          assert(scenario === "no-token" || clock === 8000, "fallback must allow the bounded graceful-exit wait first");
+          forced++;
+          if (scenario !== "fallback-fails") exitAt = clock + 100;
+          return { status: scenario === "fallback-fails" ? 1 : 0 };
+        },
+        readProfileProcesses: async profile => {
+          assert(profile === join("fixture-profile", "WebView2") && child.exitCode !== null,
+            "WebView2 wait must follow host exit and inspect only its isolated profile");
+          return clock < exitAt + 1000 ? [23456] : [];
+        },
+        removeProfile: directory => {
+          assert(directory === "fixture-profile" && child.exitCode !== null && clock >= exitAt + 1000,
+            "profile removal must follow confirmed host and exact-profile WebView2 exit");
+          removed = true;
+        }
+      });
+    } catch (error) {
+      failure = error;
+    }
+    assert(requests === (["already-exited", "no-token"].includes(scenario) ? 0 : 1), `${scenario}: unexpected quit request count`);
+    assert(forced === (["quit-stalls", "quit-rejected", "no-token", "fallback-fails"].includes(scenario) ? 1 : 0), `${scenario}: unexpected forced termination`);
+    assert(scenario === "fallback-fails" ? failure instanceof AggregateError && !removed && clock === 13000
+      : !failure && removed, `${scenario}: shutdown must verify exit before removing the profile`);
+  }
+  for (const scenario of ["webview-stays-live", "probe-unavailable"]) {
+    let clock = 0;
+    let removed = false;
+    let failure;
+    try {
+      await cleanupNativeProfile({ exitCode: 0, signalCode: null }, "", "fixture-profile", {
+        now: () => clock,
+        delay: async milliseconds => { clock += milliseconds; },
+        readProfileProcesses: async () => {
+          if (scenario === "probe-unavailable") throw new Error("fixture process query failed");
+          return [23456];
+        },
+        removeProfile: () => { removed = true; }
+      });
+    } catch (error) {
+      failure = error;
+    }
+    assert(failure && /WebView2 process exit was not confirmed/.test(failure.message) && !removed && clock === 15000,
+      `${scenario}: uncertain browser shutdown must time out and preserve the profile`);
+  }
+  const fixtureProfile = String.raw`C:\Temp\owned profile\WebView2`;
+  const matches = matchingWebViewProcesses([
+    { ProcessId: 1, CommandLine: `webview.exe --user-data-dir="${fixtureProfile}" --flag` },
+    { ProcessId: 2, CommandLine: `webview.exe "--user-data-dir=${fixtureProfile}"` },
+    { ProcessId: 3, CommandLine: `webview.exe --user-data-dir "${fixtureProfile.toUpperCase()}"` },
+    { ProcessId: 4, CommandLine: `webview.exe --user-data-dir="${fixtureProfile}-other"` },
+    { ProcessId: 5, CommandLine: `webview.exe --user-data-dir="${fixtureProfile}\\child"` },
+    { ProcessId: 6, CommandLine: 'webview.exe --user-data-dir=C:\\Temp\\unrelated --flag' },
+    { ProcessId: 7, CommandLine: 'webview.exe --type=renderer' },
+    { ProcessId: 8, CommandLine: `webview.exe --user-data-dir="${fixtureProfile}\\EBWebView" --flag` },
+    { ProcessId: 9, CommandLine: `webview.exe "--user-data-dir=${fixtureProfile.toUpperCase()}\\EBWebView"` },
+    { ProcessId: 10, CommandLine: `webview.exe --user-data-dir="${fixtureProfile}\\EBWebView-other"` },
+    { ProcessId: 11, CommandLine: `webview.exe --user-data-dir="${fixtureProfile}\\EBWebView\\child"` }
+  ], fixtureProfile);
+  assert(JSON.stringify(matches) === "[1,2,3,8,9]", "WebView2 ownership must match the exact assigned root or EBWebView folder, not neighboring paths or other children");
+  const unquotedProfile = String.raw`C:\Temp\owned-profile\WebView2`;
+  const unquotedMatches = matchingWebViewProcesses([
+    { ProcessId: 12, CommandLine: `webview.exe --user-data-dir=${unquotedProfile}\\EBWebView --flag` },
+    { ProcessId: 13, CommandLine: `webview.exe --user-data-dir=${unquotedProfile}\\EBWebView-other --flag` },
+    { ProcessId: 14, CommandLine: `webview.exe --user-data-dir=${unquotedProfile} --flag` }
+  ], unquotedProfile);
+  assert(JSON.stringify(unquotedMatches) === "[12,14]", "unquoted WebView2 paths must retain the same exact ownership boundary");
+  for (const output of [
+    { status: 0, stdout: "[]", expected: "empty" },
+    { status: 1, stdout: "[]" },
+    { status: 0, stdout: "not-json" },
+    { status: 0, stdout: JSON.stringify([{ ProcessId: 1, CommandLine: null }]) }
+  ]) {
+    let failure;
+    let processes;
+    try {
+      processes = readProfileWebViewProcesses(fixtureProfile, (_command, _args, options) => {
+        assert(options.windowsHide && options.timeout === 3000, "process probe must be hidden and bounded");
+        return output;
+      });
+    } catch (error) {
+      failure = error;
+    }
+    assert(output.expected === "empty" ? !failure && processes.length === 0 : !!failure,
+      "failed or unreadable WebView2 probes must not be mistaken for an empty process list");
+  }
+  const deletionFailure = new Error("fixture profile deletion failed");
+  for (const primaryFailure of [undefined, new Error("fixture primary assertion failed")]) {
+    let reported = false;
+    let failure;
+    try {
+      await finishNativeTest(primaryFailure, () => cleanupNativeProfile(
+        { exitCode: 0, signalCode: null }, "", "fixture-profile",
+        { readProfileProcesses: async () => [], removeProfile: () => { throw deletionFailure; } }
+      ), () => { reported = true; });
+    } catch (error) {
+      failure = error;
+    }
+    assert(failure === (primaryFailure || deletionFailure) && reported === Boolean(primaryFailure),
+      "cleanup failure must remain visible without replacing the primary test failure");
+  }
+  console.log("native host shutdown: graceful quit, owned fallback, exact-profile WebView2 exit, bounded probes, profile retention, and failure preservation passed");
 }
 
 const windowPlacementProbe = String.raw`
@@ -562,6 +806,11 @@ async function stopWindowPlacementWatcher(watcher) {
   return watcher.resultPromise;
 }
 
+await checkNativeShutdown();
+if (process.argv.includes("--check-shutdown")) {
+  process.exit(0);
+}
+
 if (process.argv.includes("--window-probe-self-test")) {
   assert(process.platform === "win32", "window placement watcher self-test requires Windows");
   const watcher = await startWindowPlacementWatcher();
@@ -612,6 +861,8 @@ const child = spawn(executable, ["--safe-mode"], {
 const readHostDiagnostics = captureChildOutput(child, join(local, "Auxora", "logs", "host.log"));
 placementWatcher.process.stdin.write(`${child.pid}\n`);
 let placementResult = null;
+let sessionToken = "";
+let primaryFailure;
 
 try {
   const healthResponse = await waitForHost(child, readHostDiagnostics);
@@ -626,6 +877,15 @@ try {
   for (const privateKey of ["suggestedLaunchers", "executablePath", "iconPath", "arguments"]) {
     assert(!healthJson.includes(`"${privateKey}"`), `live /api/health leaked private provisioning field '${privateKey}'`);
   }
+  // Retain the isolated host's quit token even if embedded WebView startup fails.
+  // Reading HTML does not execute the dashboard or add an /api/config request.
+  const dashboardResponse = await fetchWithTimeout("/dashboard.html");
+  assert(dashboardResponse.ok, `live dashboard returned HTTP ${dashboardResponse.status}`);
+  const dashboardHtml = await dashboardResponse.text();
+  assert(dashboardHtml.includes("Auxora"), "live dashboard must serve embedded Auxora HTML");
+  const sessionTokenMatch = dashboardHtml.match(/window\.XenonSessionToken\s*=\s*("(?:\\.|[^"\\])*")/);
+  assert(sessionTokenMatch, "live dashboard must include an inline mutation session token");
+  sessionToken = JSON.parse(sessionTokenMatch[1]);
   const embeddedBoot = await waitForEmbeddedDashboardBoot();
   if (embeddedBoot.companionDisplayCount === 0) {
     assert(
@@ -672,17 +932,10 @@ try {
   const invalidSnapshotResponse = await fetchWithTimeout("/api/frigate/snapshot?id=..%2Fprivate-camera");
   assert(invalidSnapshotResponse.status === 404, `invalid Camera Detection snapshot ID must return HTTP 404; received ${invalidSnapshotResponse.status}`);
 
-  const dashboardResponse = await fetchWithTimeout("/dashboard.html");
-  assert(dashboardResponse.ok, `live dashboard returned HTTP ${dashboardResponse.status}`);
-  const dashboardHtml = await dashboardResponse.text();
-  assert(dashboardHtml.includes("Auxora"), "live dashboard must serve embedded Auxora HTML");
   for (const path of standaloneFallbackPaths) {
     await assertStandaloneScriptPolicy(path);
   }
   console.log(`live CSP nonce coverage for ${standaloneFallbackPaths.length} standalone fallback pages: passed`);
-  const sessionTokenMatch = dashboardHtml.match(/window\.XenonSessionToken\s*=\s*("(?:\\.|[^"\\])*")/);
-  assert(sessionTokenMatch, "live dashboard must include an inline mutation session token");
-  const sessionToken = JSON.parse(sessionTokenMatch[1]);
   const sessionHeaders = {
     "Content-Type": "application/json",
     Origin: hostUrl,
@@ -827,13 +1080,23 @@ try {
   );
 
   console.log(`launched native host and verified live health, companion-only display diagnostics, preference rejection, and ${placementResult.sampleCount} HWND placement samples at ${placementResult.effectiveIntervalMs} ms effective intervals; primary=${JSON.stringify(placementResult.primary)}; visibleWindows=${JSON.stringify(placementResult.observedWindows)}`);
-} finally {
+} catch (error) {
+  primaryFailure = error;
+}
+
+await finishNativeTest(primaryFailure, async () => {
+  const cleanupErrors = [];
   if (!placementResult) {
     try {
       await stopWindowPlacementWatcher(placementWatcher);
-    } catch {
+    } catch (error) {
+      cleanupErrors.push(error);
     }
   }
-  await stopChild(child);
-  rmSync(profileRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
-}
+  try {
+    await cleanupNativeProfile(child, sessionToken, profileRoot);
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  if (cleanupErrors.length) throw new AggregateError(cleanupErrors, "native host test cleanup did not complete");
+});
