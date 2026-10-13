@@ -971,12 +971,26 @@ try {
   );
   assert(companionDisplays.every(display => display && display.primary !== true), "display diagnostics must never expose the Windows primary display as a candidate");
 
+  const monitorControlsStartedAt = performance.now();
   const monitorControlsResponse = await fetchWithTimeout("/api/displays/controls", {}, 10000);
   assert(monitorControlsResponse.ok, `live display controls returned HTTP ${monitorControlsResponse.status}`);
   const monitorControls = await monitorControlsResponse.json();
   assert(monitorControls.primaryExcluded === true, "display controls must explicitly exclude the Windows primary display");
   assert(monitorControls.scope === "companion-only", `display controls must report companion-only scope: ${JSON.stringify(monitorControls)}`);
   assert(/primary display is intentionally excluded/i.test(monitorControls.message || ""), "display controls must explain the primary-display safety boundary");
+  const repeatedMonitorResponse = await fetchWithTimeout("/api/displays/controls", {}, 10000);
+  assert(repeatedMonitorResponse.ok, `repeated display controls query returned HTTP ${repeatedMonitorResponse.status}`);
+  const repeatedMonitorControls = await repeatedMonitorResponse.json();
+  for (const snapshot of [monitorControls, repeatedMonitorControls]) {
+    assert(snapshot.primaryExcluded === true && snapshot.scope === "companion-only", "repeated monitor queries must preserve companion-only scope");
+    assert(Array.isArray(snapshot.displays), "monitor controls must return a display list even while checking hardware");
+    assert(["pending", "ready", "unsupported", "unavailable"].includes(snapshot.status), "monitor controls must report an explicit hardware-query state");
+    if (snapshot.status === "pending") {
+      assert(snapshot.supported === false && snapshot.displays.length === 0, "pending monitor queries must not advertise stale hardware controls");
+      assert(/checking|progress|busy/i.test(snapshot.message || ""), "pending monitor queries must explain that the hardware query is unfinished");
+    }
+  }
+  console.log(`live monitor queries returned explicit states without changing hardware settings in ${Math.round(performance.now() - monitorControlsStartedAt)} ms`);
 
   if (displayDiagnostics.companionDisplayCount === 0) {
     assert(

@@ -13,15 +13,24 @@ public sealed class MonitorControlService
     private const uint MaxPhysicalMonitorsPerLogicalDisplay = 16;
     private const uint MaxCapabilitiesLength = 64 * 1024;
     private readonly HostLogger _logger;
+    private readonly MonitorControlQueryCoordinator _queries;
 
     public MonitorControlService(HostLogger logger)
     {
         _logger = logger;
+        _queries = new MonitorControlQueryCoordinator(
+            () => WithPhysicalMonitors(ReadMonitor),
+            SetControl,
+            error => _logger.Warn($"DDC/CI companion-display query failed: {error.Message}"));
     }
 
-    public object GetSnapshot()
+    public object GetSnapshot() => CreateSnapshotResponse(_queries.GetSnapshot());
+
+    public object Set(MonitorControlRequest request) => CreateSnapshotResponse(_queries.Set(request));
+
+    internal static object CreateSnapshotResponse(MonitorControlQueryResult result)
     {
-        var monitors = WithPhysicalMonitors(ReadMonitor);
+        var monitors = result.Displays;
         var supported = monitors.Any(monitor => monitor.BrightnessSupported
             || monitor.ContrastSupported
             || monitor.InputSupported
@@ -31,10 +40,14 @@ public sealed class MonitorControlService
             supported,
             primaryExcluded = true,
             scope = "companion-only",
-            status = monitors.Count == 0 ? "unavailable" : supported ? "ready" : "unsupported",
+            status = result.Pending ? "pending" : monitors.Count == 0 ? "unavailable" : supported ? "ready" : "unsupported",
             source = "Windows DDC/CI (companion displays only)",
             displays = monitors,
-            message = monitors.Count == 0
+            message = result.Pending
+                ? "Checking or updating companion-display controls. The primary display is intentionally excluded."
+                : result.Failed
+                    ? "Companion-display DDC/CI controls could not be read. Try again shortly. The primary display is intentionally excluded."
+                : monitors.Count == 0
                 ? "No companion-display DDC/CI controls were exposed by Windows. The primary display is intentionally excluded."
                 : supported
                     ? "Supported companion-display controls are ready. The primary display is intentionally excluded."
@@ -42,7 +55,7 @@ public sealed class MonitorControlService
         };
     }
 
-    public object Set(MonitorControlRequest request)
+    private void SetControl(MonitorControlRequest request)
     {
         var control = request.Control?.Trim().ToLowerInvariant() ?? "";
         var physical = EnumeratePhysicalMonitors();
@@ -87,8 +100,6 @@ public sealed class MonitorControlService
         {
             Destroy(physical);
         }
-
-        return GetSnapshot();
     }
 
     private static MonitorControlSnapshot ReadMonitor(PhysicalMonitorHandle monitor, int index)
