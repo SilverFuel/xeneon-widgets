@@ -17,6 +17,31 @@ public sealed class HostLogger : IDisposable
 
     public string LogPath => _logPath;
 
+    public string[] ReadRecentLines(int maxLines)
+    {
+        lock (_writeLock)
+        {
+            try
+            {
+                if (!File.Exists(_logPath))
+                {
+                    return [];
+                }
+
+                // Materialize under the writer/trim/clear lock. File.ReadLines
+                // keeps a read-only file share open while enumerating on Windows,
+                // so concurrent uncoordinated reads can prevent log appends.
+                return File.ReadLines(_logPath)
+                    .TakeLast(Math.Clamp(maxLines, 1, MaxLogLines))
+                    .ToArray();
+            }
+            catch
+            {
+                return [];
+            }
+        }
+    }
+
     public void Info(string message)
     {
         WriteEntry("INFO", message);

@@ -179,17 +179,11 @@ public sealed class SupportController
         };
     }
 
-    private string[] ReadRecentLogLines(int maxLines, AppConfig? config = null)
+    internal string[] ReadRecentLogLines(int maxLines, AppConfig? config = null)
     {
         try
         {
-            if (!File.Exists(_logger.LogPath))
-            {
-                return [];
-            }
-
-            return File.ReadLines(_logger.LogPath)
-                .TakeLast(Math.Max(1, maxLines))
+            return _logger.ReadRecentLines(maxLines)
                 .Select(line => SanitizeText(line, config))
                 .ToArray();
         }
