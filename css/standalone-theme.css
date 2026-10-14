@@ -1,0 +1,121 @@
+html[data-standalone-ui] {
+  color-scheme: dark;
+
+  /* Semantic aliases for the older self-contained widget pages. */
+  --bg: var(--theme-page);
+  --fg: var(--theme-text);
+  --text: var(--theme-text);
+  --muted: var(--theme-text-muted);
+  --panel: var(--theme-surface-primary);
+  --panel-2: var(--theme-surface-elevated);
+  --panel-soft: var(--theme-surface-muted);
+  --panel-strong: var(--theme-surface-elevated);
+  --surface: var(--theme-surface-primary);
+  --surface-strong: var(--theme-surface-elevated);
+  --border: var(--theme-border);
+  --line: var(--theme-border);
+  --accent: var(--theme-accent);
+  --accent-2: var(--theme-accent-secondary);
+  --chip: var(--theme-selected-surface);
+  --good: var(--status-success-text);
+  --warn: var(--status-warning-text);
+  --danger: var(--status-danger-text);
+  --shadow: var(--theme-panel-shadow);
+  --radius: var(--theme-panel-radius);
+  --font: var(--font-ui);
+  --scene-a: var(--theme-accent-border);
+  --scene-b: var(--theme-ambient-secondary);
+  --scene-c: var(--theme-ambient-rim);
+
+  background-color: var(--theme-page);
+  color: var(--theme-text);
+  overflow: auto;
+  scrollbar-color: var(--theme-border-strong) var(--theme-surface-secondary);
+}
+
+html[data-standalone-ui] body {
+  background:
+    radial-gradient(circle at top left, var(--theme-ambient-primary), transparent 30%),
+    radial-gradient(circle at bottom right, var(--theme-ambient-secondary), transparent 34%),
+    var(--theme-page);
+  color: var(--theme-text);
+  overflow: auto;
+}
+
+html[data-standalone-ui] body.dashboard-native-page {
+  overflow: hidden;
+}
+
+html[data-standalone-ui][data-theme-variant="night"] body,
+html[data-standalone-ui][data-readability="clean"] body,
+html[data-standalone-ui][data-readability="high-contrast"] body {
+  background: var(--theme-page);
+}
+
+html[data-standalone-ui] :where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 3px solid var(--theme-focus-ring);
+  outline-offset: 3px;
+}
+
+html[data-standalone-ui][data-readability="high-contrast"] {
+  --accent: var(--theme-accent-text);
+}
+
+html[data-standalone-ui][data-readability="high-contrast"] :where([aria-pressed="true"], [aria-current], .is-active, .is-selected) {
+  border-color: var(--theme-accent-text);
+}
+
+html[data-standalone-ui][data-readability="high-contrast"] :where(a[href]) {
+  text-decoration: underline;
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.16em;
+}
+
+:is(
+  html[data-standalone-ui][data-theme-variant="night"],
+  html[data-standalone-ui].dashboard-native-page--motion-off,
+  html[data-standalone-ui][data-reduced-motion="true"]
+) *,
+:is(
+  html[data-standalone-ui][data-theme-variant="night"],
+  html[data-standalone-ui].dashboard-native-page--motion-off,
+  html[data-standalone-ui][data-reduced-motion="true"]
+) *::before,
+:is(
+  html[data-standalone-ui][data-theme-variant="night"],
+  html[data-standalone-ui].dashboard-native-page--motion-off,
+  html[data-standalone-ui][data-reduced-motion="true"]
+) *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-standalone-ui] *,
+  html[data-standalone-ui] *::before,
+  html[data-standalone-ui] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  html[data-standalone-ui] {
+    forced-color-adjust: auto;
+  }
+
+  html[data-standalone-ui],
+  html[data-standalone-ui] body {
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  html[data-standalone-ui] :where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 3px solid Highlight;
+    outline-offset: 3px;
+  }
+}

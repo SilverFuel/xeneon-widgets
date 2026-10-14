@@ -1,5 +1,6 @@
 param(
-  [switch]$Quiet
+  [switch]$Quiet,
+  [switch]$KeepRunning
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,8 +19,8 @@ if (Test-Path (Join-Path $scriptRoot "XenonEdgeHost.exe")) {
   }
 }
 
-$taskName = "XenonEdgeHost"
-$runValueName = "XenonEdgeHost"
+$taskNames = @("XenonEdgeHost", "XeneonBridge")
+$runValueNames = @("XenonEdgeHost", "XeneonBridge")
 $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 
 function Write-Step($message) {
@@ -53,36 +54,51 @@ if ($appRoot) {
 
 # --- Kill running instance ---
 
-$running = Get-Process -Name "XenonEdgeHost" -ErrorAction SilentlyContinue
-if ($running) {
-  try {
-    $running | Stop-Process -Force
-    Write-Info "Stopped running XenonEdgeHost process."
-  } catch {
-    Write-QuietWarning "Could not stop running XenonEdgeHost process."
+if (-not $KeepRunning) {
+  $running = Get-Process -Name "XenonEdgeHost" -ErrorAction SilentlyContinue
+  if ($running) {
+    try {
+      $running | Stop-Process -Force
+      Write-Info "Stopped running XenonEdgeHost process."
+    } catch {
+      Write-QuietWarning "Could not stop running XenonEdgeHost process."
+    }
   }
 }
 
 # --- Remove scheduled task ---
 
-if (Get-RootScheduledTask $taskName) {
-  try {
-    Unregister-ScheduledTask -TaskName $taskName -TaskPath "\" -Confirm:$false
-    Write-Info "Removed scheduled task '$taskName'."
-  } catch {
-    Write-QuietWarning "Unable to remove scheduled task '$taskName'."
+foreach ($taskName in $taskNames) {
+  if (Get-RootScheduledTask $taskName) {
+    try {
+      Unregister-ScheduledTask -TaskName $taskName -TaskPath "\" -Confirm:$false
+      Write-Info "Removed scheduled task '$taskName'."
+    } catch {
+      Write-QuietWarning "Unable to remove scheduled task '$taskName'."
+    }
+  } else {
+    Write-Info "Scheduled task '$taskName' was not installed."
   }
-} else {
-  Write-Info "Scheduled task '$taskName' was not installed."
 }
 
 # --- Remove registry Run key ---
 
-if (Get-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue) {
-  Remove-ItemProperty -Path $runKeyPath -Name $runValueName
-  Write-Info "Removed startup entry '$runValueName'."
-} else {
-  Write-Info "Startup entry '$runValueName' was not installed."
+foreach ($runValueName in $runValueNames) {
+  if (Get-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue) {
+    Remove-ItemProperty -Path $runKeyPath -Name $runValueName
+    Write-Info "Removed startup entry '$runValueName'."
+  } else {
+    Write-Info "Startup entry '$runValueName' was not installed."
+  }
+}
+
+$remainingTasks = @($taskNames | Where-Object { Get-RootScheduledTask $_ })
+$remainingRunValues = @($runValueNames | Where-Object {
+  -not [string]::IsNullOrWhiteSpace((Get-ItemProperty -Path $runKeyPath -Name $_ -ErrorAction SilentlyContinue).$_)
+})
+if ($remainingTasks.Count -gt 0 -or $remainingRunValues.Count -gt 0) {
+  $remaining = @($remainingTasks + $remainingRunValues) | Select-Object -Unique
+  throw "Automatic startup could not be disabled for: $($remaining -join ', '). Remove those entries and run the operation again."
 }
 
 if (-not $Quiet) {

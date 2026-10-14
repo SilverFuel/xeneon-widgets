@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NAS Storage Monitor</title>
+  <link rel="stylesheet" href="../css/theme.css">
   <style>
     :root {
       color-scheme: dark;
@@ -208,7 +209,7 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     .nas-name {
@@ -343,13 +344,24 @@
     [data-size="large"] body,
     [data-size="medium"] body,
     [data-size="small"] body {
+      height: auto;
+      min-height: 100%;
       padding: 10px;
+      overflow: visible;
+    }
+
+    html[data-size="large"],
+    html[data-size="medium"],
+    html[data-size="small"] {
+      overflow-x: hidden;
+      overflow-y: auto;
     }
 
     [data-size="large"] .widget,
     [data-size="medium"] .widget,
     [data-size="small"] .widget {
-      height: calc(100vh - 20px);
+      height: auto;
+      min-height: calc(100vh - 20px);
       padding: 16px;
       gap: 14px;
     }
@@ -357,6 +369,7 @@
     [data-size="large"] .layout,
     [data-size="medium"] .layout,
     [data-size="small"] .layout {
+      height: auto;
       grid-template-columns: 1fr;
     }
 
@@ -381,7 +394,7 @@
     [data-size="small"] .status {
       min-height: 34px;
       padding: 8px 10px;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     [data-size="medium"] .panel,
@@ -411,6 +424,8 @@
       font-size: 1.5rem;
     }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body>
   <main class="widget">

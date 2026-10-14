@@ -9,22 +9,23 @@ public static class SceneDefaults
             ActiveSceneId = "scene-work",
             DefaultSceneId = "scene-work",
             AutomationEnabled = true,
-            LastActivationReason = "Default scene",
+            ThemeVariant = "standard",
+            LastActivationReason = "Default mode",
             Profiles =
             [
-                BuiltIn("scene-work", "Work", "briefcase", "edge", "comfortable", 72, 18, "balanced",
+                BuiltIn("scene-work", "Work", "briefcase", "focus", "standard", "comfortable", 72, 18, "balanced",
                     ["home", "calendar", "system", "audio", "quick-actions"],
                     ["dark-mode", "settings", "task-manager"]),
-                BuiltIn("scene-gaming", "Gaming", "gamepad", "deepcore", "compact", 82, 60, "game",
+                BuiltIn("scene-gaming", "Gaming", "gamepad", "gaming", "standard", "compact", 82, 60, "game",
                     ["home", "game-mode", "system", "network", "audio"],
                     ["night-light", "task-manager"]),
-                BuiltIn("scene-media", "Media", "play", "afterburn", "comfortable", 65, 48, "balanced",
+                BuiltIn("scene-media", "Media", "play", "warm", "standard", "comfortable", 65, 48, "balanced",
                     ["home", "audio", "hue", "weather"],
                     ["dark-mode", "night-light"]),
-                BuiltIn("scene-night", "Night", "moon", "afterburn", "spacious", 28, 0, "battery",
+                BuiltIn("scene-night", "Night", "moon", "focus", "night", "spacious", 28, 0, "battery",
                     ["home", "audio", "weather", "calendar", "hue"],
                     ["night-light", "dark-mode"]),
-                BuiltIn("scene-home", "Home", "home", "verdant", "comfortable", 58, 25, "balanced",
+                BuiltIn("scene-home", "Home", "home", "focus", "standard", "comfortable", 58, 25, "balanced",
                     ["home", "hue", "network", "weather", "calendar"],
                     ["night-light", "settings"])
             ]
@@ -51,30 +52,53 @@ public static class SceneDefaults
             .GroupBy(scene => scene.Id, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();
+        source.DefaultSceneId = FindBaseSceneId(source.Profiles, source.DefaultSceneId) ?? "scene-work";
         source.DisplayAssignments = (source.DisplayAssignments ?? [])
             .Where(assignment => !string.IsNullOrWhiteSpace(assignment.DisplayId))
             .Select(assignment => new DisplaySceneAssignment
             {
                 DisplayId = assignment.DisplayId.Trim(),
-                SceneId = FindSceneId(source.Profiles, assignment.SceneId) ?? source.DefaultSceneId
+                SceneId = FindBaseSceneId(source.Profiles, assignment.SceneId) ?? source.DefaultSceneId
             })
             .GroupBy(assignment => assignment.DisplayId, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .Take(8)
             .ToList();
-        source.DefaultSceneId = FindSceneId(source.Profiles, source.DefaultSceneId) ?? "scene-work";
-        source.ActiveSceneId = FindSceneId(source.Profiles, source.ActiveSceneId) ?? source.DefaultSceneId;
+        var requestedActive = source.Profiles.FirstOrDefault(scene => string.Equals(scene.Id, source.ActiveSceneId, StringComparison.OrdinalIgnoreCase));
+        if (requestedActive is not null && string.Equals(requestedActive.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
+        {
+            source.ActiveSceneId = source.DefaultSceneId;
+            source.ThemeVariant = "night";
+            if (string.IsNullOrWhiteSpace(source.VariantOverrideUntil) && !string.IsNullOrWhiteSpace(source.ManualOverrideUntil))
+            {
+                source.VariantOverrideUntil = source.ManualOverrideUntil;
+                source.ManualOverrideUntil = "";
+            }
+        }
+        else
+        {
+            source.ActiveSceneId = FindBaseSceneId(source.Profiles, source.ActiveSceneId) ?? source.DefaultSceneId;
+            source.ThemeVariant = NormalizeThemeVariant(source.ThemeVariant);
+        }
         source.ManualOverrideUntil = source.ManualOverrideUntil?.Trim() ?? "";
-        source.LastActivationReason = string.IsNullOrWhiteSpace(source.LastActivationReason) ? "Default scene" : source.LastActivationReason.Trim();
+        source.VariantOverrideUntil = source.VariantOverrideUntil?.Trim() ?? "";
+        source.LastActivationReason = string.IsNullOrWhiteSpace(source.LastActivationReason) ? "Default mode" : source.LastActivationReason.Trim();
+        if (string.Equals(source.LastActivationReason, "Default scene", StringComparison.OrdinalIgnoreCase))
+        {
+            source.LastActivationReason = "Default mode";
+        }
         return source;
     }
 
     public static SceneProfile NormalizeProfile(SceneProfile scene)
     {
         scene.Id = NormalizeId(scene.Id);
-        scene.Name = string.IsNullOrWhiteSpace(scene.Name) ? "Custom Scene" : scene.Name.Trim()[..Math.Min(scene.Name.Trim().Length, 40)];
+        scene.Name = string.IsNullOrWhiteSpace(scene.Name) ? "Custom Mode" : scene.Name.Trim()[..Math.Min(scene.Name.Trim().Length, 40)];
         scene.Icon = NormalizeToken(scene.Icon, "spark");
-        scene.ThemeId = NormalizeToken(scene.ThemeId, "edge");
+        scene.ThemeId = BuiltInThemeId(scene.Id) ?? NormalizeThemeId(scene.ThemeId);
+        scene.ThemeVariant = string.Equals(scene.Id, "scene-night", StringComparison.OrdinalIgnoreCase)
+            ? "night"
+            : NormalizeThemeVariant(scene.ThemeVariant);
         scene.AccentColor = NormalizeColor(scene.AccentColor);
         scene.Density = NormalizeChoice(scene.Density, "comfortable", "compact", "comfortable", "spacious");
         scene.Brightness = Math.Clamp(scene.Brightness, 10, 100);
@@ -91,7 +115,37 @@ public static class SceneDefaults
         return scene;
     }
 
-    private static SceneProfile BuiltIn(string id, string name, string icon, string theme, string density, int brightness, int animation, string budget, List<string> widgets, List<string> actions)
+    public static string NormalizeThemeId(string? value)
+    {
+        return (value?.Trim().ToLowerInvariant() ?? "") switch
+        {
+            "focus" or "edge" or "verdant" => "focus",
+            "gaming" or "deepcore" => "gaming",
+            "warm" or "afterburn" => "warm",
+            _ => "focus"
+        };
+    }
+
+    public static string NormalizeThemeVariant(string? value)
+    {
+        return string.Equals(value?.Trim(), "night", StringComparison.OrdinalIgnoreCase)
+            ? "night"
+            : "standard";
+    }
+
+    public static string NormalizeAccentColor(string? value) => NormalizeColor(value);
+
+    private static string? BuiltInThemeId(string id) => id switch
+    {
+        "scene-work" => "focus",
+        "scene-gaming" => "gaming",
+        "scene-media" => "warm",
+        "scene-night" => "focus",
+        "scene-home" => "focus",
+        _ => null
+    };
+
+    private static SceneProfile BuiltIn(string id, string name, string icon, string theme, string themeVariant, string density, int brightness, int animation, string budget, List<string> widgets, List<string> actions)
     {
         return new SceneProfile
         {
@@ -99,6 +153,7 @@ public static class SceneDefaults
             Name = name,
             Icon = icon,
             ThemeId = theme,
+            ThemeVariant = themeVariant,
             Density = density,
             Brightness = brightness,
             AnimationIntensity = animation,
@@ -164,6 +219,7 @@ public static class SceneDefaults
 
     private static string NormalizeClock(string? value) => TimeOnly.TryParse(value, out var time) ? time.ToString("HH:mm") : "";
 
-    private static string? FindSceneId(IEnumerable<SceneProfile> scenes, string? requested) => scenes
-        .FirstOrDefault(scene => string.Equals(scene.Id, requested, StringComparison.OrdinalIgnoreCase))?.Id;
+    private static string? FindBaseSceneId(IEnumerable<SceneProfile> scenes, string? requested) => scenes
+        .FirstOrDefault(scene => string.Equals(scene.Id, requested, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))?.Id;
 }

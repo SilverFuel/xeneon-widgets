@@ -57,5 +57,5 @@ if (Test-Path -LiteralPath $uninstallAutoStartScript) {
   & $uninstallAutoStartScript -Quiet
 }
 
-Write-Info "Launching Auxora Safe Mode on the primary display."
+Write-Info "Launching Auxora Safe Mode on an available companion display."
 Start-Process -FilePath $exePath -ArgumentList "--safe-mode" -WorkingDirectory $scriptRoot

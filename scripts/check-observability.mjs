@@ -2,6 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const nativeBridge = readWorkspaceFile("app/BridgeManager.cs");
+const telemetryController = readWorkspaceFile("app/Controllers/TelemetryController.cs");
+const audioService = readWorkspaceFile("app/Services/AudioService.cs");
+const calendarService = readWorkspaceFile("app/Services/CalendarService.cs");
+const hueService = readWorkspaceFile("app/Services/HueService.cs");
+const mediaService = readWorkspaceFile("app/Services/MediaService.cs");
 const legacyBridge = readWorkspaceFile("bridge/server.mjs");
 
 function readWorkspaceFile(relativePath) {
@@ -37,6 +42,25 @@ assert(
 );
 
 assert(
+  /dashboardAssetRevision\s*=\s*_dashboardAssetRevision/.test(telemetryController)
+    && /name\s*=\s*"Auxora"/.test(telemetryController),
+  "native health must expose authoritative product and embedded asset revision identity"
+);
+
+assert(
+  /var audio = _audioService\.GetCachedSnapshot\(\)/.test(telemetryController)
+    && /var calendar = _calendarService\.GetCachedSnapshot\(config\)/.test(telemetryController)
+    && /var media = _mediaService\.GetCachedSnapshot\(\)/.test(telemetryController)
+    && /var hue = _hueService\.GetCachedSnapshot\(config\)/.test(telemetryController)
+    && !/BuildHealthPayloadAsync[\s\S]+?await _(?:audio|calendar|media|hue)Service\.GetSnapshotAsync/.test(telemetryController)
+    && /GetCachedSnapshot\(\)/.test(audioService)
+    && /GetCachedSnapshot\(AppConfig config\)/.test(calendarService)
+    && /GetCachedSnapshot\(AppConfig config\)/.test(hueService)
+    && /GetCachedSnapshot\(\)/.test(mediaService),
+  "native health must use cached integration snapshots and never block bridge availability on optional live probes"
+);
+
+assert(
   /response\.setHeader\("X-Request-ID",\s*requestId\)/.test(legacyBridge)
     && /writeStructuredLog\("http_request"/.test(legacyBridge),
   "legacy bridge must emit request IDs and structured request boundary logs"
@@ -46,6 +70,16 @@ assert(
   /sensitiveQueryPattern/.test(legacyBridge)
     && /sanitizeLogPath/.test(legacyBridge),
   "legacy bridge request logs must sanitize sensitive query values"
+);
+
+assert(
+  /_refreshTimeoutReported/.test(mediaService)
+    && /timedOutRefreshStillRunning/.test(mediaService)
+    && /suppressing duplicate timeout reports/.test(mediaService)
+    && /RequestAsync\(\)[\s\S]+?\.AsTask\(cancellationToken\)/.test(mediaService)
+    && /TryGetMediaPropertiesAsync\(\)[\s\S]+?\.AsTask\(cancellationToken\)/.test(mediaService)
+    && /refreshCancellation\?\.Cancel\(\)/.test(mediaService),
+  "Windows media polling must cancel timed-out WinRT work and suppress duplicate timeout loops"
 );
 
 console.log("checked local HTTP observability");

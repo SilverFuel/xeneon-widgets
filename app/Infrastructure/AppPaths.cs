@@ -6,13 +6,37 @@ public static class AppPaths
     public const string LegacyProductDirectoryName = "XenonEdgeHost";
     public const string ProductDirectoryName = "Auxora";
 
-    public static string RoamingDataDirectory => EnsureMigratedDirectory(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+    public static string RoamingDataDirectory => EnsureMigratedDirectory(ResolveDataRoot(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        Environment.GetEnvironmentVariable("AUXORA_TEST_ROAMING_ROOT"),
+        IsTestDataRootEnabled()));
 
-    public static string LocalDataDirectory => EnsureMigratedDirectory(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+    public static string LocalDataDirectory => EnsureMigratedDirectory(ResolveDataRoot(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        Environment.GetEnvironmentVariable("AUXORA_TEST_LOCAL_ROOT"),
+        IsTestDataRootEnabled()));
 
     internal static string EnsureMigratedDirectoryForRoot(string root) => EnsureMigratedDirectory(root);
+
+    internal static string ResolveDataRoot(string fallbackRoot, string? testRoot, bool testRootsEnabled)
+    {
+        if (!testRootsEnabled)
+        {
+            return fallbackRoot;
+        }
+
+        if (string.IsNullOrWhiteSpace(testRoot))
+        {
+            throw new InvalidOperationException("Auxora test data roots are enabled but an explicit data root is missing.");
+        }
+
+        return Path.GetFullPath(testRoot);
+    }
+
+    private static bool IsTestDataRootEnabled() => string.Equals(
+        Environment.GetEnvironmentVariable("AUXORA_ENABLE_TEST_DATA_ROOTS"),
+        "1",
+        StringComparison.Ordinal);
 
     private static string EnsureMigratedDirectory(string root)
     {

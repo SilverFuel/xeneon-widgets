@@ -8,28 +8,17 @@
   var buildBridgeUrl = runtime.buildBridgeUrl;
   var clamp = runtime.clamp;
   var createTimerLoop = runtime.createTimerLoop;
-  var emptyState = runtime.emptyState;
   var escapeHtml = runtime.escapeHtml;
   var formatPercent = runtime.formatPercent;
   var formatTemp = runtime.formatTemp;
   var optionalNumber = runtime.optionalNumber;
+  var patchStableDom = runtime.patchStableDom;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
   var statusPill = runtime.statusPill;
   var statusTextFromPayload = runtime.statusTextFromPayload;
   var statusToneFromPayload = runtime.statusToneFromPayload;
   var text = runtime.text;
-
-  function formatMemoryMb(value) {
-    var parsed = optionalNumber(value);
-    if (parsed == null) {
-      return "--";
-    }
-
-    return parsed >= 1024
-      ? (parsed / 1024).toFixed(parsed >= 10240 ? 0 : 1) + " GB"
-      : Math.round(parsed) + " MB";
-  }
 
   function normalizeGpuPowerPayload(payload) {
     payload = payload || {};
@@ -91,8 +80,17 @@
     var displays = displayDiagnostics && Array.isArray(displayDiagnostics.displays) ? displayDiagnostics.displays : [];
     var selectedId = text(displayDiagnostics && displayDiagnostics.selectedDisplayId, "");
     return displays.filter(function (display) {
-      return display.preferred || (selectedId && (display.id === selectedId || display.deviceName === selectedId || display.deviceId === selectedId));
-    })[0] || displays[0] || null;
+      return display && !display.primary
+        && (display.preferred || (selectedId && (display.id === selectedId || display.deviceName === selectedId || display.deviceId === selectedId)));
+    })[0] || null;
+  }
+
+  function displayTargetReady(displayDiagnostics) {
+    var companionCount = optionalNumber(displayDiagnostics && displayDiagnostics.companionDisplayCount);
+    return text(displayDiagnostics && displayDiagnostics.status, "").toLowerCase() === "ready"
+      && companionCount != null
+      && companionCount > 0
+      && Boolean(selectedDisplayFromDiagnostics(displayDiagnostics));
   }
 
   function buildSystemHealth(data, gpuPower, displayDiagnostics) {
@@ -131,7 +129,7 @@
     if (gpuPower && gpuPower.alerts && gpuPower.alerts.length) {
       alerts.push("GPU power alert");
     }
-    if (displayDiagnostics && displayDiagnostics.edgeCandidateCount === 0) {
+    if (displayDiagnostics && !displayTargetReady(displayDiagnostics)) {
       warnings.push("Display selection needed");
     }
 
@@ -159,7 +157,7 @@
   function renderSystemStatCard(label, value, detail, percent, tone, trend) {
     var progress = optionalNumber(percent);
     return '' +
-      '<article class="system-stat-card" data-tone="' + escapeHtml(tone || "muted") + '">' +
+      '<article class="system-stat-card" data-ui-key="system-stat-' + escapeHtml(String(label || "metric").toLowerCase()) + '" data-tone="' + escapeHtml(tone || "muted") + '">' +
         '<div class="metric-label">' + escapeHtml(label) + '</div>' +
         '<div class="system-stat-value">' + escapeHtml(value) + '</div>' +
         (progress == null ? "" : '<div class="inline-progress"><span class="inline-progress__bar" style="width:' + clamp(progress, 0, 100) + '%"></span></div>') +
@@ -168,49 +166,44 @@
       '</article>';
   }
 
-  function renderSystemProcesses(processes) {
-    var visible = Array.isArray(processes) ? processes.slice(0, 5) : [];
-    if (!visible.length) {
-      return emptyState("No process pressure", "Top apps appear after the next telemetry sample.");
-    }
-
-    return '<div class="system-process-list">' + visible.map(function (process) {
-      var cpu = optionalNumber(process.cpu) || 0;
-      var memory = optionalNumber(process.memoryMb) || 0;
-      return '' +
-        '<div class="system-process-row">' +
-          '<div>' +
-            '<strong>' + escapeHtml(text(process.name, "Process")) + '</strong>' +
-            '<span>PID ' + escapeHtml(String(process.processId || "--")) + '</span>' +
+  function renderSystemToolsPanel(busy) {
+    return '' +
+      '<article class="system-panel system-tools-panel">' +
+        '<div class="system-panel-head">' +
+          '<div><div class="metric-label">System tools</div><strong>Privacy-safe telemetry</strong></div>' +
+          '<div class="system-panel-actions">' +
+            '<button class="inline-button" type="button" data-action="system-refresh"' + (busy ? " disabled" : "") + '>Refresh</button>' +
+            '<button class="inline-button" type="button" data-action="system-task-manager"' + (busy ? " disabled" : "") + '>Task Manager</button>' +
           '</div>' +
-          '<b>' + escapeHtml(formatPercent(cpu)) + '</b>' +
-          '<em>' + escapeHtml(formatMemoryMb(memory)) + '</em>' +
-        '</div>';
-    }).join("") + '</div>';
+        '</div>' +
+        '<p class="router-inline-copy">Auxora reports overall CPU, GPU, and memory pressure without listing running applications or process IDs. Open Task Manager when you need app-level detail.</p>' +
+      '</article>';
   }
 
   function renderSystemDisplayPanel(data, displayDiagnostics) {
     var primaryDisplay = primaryDisplayFromSystem(data || {});
     var selected = selectedDisplayFromDiagnostics(displayDiagnostics);
-    var edgeReady = displayDiagnostics && displayDiagnostics.edgeCandidateCount > 0;
-    var selectedLabel = text(displayDiagnostics && displayDiagnostics.selectedDisplayName, selected ? selected.label : "No Auxora display");
+    var edgeReady = displayTargetReady(displayDiagnostics);
+    var selectedLabel = selected
+      ? text(displayDiagnostics && displayDiagnostics.selectedDisplayName, text(selected.label, "Companion display"))
+      : "No active companion display";
     var primaryLabel = text(primaryDisplay.name || primaryDisplay.deviceName, "Primary display");
-    var selectedHz = selected && selected.refreshRate != null ? formatHz(selected.refreshRate) : formatHz(displayRefreshRate(primaryDisplay));
+    var selectedHz = selected && selected.refreshRate != null ? formatHz(selected.refreshRate) : "--";
     var selectedSize = selected && selected.boundsWidth && selected.boundsHeight
       ? selected.boundsWidth + "x" + selected.boundsHeight
-      : (primaryDisplay.width && primaryDisplay.height ? primaryDisplay.width + "x" + primaryDisplay.height : "--");
+      : "--";
 
     return '' +
       '<article class="system-panel system-display-panel">' +
         '<div class="system-panel-head">' +
-          '<div><div class="metric-label">Display Health</div><strong>' + escapeHtml(edgeReady ? "Auxora display ready" : "Choose display") + '</strong></div>' +
+          '<div><div class="metric-label">Companion Display Health</div><strong>' + escapeHtml(edgeReady ? "Companion display ready" : "Waiting for companion display") + '</strong></div>' +
           statusPill(edgeReady ? "Ready" : "Check", edgeReady ? "good" : "warn") +
         '</div>' +
         '<div class="system-display-grid">' +
           '<div><span>Target</span><strong>' + escapeHtml(selectedLabel) + '</strong></div>' +
           '<div><span>Refresh</span><strong>' + escapeHtml(selectedHz) + '</strong></div>' +
           '<div><span>Size</span><strong>' + escapeHtml(selectedSize) + '</strong></div>' +
-          '<div><span>Primary</span><strong>' + escapeHtml(primaryLabel) + '</strong></div>' +
+          '<div><span>Reserved primary</span><strong>' + escapeHtml(primaryLabel) + '</strong></div>' +
         '</div>' +
       '</article>';
   }
@@ -220,7 +213,7 @@
     var hasGpuPower = gpuPower && (gpuPower.totalPower || gpuPower.pins.length || gpuPower.rails.length || gpuPower.power.length);
     var sensorTone = gpuPower && gpuPower.alerts.length ? "danger" : (hasTemps || hasGpuPower ? "good" : "warn");
     var sensorLabel = gpuPower && gpuPower.alerts.length ? "Power alert" : (hasTemps || hasGpuPower ? "Live" : "Limited");
-    var powerValue = sensorValue(gpuPower && gpuPower.totalPower, "--");
+    var powerValue = sensorValue(gpuPower && gpuPower.totalPower, "Unavailable");
 
     return '' +
       '<article class="system-panel system-sensor-panel">' +
@@ -239,12 +232,12 @@
 
   function renderSystemWidget(data, statusText, statusTone, history, displayDiagnostics, busy) {
     var gpuPower = data.gpuPower || normalizeGpuPowerPayload({});
-    var display = selectedDisplayFromDiagnostics(displayDiagnostics) || primaryDisplayFromSystem(data || {});
+    var display = selectedDisplayFromDiagnostics(displayDiagnostics);
     var displayHz = display && display.refreshRate != null ? display.refreshRate : displayRefreshRate(display);
     var health = buildSystemHealth(data || {}, gpuPower, displayDiagnostics);
-    var topProcess = Array.isArray(data.topProcesses) && data.topProcesses.length ? data.topProcesses[0] : null;
-    var topProcessText = topProcess ? text(topProcess.name, "Process") + " top app" : text(data.source, "Native telemetry");
-    var selectedDisplayLabel = text(displayDiagnostics && displayDiagnostics.selectedDisplayName, text(display && display.label, text(display && display.name, "Display target")));
+    var selectedDisplayLabel = display
+      ? text(displayDiagnostics && displayDiagnostics.selectedDisplayName, text(display.label, text(display.name, "Companion display")))
+      : "No active companion display";
 
     return '' +
       '<div class="inline-widget-shell inline-widget-shell--system">' +
@@ -255,22 +248,13 @@
               '<strong>' + escapeHtml(health.label) + '</strong>' +
               '<span>' + escapeHtml(health.detail) + '</span>' +
             '</article>' +
-            renderSystemStatCard("CPU", formatPercent(data.cpu), data.cpuTemp != null ? formatTemp(data.cpuTemp) : topProcessText, data.cpu, systemMetricTone(data.cpu, 78, 92), history.cpu) +
+            renderSystemStatCard("CPU", formatPercent(data.cpu), data.cpuTemp != null ? formatTemp(data.cpuTemp) : "System load", data.cpu, systemMetricTone(data.cpu, 78, 92), history.cpu) +
             renderSystemStatCard("GPU", formatPercent(data.gpu), data.gpuTemp != null ? formatTemp(data.gpuTemp) : "GPU load", data.gpu, systemMetricTone(data.gpu, 82, 92), history.gpu) +
-            renderSystemStatCard("RAM", formatPercent(data.ram), "Memory pressure", data.ram, systemMetricTone(data.ram, 78, 90), history.ram) +
-            renderSystemStatCard("Display", formatHz(displayHz), selectedDisplayLabel, displayHz == null ? null : Math.min(displayHz, 240) / 240 * 100, displayDiagnostics && displayDiagnostics.edgeCandidateCount === 0 ? "warn" : "good", []) +
+            renderSystemStatCard("RAM", formatPercent(data.ram), "Memory used", data.ram, systemMetricTone(data.ram, 78, 90), history.ram) +
+            renderSystemStatCard("Display", formatHz(displayHz), selectedDisplayLabel, displayHz == null ? null : Math.min(displayHz, 240) / 240 * 100, displayTargetReady(displayDiagnostics) ? "good" : "warn", []) +
           '</section>' +
           '<section class="system-detail-grid">' +
-            '<article class="system-panel system-process-panel">' +
-              '<div class="system-panel-head">' +
-                '<div><div class="metric-label">What is using resources?</div><strong>Top apps right now</strong></div>' +
-                '<div class="system-panel-actions">' +
-                  '<button class="inline-button" type="button" data-action="system-refresh"' + (busy ? " disabled" : "") + '>Refresh</button>' +
-                  '<button class="inline-button" type="button" data-action="system-task-manager"' + (busy ? " disabled" : "") + '>Task Manager</button>' +
-                '</div>' +
-              '</div>' +
-              renderSystemProcesses(data.topProcesses) +
-            '</article>' +
+            renderSystemToolsPanel(busy) +
             renderSystemDisplayPanel(data, displayDiagnostics) +
             renderSystemSensorPanel(data, gpuPower) +
           '</section>' +
@@ -313,7 +297,7 @@
 
     function redraw() {
       state.data.gpuPower = state.gpuPower;
-      container.innerHTML = renderSystemWidget(state.data, state.statusText, state.statusTone, state.history, state.display, state.busy);
+      patchStableDom(container, renderSystemWidget(state.data, state.statusText, state.statusTone, state.history, state.display, state.busy));
     }
 
     function refresh() {
@@ -389,7 +373,7 @@
       destroy: function () {
         loop.destroy();
         runCleanups(cleanups);
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }

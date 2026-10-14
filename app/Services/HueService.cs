@@ -54,6 +54,32 @@ public sealed class HueService
         }
     }
 
+    public HueSnapshot GetCachedSnapshot(AppConfig config)
+    {
+        var hue = GetConfigSnapshot(config);
+        if (string.IsNullOrWhiteSpace(hue.BridgeIp))
+        {
+            return HueSnapshot.CreateSetup("");
+        }
+
+        lock (_sync)
+        {
+            if (!string.Equals(_snapshot.BridgeIp, hue.BridgeIp, StringComparison.OrdinalIgnoreCase))
+            {
+                return HueSnapshot.CreateSetup(hue.BridgeIp);
+            }
+
+            var clone = _snapshot.Clone();
+            clone.Stale = clone.SampledAt is null || DateTimeOffset.UtcNow - clone.SampledAt.Value > TimeSpan.FromSeconds(20);
+            if (clone.Status == "live" && clone.Stale)
+            {
+                clone.Status = "stale";
+            }
+
+            return clone;
+        }
+    }
+
     public async Task<HueSnapshot> LinkBridgeAsync(string? bridgeIp, bool trustCertificate, string? trustedCertificateThumbprint, CancellationToken cancellationToken)
     {
         var normalizedIp = NormalizeBridgeIp(bridgeIp ?? _configStore.Current.Hue.BridgeIp);

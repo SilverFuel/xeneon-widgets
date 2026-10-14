@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UniFi Network Dashboard</title>
+  <link rel="stylesheet" href="../css/theme.css">
   <style>
     :root {
       color-scheme: dark;
@@ -93,8 +94,8 @@
     }
 
     .rail, .board { min-height: 0; overflow: auto; padding-right: 6px; }
-    .rail { display: grid; gap: 12px; align-content: start; }
-    .board { display: grid; gap: 12px; align-content: start; }
+    .rail { display: grid; grid-auto-rows: max-content; gap: 12px; align-content: start; }
+    .board { display: grid; grid-auto-rows: max-content; gap: 12px; align-content: start; }
 
     .card {
       border: 1px solid var(--border);
@@ -111,7 +112,7 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       font-weight: 600;
     }
 
@@ -174,6 +175,7 @@
     .toggle button, .range button {
       display: inline-flex;
       align-items: center;
+      min-height: 44px;
       gap: 8px;
       border-color: rgba(255, 255, 255, 0.08);
       transition: background 160ms ease, border-color 160ms ease;
@@ -249,7 +251,7 @@
     .list-item__badge {
       padding: 6px 10px;
       border-radius: 999px;
-      font-size: 0.74rem;
+      font-size: 0.75rem;
       background: rgba(255, 255, 255, 0.08);
     }
     .list-item__badge[data-tone="good"] { color: #c8ffe4; background: rgba(73, 209, 125, 0.15); }
@@ -275,7 +277,7 @@
       border-radius: 10px;
       background: rgba(62, 181, 255, 0.14);
       color: var(--accent);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       font-weight: 700;
       letter-spacing: 0.06em;
     }
@@ -303,6 +305,8 @@
       *, *::before, *::after { animation: none !important; transition: none !important; }
     }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body>
   <main class="widget">
@@ -579,8 +583,8 @@
           hasLiveData: hasLiveData,
           hasChartData: hasChartData,
           gateway: data.gateway || getParam("gateway", "UniFi Network"),
-          gatewayCopy: data.gatewayCopy || getParam("copy", endpoint ? "Xenon is checking for UniFi locally." : "Xenon has a built-in UniFi detector."),
-          source: data.source || (endpoint ? "Xenon UniFi detector" : "Needs setup"),
+          gatewayCopy: data.gatewayCopy || getParam("copy", endpoint ? "Auxora is checking for UniFi locally." : "Auxora has a built-in UniFi detector."),
+          source: data.source || (endpoint ? "Auxora UniFi detector" : "Needs setup"),
           provider: data.provider || data.internetName || wan.name || "WAN",
           gatewayIp: data.gatewayIp || wan.gatewayIp || "",
           wanIp: data.wanIp || wan.ip || "",
@@ -663,7 +667,7 @@
           svg.push('<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + height + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"></line>');
         }
         if (!data.hasChartData) {
-          svg.push('<text x="' + (width / 2) + '" y="' + (height / 2) + '" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="18">Xenon will add richer UniFi charts after credentials are connected.</text>');
+          svg.push('<text x="' + (width / 2) + '" y="' + (height / 2) + '" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="18">Auxora will add richer UniFi charts after credentials are connected.</text>');
           document.getElementById("chart-svg").innerHTML = svg.join("");
           document.getElementById("chart-labels").innerHTML = "";
           document.getElementById("legend-values").innerHTML = [
@@ -751,7 +755,7 @@
         document.getElementById("site-badge").setAttribute("data-tone", overallTone);
         document.getElementById("chart-title").textContent = data.provider + " trend";
         document.getElementById("toolbar-copy").textContent = data.hasLiveData ? data.gateway + " / " + data.clients.total + " clients / " + data.aps.length + " APs" : "Waiting for controller data";
-        document.getElementById("chart-note").textContent = data.hasLiveData ? "Latency " + formatMs(data.latencyMs) + " / Loss " + formatPercent(data.packetLoss) + " / Connections " + (data.connections == null ? "--" : Math.round(data.connections)) : "Xenon has a built-in UniFi detector.";
+        document.getElementById("chart-note").textContent = data.hasLiveData ? "Latency " + formatMs(data.latencyMs) + " / Loss " + formatPercent(data.packetLoss) + " / Connections " + (data.connections == null ? "--" : Math.round(data.connections)) : "Auxora has a built-in UniFi detector.";
         document.getElementById("ap-summary").textContent = data.aps.length ? onlineAps + "/" + data.aps.length + " APs healthy" : "No AP data";
         document.getElementById("ap-summary").setAttribute("data-tone", overallTone);
         document.getElementById("client-total").textContent = data.clients.total ? data.clients.total + " total" : "No client data";

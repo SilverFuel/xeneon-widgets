@@ -33,34 +33,54 @@ public sealed class LauncherService : IDisposable
     };
 
     private readonly HostLogger _logger;
+    private readonly ConfigStore _configStore;
     private readonly object _recentLock = new();
     private readonly string _recentStatePath;
+    private readonly Func<string?> _foregroundAppPathProvider;
     private readonly Timer _foregroundTimer;
     private List<RecentLauncherEntry> _recentEntries = [];
     private string _lastForegroundKey = "";
     private bool _foregroundWarningLogged;
     private bool _disposed;
 
-    public LauncherService(HostLogger logger)
+    public LauncherService(HostLogger logger, ConfigStore configStore)
+        : this(logger, configStore, null, null, startTimer: true)
+    {
+    }
+
+    internal LauncherService(
+        HostLogger logger,
+        ConfigStore configStore,
+        string? recentStatePathOverride,
+        Func<string?>? foregroundAppPathProvider,
+        bool startTimer)
     {
         _logger = logger;
-        _recentStatePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "XenonEdgeHost",
-            "recent-apps.json");
+        _configStore = configStore;
+        _recentStatePath = string.IsNullOrWhiteSpace(recentStatePathOverride)
+            ? Path.Combine(AppPaths.LocalDataDirectory, "recent-apps.json")
+            : recentStatePathOverride;
+        _foregroundAppPathProvider = foregroundAppPathProvider ?? GetForegroundProcessPathOrNull;
 
-        LoadRecentState();
-        SeedWindowsFeatureUsage();
+        if (IsForegroundTrackingEnabled())
+        {
+            LoadRecentState();
+            SeedWindowsFeatureUsage();
+        }
         _foregroundTimer = new Timer(
             CaptureForegroundApp,
             null,
-            TimeSpan.FromSeconds(1),
-            ForegroundPollInterval);
+            startTimer ? TimeSpan.FromSeconds(1) : Timeout.InfiniteTimeSpan,
+            startTimer ? ForegroundPollInterval : Timeout.InfiniteTimeSpan);
     }
 
     public LauncherSnapshot GetSnapshot(AppConfig config)
     {
-        CaptureForegroundApp(null);
+        var foregroundTrackingEnabled = config.Dashboard.ForegroundAppTrackingEnabled;
+        if (foregroundTrackingEnabled)
+        {
+            CaptureForegroundApp(null);
+        }
         var entries = GetRecentEntries(config);
         var sampledAt = DateTimeOffset.UtcNow;
 
@@ -71,13 +91,41 @@ public sealed class LauncherService : IDisposable
             Status = entries.Count > 0 ? "live" : "setup",
             SampledAt = sampledAt,
             Stale = false,
-            Message = entries.Count > 0
-                ? $"Showing {entries.Count} recent app{(entries.Count == 1 ? "" : "s")} from this PC."
-                : "Open apps on this PC and Auxora will build the recent app launcher automatically.",
-            Source = "Windows app activity",
+            Message = foregroundTrackingEnabled
+                ? entries.Count > 0
+                    ? $"Showing {entries.Count} recent app{(entries.Count == 1 ? "" : "s")} from this PC."
+                    : "Foreground-app tracking is on. Open apps to build the recent launcher."
+                : "Foreground-app tracking is off. Only launchers you save or open from Auxora are shown.",
+            Source = foregroundTrackingEnabled ? "Windows app activity" : "Auxora launchers",
             Entries = entries.Select(MapEntry).ToList()
         };
     }
+
+    public int ClearRecentHistory()
+    {
+        int removed;
+        lock (_recentLock)
+        {
+            removed = _recentEntries.Count;
+            _recentEntries = [];
+            _lastForegroundKey = "";
+        }
+
+        if (File.Exists(_recentStatePath))
+        {
+            File.Delete(_recentStatePath);
+            removed = Math.Max(removed, 1);
+        }
+
+        if (File.Exists(_recentStatePath))
+        {
+            throw new IOException("Recent-app history could not be deleted.");
+        }
+
+        return removed;
+    }
+
+    internal void CaptureForegroundAppForTest() => CaptureForegroundApp(null);
 
     public List<LauncherEntryConfig> NormalizeEntries(IEnumerable<LauncherEntryRequest>? entries)
     {
@@ -341,27 +389,41 @@ public sealed class LauncherService : IDisposable
 
     private void CaptureForegroundApp(object? _)
     {
-        if (_disposed)
+        if (_disposed || !IsForegroundTrackingEnabled())
         {
             return;
         }
 
         try
         {
-            if (!TryGetForegroundProcessPath(out var path))
+            var path = _foregroundAppPathProvider()?.Trim() ?? "";
+            if (!IsUsefulLauncherFile(path))
             {
                 return;
             }
 
-            var key = BuildLauncherKey(path, "");
-            if (string.Equals(key, _lastForegroundKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            _lastForegroundKey = key;
             var entry = CreateRecentEntryFromTarget(path, "", "", "Foreground app", DateTimeOffset.UtcNow);
-            PromoteRecentEntry(entry, persist: true);
+            lock (_recentLock)
+            {
+                if (!IsForegroundTrackingEnabled())
+                {
+                    return;
+                }
+
+                var key = BuildLauncherKey(path, "");
+                if (string.Equals(key, _lastForegroundKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                _lastForegroundKey = key;
+                _recentEntries = _recentEntries
+                    .Where(current => !SameLauncherTarget(current, entry))
+                    .ToList();
+                _recentEntries.Add(entry);
+                SortAndTrimRecentEntries();
+                PersistRecentState();
+            }
         }
         catch (Exception error)
         {
@@ -373,27 +435,32 @@ public sealed class LauncherService : IDisposable
         }
     }
 
-    private static bool TryGetForegroundProcessPath(out string path)
+    private bool IsForegroundTrackingEnabled()
     {
-        path = "";
+        return _configStore.Snapshot().Dashboard.ForegroundAppTrackingEnabled;
+    }
+
+    private static string? GetForegroundProcessPathOrNull()
+    {
         var foregroundWindow = GetForegroundWindow();
         if (foregroundWindow == IntPtr.Zero)
         {
-            return false;
+            return null;
         }
 
         GetWindowThreadProcessId(foregroundWindow, out var processId);
         if (processId == 0)
         {
-            return false;
+            return null;
         }
 
         using var process = Process.GetProcessById((int)processId);
         if (ForegroundProcessSkipList.Contains(process.ProcessName))
         {
-            return false;
+            return null;
         }
 
+        string path;
         try
         {
             path = process.MainModule?.FileName?.Trim() ?? "";
@@ -403,7 +470,7 @@ public sealed class LauncherService : IDisposable
             path = "";
         }
 
-        return IsUsefulLauncherFile(path);
+        return IsUsefulLauncherFile(path) ? path : null;
     }
 
     private void PromoteRecentEntry(RecentLauncherEntry entry, bool persist)

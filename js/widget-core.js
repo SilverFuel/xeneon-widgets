@@ -353,6 +353,9 @@
   }
 
   function handleScrollCapture(event) {
+    if (!activeTouch) {
+      return;
+    }
     markRecentScroll(event.target || document.documentElement);
   }
 

@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Philips Hue Panel</title>
+  <link rel="stylesheet" href="../css/theme.css">
   <style>
     :root {
       color-scheme: dark;
@@ -155,7 +156,7 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.14em;
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       font-weight: 600;
     }
 
@@ -177,6 +178,10 @@
       border: 1px solid transparent;
       font-size: 0.82rem;
       white-space: nowrap;
+    }
+
+    .action-button {
+      min-height: 44px;
     }
 
     .status,
@@ -213,14 +218,19 @@
     }
 
     .action-button:hover,
-    .action-button:focus-visible,
     .diagnostics-toggle:hover,
-    .diagnostics-toggle:focus-visible,
-    .toggle-button:hover,
-    .toggle-button:focus-visible {
+    .toggle-button:hover {
       border-color: rgba(255, 255, 255, 0.22);
       background: rgba(255, 255, 255, 0.12);
-      outline: 0;
+    }
+
+    .action-button:focus-visible,
+    .diagnostics-toggle:focus-visible,
+    .toggle-button:focus-visible {
+      border-color: #7defff;
+      background: rgba(255, 255, 255, 0.12);
+      outline: 3px solid #7defff;
+      outline-offset: 3px;
     }
 
     .action-button:active,
@@ -374,7 +384,7 @@
     .scene-chip__label {
       display: block;
       margin-top: 4px;
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--muted);
@@ -761,7 +771,7 @@
     [data-size="small"] .action-button {
       min-height: 34px;
       padding: 8px 10px;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     [data-size="medium"] .device-grid--lights,
@@ -779,6 +789,8 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body>
   <main id="hue-widget" class="widget" data-size="full">
@@ -1196,7 +1208,7 @@
                 '<span class="label">Brightness</span>' +
                 '<span class="brightness-value">' + Math.round(light.brightness) + '%</span>' +
               '</div>' +
-              '<input class="brightness-slider" data-action="brightness-light" data-id="' + encodeURIComponent(light.id) + '" type="range" min="0" max="100" value="' + Math.round(light.brightness) + '"' + (controlsEnabled && light.reachable !== false ? '' : ' disabled') + '>' +
+              '<input class="brightness-slider" data-action="brightness-light" data-id="' + encodeURIComponent(light.id) + '" type="range" min="0" max="100" value="' + Math.round(light.brightness) + '" aria-label="Light brightness for ' + escapeHtml(light.name) + '"' + (controlsEnabled && light.reachable !== false ? '' : ' disabled') + '>' +
               '<div class="device-meta">' +
                 '<span class="device-meta__state" data-tone="' + deviceStateTone + '">' + (light.reachable ? 'Reachable' : 'Unavailable') + '</span>' +
                 '<span>' + (light.on ? 'Live' : 'Standby') + '</span>' +
@@ -1235,7 +1247,7 @@
                 '<span class="label">Brightness</span>' +
                 '<span class="brightness-value">' + Math.round(group.brightness) + '%</span>' +
               '</div>' +
-              '<input class="brightness-slider" data-action="brightness-group" data-id="' + encodeURIComponent(group.id) + '" type="range" min="0" max="100" value="' + Math.round(group.brightness) + '"' + (controlsEnabled ? '' : ' disabled') + '>' +
+              '<input class="brightness-slider" data-action="brightness-group" data-id="' + encodeURIComponent(group.id) + '" type="range" min="0" max="100" value="' + Math.round(group.brightness) + '" aria-label="Room brightness for ' + escapeHtml(group.name) + '"' + (controlsEnabled ? '' : ' disabled') + '>' +
               '<div class="device-meta">' +
                 '<span class="device-meta__state" data-tone="' + (group.on ? 'good' : 'warn') + '">' + (group.on ? 'Live' : 'Standby') + '</span>' +
                 '<span>' + escapeHtml(group.type) + '</span>' +

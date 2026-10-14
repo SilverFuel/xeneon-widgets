@@ -5,6 +5,7 @@
 .gitattributes text eol=lf
 *.gitignore text eol=lf
 *.cs text eol=lf
+*.csproj text eol=lf
 *.css text eol=lf
 *.html text eol=lf
 *.js text eol=lf
@@ -13,8 +14,10 @@
 *.md text eol=lf
 *.mjs text eol=lf
 *.plist text eol=lf
+*.props text eol=lf
 *.ps1 text eol=lf
 *.sh text eol=lf
+*.txt text eol=lf
 *.xaml text eol=lf
 *.xml text eol=lf
 *.yml text eol=lf

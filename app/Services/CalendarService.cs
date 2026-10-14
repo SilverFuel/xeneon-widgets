@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using Ical.Net;
 using Ical.Net.CalendarComponents;
 using Ical.Net.DataTypes;
@@ -9,18 +10,24 @@ namespace XenonEdgeHost;
 public sealed class CalendarService
 {
     private const int MaxIcsBytes = 512 * 1024;
+    private const int MaxRedirects = 5;
 
     private readonly HttpClient _httpClient;
     private readonly HostLogger _logger;
+    private readonly Func<string, CancellationToken, Task<IPAddress[]>>? _addressResolver;
     private readonly object _sync = new();
     private CalendarSnapshot _snapshot = CalendarSnapshot.CreateSetup();
     private string _cachedUrl = "";
     private DateTimeOffset _lastRefresh = DateTimeOffset.MinValue;
 
-    public CalendarService(HttpClient httpClient, HostLogger logger)
+    public CalendarService(
+        HttpClient httpClient,
+        HostLogger logger,
+        Func<string, CancellationToken, Task<IPAddress[]>>? addressResolver = null)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _addressResolver = addressResolver;
     }
 
     public async Task<CalendarSnapshot> GetSnapshotAsync(AppConfig config, CancellationToken cancellationToken)
@@ -71,16 +78,45 @@ public sealed class CalendarService
         }
     }
 
+    public CalendarSnapshot GetCachedSnapshot(AppConfig config)
+    {
+        var icsUrl = config.Calendar.IcsUrl?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(icsUrl))
+        {
+            return CalendarSnapshot.CreateSetup();
+        }
+
+        lock (_sync)
+        {
+            if (_snapshot.SampledAt is null || !string.Equals(_cachedUrl, icsUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                return new CalendarSnapshot
+                {
+                    Supported = true,
+                    Configured = true,
+                    Status = "checking",
+                    Message = "Calendar status will refresh in the Calendar panel."
+                };
+            }
+
+            var clone = _snapshot.Clone();
+            var sampledAt = clone.SampledAt;
+            clone.Stale = sampledAt is null || DateTimeOffset.UtcNow - sampledAt.Value > TimeSpan.FromMinutes(15);
+            if (clone.Status == "live" && clone.Stale)
+            {
+                clone.Status = "stale";
+            }
+
+            return clone;
+        }
+    }
+
     private async Task RefreshAsync(string icsUrl, CancellationToken cancellationToken)
     {
         try
         {
             var normalizedUrl = NetworkEndpointGuard.NormalizeRemoteHttpUrl(icsUrl, "Calendar ICS URL");
-            using var response = await HttpReadResilience.SendAsync(
-                _httpClient,
-                () => new HttpRequestMessage(HttpMethod.Get, normalizedUrl),
-                MaxIcsBytes,
-                cancellationToken);
+            using var response = await SendValidatedAsync(normalizedUrl, cancellationToken);
             if (response.Content.Headers.ContentLength is > MaxIcsBytes)
             {
                 throw new InvalidOperationException("Calendar feed is larger than the supported 512 KiB limit.");
@@ -120,6 +156,58 @@ public sealed class CalendarService
                 _lastRefresh = DateTimeOffset.UtcNow;
             }
         }
+    }
+
+    private async Task<HttpResponseMessage> SendValidatedAsync(string initialUrl, CancellationToken cancellationToken)
+    {
+        var current = await NetworkEndpointGuard.ValidatePublicHttpsDestinationAsync(
+            initialUrl,
+            "Calendar ICS URL",
+            cancellationToken,
+            _addressResolver);
+
+        for (var redirectCount = 0; ; redirectCount++)
+        {
+            var response = await HttpReadResilience.SendAsync(
+                _httpClient,
+                () => new HttpRequestMessage(HttpMethod.Get, current),
+                MaxIcsBytes,
+                cancellationToken);
+
+            if (!IsRedirect(response.StatusCode))
+            {
+                return response;
+            }
+
+            if (redirectCount >= MaxRedirects)
+            {
+                response.Dispose();
+                throw new InvalidOperationException($"Calendar ICS URL exceeded the {MaxRedirects}-redirect limit.");
+            }
+
+            var location = response.Headers.Location;
+            response.Dispose();
+            if (location is null)
+            {
+                throw new InvalidOperationException("Calendar ICS redirect did not include a destination.");
+            }
+
+            var next = location.IsAbsoluteUri ? location : new Uri(current, location);
+            current = await NetworkEndpointGuard.ValidatePublicHttpsDestinationAsync(
+                next.ToString(),
+                "Calendar ICS redirect",
+                cancellationToken,
+                _addressResolver);
+        }
+    }
+
+    private static bool IsRedirect(HttpStatusCode statusCode)
+    {
+        return statusCode is HttpStatusCode.Moved
+            or HttpStatusCode.Redirect
+            or HttpStatusCode.RedirectMethod
+            or HttpStatusCode.TemporaryRedirect
+            or HttpStatusCode.PermanentRedirect;
     }
 
     private static async Task<string> ReadContentWithLimitAsync(HttpContent content, int maxBytes, CancellationToken cancellationToken)

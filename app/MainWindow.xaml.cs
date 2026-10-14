@@ -1,8 +1,8 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
-using Microsoft.Win32;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using WinRT.Interop;
@@ -13,6 +13,7 @@ namespace XenonEdgeHost;
 public sealed partial class MainWindow : Window
 {
     private const int GwlExStyle = -20;
+    private const int GwlStyle = -16;
     private const long WsExToolWindow = 0x00000080L;
     private const long WsExAppWindow = 0x00040000L;
     private const long WsExNoActivate = 0x08000000L;
@@ -20,13 +21,12 @@ public sealed partial class MainWindow : Window
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpFrameChanged = 0x0020;
-    private const uint SwpShowWindow = 0x0040;
     private const int SwHide = 0;
-    private const int SwShow = 5;
     private const int SwShowNoActivate = 4;
-    private const int WaitingWindowWidth = 1280;
-    private const int WaitingWindowHeight = 360;
-    private static readonly TimeSpan DisplayRecoveryWindow = TimeSpan.FromSeconds(30);
+    private const int WaitingWindowWidth = 1120;
+    private const int WaitingWindowHeight = 720;
+    private static readonly TimeSpan DisplayTopologyDebounceDelay = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan PersistentDisplayRecoveryDelay = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan[] DisplayRecoveryDelays =
     [
         TimeSpan.FromSeconds(2),
@@ -38,6 +38,10 @@ public sealed partial class MainWindow : Window
     private static readonly IntPtr HwndNoTopmost = new(-2);
 
     private readonly BridgeManager _bridgeManager;
+    private readonly IntPtr _windowHandle;
+    private readonly bool _suppressWindowForTests = Program.ShouldSuppressWindowForTests;
+    private readonly DisplayPresentationGate _displayPresentation = new();
+    private readonly SemaphoreSlim _webViewDiagnosticsGate = new(1, 1);
     private TrayIcon? _trayIcon;
     private readonly HostLogger _logger = App.Logger;
     private readonly Uri _dashboardUri;
@@ -45,45 +49,86 @@ public sealed partial class MainWindow : Window
     private readonly string _webViewUserDataPath;
     private bool _initialized;
     private bool _disposed;
+    private Task? _disposeResourcesTask;
     private bool _webViewInitializationFailed;
-    private bool _webViewDiagnosticsAttached;
     private bool _dashboardLoaded;
+    private bool _bridgeReady;
     private bool _taskbarStyleApplied;
     private bool _waitingForEdgeDisplay;
+    private bool _companionDisplayUnavailable;
+    private bool _windowHasBeenShown;
+    private bool _displayMoveMode;
+    private string _configuredDisplayId = "";
+    private ulong _dashboardNavigationId;
     private int _quitRequested;
     private int _navigationFailures;
+    private int _dashboardStartupScheduled;
     private int _webViewRecoveryScheduled;
     private int _displayRecoveryScheduled;
+    private int _displayMoveConstraintQueued;
     private EventWaitHandle? _showDisplayEvent;
     private RegisteredWaitHandle? _showDisplayWaitHandle;
+    private CoreWebView2? _webViewDiagnosticsWebView;
+    private string? _webViewDiagnosticsScriptId;
     private CancellationTokenSource? _displayRecoveryCancellation;
+    private DisplayWindowNativeGuard? _displayWindowGuard;
+    private int _nativeDisplayRecoveryQueued;
 
     public MainWindow()
     {
         InitializeComponent();
 
+        _windowHandle = WindowNative.GetWindowHandle(this);
         _bridgeManager = new BridgeManager();
         _dashboardUri = _bridgeManager.DashboardUri;
         _settingsUri = _bridgeManager.SettingsUri;
-        _webViewUserDataPath = Path.Combine(
+        _webViewUserDataPath = ResolveWebViewUserDataPath(
+            _suppressWindowForTests,
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "XenonEdgeHost",
-            "WebView2");
+            _suppressWindowForTests ? AppPaths.LocalDataDirectory : null);
 
         _bridgeManager.StatusChanged += HandleBridgeStatusChanged;
         _bridgeManager.BridgeReady += HandleBridgeReady;
         _bridgeManager.BridgeStopped += HandleBridgeStopped;
         _bridgeManager.DisplayPreferenceChanged += HandleDisplayPreferenceChanged;
+        _bridgeManager.QuitRequested += HandleRecoveryQuitRequested;
+        _bridgeManager.SetBrowserDataClearer(ClearWebViewBrowsingDataAsync);
 
         AppWindow.Closing += HandleAppWindowClosing;
-        Activated += HandleActivated;
+        AppWindow.Changed += HandleAppWindowChanged;
         Closed += HandleClosed;
+        DashboardView.NavigationStarting += HandleNavigationStarting;
         DashboardView.NavigationCompleted += HandleNavigationCompleted;
-        SystemEvents.DisplaySettingsChanged += HandleDisplaySettingsChanged;
-        StartShowDisplaySignalListener();
+        if (!_suppressWindowForTests)
+        {
+            StartShowDisplaySignalListener();
+        }
     }
 
-    private async void HandleActivated(object sender, WindowActivatedEventArgs args)
+    internal static string ResolveWebViewUserDataPath(
+        bool suppressWindowForTests,
+        string productionLocalApplicationDataRoot,
+        string? isolatedLocalDataDirectory)
+    {
+        if (suppressWindowForTests)
+        {
+            if (string.IsNullOrWhiteSpace(isolatedLocalDataDirectory))
+            {
+                throw new InvalidOperationException("A suppressed test window requires an isolated WebView data directory.");
+            }
+
+            return Path.Combine(isolatedLocalDataDirectory, "WebView2");
+        }
+
+        if (string.IsNullOrWhiteSpace(productionLocalApplicationDataRoot))
+        {
+            throw new InvalidOperationException("The production WebView data root is unavailable.");
+        }
+
+        return Path.Combine(productionLocalApplicationDataRoot, "XenonEdgeHost", "WebView2");
+    }
+
+    internal void Start()
     {
         if (_initialized)
         {
@@ -91,127 +136,534 @@ public sealed partial class MainWindow : Window
         }
 
         _initialized = true;
-        _trayIcon ??= new TrayIcon(
-            WindowNative.GetWindowHandle(this),
-            onOpenSettings: () => DispatcherQueue.TryEnqueue(() => _ = OpenSettingsAsync()),
-            onRestartBridge: () => DispatcherQueue.TryEnqueue(() => _ = RestartBridgeAsync()),
-            onShowDisplay: () => DispatcherQueue.TryEnqueue(ShowDisplayWindow),
-            onOpenLogs: () => DispatcherQueue.TryEnqueue(OpenLogs),
-            onResetDashboard: () => DispatcherQueue.TryEnqueue(() => _ = ResetDashboardStateAsync()),
-            onQuit: RequestQuitFromTray,
-            logger: _logger);
-        ConfigureWindow(saveSelection: false);
+        if (Program.ShouldCreateTrayIcon)
+        {
+            _trayIcon ??= new TrayIcon(
+                _windowHandle,
+                onOpenSettings: () => DispatcherQueue.TryEnqueue(() => _ = OpenSettingsAsync()),
+                onRestartBridge: () => DispatcherQueue.TryEnqueue(() => _ = RestartBridgeAsync()),
+                onShowDisplay: () => DispatcherQueue.TryEnqueue(ShowDisplayWindow),
+                onMoveDisplay: () => DispatcherQueue.TryEnqueue(BeginDisplayMoveMode),
+                onOpenLogs: () => DispatcherQueue.TryEnqueue(OpenLogs),
+                onResetDashboard: () => DispatcherQueue.TryEnqueue(() => _ = ResetDashboardStateAsync()),
+                onQuit: RequestQuitFromTray,
+                logger: _logger);
+        }
+        else
+        {
+            _logger.Info("Tray icon disabled for isolated automated UI testing.");
+        }
+
+        if (_suppressWindowForTests)
+        {
+            ShowWindow(_windowHandle, SwHide);
+            _logger.Info("Window suppressed for isolated automated UI testing; native services and WebView2 remain available.");
+            _ = InitializeHostAsync();
+            return;
+        }
+
+        // TrayIcon installs a legacy window-procedure wrapper. Install our
+        // independent subclass after it, and detach before disposing the tray.
+        StartDisplayWindowGuard();
+        var placementReady = ConfigureWindow(saveSelection: false);
+        if (placementReady)
+        {
+            RevealConfiguredWindow();
+        }
         ScheduleDisplayRecovery("startup display backoff");
-        await InitializeHostAsync();
+        _ = InitializeHostAsync();
     }
 
-    private void ConfigureWindow(bool saveSelection)
+    private bool ConfigureWindow(bool saveSelection)
     {
-        var windowHandle = WindowNative.GetWindowHandle(this);
+        using var placement = _displayWindowGuard?.BeginPlacement();
+        _displayMoveMode = false;
+        var windowHandle = _windowHandle;
+        if (windowHandle != IntPtr.Zero)
+        {
+            ShowWindow(windowHandle, SwHide);
+        }
+
+        if (!_suppressWindowForTests && _displayWindowGuard is null)
+        {
+            EnterCompanionDisplayWaitingState(windowHandle, "Display-change monitoring is unavailable. Restart Auxora before showing the dashboard.");
+            return false;
+        }
+
         var safeMode = Program.LaunchOptions.SafeMode;
-        var displayCandidates = _bridgeManager.ListDisplayCandidates(ignoreSavedPreference: safeMode);
+        List<DisplayTarget> displayCandidates;
+        try
+        {
+            displayCandidates = _bridgeManager
+                .ListDisplayCandidates(ignoreSavedPreference: safeMode)
+                .Where(display => !display.IsPrimary)
+                .ToList();
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Companion display enumeration failed: {error.Message}");
+            EnterCompanionDisplayWaitingState(windowHandle, "Windows could not verify a companion display.");
+            return false;
+        }
+
         if (displayCandidates.Count == 0)
         {
-            throw new InvalidOperationException("No displays were detected.");
+            EnterCompanionDisplayWaitingState(windowHandle, "Connect or enable a non-primary companion display to use Auxora.");
+            return false;
         }
 
         var needsDisplaySelection = !safeMode && displayCandidates.Count > 1 && displayCandidates.All(display => !display.IsPreferred);
-        var targetDisplay = _bridgeManager.SelectDisplayTarget(
-            displayCandidates,
-            saveSelection: saveSelection && !safeMode,
-            preferPrimary: safeMode);
+        DisplayTarget targetDisplay;
+        try
+        {
+            targetDisplay = _bridgeManager.SelectDisplayTarget(
+                displayCandidates,
+                saveSelection: saveSelection && !safeMode);
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Companion display selection failed: {error.Message}");
+            EnterCompanionDisplayWaitingState(windowHandle, "Auxora could not verify a safe companion-display target.");
+            return false;
+        }
+
+        if (targetDisplay.IsPrimary)
+        {
+            _logger.Error("Display policy returned the Windows primary display. Auxora refused to show its window.");
+            EnterCompanionDisplayWaitingState(windowHandle, "Auxora refused an unsafe primary-display target.");
+            return false;
+        }
+
+        _displayWindowGuard?.SetVerifiedTarget(targetDisplay, locked: !needsDisplaySelection);
         var appWindow = AppWindow;
 
-        appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        if (appWindow.Presenter is not OverlappedPresenter)
+        {
+            appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        }
         if (appWindow.Presenter is OverlappedPresenter presenter)
         {
+            if (presenter.State != OverlappedPresenterState.Restored)
+            {
+                presenter.Restore(false);
+            }
             presenter.SetBorderAndTitleBar(false, false);
             presenter.IsResizable = false;
             presenter.IsMaximizable = false;
             presenter.IsMinimizable = false;
+            presenter.IsAlwaysOnTop = !needsDisplaySelection;
         }
 
         if (needsDisplaySelection)
         {
-            var rescueDisplay = displayCandidates.FirstOrDefault(display => display.IsPrimary) ?? targetDisplay;
-            ApplyDisplaySelectionWindow(appWindow, windowHandle, rescueDisplay, displayCandidates);
-            return;
+            ApplyDisplaySelectionWindow(appWindow, windowHandle, targetDisplay, displayCandidates);
+            return true;
         }
 
+        _configuredDisplayId = targetDisplay.StableId;
         appWindow.MoveAndResize(new RectInt32(
             targetDisplay.Bounds.X,
             targetDisplay.Bounds.Y,
             targetDisplay.Bounds.Width,
             targetDisplay.Bounds.Height));
-        EnsureDisplayWindowStaysOffTaskbar(windowHandle);
+        // Fill the monitor without FullScreen presenter transitions. The native
+        // placement guard retains control of visibility throughout recovery.
+        if (!EnsureDisplayWindowStaysOffTaskbar(windowHandle))
+        {
+            EnterCompanionDisplayWaitingState(windowHandle, "Auxora could not verify borderless companion-window styles.");
+            return false;
+        }
+        _companionDisplayUnavailable = false;
         _waitingForEdgeDisplay = false;
+        DisplayPickerPanel.Visibility = Visibility.Collapsed;
+        DashboardView.Visibility = Visibility.Visible;
 
         _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
         _logger.Info($"{(safeMode ? "Safe Mode: " : "")}Window positioned on {targetDisplay.Label} (score {targetDisplay.Score}).");
         if (!_dashboardLoaded)
         {
             SetOverlayText(safeMode
-                ? $"Safe Mode: launching on primary display ({targetDisplay.Label})."
+                ? $"Safe Mode: launching on companion display ({targetDisplay.Label})."
                 : $"Launching on {targetDisplay.Label}.");
         }
         else
         {
             OverlayPanel.Visibility = Visibility.Collapsed;
         }
+
+        return true;
+    }
+
+    private void EnterCompanionDisplayWaitingState(IntPtr windowHandle, string message)
+    {
+        _displayWindowGuard?.InvalidateTarget();
+        if (windowHandle != IntPtr.Zero)
+        {
+            ShowWindow(windowHandle, SwHide);
+        }
+
+        _companionDisplayUnavailable = true;
+        _displayMoveMode = false;
+        _waitingForEdgeDisplay = false;
+        _configuredDisplayId = "";
+        DisplayPickerPanel.Visibility = Visibility.Collapsed;
+        DashboardView.Visibility = Visibility.Collapsed;
+        OverlayPanel.Visibility = Visibility.Visible;
+        StatusText.Text = message;
+        _logger.Info($"Auxora is staying hidden: {message}");
     }
 
     private void ApplyDisplaySelectionWindow(
         AppWindow appWindow,
         IntPtr windowHandle,
-        DisplayTarget rescueDisplay,
+        DisplayTarget pickerDisplay,
         IReadOnlyList<DisplayTarget> displayCandidates)
     {
-        appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        // Refresh and tray Move reach this helper outside ConfigureWindow.
+        // Their presenter changes must stay hidden until the same final reveal.
+        using var placement = _displayWindowGuard?.BeginPlacement();
+        _displayWindowGuard?.SetVerifiedTarget(pickerDisplay, locked: false);
+        if (appWindow.Presenter is not OverlappedPresenter)
+        {
+            appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        }
         if (appWindow.Presenter is OverlappedPresenter presenter)
         {
+            if (presenter.State != OverlappedPresenterState.Restored)
+            {
+                presenter.Restore(false);
+            }
             presenter.SetBorderAndTitleBar(true, true);
             presenter.IsResizable = true;
             presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
+            presenter.IsAlwaysOnTop = false;
         }
 
         RestoreDisplayWindowToTaskbar(windowHandle);
 
-        var availableWidth = Math.Max(320, rescueDisplay.Bounds.Width - 96);
-        var availableHeight = Math.Max(240, rescueDisplay.Bounds.Height - 96);
-        var width = Math.Min(WaitingWindowWidth, availableWidth);
-        var height = Math.Min(WaitingWindowHeight, availableHeight);
-        var x = rescueDisplay.Bounds.X + Math.Max(0, (rescueDisplay.Bounds.Width - width) / 2);
-        var y = rescueDisplay.Bounds.Y + Math.Max(0, (rescueDisplay.Bounds.Height - height) / 2);
-
-        appWindow.MoveAndResize(new RectInt32(x, y, width, height));
-        ShowWindow(windowHandle, SwShow);
+        _configuredDisplayId = pickerDisplay.StableId;
+        appWindow.MoveAndResize(BuildDisplaySelectionBounds(pickerDisplay));
+        _companionDisplayUnavailable = false;
         _waitingForEdgeDisplay = true;
 
         _logger.Info("Display candidates: " + string.Join(" | ", displayCandidates.Select(DescribeDisplayCandidate)));
-        _logger.Info($"Auxora needs a preferred display; showing display selection on {rescueDisplay.Label}.");
-        SetOverlayText("Choose an Auxora display.\n\nOpen Settings and select the touch display you want to use. Auxora will remember it for future launches.");
+        _logger.Info($"Auxora needs a preferred display; showing display selection on {pickerDisplay.Label}.");
+        ShowDisplayPicker(displayCandidates);
     }
 
-    private void HandleDisplaySettingsChanged(object? sender, EventArgs args)
+    private static RectInt32 BuildDisplaySelectionBounds(DisplayTarget display)
     {
-        _logger.Info("Display topology changed; scheduling Auxora window recovery.");
-        ScheduleDisplayRecovery("display topology changed");
+        var availableWidth = Math.Max(320, display.Bounds.Width - 64);
+        var availableHeight = Math.Max(240, display.Bounds.Height - 32);
+        var width = Math.Min(WaitingWindowWidth, availableWidth);
+        var height = Math.Min(WaitingWindowHeight, availableHeight);
+        var x = display.Bounds.X + Math.Max(0, (display.Bounds.Width - width) / 2);
+        var y = display.Bounds.Y + Math.Max(0, (display.Bounds.Height - height) / 2);
+        return new RectInt32(x, y, width, height);
+    }
+
+    private void ShowDisplayPicker(IReadOnlyList<DisplayTarget> displayCandidates)
+    {
+        DisplayPickerList.Children.Clear();
+        for (var index = 0; index < displayCandidates.Count; index++)
+        {
+            var display = displayCandidates[index];
+            var displayName = string.IsNullOrWhiteSpace(display.FriendlyName)
+                ? display.IsPrimary ? "Primary display" : $"Display {index + 1}"
+                : display.FriendlyName;
+            var refreshRate = display.RefreshRate is double rate ? $" • {rate:0.#} Hz" : "";
+            var primaryLabel = display.IsPrimary ? " • Primary" : "";
+
+            var content = new StackPanel { Spacing = 5 };
+            content.Children.Add(new TextBlock
+            {
+                Text = displayName,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 245, 248, 250)),
+                FontSize = 19,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{display.Bounds.Width} × {display.Bounds.Height}{refreshRate}{primaryLabel}",
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 184, 199, 209)),
+                FontSize = 14,
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"Windows position {display.Bounds.X}, {display.Bounds.Y} — tap to use this display",
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 116, 221, 255)),
+                FontSize = 13,
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+
+            var button = new Button
+            {
+                Tag = display.StableId,
+                Content = content,
+                Padding = new Thickness(18, 14, 18, 14),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                MinHeight = 88,
+                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 25, 39, 49)),
+                BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(102, 0, 217, 255)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(14)
+            };
+            button.Click += HandleDisplayChoice;
+            DisplayPickerList.Children.Add(button);
+        }
+
+        DisplayPickerStatus.Text = displayCandidates.Count == 0
+            ? "No active displays were found. Check the cable, then refresh."
+            : "Choose one display to continue. You can change it later in Settings → Diagnostics.";
+        DisplayPickerStatus.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(
+            255,
+            displayCandidates.Count == 0 ? (byte)255 : (byte)145,
+            displayCandidates.Count == 0 ? (byte)165 : (byte)168,
+            displayCandidates.Count == 0 ? (byte)120 : (byte)183));
+        OverlayPanel.Visibility = Visibility.Collapsed;
+        DashboardView.Visibility = Visibility.Collapsed;
+        DisplayPickerPanel.Visibility = Visibility.Visible;
+    }
+
+    private void HandleDisplayChoice(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string displayId } || string.IsNullOrWhiteSpace(displayId))
+        {
+            return;
+        }
+
+        foreach (var child in DisplayPickerList.Children.OfType<Button>())
+        {
+            child.IsEnabled = false;
+        }
+
+        DisplayPickerStatus.Text = "Moving Auxora and saving your choice...";
+        try
+        {
+            _displayMoveMode = false;
+            _bridgeManager.SetDisplayPreference(displayId);
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Native display selection failed", error);
+            ShowWindow(_windowHandle, SwHide);
+            if (ConfigureWindow(saveSelection: false))
+            {
+                DisplayPickerStatus.Text = "That display is no longer available. Choose an active companion display.";
+                DisplayPickerStatus.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 165, 120));
+                foreach (var child in DisplayPickerList.Children.OfType<Button>())
+                {
+                    child.IsEnabled = true;
+                }
+                RevealConfiguredWindow();
+            }
+            else
+            {
+                ScheduleDisplayRecovery("selected companion display became unavailable");
+            }
+        }
+    }
+
+    private void HandleRefreshDisplays(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            ShowWindow(_windowHandle, SwHide);
+            var displayCandidates = _bridgeManager
+                .ListDisplayCandidates(ignoreSavedPreference: true)
+                .Where(display => !display.IsPrimary)
+                .ToList();
+            if (displayCandidates.Count == 0)
+            {
+                EnterCompanionDisplayWaitingState(_windowHandle, "Connect or enable a non-primary companion display to use Auxora.");
+                ScheduleDisplayRecovery("display picker refresh found no companion display");
+                return;
+            }
+
+            var pickerDisplay = _bridgeManager.SelectDisplayTarget(displayCandidates, saveSelection: false);
+            ApplyDisplaySelectionWindow(AppWindow, _windowHandle, pickerDisplay, displayCandidates);
+            RevealConfiguredWindow();
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Display picker refresh failed", error);
+            EnterCompanionDisplayWaitingState(_windowHandle, "Windows could not safely refresh the companion-display list.");
+            ScheduleDisplayRecovery("display picker refresh failed");
+        }
+    }
+
+    private void HandleOpenWindowsDisplaySettings(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("ms-settings:display") { UseShellExecute = true });
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Opening Windows display settings failed", error);
+            DisplayPickerStatus.Text = "Windows display settings could not be opened. Use Settings → System → Display.";
+        }
+    }
+
+    private void StartDisplayWindowGuard()
+    {
+        try
+        {
+            _displayWindowGuard = new DisplayWindowNativeGuard(
+                _windowHandle, HandleNativeDisplayChange, QueueNativeDisplayRecovery, _logger);
+            _logger.Info("Native companion-window message and pre-position guard installed.");
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Native companion-window guard could not start; keeping the dashboard hidden.", error);
+        }
+    }
+
+    private void HandleNativeDisplayChange(uint message)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _logger.Info($"Native display message 0x{message:X4} received; hiding before default window processing.");
+        ScheduleDisplayTopologyRevalidation(forceHide: true);
+    }
+
+    private void QueueNativeDisplayRecovery()
+    {
+        if (_disposed || Interlocked.Exchange(ref _nativeDisplayRecoveryQueued, 1) == 1)
+        {
+            return;
+        }
+
+        // A WINDOWPOS callback can run inside the final reveal lock. Queue only:
+        // no display enumeration, nested hide, or callbacks under that lock.
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            Interlocked.Exchange(ref _nativeDisplayRecoveryQueued, 0);
+            if (!_disposed)
+            {
+                _logger.Warn("Native guard rejected an implicit reveal or unsafe position; revalidating companion placement.");
+                ScheduleDisplayTopologyRevalidation(forceHide: true);
+            }
+        }))
+        {
+            Interlocked.Exchange(ref _nativeDisplayRecoveryQueued, 0);
+        }
+    }
+
+    private void ScheduleDisplayTopologyRevalidation(bool forceHide = false)
+    {
+        var request = new CancellationTokenSource();
+        if (!_displayPresentation.TryBeginTopologyChange(request, out var previousRequest))
+        {
+            request.Dispose();
+            return;
+        }
+
+        var firstInBurst = previousRequest is null;
+        CancelCancellationSource(previousRequest);
+        _displayWindowGuard?.InvalidateTarget();
+
+        // Windows can emit a burst of equivalent topology notifications. Hide once
+        // at the start of the burst, then wait for a quiet period before doing the
+        // expensive placement and fullscreen work on the UI thread.
+        if (firstInBurst || forceHide)
+        {
+            if (_windowHandle != IntPtr.Zero)
+            {
+                ShowWindow(_windowHandle, SwHide);
+            }
+
+            _logger.Info("Display topology changed; coalescing notifications before companion placement is revalidated.");
+        }
+
+        _ = RevalidateDisplayTopologyAfterQuietPeriodAsync(request);
+    }
+
+    private async Task RevalidateDisplayTopologyAfterQuietPeriodAsync(CancellationTokenSource request)
+    {
+        var cancellationToken = request.Token;
+        try
+        {
+            await Task.Delay(DisplayTopologyDebounceDelay, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    if (_disposed || cancellationToken.IsCancellationRequested
+                        || !_displayPresentation.IsCurrentTopologyRequest(request))
+                    {
+                        return;
+                    }
+
+                    _displayMoveMode = false;
+                    if (ConfigureWindow(saveSelection: false))
+                    {
+                        RevealConfiguredWindow(request);
+                    }
+
+                    ScheduleDisplayRecovery("display topology changed");
+                }
+                catch (Exception error)
+                {
+                    _logger.Warn($"Coalesced display topology revalidation failed: {error.Message}");
+                    ScheduleDisplayRecovery("display topology revalidation failed");
+                }
+                finally
+                {
+                    completion.TrySetResult();
+                }
+            }))
+            {
+                _logger.Warn("Display topology changed, but the coalesced revalidation could not be queued.");
+                return;
+            }
+
+            await completion.Task.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _displayPresentation.CompleteTopologyChange(request);
+            request.Dispose();
+        }
     }
 
     private void HandleDisplayPreferenceChanged()
     {
+        if (_suppressWindowForTests)
+        {
+            return;
+        }
+
         DispatcherQueue.TryEnqueue(() =>
         {
-            ConfigureWindow(saveSelection: false);
-            ShowWindowNoActivate();
-            _logger.Info("Auxora moved to the newly selected display.");
+            _displayMoveMode = false;
+            ShowWindow(_windowHandle, SwHide);
+            if (ConfigureWindow(saveSelection: false))
+            {
+                RevealConfiguredWindow();
+                _logger.Info("Auxora moved to the newly selected companion display.");
+            }
         });
     }
 
     private void ScheduleDisplayRecovery(string reason)
     {
-        if (_disposed || Interlocked.Exchange(ref _displayRecoveryScheduled, 1) == 1)
+        if (_suppressWindowForTests
+            || _disposed
+            || Interlocked.Exchange(ref _displayRecoveryScheduled, 1) == 1)
         {
             return;
         }
@@ -225,9 +677,12 @@ public sealed partial class MainWindow : Window
         {
             try
             {
-                var startedAt = DateTimeOffset.UtcNow;
-                foreach (var delay in DisplayRecoveryDelays)
+                var attempt = 0;
+                while (!_disposed && !token.IsCancellationRequested)
                 {
+                    var delay = attempt < DisplayRecoveryDelays.Length
+                        ? DisplayRecoveryDelays[attempt]
+                        : PersistentDisplayRecoveryDelay;
                     await Task.Delay(delay, token);
                     if (_disposed || token.IsCancellationRequested)
                     {
@@ -235,10 +690,12 @@ public sealed partial class MainWindow : Window
                     }
 
                     var recovered = await TryRecoverDisplayPlacementAsync(reason, token);
-                    if (recovered || DateTimeOffset.UtcNow - startedAt > DisplayRecoveryWindow)
+                    if (recovered)
                     {
                         return;
                     }
+
+                    attempt++;
                 }
             }
             catch (OperationCanceledException)
@@ -259,11 +716,13 @@ public sealed partial class MainWindow : Window
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var diagnostics = DisplayManager.BuildDiagnostics();
-                ConfigureWindow(saveSelection: false);
-                ShowWindowNoActivate();
-                var recovered = diagnostics.EdgeCandidateCount > 0;
-                _logger.Info($"Display recovery pass after {reason}: edgeCandidates={diagnostics.EdgeCandidateCount}; recovered={recovered}.");
+                var recovered = ConfigureWindow(saveSelection: false);
+                if (recovered)
+                {
+                    recovered = RevealConfiguredWindow();
+                }
+
+                _logger.Info($"Display recovery pass after {reason}: companionPlacementReady={recovered}.");
                 completion.TrySetResult(recovered);
             }
             catch (Exception error)
@@ -286,23 +745,24 @@ public sealed partial class MainWindow : Window
 
     private async Task InitializeHostAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         try
         {
             SetOverlayText("Starting native dashboard services...");
             _logger.Info("Starting native dashboard services.");
             await _bridgeManager.StartAsync();
-
-            SetOverlayText("Initializing WebView2...");
-            _logger.Info("Initializing WebView2.");
-            await EnsureWebViewReadyAsync();
-
-            _logger.Info("Navigating to dashboard.");
-            NavigateDashboard(forceReload: false);
         }
         catch (Exception error)
         {
             _logger.Error("Host initialization failed", error);
-            SetOverlayText(_webViewInitializationFailed ? BuildWebView2HelpText() : $"Startup failed: {error.Message}");
+            if (!_disposed)
+            {
+                SetOverlayText(_webViewInitializationFailed ? BuildWebView2HelpText() : $"Startup failed: {error.Message}");
+            }
         }
     }
 
@@ -310,12 +770,15 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            Directory.CreateDirectory(_webViewUserDataPath);
-            var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
-                browserExecutableFolder: null,
-                userDataFolder: _webViewUserDataPath,
-                options: null);
-            await DashboardView.EnsureCoreWebView2Async(environment);
+            if (DashboardView.CoreWebView2 is null)
+            {
+                Directory.CreateDirectory(_webViewUserDataPath);
+                var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: _webViewUserDataPath,
+                    options: null);
+                await DashboardView.EnsureCoreWebView2Async(environment);
+            }
             _webViewInitializationFailed = false;
         }
         catch (Exception error)
@@ -326,24 +789,42 @@ public sealed partial class MainWindow : Window
             throw;
         }
 
-        if (DashboardView.CoreWebView2 is null)
+        var webView = DashboardView.CoreWebView2
+            ?? throw new InvalidOperationException("WebView2 did not initialize correctly.");
+
+        webView.Settings.AreDefaultContextMenusEnabled = false;
+        webView.Settings.AreBrowserAcceleratorKeysEnabled = false;
+        webView.Settings.IsStatusBarEnabled = false;
+        webView.Settings.IsZoomControlEnabled = false;
+
+        await _webViewDiagnosticsGate.WaitAsync();
+        try
         {
-            throw new InvalidOperationException("WebView2 did not initialize correctly.");
+            await AttachWebViewDiagnosticsAsync(webView);
         }
+        finally
+        {
+            _webViewDiagnosticsGate.Release();
+        }
+    }
 
-        DashboardView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-        DashboardView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
-        DashboardView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-        DashboardView.CoreWebView2.Settings.IsZoomControlEnabled = false;
-
-        if (_webViewDiagnosticsAttached)
+    private async Task AttachWebViewDiagnosticsAsync(CoreWebView2 webView)
+    {
+        if (ReferenceEquals(_webViewDiagnosticsWebView, webView)
+            && !string.IsNullOrWhiteSpace(_webViewDiagnosticsScriptId))
         {
             return;
         }
 
-        DashboardView.CoreWebView2.WebMessageReceived += HandleWebMessageReceived;
-        DashboardView.CoreWebView2.ProcessFailed += HandleProcessFailed;
-        await DashboardView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+        DetachWebViewDiagnostics();
+        webView.WebMessageReceived += HandleWebMessageReceived;
+        webView.ProcessFailed += HandleProcessFailed;
+        webView.DOMContentLoaded += HandleDashboardDOMContentLoaded;
+        _webViewDiagnosticsWebView = webView;
+
+        try
+        {
+            var scriptId = await webView.AddScriptToExecuteOnDocumentCreatedAsync(
             """
             (() => {
               if (!window.chrome || !window.chrome.webview || window.__xenonDiagnosticsInstalled) {
@@ -384,7 +865,71 @@ public sealed partial class MainWindow : Window
               });
             })();
             """);
-        _webViewDiagnosticsAttached = true;
+
+            if (_disposed
+                || !ReferenceEquals(DashboardView.CoreWebView2, webView)
+                || !ReferenceEquals(_webViewDiagnosticsWebView, webView))
+            {
+                webView.WebMessageReceived -= HandleWebMessageReceived;
+                webView.ProcessFailed -= HandleProcessFailed;
+                webView.DOMContentLoaded -= HandleDashboardDOMContentLoaded;
+                RemoveWebViewDiagnosticsScript(webView, scriptId);
+                if (ReferenceEquals(_webViewDiagnosticsWebView, webView))
+                {
+                    _webViewDiagnosticsWebView = null;
+                    _webViewDiagnosticsScriptId = null;
+                }
+                return;
+            }
+
+            _webViewDiagnosticsScriptId = scriptId;
+        }
+        catch
+        {
+            webView.WebMessageReceived -= HandleWebMessageReceived;
+            webView.ProcessFailed -= HandleProcessFailed;
+            webView.DOMContentLoaded -= HandleDashboardDOMContentLoaded;
+            if (ReferenceEquals(_webViewDiagnosticsWebView, webView))
+            {
+                _webViewDiagnosticsWebView = null;
+                _webViewDiagnosticsScriptId = null;
+            }
+
+            throw;
+        }
+    }
+
+    private void DetachWebViewDiagnostics()
+    {
+        var webView = _webViewDiagnosticsWebView;
+        var scriptId = _webViewDiagnosticsScriptId;
+        _webViewDiagnosticsWebView = null;
+        _webViewDiagnosticsScriptId = null;
+
+        if (webView is null)
+        {
+            return;
+        }
+
+        webView.WebMessageReceived -= HandleWebMessageReceived;
+        webView.ProcessFailed -= HandleProcessFailed;
+        webView.DOMContentLoaded -= HandleDashboardDOMContentLoaded;
+        if (!string.IsNullOrWhiteSpace(scriptId))
+        {
+            RemoveWebViewDiagnosticsScript(webView, scriptId);
+        }
+    }
+
+    private void RemoveWebViewDiagnosticsScript(CoreWebView2 webView, string scriptId)
+    {
+        try
+        {
+            webView.RemoveScriptToExecuteOnDocumentCreated(scriptId);
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Removing the previous WebView diagnostics script failed: {error.Message}");
+        }
     }
 
     private static string BuildWebView2HelpText()
@@ -451,15 +996,85 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void HandleNavigationStarting(WebView2 sender, CoreWebView2NavigationStartingEventArgs args)
+    {
+        if (!IsDashboardAddress(args.Uri))
+        {
+            return;
+        }
+
+        var previousNavigationId = _dashboardNavigationId;
+        _dashboardNavigationId = args.NavigationId;
+        _dashboardLoaded = false;
+        _logger.Info($"Dashboard navigation starting: navigationId={args.NavigationId}; previousNavigationId={previousNavigationId}.");
+    }
+
+    private void HandleDashboardDOMContentLoaded(CoreWebView2 sender, CoreWebView2DOMContentLoadedEventArgs args)
+    {
+        if (!ReferenceEquals(sender, _webViewDiagnosticsWebView))
+        {
+            return;
+        }
+
+        var matchesDashboardNavigation = _dashboardNavigationId != 0
+            && args.NavigationId == _dashboardNavigationId;
+        var sourceIsDashboard = IsDashboardAddress(sender.Source);
+        if (matchesDashboardNavigation || sourceIsDashboard)
+        {
+            // IDs and booleans diagnose event delivery without exposing URLs,
+            // query strings, or session tokens in the support log.
+            _logger.Info($"Dashboard DOM content loaded: navigationId={args.NavigationId}; trackedNavigationId={_dashboardNavigationId}; navigationMatchesDashboard={matchesDashboardNavigation}; sourceMatchesDashboard={sourceIsDashboard}.");
+        }
+    }
+
+    private bool IsDashboardAddress(string? address)
+    {
+        return Uri.TryCreate(address, UriKind.Absolute, out var candidate)
+            && IsDashboardSource(candidate);
+    }
+
+    private bool IsDashboardSource(Uri? candidate)
+    {
+        return candidate is not null
+            && Uri.Compare(
+                candidate,
+                _dashboardUri,
+                UriComponents.SchemeAndServer | UriComponents.Path,
+                UriFormat.SafeUnescaped,
+                StringComparison.OrdinalIgnoreCase) == 0;
+    }
+
     private void HandleNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
-        if (args.IsSuccess)
+        var matchesDashboardNavigation = _dashboardNavigationId != 0
+            && args.NavigationId == _dashboardNavigationId;
+        var sourceIsDashboard = IsDashboardSource(sender.Source);
+
+        if (matchesDashboardNavigation || sourceIsDashboard)
+        {
+            // Log before UI updates so a missing success receipt can be separated
+            // from an event that never arrived. Do not log the navigation URL.
+            _logger.Info($"Dashboard navigation completed event: navigationId={args.NavigationId}; trackedNavigationId={_dashboardNavigationId}; success={args.IsSuccess}; status={args.WebErrorStatus}; navigationMatchesDashboard={matchesDashboardNavigation}; sourceMatchesDashboard={sourceIsDashboard}.");
+        }
+
+        if (args.IsSuccess && matchesDashboardNavigation && sourceIsDashboard)
         {
             _navigationFailures = 0;
             _dashboardLoaded = true;
             if (_waitingForEdgeDisplay)
             {
-                SetOverlayText("Choose an Auxora display.\n\nOpen Settings and select the touch display you want to use. Auxora will remember it for future launches.");
+                var wasVisible = IsWindowVisible(_windowHandle);
+                if (ConfigureWindow(saveSelection: false))
+                {
+                    if (wasVisible)
+                    {
+                        RevealConfiguredWindow();
+                    }
+                }
+                else
+                {
+                    ScheduleDisplayRecovery("dashboard loaded while companion display was unavailable");
+                }
             }
             else
             {
@@ -469,17 +1084,48 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _navigationFailures++;
-        _logger.Warn($"Dashboard navigation failed: {args.WebErrorStatus} (attempt {_navigationFailures}).");
-
-        if (_navigationFailures <= 3)
+        if (args.IsSuccess)
         {
-            SetOverlayText($"Dashboard loading failed ({args.WebErrorStatus}). Retrying...");
-            _ = RetryNavigationAsync();
+            var source = sender.Source?.GetLeftPart(UriPartial.Path) ?? "unknown source";
+            _logger.Info($"Ignoring successful non-dashboard navigation completion from {source}.");
+            if (matchesDashboardNavigation && _navigationFailures == 0)
+            {
+                _navigationFailures = 1;
+                SetOverlayText("Finishing dashboard startup...");
+                _ = RetryNavigationAsync(_navigationFailures);
+            }
             return;
         }
 
-        SetOverlayText($"Dashboard failed to load after {_navigationFailures} attempts.\n{args.WebErrorStatus}\n\nUse the tray icon to restart the server.");
+        if (!matchesDashboardNavigation)
+        {
+            _logger.Info($"Ignoring non-dashboard navigation failure: {args.WebErrorStatus}.");
+            return;
+        }
+
+        _navigationFailures++;
+        var failureAttempt = _navigationFailures;
+        var transientStartupAbort = failureAttempt == 1
+            && args.WebErrorStatus == CoreWebView2WebErrorStatus.ConnectionAborted;
+        if (transientStartupAbort)
+        {
+            _logger.Info("Dashboard startup navigation was interrupted once; waiting for the current navigation before retrying.");
+        }
+        else
+        {
+            _logger.Warn($"Dashboard navigation failed: {args.WebErrorStatus} (attempt {failureAttempt}).");
+        }
+
+        if (failureAttempt <= 3)
+        {
+            SetOverlayText(transientStartupAbort
+                ? "Finishing dashboard startup..."
+                : $"Dashboard loading failed ({args.WebErrorStatus}). Retrying...");
+            _ = RetryNavigationAsync(failureAttempt);
+            return;
+        }
+
+        SetOverlayText($"Dashboard failed to load after {failureAttempt} attempts.\n{args.WebErrorStatus}\n\nUse the tray icon to restart the server.");
     }
 
     private void HandleWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
@@ -500,11 +1146,11 @@ public sealed partial class MainWindow : Window
         ScheduleWebViewRecovery($"WebView process failed: {args.ProcessFailedKind}");
     }
 
-    private async Task RetryNavigationAsync()
+    private async Task RetryNavigationAsync(int failureAttempt)
     {
         await Task.Delay(2000);
 
-        if (_disposed)
+        if (_disposed || _dashboardLoaded || _navigationFailures != failureAttempt)
         {
             return;
         }
@@ -523,6 +1169,12 @@ public sealed partial class MainWindow : Window
         {
             try
             {
+                var wasVisible = IsWindowVisible(_windowHandle);
+                var placementReady = ConfigureWindow(saveSelection: false);
+                if (placementReady && wasVisible)
+                {
+                    RevealConfiguredWindow();
+                }
                 SetOverlayText("Recovering dashboard display...");
                 _logger.Warn($"Recovering dashboard after {reason}.");
                 await Task.Delay(1000);
@@ -531,7 +1183,6 @@ public sealed partial class MainWindow : Window
                     return;
                 }
 
-                _webViewDiagnosticsAttached = false;
                 await EnsureWebViewReadyAsync();
                 _navigationFailures = 0;
                 NavigateDashboard(forceReload: true);
@@ -560,34 +1211,83 @@ public sealed partial class MainWindow : Window
 
     private void HandleBridgeReady()
     {
+        _bridgeReady = true;
         _logger.Info("Native dashboard server ready.");
-        DispatcherQueue.TryEnqueue(async () =>
+        if (!DispatcherQueue.TryEnqueue(BeginDashboardStartupIfReady))
         {
-            try
-            {
-                await EnsureWebViewReadyAsync();
-                _navigationFailures = 0;
-                NavigateDashboard(forceReload: true);
-            }
-            catch (Exception error)
-            {
-                _logger.Error("Failed to load dashboard after bridge ready", error);
-                SetOverlayText(_webViewInitializationFailed ? BuildWebView2HelpText() : error.Message);
-            }
-        });
+            _logger.Warn("Native dashboard is ready, but WebView2 startup could not be queued.");
+        }
+    }
+
+    private void BeginDashboardStartupIfReady()
+    {
+        if (_disposed
+            || !_bridgeReady
+            || (!_windowHasBeenShown && !_suppressWindowForTests)
+            || (_companionDisplayUnavailable && !_suppressWindowForTests))
+        {
+            _logger.Info("Native dashboard server is ready; WebView2 remains deferred until a verified companion display is revealed.");
+            return;
+        }
+
+        // Startup display recovery can re-reveal the window after WebView2 has
+        // already initialized or while its first navigation is still running.
+        // Reusing the live controller is safe; initializing it with a second
+        // environment raises E_INVALIDARG and hides the working dashboard.
+        if (_dashboardLoaded || DashboardView.CoreWebView2 is not null)
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _dashboardStartupScheduled, 1) == 1)
+        {
+            return;
+        }
+
+        _ = InitializeDashboardAfterBridgeReadyAsync();
+    }
+
+    private async Task InitializeDashboardAfterBridgeReadyAsync()
+    {
+        try
+        {
+            SetOverlayText("Initializing WebView2...");
+            await EnsureWebViewReadyAsync();
+            _navigationFailures = 0;
+            NavigateDashboard(forceReload: true);
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Failed to load dashboard after bridge ready", error);
+            SetOverlayText(_webViewInitializationFailed ? BuildWebView2HelpText() : error.Message);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _dashboardStartupScheduled, 0);
+        }
     }
 
     private void HandleBridgeStopped(string message)
     {
+        _bridgeReady = false;
         _logger.Warn($"Server stopped: {message}");
         DispatcherQueue.TryEnqueue(() => SetOverlayText(message));
     }
 
     private async Task OpenSettingsAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         try
         {
             await _bridgeManager.StartAsync();
+            if (_disposed)
+            {
+                return;
+            }
             Process.Start(new ProcessStartInfo
             {
                 FileName = _settingsUri.ToString(),
@@ -597,24 +1297,45 @@ public sealed partial class MainWindow : Window
         catch (Exception error)
         {
             _logger.Error("Failed to open settings", error);
-            SetOverlayText(error.Message);
+            if (!_disposed)
+            {
+                SetOverlayText(error.Message);
+            }
         }
     }
 
     private async Task RestartBridgeAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         try
         {
+            var wasVisible = IsWindowVisible(_windowHandle);
+            var placementReady = ConfigureWindow(saveSelection: false);
+            if (placementReady && wasVisible)
+            {
+                RevealConfiguredWindow();
+            }
             SetOverlayText("Restarting native dashboard server...");
             _logger.Info("Restarting native dashboard server from tray menu.");
             await _bridgeManager.RestartAsync();
+            if (_disposed)
+            {
+                return;
+            }
             _navigationFailures = 0;
             NavigateDashboard(forceReload: true);
         }
         catch (Exception error)
         {
             _logger.Error("Bridge restart failed", error);
-            SetOverlayText(error.Message);
+            if (!_disposed)
+            {
+                SetOverlayText(error.Message);
+            }
         }
     }
 
@@ -675,8 +1396,50 @@ public sealed partial class MainWindow : Window
 
     private void ShowDisplayWindow()
     {
-        ConfigureWindow(saveSelection: false);
-        ShowWindowNoActivate();
+        ShowWindow(_windowHandle, SwHide);
+        if (ConfigureWindow(saveSelection: false))
+        {
+            RevealConfiguredWindow();
+        }
+    }
+
+    private void BeginDisplayMoveMode()
+    {
+        _displayPresentation.InvalidatePresentation();
+        ShowWindow(_windowHandle, SwHide);
+        try
+        {
+            var displayCandidates = _bridgeManager
+                .ListDisplayCandidates(ignoreSavedPreference: true)
+                .Where(display => !display.IsPrimary)
+                .ToList();
+            if (displayCandidates.Count == 0)
+            {
+                EnterCompanionDisplayWaitingState(
+                    _windowHandle,
+                    "Connect or enable a non-primary companion display before moving Auxora.");
+                ScheduleDisplayRecovery("move display requested without a companion display");
+                return;
+            }
+
+            var pickerDisplay = displayCandidates.FirstOrDefault(display =>
+                    display.IsPreferredDisplay(_configuredDisplayId))
+                ?? _bridgeManager.SelectDisplayTarget(displayCandidates, saveSelection: false);
+            _displayMoveMode = true;
+            ApplyDisplaySelectionWindow(AppWindow, _windowHandle, pickerDisplay, displayCandidates);
+            DisplayPickerStatus.Text = "Position is unlocked. Drag this window within a companion display if needed, then choose the companion below to lock Auxora there.";
+            RevealConfiguredWindow();
+            _logger.Info("Auxora display position unlocked for deliberate movement.");
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Opening Auxora display move mode failed", error);
+            _displayMoveMode = false;
+            if (ConfigureWindow(saveSelection: false))
+            {
+                RevealConfiguredWindow();
+            }
+        }
     }
 
     private void RequestQuitFromTray()
@@ -685,6 +1448,62 @@ public sealed partial class MainWindow : Window
         {
             QuitApplication();
         }
+    }
+
+    private void HandleRecoveryQuitRequested()
+    {
+        if (!DispatcherQueue.TryEnqueue(QuitApplication))
+        {
+            QuitApplication();
+        }
+    }
+
+    private Task<ResetStepReceipt> ClearWebViewBrowsingDataAsync(CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<ResetStepReceipt>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var profile = DashboardView.CoreWebView2?.Profile;
+                if (profile is null)
+                {
+                    completion.TrySetResult(new ResetStepReceipt
+                    {
+                        Id = "webview-data",
+                        Label = "WebView browsing data",
+                        Required = false,
+                        Status = "unavailable",
+                        Message = "The WebView profile was not initialized, so no profile deletion was claimed."
+                    });
+                    return;
+                }
+
+                await profile.ClearBrowsingDataAsync();
+                completion.TrySetResult(new ResetStepReceipt
+                {
+                    Id = "webview-data",
+                    Label = "WebView browsing data",
+                    Required = false,
+                    Status = "cleared",
+                    Message = "Cleared the active WebView profile browsing data."
+                });
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                completion.TrySetCanceled(cancellationToken);
+            }
+            catch (Exception error)
+            {
+                completion.TrySetException(error);
+            }
+        }))
+        {
+            completion.TrySetException(new InvalidOperationException("The WebView dispatcher is unavailable."));
+        }
+
+        return completion.Task;
     }
 
     private void StartShowDisplaySignalListener()
@@ -709,29 +1528,32 @@ public sealed partial class MainWindow : Window
             executeOnlyOnce: false);
     }
 
-    private void QuitApplication()
+    private async void QuitApplication()
     {
         if (Interlocked.Exchange(ref _quitRequested, 1) == 1)
         {
             return;
         }
 
-        _logger.Info("Quit requested from tray menu.");
+        _logger.Info("Quit requested.");
         ScheduleForceExitIfShutdownStalls();
 
         try
         {
-            _trayIcon?.Dispose();
-            _trayIcon = null;
+            ShowWindow(_windowHandle, SwHide);
+            // Keep the UI dispatcher running until active native requests have
+            // drained: media, clipboard and reset requests can still need it.
+            await DisposeResourcesAsync();
         }
         catch (Exception error)
         {
-            _logger.Warn($"Tray icon cleanup failed during quit: {error.Message}");
+            _logger.Error("Resource cleanup failed during quit.", error);
         }
 
         try
         {
             Close();
+            DisposeWindowHooks();
         }
         catch (Exception error)
         {
@@ -749,10 +1571,17 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void HandleClosed(object sender, WindowEventArgs args)
+    private async void HandleClosed(object sender, WindowEventArgs args)
     {
         _logger.Info("Window closing.");
-        DisposeResources();
+        try
+        {
+            await DisposeResourcesAsync();
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Resource cleanup failed while closing the window.", error);
+        }
     }
 
     private void HandleAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -763,8 +1592,152 @@ public sealed partial class MainWindow : Window
         }
 
         args.Cancel = true;
+        if (_displayMoveMode)
+        {
+            _logger.Info("Display move mode closed; restoring Auxora to its sticky companion placement.");
+            _displayMoveMode = false;
+            ShowWindow(_windowHandle, SwHide);
+            if (ConfigureWindow(saveSelection: false))
+            {
+                RevealConfiguredWindow();
+            }
+            return;
+        }
+
         _logger.Info("Window close button pressed; hiding the dashboard window and keeping the local bridge running.");
         ShowWindow(WindowNative.GetWindowHandle(this), SwHide);
+    }
+
+    private void HandleAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (_disposed || (!args.DidPositionChange && !args.DidSizeChange))
+        {
+            return;
+        }
+
+        if (!_waitingForEdgeDisplay)
+        {
+            RevalidateVisibleLockedPlacement();
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _displayMoveConstraintQueued, 1) == 1)
+        {
+            return;
+        }
+
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                ConstrainDisplayPickerToCompanion();
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _displayMoveConstraintQueued, 0);
+            }
+        }))
+        {
+            Interlocked.Exchange(ref _displayMoveConstraintQueued, 0);
+        }
+    }
+
+    private void RevalidateVisibleLockedPlacement()
+    {
+        // Programmatic placement is performed while hidden. Ignore those
+        // intermediate bounds so this fallback cannot re-enter its own moves.
+        if (!_initialized || _suppressWindowForTests || _companionDisplayUnavailable
+            || _displayMoveMode || !IsWindowVisible(_windowHandle))
+        {
+            return;
+        }
+
+        try
+        {
+            var position = AppWindow.Position;
+            var size = AppWindow.Size;
+            var target = DisplayManager.ResolveCompanionDisplay(_configuredDisplayId);
+            if (_displayWindowGuard is not null && DisplayWindowPlacementPolicy.IsContainedByCompanion(
+                new System.Drawing.Rectangle(position.X, position.Y, size.Width, size.Height), target))
+            {
+                return;
+            }
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Visible display placement could not be verified: {error.Message}");
+        }
+
+        _logger.Warn("Visible locked window moved outside its verified companion; hiding before display recovery.");
+        // Windows may move/reveal us while a topology burst is already pending.
+        // That unsafe visible geometry must hide again, not wait for debounce.
+        ScheduleDisplayTopologyRevalidation(forceHide: true);
+    }
+
+    private void ConstrainDisplayPickerToCompanion()
+    {
+        if (!_waitingForEdgeDisplay || _disposed)
+        {
+            return;
+        }
+
+        var companions = _bridgeManager
+            .ListDisplayCandidates(ignoreSavedPreference: true)
+            .Where(display => !display.IsPrimary)
+            .ToList();
+        if (companions.Count == 0)
+        {
+            EnterCompanionDisplayWaitingState(
+                _windowHandle,
+                "Auxora stopped moving because no non-primary companion display is active.");
+            ScheduleDisplayRecovery("display move lost all companion displays");
+            return;
+        }
+
+        var position = AppWindow.Position;
+        var size = AppWindow.Size;
+        var requestedLeft = position.X;
+        var requestedTop = position.Y;
+        var requestedRight = position.X + size.Width;
+        var requestedBottom = position.Y + size.Height;
+        var target = companions
+            .OrderByDescending(display => IntersectionArea(
+                requestedLeft,
+                requestedTop,
+                requestedRight,
+                requestedBottom,
+                display.Bounds.Left,
+                display.Bounds.Top,
+                display.Bounds.Right,
+                display.Bounds.Bottom))
+            .ThenByDescending(display => display.IsPreferredDisplay(_configuredDisplayId))
+            .First();
+
+        var width = Math.Min(Math.Max(320, size.Width), target.Bounds.Width);
+        var height = Math.Min(Math.Max(240, size.Height), target.Bounds.Height);
+        var x = Math.Clamp(position.X, target.Bounds.Left, target.Bounds.Right - width);
+        var y = Math.Clamp(position.Y, target.Bounds.Top, target.Bounds.Bottom - height);
+        _configuredDisplayId = target.StableId;
+
+        if (x != position.X || y != position.Y || width != size.Width || height != size.Height)
+        {
+            AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
+        }
+    }
+
+    private static long IntersectionArea(
+        int firstLeft,
+        int firstTop,
+        int firstRight,
+        int firstBottom,
+        int secondLeft,
+        int secondTop,
+        int secondRight,
+        int secondBottom)
+    {
+        var width = Math.Max(0, Math.Min(firstRight, secondRight) - Math.Max(firstLeft, secondLeft));
+        var height = Math.Max(0, Math.Min(firstBottom, secondBottom) - Math.Max(firstTop, secondTop));
+        return (long)width * height;
     }
 
     private void SetOverlayText(string message)
@@ -773,27 +1746,53 @@ public sealed partial class MainWindow : Window
         StatusText.Text = message;
     }
 
-    private void EnsureDisplayWindowStaysOffTaskbar(IntPtr windowHandle)
+    private bool EnsureDisplayWindowStaysOffTaskbar(IntPtr windowHandle)
     {
-        if (windowHandle == IntPtr.Zero || _taskbarStyleApplied)
+        if (windowHandle == IntPtr.Zero)
         {
-            return;
+            return false;
         }
 
+        var currentWindowStyle = GetWindowLongPtr(windowHandle, GwlStyle).ToInt64();
+        var nextWindowStyle = DisplayWindowPlacementPolicy.LockedWindowStyle(currentWindowStyle);
         var currentStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
-        var nextStyle = (currentStyle | WsExToolWindow | WsExNoActivate) & ~WsExAppWindow;
+        var nextStyle = DisplayWindowPlacementPolicy.LockedExtendedStyle(currentStyle);
 
-        var styleChanged = nextStyle != currentStyle;
+        var styleChanged = nextStyle != currentStyle || nextWindowStyle != currentWindowStyle;
         if (styleChanged)
         {
-            SetWindowLongPtr(windowHandle, GwlExStyle, new IntPtr(nextStyle));
             ShowWindow(windowHandle, SwHide);
+            SetWindowLongPtr(windowHandle, GwlStyle, new IntPtr(nextWindowStyle));
+            SetWindowLongPtr(windowHandle, GwlExStyle, new IntPtr(nextStyle));
         }
 
-        KeepDisplayWindowOnTop(windowHandle, includeFrameChanged: styleChanged);
-        ShowWindow(windowHandle, SwShowNoActivate);
+        // Presenter border settings can leave a dialog frame/client inset.
+        // Read back the native styles before permitting the final reveal.
+        var actualWindowStyle = GetWindowLongPtr(windowHandle, GwlStyle).ToInt64();
+        var actualExtendedStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
+        if (actualWindowStyle != DisplayWindowPlacementPolicy.LockedWindowStyle(actualWindowStyle)
+            || actualExtendedStyle != DisplayWindowPlacementPolicy.LockedExtendedStyle(actualExtendedStyle))
+        {
+            ShowWindow(windowHandle, SwHide);
+            _logger.Error($"Borderless companion-window styles could not be verified; keeping the dashboard hidden. style=0x{actualWindowStyle:X8}; extendedStyle=0x{actualExtendedStyle:X8}.");
+            return false;
+        }
+
+        var positionApplied = KeepDisplayWindowOnTop(windowHandle, out var positionError, includeFrameChanged: styleChanged);
+        if (!DisplayWindowPlacementPolicy.IsLockedPresentationApplied(positionApplied,
+            actualWindowStyle = GetWindowLongPtr(windowHandle, GwlStyle).ToInt64(),
+            actualExtendedStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64()))
+        {
+            ShowWindow(windowHandle, SwHide);
+            _logger.Error($"Companion-window frame or topmost placement failed; keeping the dashboard hidden. positionApplied={positionApplied}; win32Error={positionError}; style=0x{actualWindowStyle:X8}; extendedStyle=0x{actualExtendedStyle:X8}; frameChanged={styleChanged}.");
+            return false;
+        }
+        if (styleChanged || !_taskbarStyleApplied)
+        {
+            _logger.Info("Applied no-activate topmost tool-window style so the Auxora display stays visible, stays off the taskbar, and does not steal audio focus.");
+        }
         _taskbarStyleApplied = true;
-        _logger.Info("Applied no-activate topmost tool-window style so the Auxora display stays visible, stays off the taskbar, and does not steal audio focus.");
+        return true;
     }
 
     private void RestoreDisplayWindowToTaskbar(IntPtr windowHandle)
@@ -803,6 +1802,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        _displayPresentation.InvalidatePresentation();
+
         var currentStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64();
         var nextStyle = (currentStyle | WsExAppWindow) & ~WsExToolWindow & ~WsExNoActivate;
         var styleChanged = nextStyle != currentStyle;
@@ -811,6 +1812,8 @@ public sealed partial class MainWindow : Window
             SetWindowLongPtr(windowHandle, GwlExStyle, new IntPtr(nextStyle));
         }
 
+        var flags = SwpNoMove | SwpNoSize | SwpNoActivate | (styleChanged ? SwpFrameChanged : 0u);
+
         SetWindowPos(
             windowHandle,
             HwndNoTopmost,
@@ -818,38 +1821,188 @@ public sealed partial class MainWindow : Window
             0,
             0,
             0,
-            SwpNoMove | SwpNoSize | SwpShowWindow | (styleChanged ? SwpFrameChanged : 0u));
+            flags);
         _taskbarStyleApplied = false;
         _logger.Info("Restored normal taskbar-visible window style while selecting an Auxora display.");
     }
 
-    private void ShowWindowNoActivate()
+    private bool ShowWindowNoActivate(long topologyGeneration, CancellationTokenSource? topologyRequest)
     {
-        var windowHandle = WindowNative.GetWindowHandle(this);
+        var windowHandle = _windowHandle;
         if (windowHandle == IntPtr.Zero)
         {
-            return;
+            return false;
         }
 
-        if (_waitingForEdgeDisplay)
+        if (_suppressWindowForTests)
         {
-            ShowWindow(windowHandle, SwShow);
-            return;
+            ShowWindow(windowHandle, SwHide);
+            return false;
         }
 
-        KeepDisplayWindowOnTop(windowHandle);
-        ShowWindow(windowHandle, SwShowNoActivate);
+        if (_companionDisplayUnavailable)
+        {
+            ShowWindow(windowHandle, SwHide);
+            return false;
+        }
+
+        if (!_waitingForEdgeDisplay && !KeepDisplayWindowOnTop(windowHandle))
+        {
+            ShowWindow(windowHandle, SwHide);
+            return false;
+        }
+
+        if (_displayWindowGuard is null)
+        {
+            ShowWindow(windowHandle, SwHide);
+            return false;
+        }
+
+        var revealed = _displayPresentation.TryReveal(
+            topologyGeneration,
+            topologyRequest,
+            () => _displayWindowGuard.Reveal(() => ShowWindow(windowHandle, SwShowNoActivate)));
+        return revealed && IsWindowVisible(windowHandle);
     }
 
-    private static void KeepDisplayWindowOnTop(IntPtr windowHandle, bool includeFrameChanged = false)
+    private bool RevealConfiguredWindow(CancellationTokenSource? topologyRequest = null)
     {
-        var flags = SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow;
-        if (includeFrameChanged)
+        using var placement = _displayWindowGuard?.BeginPlacement();
+        if (_suppressWindowForTests)
         {
-            flags |= SwpFrameChanged;
+            ShowWindow(_windowHandle, SwHide);
+            BeginDashboardStartupIfReady();
+            return false;
         }
 
-        SetWindowPos(
+        if (_displayWindowGuard is null || _companionDisplayUnavailable || string.IsNullOrWhiteSpace(_configuredDisplayId))
+        {
+            ShowWindow(_windowHandle, SwHide);
+            return false;
+        }
+
+        if (!_displayPresentation.TryCaptureReveal(topologyRequest, out var topologyGeneration))
+        {
+            return false;
+        }
+
+        try
+        {
+            ShowWindow(_windowHandle, SwHide);
+            // Resolve against the current topology immediately before showing so
+            // a former companion that was promoted to primary can never be used.
+            var currentTarget = DisplayManager.ResolveCompanionDisplay(_configuredDisplayId);
+            if (currentTarget.IsPrimary)
+            {
+                throw new InvalidOperationException("The configured target is now the Windows primary display.");
+            }
+
+            _configuredDisplayId = currentTarget.StableId;
+            _displayWindowGuard.SetVerifiedTarget(currentTarget, locked: !_waitingForEdgeDisplay);
+            if (AppWindow.Presenter is not OverlappedPresenter)
+            {
+                AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+            }
+            if (AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                if (presenter.State != OverlappedPresenterState.Restored)
+                {
+                    presenter.Restore(false);
+                }
+                presenter.SetBorderAndTitleBar(_waitingForEdgeDisplay, _waitingForEdgeDisplay);
+                presenter.IsResizable = _waitingForEdgeDisplay;
+                presenter.IsMaximizable = _waitingForEdgeDisplay;
+                presenter.IsMinimizable = _waitingForEdgeDisplay;
+                presenter.IsAlwaysOnTop = !_waitingForEdgeDisplay;
+            }
+
+            AppWindow.MoveAndResize(_waitingForEdgeDisplay
+                ? BuildDisplaySelectionBounds(currentTarget)
+                : new RectInt32(
+                    currentTarget.Bounds.X,
+                    currentTarget.Bounds.Y,
+                    currentTarget.Bounds.Width,
+                    currentTarget.Bounds.Height));
+
+            if (!_waitingForEdgeDisplay)
+            {
+                // Keep the borderless window above the companion taskbar without
+                // handing geometry or visibility to a fullscreen presenter.
+                if (!EnsureDisplayWindowStaysOffTaskbar(_windowHandle))
+                {
+                    throw new InvalidOperationException("Borderless companion-window styles could not be verified.");
+                }
+            }
+        }
+        catch (Exception error)
+        {
+            _logger.Warn($"Pre-reveal companion-display validation failed: {error.Message}");
+            EnterCompanionDisplayWaitingState(_windowHandle, "Auxora is waiting for a verified companion display.");
+            ScheduleDisplayRecovery("pre-reveal companion validation failed");
+            return false;
+        }
+
+        if (!ShowWindowNoActivate(topologyGeneration, topologyRequest))
+        {
+            return false;
+        }
+        _windowHasBeenShown = true;
+        BeginDashboardStartupIfReady();
+        if (!_waitingForEdgeDisplay)
+        {
+            ScheduleLockedPresentationReassert();
+        }
+        return true;
+    }
+
+    private void ScheduleLockedPresentationReassert()
+    {
+        var generation = _displayPresentation.InvalidatePresentation();
+        _ = ReassertLockedPresentationAsync(generation);
+    }
+
+    private async Task ReassertLockedPresentationAsync(int generation)
+    {
+        foreach (var delay in new[] { TimeSpan.FromMilliseconds(120), TimeSpan.FromMilliseconds(850) })
+        {
+            await Task.Delay(delay);
+            if (_disposed || !_displayPresentation.IsCurrentPresentation(generation))
+            {
+                return;
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_disposed
+                    || !_displayPresentation.IsCurrentPresentation(generation)
+                    || _displayMoveMode
+                    || _waitingForEdgeDisplay
+                    || _companionDisplayUnavailable)
+                {
+                    return;
+                }
+
+                // Windows can raise the companion taskbar after a fullscreen or
+                // move-mode transition. Reassert z-order only after that transition
+                // settles; do not activate the window or steal keyboard/audio focus.
+                KeepDisplayWindowOnTop(_windowHandle);
+            });
+        }
+    }
+
+    private static bool KeepDisplayWindowOnTop(
+        IntPtr windowHandle,
+        bool includeFrameChanged = false)
+        => KeepDisplayWindowOnTop(windowHandle, out _, includeFrameChanged);
+
+    private static bool KeepDisplayWindowOnTop(
+        IntPtr windowHandle,
+        out int win32Error,
+        bool includeFrameChanged = false)
+    {
+        var flags = DisplayPresentationGate.BuildTopmostFlags(includeFrameChanged);
+
+        var applied = SetWindowPos(
             windowHandle,
             HwndTopmost,
             0,
@@ -857,6 +2010,10 @@ public sealed partial class MainWindow : Window
             0,
             0,
             flags);
+        // Capture immediately, before style reads or logging can replace the
+        // native failure code. A successful call has no meaningful last error.
+        win32Error = applied ? 0 : Marshal.GetLastWin32Error();
+        return applied;
     }
 
     private void ScheduleForceExitIfShutdownStalls()
@@ -869,7 +2026,28 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    private void DisposeResources()
+    private void DisposeWindowHooks()
+    {
+        // Reverse installation order on both explicit Quit and window close.
+        // The tray restores a raw WndProc, so its outer subclass must go first.
+        _displayWindowGuard?.Dispose();
+        if (_displayWindowGuard?.IsAttached == true)
+        {
+            // Keep the callback rooted and the tray chain intact until window
+            // destruction; QuitApplication retries after Close completes.
+            return;
+        }
+        _displayWindowGuard = null;
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+    }
+
+    private Task DisposeResourcesAsync()
+    {
+        return _disposeResourcesTask ??= DisposeResourcesCoreAsync();
+    }
+
+    private async Task DisposeResourcesCoreAsync()
     {
         if (_disposed)
         {
@@ -877,25 +2055,43 @@ public sealed partial class MainWindow : Window
         }
 
         _disposed = true;
+        var displayTopologyChangeCancellation = _displayPresentation.Stop();
+        CancelCancellationSource(displayTopologyChangeCancellation);
         DashboardView.NavigationCompleted -= HandleNavigationCompleted;
-        SystemEvents.DisplaySettingsChanged -= HandleDisplaySettingsChanged;
+        DashboardView.NavigationStarting -= HandleNavigationStarting;
+        DisposeWindowHooks();
         _bridgeManager.DisplayPreferenceChanged -= HandleDisplayPreferenceChanged;
         AppWindow.Closing -= HandleAppWindowClosing;
-        if (DashboardView.CoreWebView2 is not null && _webViewDiagnosticsAttached)
-        {
-            DashboardView.CoreWebView2.WebMessageReceived -= HandleWebMessageReceived;
-            DashboardView.CoreWebView2.ProcessFailed -= HandleProcessFailed;
-        }
+        AppWindow.Changed -= HandleAppWindowChanged;
+        DetachWebViewDiagnostics();
         _bridgeManager.StatusChanged -= HandleBridgeStatusChanged;
         _bridgeManager.BridgeReady -= HandleBridgeReady;
         _bridgeManager.BridgeStopped -= HandleBridgeStopped;
+        _bridgeManager.QuitRequested -= HandleRecoveryQuitRequested;
         _showDisplayWaitHandle?.Unregister(null);
         _showDisplayEvent?.Dispose();
         _displayRecoveryCancellation?.Cancel();
         _displayRecoveryCancellation?.Dispose();
-        _trayIcon?.Dispose();
-        _bridgeManager.Dispose();
+        await _bridgeManager.DisposeAsync();
         _logger.Info("Resources disposed. Exiting.");
+    }
+
+    private static void CancelCancellationSource(CancellationTokenSource? source)
+    {
+        if (source is null)
+        {
+            return;
+        }
+
+        try
+        {
+            source.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // A superseded debounce can finish and dispose itself between the
+            // ownership swap and cancellation. It is already stopped in that case.
+        }
     }
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
@@ -915,6 +2111,10 @@ public sealed partial class MainWindow : Window
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool ShowWindow(IntPtr hWnd, int command);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
 
     private static IntPtr GetWindowLongPtr(IntPtr hWnd, int index)
     {

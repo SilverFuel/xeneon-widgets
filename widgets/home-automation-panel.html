@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Home Automation Panel</title>
+  <link rel="stylesheet" href="../css/theme.css">
   <style>
     :root {
       color-scheme: dark;
@@ -213,7 +214,7 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     .device-grid,
@@ -345,13 +346,24 @@
     [data-size="large"] body,
     [data-size="medium"] body,
     [data-size="small"] body {
+      height: auto;
+      min-height: 100%;
       padding: 10px;
+      overflow: visible;
+    }
+
+    html[data-size="large"],
+    html[data-size="medium"],
+    html[data-size="small"] {
+      overflow-x: hidden;
+      overflow-y: auto;
     }
 
     [data-size="large"] .widget,
     [data-size="medium"] .widget,
     [data-size="small"] .widget {
-      height: calc(100vh - 20px);
+      height: auto;
+      min-height: calc(100vh - 20px);
       padding: 16px;
       gap: 14px;
     }
@@ -359,6 +371,7 @@
     [data-size="large"] .layout,
     [data-size="medium"] .layout,
     [data-size="small"] .layout {
+      height: auto;
       grid-template-columns: 1fr;
     }
 
@@ -389,7 +402,7 @@
     [data-size="small"] .status {
       min-height: 34px;
       padding: 8px 10px;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     [data-size="medium"] .panel,
@@ -409,7 +422,20 @@
     [data-size="small"] .scene-grid {
       grid-template-columns: 1fr;
     }
+    @media (prefers-reduced-motion: reduce) {
+      .toggle-button,
+      .scene-button {
+        transition: none;
+      }
+
+      .toggle-button:active,
+      .scene-button:active {
+        transform: none;
+      }
+    }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body>
   <main class="widget">
@@ -661,7 +687,7 @@
                 '<span class="label">Brightness</span>' +
                 '<span class="brightness-value">' + Math.round(light.brightness) + '%</span>' +
               '</div>' +
-              '<input class="brightness-slider" data-action="brightness" data-id="' + escapeHtml(light.id) + '" type="range" min="0" max="100" value="' + Math.round(light.brightness) + '"' + (writable ? '' : ' disabled') + '>' +
+              '<input class="brightness-slider" data-action="brightness" data-id="' + escapeHtml(light.id) + '" type="range" min="0" max="100" value="' + Math.round(light.brightness) + '" aria-label="Light brightness for ' + escapeHtml(light.name) + '"' + (writable ? '' : ' disabled') + '>' +
             '</article>';
         }).join("") : '<div class="empty-state">Smart-home controls will light up after the native connector is added.</div>';
 

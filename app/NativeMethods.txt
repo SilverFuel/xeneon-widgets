@@ -1,4 +1,5 @@
 EnumDisplayMonitors
+GetMonitorInfo
 GetNumberOfPhysicalMonitorsFromHMONITOR
 GetPhysicalMonitorsFromHMONITOR
 DestroyPhysicalMonitor

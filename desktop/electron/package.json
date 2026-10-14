@@ -1,12 +1,12 @@
 {
   "name": "auxora-desktop",
-  "version": "0.3.0",
+  "version": "0.3.0-beta.1",
   "private": true,
   "description": "Cross-platform beta host for the Auxora adaptive dashboard.",
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main.cjs",
+    "check": "node --check src/main.cjs && node scripts/check-dependencies.cjs",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac dmg zip",
     "dist:win": "electron-builder --win nsis"
@@ -79,10 +79,15 @@
     }
   },
   "devDependencies": {
-    "electron": "41.3.0",
-    "electron-builder": "26.8.1"
+    "electron": "41.10.7",
+    "electron-builder": "26.15.3"
+  },
+  "overrides": {
+    "global-agent@3.0.0": {
+      "roarr": "3.3.0"
+    }
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   }
 }
