@@ -44,6 +44,22 @@ internal sealed class DisplayWindowNativeGuard : IDisposable
 
     internal bool IsAttached => _attached;
 
+    internal static int PositionFlagsOffset { get; } = Marshal.OffsetOf<WindowPosition>(nameof(WindowPosition.Flags)).ToInt32();
+
+    internal static bool WritePositionFlags(IntPtr position, uint flags)
+    {
+        var value = unchecked((int)flags);
+        if (Marshal.ReadInt32(position, PositionFlagsOffset) == value)
+        {
+            return false;
+        }
+
+        // This guard owns only Flags, not the native WINDOWPOS buffer or its
+        // padding. Preserve every other byte after default window processing.
+        Marshal.WriteInt32(position, PositionFlagsOffset, value);
+        return true;
+    }
+
     internal void SetVerifiedTarget(DisplayTarget target, bool locked)
     {
         if (target.IsPrimary || target.Bounds.Width <= 0 || target.Bounds.Height <= 0)
@@ -98,7 +114,7 @@ internal sealed class DisplayWindowNativeGuard : IDisposable
                 {
                     var position = Marshal.PtrToStructure<WindowPosition>(lParam);
                     position.Flags = DisplayWindowPlacementPolicy.HideAndRejectPosition(position.Flags);
-                    Marshal.StructureToPtr(position, lParam, false);
+                    WritePositionFlags(lParam, position.Flags);
                 }
                 else if (!_handlingFailure)
                 {
@@ -147,7 +163,7 @@ internal sealed class DisplayWindowNativeGuard : IDisposable
                 position.Flags = DisplayWindowPlacementPolicy.FilterNativePositionFlags(
                     position.Flags, IsWindowVisible(window), _revealAuthorized, _placementDepth > 0,
                     _locked, proposed, _verifiedCompanion, out var needsRecovery);
-                Marshal.StructureToPtr(position, lParam, false);
+                WritePositionFlags(lParam, position.Flags);
                 if (needsRecovery)
                 {
                     // MainWindow only queues recovery here; never enumerate
@@ -158,7 +174,7 @@ internal sealed class DisplayWindowNativeGuard : IDisposable
             catch (Exception error)
             {
                 position.Flags = DisplayWindowPlacementPolicy.HideAndRejectPosition(position.Flags);
-                Marshal.StructureToPtr(position, lParam, false);
+                WritePositionFlags(lParam, position.Flags);
                 _logger.Error("Native window placement could not be verified; rejecting visibility.", error);
                 _unsafePlacement();
             }

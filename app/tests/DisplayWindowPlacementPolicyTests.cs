@@ -1,10 +1,48 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using NUnit.Framework;
 
 namespace XenonEdgeHost.Tests;
 
 public sealed class DisplayWindowPlacementPolicyTests
 {
+    [TestCase(0u)]
+    [TestCase(0x0083u)]
+    [TestCase(0x80000000u)]
+    [TestCase(uint.MaxValue)]
+    public void NativePositionUpdate_ChangesOnlyTheFourFlagBytes(uint flags)
+    {
+        const int prefixBytes = 16;
+        const int bufferSize = 96;
+        var flagsOffset = 2 * IntPtr.Size + 4 * sizeof(int);
+        Assert.That(DisplayWindowNativeGuard.PositionFlagsOffset, Is.EqualTo(flagsOffset),
+            "WINDOWPOS has two HWND fields and four 32-bit geometry fields before its UINT flags.");
+        var expected = Enumerable.Range(0, bufferSize).Select(index => unchecked((byte)(index * 37 + 11))).ToArray();
+        var buffer = Marshal.AllocHGlobal(bufferSize);
+        try
+        {
+            Marshal.Copy(expected, 0, buffer, expected.Length);
+            var position = IntPtr.Add(buffer, prefixBytes);
+            var requestedBytes = BitConverter.GetBytes(flags);
+            Array.Copy(requestedBytes, 0, expected, prefixBytes + flagsOffset, requestedBytes.Length);
+
+            Assert.That(DisplayWindowNativeGuard.WritePositionFlags(position, flags), Is.True);
+
+            var actual = new byte[bufferSize];
+            Marshal.Copy(buffer, actual, 0, actual.Length);
+            Assert.That(actual, Is.EqualTo(expected),
+                "Handles, geometry, native trailing padding, and surrounding sentinel bytes must remain untouched.");
+            Assert.That(DisplayWindowNativeGuard.WritePositionFlags(position, flags), Is.False,
+                "An unchanged flag value must not rewrite any part of the native buffer.");
+            Marshal.Copy(buffer, actual, 0, actual.Length);
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
     [Test]
     public void LockedStyles_RemoveNativeFrameInsetsWithoutDiscardingOtherStyles()
     {

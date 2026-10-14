@@ -116,8 +116,12 @@ internal sealed class DisplayPresentationGate
         const uint noMove = 0x0002;
         const uint noActivate = 0x0010;
         const uint frameChanged = 0x0020;
+        const uint noOwnerZOrder = 0x0200;
+        // Raise only our window, not its owner: changing owner z-order can be
+        // denied while another application has foreground permission. Keep
+        // focus and visibility unchanged, including during display recovery.
         // Z-order maintenance must never contain SWP_SHOWWINDOW (0x0040).
-        return noSize | noMove | noActivate | (includeFrameChanged ? frameChanged : 0u);
+        return noSize | noMove | noActivate | noOwnerZOrder | (includeFrameChanged ? frameChanged : 0u);
     }
 
     private bool CanReveal(CancellationTokenSource? topologyRequest)
