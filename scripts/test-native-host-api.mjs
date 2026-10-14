@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, win32 } from "node:path";
 
 let hostUrl = "";
+const launchMode = resolveLaunchMode(process.argv.slice(2));
 const executable = resolve(
   process.cwd(),
   "app/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/XenonEdgeHost.exe"
@@ -28,6 +29,43 @@ const standaloneFallbackPaths = [
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function resolveLaunchMode(argumentsList) {
+  const modes = new Map([
+    ["--normal-startup", "normal"],
+    ["--check-shutdown", "shutdown-fixtures"],
+    ["--window-probe-self-test", "window-probe"]
+  ]);
+  assert(argumentsList.length <= 1 && argumentsList.every(argument => modes.has(argument)),
+    "Use at most one native-test mode: --normal-startup, --check-shutdown, or --window-probe-self-test");
+  return argumentsList.length ? modes.get(argumentsList[0]) : "safe";
+}
+
+function selectNormalStartupCompanion(snapshot) {
+  assert(Array.isArray(snapshot?.Monitors) && snapshot.Monitors.some(monitor => monitor.Primary === true),
+    "normal startup requires a verified active primary-monitor inventory");
+  for (const monitor of snapshot.Monitors) {
+    assert(typeof monitor.DeviceName === "string" && monitor.DeviceName.trim()
+      && typeof monitor.Primary === "boolean"
+      && [monitor.Left, monitor.Top, monitor.Right, monitor.Bottom].every(Number.isInteger)
+      && monitor.Right > monitor.Left && monitor.Bottom > monitor.Top,
+      "normal startup monitor inventory was incomplete");
+  }
+  const companions = snapshot.Monitors.filter(monitor => !monitor.Primary);
+  // Prefer this project's 2560x720 target when it is present, without changing
+  // any Windows display role, mode, scaling, or the user's saved preference.
+  return companions.find(monitor => monitor.Right - monitor.Left === 2560 && monitor.Bottom - monitor.Top === 720)
+    || companions[0] || null;
+}
+
+function verifyStartupMode(mode, log, companionCount) {
+  const normal = mode === "normal";
+  assert(normal ? /Tray icon created\./.test(log) && !/Tray icon disabled/.test(log)
+    : /Tray icon disabled for isolated automated UI testing\./.test(log) && !/Tray icon created\./.test(log),
+  `${mode} startup did not use the requested tray policy`);
+  assert(normal ? !/Safe Mode:/.test(log) : companionCount === 0 || /Safe Mode: Window positioned/.test(log),
+    `${mode} startup did not use the requested safe-mode policy`);
 }
 
 async function reserveLocalPort() {
@@ -171,8 +209,9 @@ async function waitForEmbeddedDashboardBoot(timeoutMs = 15000) {
 
 async function stopChild(child, sessionToken, hooks = {}) {
   const stopped = () => child.exitCode !== null || child.signalCode !== null;
-  if (stopped()) return;
+  if (stopped()) return { method: "already-exited", elapsedMs: 0 };
   const now = hooks.now || Date.now;
+  const startedAt = now();
   const pause = hooks.delay || (milliseconds => new Promise(resolvePromise => setTimeout(resolvePromise, milliseconds)));
   const request = hooks.request || fetchWithTimeout;
   const terminate = hooks.terminate || (pid => spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
@@ -198,11 +237,11 @@ async function stopChild(child, sessionToken, hooks = {}) {
       // The host can close its listener before acknowledging a successful quit.
       shutdownErrors.push(error);
     }
-    if (await waitForExit(8000)) return;
+    if (await waitForExit(8000)) return { method: "quit", elapsedMs: now() - startedAt };
   }
   // Only the child spawned by this test (and its tree) may be forced to stop.
   assert(Number.isInteger(child.pid) && child.pid > 0, "cannot terminate an unidentified native test child; preserving profile");
-  if (stopped()) return;
+  if (stopped()) return { method: "already-exited", elapsedMs: now() - startedAt };
   try {
     const result = terminate(child.pid);
     if (result.error || result.status !== 0) shutdownErrors.push(result.error || new Error("owned native host fallback termination failed"));
@@ -212,6 +251,15 @@ async function stopChild(child, sessionToken, hooks = {}) {
   if (!(await waitForExit(5000))) {
     throw new AggregateError(shutdownErrors, "owned native host did not exit; preserving profile");
   }
+  return { method: "forced", elapsedMs: now() - startedAt };
+}
+
+function verifyGracefulShutdown(child, receipt, log) {
+  assert(receipt?.method === "quit" && child.exitCode === 0 && child.signalCode === null,
+    `native host did not exit through its normal quit action: ${JSON.stringify(receipt)}`);
+  assert(/Resources disposed\. Exiting\./.test(log), "native host exited before confirming resource disposal; preserving its log");
+  assert(!/Quit did not complete|Forcing process exit|Resource cleanup failed|Error while stopping native dashboard server/.test(log),
+    "native host quit required its emergency watchdog or reported a cleanup failure; preserving its log");
 }
 
 function matchingWebViewProcesses(processes, profileDirectory) {
@@ -270,13 +318,21 @@ async function waitForProfileWebViewExit(profileDirectory, hooks = {}) {
 }
 
 async function cleanupNativeProfile(child, sessionToken, profileDirectory, hooks = {}) {
-  await stopChild(child, sessionToken, hooks);
-  await waitForProfileWebViewExit(profileDirectory, hooks);
-  const remove = hooks.removeProfile || (directory => {
-    rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
-    assert(!existsSync(directory), `native host test profile was not removed: ${directory}`);
-  });
-  remove(profileDirectory);
+  let removed = false;
+  try {
+    const shutdownReceipt = await stopChild(child, sessionToken, hooks);
+    await waitForProfileWebViewExit(profileDirectory, hooks);
+    await hooks.verifyShutdown?.(shutdownReceipt);
+    if (hooks.retainProfile === true) return;
+    const remove = hooks.removeProfile || (directory => {
+      rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+      assert(!existsSync(directory), `native host test profile was not removed: ${directory}`);
+    });
+    remove(profileDirectory);
+    removed = true;
+  } finally {
+    if (!removed) hooks.reportRetainedProfile?.(profileDirectory);
+  }
 }
 
 async function finishNativeTest(primaryFailure, cleanupWork, report = console.error) {
@@ -294,6 +350,89 @@ async function finishNativeTest(primaryFailure, cleanupWork, report = console.er
 }
 
 async function checkNativeShutdown() {
+  assert(resolveLaunchMode([]) === "safe" && resolveLaunchMode(["--normal-startup"]) === "normal"
+    && resolveLaunchMode(["--check-shutdown"]) === "shutdown-fixtures"
+    && resolveLaunchMode(["--window-probe-self-test"]) === "window-probe", "native test modes must resolve explicitly");
+  for (const argumentsList of [["--unknown"], ["--normal-startup", "--normal-startup"], ["--normal-startup", "--check-shutdown"]]) {
+    let rejected = false;
+    try { resolveLaunchMode(argumentsList); } catch { rejected = true; }
+    assert(rejected, "unknown, duplicate, or conflicting native test flags must fail before launching");
+  }
+  const primaryMonitor = { DeviceName: "primary", Primary: true, Left: 0, Top: 0, Right: 3840, Bottom: 2160 };
+  const otherMonitor = { DeviceName: "companion", Primary: false, Left: -1920, Top: 0, Right: 0, Bottom: 1080 };
+  const edgeMonitor = { DeviceName: "edge", Primary: false, Left: 0, Top: 2160, Right: 2560, Bottom: 2880 };
+  assert(selectNormalStartupCompanion({ Monitors: [primaryMonitor] }) === null
+    && selectNormalStartupCompanion({ Monitors: [primaryMonitor, otherMonitor] }) === otherMonitor
+    && selectNormalStartupCompanion({ Monitors: [primaryMonitor, otherMonitor, edgeMonitor] }) === edgeMonitor,
+  "normal startup may seed only an active companion, preferring the target size when present");
+  const lockedWindowOn = monitor => ({
+    ...monitor, ClientBounds: { ...monitor }, Style: 0x14080000, ExtendedStyle: 0x08000088,
+    IsForeground: false, IntersectsPrimary: false, ContainedByCompanion: true
+  });
+  const settledOn = monitor => ({
+    settled: true, stableDurationMs: 1000, sampleCount: 2,
+    sample: { Primary: primaryMonitor, Monitors: [primaryMonitor, otherMonitor, edgeMonitor], Windows: [lockedWindowOn(monitor)] }
+  });
+  assertSettledLockedPlacement(settledOn(edgeMonitor), true, edgeMonitor.DeviceName);
+  // A correctly sized window on the wrong companion must pass the general
+  // companion policy but fail the normal-startup saved-selection assertion.
+  assertSettledLockedPlacement(settledOn(otherMonitor), true);
+  let wrongCompanionRejected = false;
+  try { assertSettledLockedPlacement(settledOn(otherMonitor), true, edgeMonitor.DeviceName); }
+  catch { wrongCompanionRejected = true; }
+  assert(wrongCompanionRejected, "normal startup must reject an HWND placed on a different companion despite correct preference diagnostics");
+  for (const log of ["Tray icon disabled for isolated automated UI testing.", "Tray icon created.\nSafe Mode: Window positioned"]) {
+    let rejected = false;
+    try { verifyStartupMode("normal", log, 1); } catch { rejected = true; }
+    assert(rejected, "normal startup evidence must reject disabled tray or safe-mode launches");
+  }
+  verifyStartupMode("normal", "Tray icon created.\nWindow positioned on companion.", 1);
+  verifyStartupMode("safe", "Tray icon disabled for isolated automated UI testing.\nSafe Mode: Window positioned", 1);
+  const cleanLog = "[INFO] Quit requested.\n[INFO] Resources disposed. Exiting.\n[INFO] Window closing.";
+  for (const scenario of ["clean", "watchdog", "incomplete", "cleanup-failed", "forced", "crashed"]) {
+    let failure;
+    try {
+      verifyGracefulShutdown(
+        { exitCode: scenario === "crashed" ? 1 : 0, signalCode: null },
+        { method: scenario === "forced" ? "forced" : "quit" },
+        scenario === "incomplete" ? "[INFO] Quit requested."
+          : scenario === "watchdog" ? `${cleanLog}\nQuit did not complete within 4 seconds. Forcing process exit.`
+            : scenario === "cleanup-failed" ? `${cleanLog}\nResource cleanup failed during quit.` : cleanLog);
+    } catch (error) {
+      failure = error;
+    }
+    assert(scenario === "clean" ? !failure : !!failure,
+      `${scenario}: a zero exit code alone must not certify graceful native shutdown`);
+  }
+  let retainedFailedShutdownLog = false;
+  try {
+    await cleanupNativeProfile({ exitCode: 0, signalCode: null }, "", "fixture-profile", {
+      readProfileProcesses: async () => [],
+      verifyShutdown: () => { throw new Error("fixture emergency watchdog exit"); },
+      removeProfile: () => { throw new Error("failed shutdown evidence must not be removed"); }
+    });
+  } catch (error) {
+    retainedFailedShutdownLog = error.message === "fixture emergency watchdog exit";
+  }
+  assert(retainedFailedShutdownLog, "shutdown verification failure must retain its isolated profile and log");
+  const primaryFailureToPreserve = new Error("fixture primary startup assertion failed");
+  let retainedPrimaryFailureProfile = false;
+  let verifiedPrimaryFailureShutdown = false;
+  let primaryFailureObserved;
+  try {
+    await finishNativeTest(primaryFailureToPreserve, () => cleanupNativeProfile(
+      { exitCode: 0, signalCode: null }, "", "fixture-primary-failure-profile", {
+        retainProfile: true,
+        readProfileProcesses: async () => [],
+        verifyShutdown: () => { verifiedPrimaryFailureShutdown = true; },
+        removeProfile: () => { throw new Error("primary failure evidence must not be removed after successful shutdown"); },
+        reportRetainedProfile: directory => { retainedPrimaryFailureProfile = directory === "fixture-primary-failure-profile"; }
+      }));
+  } catch (error) {
+    primaryFailureObserved = error;
+  }
+  assert(primaryFailureObserved === primaryFailureToPreserve && verifiedPrimaryFailureShutdown && retainedPrimaryFailureProfile,
+    "a primary test failure must keep its original error and profile evidence even when owned shutdown succeeds");
   for (const scenario of ["already-exited", "graceful", "quit-disconnect", "quit-stalls", "quit-rejected", "no-token", "fallback-fails"]) {
     const child = { pid: 12345, exitCode: scenario === "already-exited" ? 0 : null, signalCode: null };
     let clock = 0;
@@ -417,7 +556,7 @@ async function checkNativeShutdown() {
     assert(failure === (primaryFailure || deletionFailure) && reported === Boolean(primaryFailure),
       "cleanup failure must remain visible without replacing the primary test failure");
   }
-  console.log("native host shutdown: graceful quit, owned fallback, exact-profile WebView2 exit, bounded probes, profile retention, and failure preservation passed");
+  console.log("native host shutdown: watchdog rejection, disposal receipt, owned fallback, exact-profile WebView2 exit, bounded probes, profile retention, and failure preservation passed");
 }
 
 const windowPlacementProbeDefinition = String.raw`
@@ -851,14 +990,14 @@ try {
 }
 `;
 
-function assertSettledLockedPlacement(result, expectVisible) {
+function assertSettledLockedPlacement(result, expectVisible, expectedDeviceName = "") {
   assert(result?.settled === true && result.stableDurationMs >= 1000 && result.sampleCount >= 2,
     `native presentation did not remain settled for one second within the five-second deadline: ${JSON.stringify(result)}`);
   const sample = result.sample;
   assert(sample?.Primary, "settled placement snapshot must identify the primary monitor");
   const windows = Array.isArray(sample.Windows) ? sample.Windows : [];
   assert(windows.length === (expectVisible ? 1 : 0),
-    `settled safe-mode host must show exactly ${expectVisible ? "one locked companion window" : "zero windows"}: ${JSON.stringify(sample)}`);
+    `settled native host must show exactly ${expectVisible ? "one locked companion window" : "zero windows"}: ${JSON.stringify(sample)}`);
   if (!expectVisible) return;
 
   const window = windows[0];
@@ -869,6 +1008,12 @@ function assertSettledLockedPlacement(result, expectVisible) {
     `settled locked window must cover one entire non-primary monitor, not its work area: ${JSON.stringify(sample)}`);
   assert(sameBounds(window, window.ClientBounds),
     `settled locked client area must fill the entire outer window without borders or taskbar-sized gaps: ${JSON.stringify(window)}`);
+  if (expectedDeviceName) {
+    const expectedMonitor = monitors.find(monitor => monitor.Primary === false
+      && typeof monitor.DeviceName === "string" && monitor.DeviceName.toLowerCase() === expectedDeviceName.toLowerCase());
+    assert(expectedMonitor && sameBounds(window, expectedMonitor) && sameBounds(window.ClientBounds, expectedMonitor),
+      `normal startup HWND and client area must fill the saved companion's current bounds (${expectedDeviceName}): ${JSON.stringify(sample)}`);
+  }
   assert(Number.isInteger(window.Style) && (window.Style & 0x00c40000) === 0,
     `settled locked window retained a caption, border, or resize frame: ${JSON.stringify(window)}`);
   assert(Number.isInteger(window.ExtendedStyle)
@@ -879,7 +1024,7 @@ function assertSettledLockedPlacement(result, expectVisible) {
     `settled locked presentation violated companion-only or no-focus policy: ${JSON.stringify(window)}`);
 }
 
-function captureSettledWindowPlacement(processId, expectVisible) {
+function captureSettledWindowPlacement(processId, expectVisible, expectedDeviceName = "") {
   const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", settledWindowPlacementProbe], {
     input: `${JSON.stringify({ processId, expectVisible })}\n`,
     encoding: "utf8", windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024
@@ -887,7 +1032,7 @@ function captureSettledWindowPlacement(processId, expectVisible) {
   assert(!result.error && result.status === 0,
     `settled native placement probe failed: ${result.error?.message || result.stderr?.trim() || result.status}`);
   const snapshot = JSON.parse(result.stdout.trim());
-  assertSettledLockedPlacement(snapshot, expectVisible);
+  assertSettledLockedPlacement(snapshot, expectVisible, expectedDeviceName);
   return snapshot;
 }
 
@@ -967,12 +1112,22 @@ async function stopWindowPlacementWatcher(watcher) {
   return watcher.resultPromise;
 }
 
+function readNormalStartupCompanion() {
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `${windowPlacementProbeDefinition}
+[AuxoraWindowProbe]::EnablePhysicalCoordinates()
+try { [AuxoraWindowProbe]::Capture(0) | ConvertTo-Json -Depth 8 -Compress }
+finally { [AuxoraWindowProbe]::RestoreTimerResolution() }
+`], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+  assert(!result.error && result.status === 0, "normal startup could not inspect active companion monitors");
+  return selectNormalStartupCompanion(JSON.parse(result.stdout));
+}
+
 await checkNativeShutdown();
-if (process.argv.includes("--check-shutdown")) {
+if (launchMode === "shutdown-fixtures") {
   process.exit(0);
 }
 
-if (process.argv.includes("--window-probe-self-test")) {
+if (launchMode === "window-probe") {
   assert(process.platform === "win32", "window placement watcher self-test requires Windows");
   const watcher = await startWindowPlacementWatcher();
   watcher.process.stdin.write(`${process.pid}\n`);
@@ -986,6 +1141,8 @@ if (process.argv.includes("--window-probe-self-test")) {
 assert(process.platform === "win32", "launched native host test requires Windows");
 assert(existsSync(executable), `Release host executable is missing: ${executable}; run npm run check:app first`);
 
+const normalStartupCompanion = launchMode === "normal" ? readNormalStartupCompanion() : null;
+
 const profileRoot = mkdtempSync(join(tmpdir(), "auxora-native-host-test-"));
 const roaming = join(profileRoot, "Roaming");
 const local = join(profileRoot, "Local");
@@ -997,10 +1154,16 @@ hostUrl = `http://127.0.0.1:${hostPort}`;
 assert(!(await hostAlreadyRunning()), `test host port ${hostPort} is already serving a host; refusing to validate an unrelated process`);
 const configDirectory = join(roaming, "Auxora");
 mkdirSync(configDirectory, { recursive: true });
-writeFileSync(join(configDirectory, "config.json"), JSON.stringify({ port: hostPort }));
+writeFileSync(join(configDirectory, "config.json"), JSON.stringify({
+  port: hostPort,
+  ...(normalStartupCompanion ? { dashboard: {
+    preferredDisplayId: normalStartupCompanion.DeviceName,
+    preferredDisplayDeviceName: normalStartupCompanion.DeviceName
+  } } : {})
+}));
 
 const placementWatcher = await startWindowPlacementWatcher();
-const child = spawn(executable, ["--safe-mode"], {
+const child = spawn(executable, launchMode === "normal" ? [] : ["--safe-mode"], {
   cwd: resolve(process.cwd(), "app"),
   env: {
     ...process.env,
@@ -1012,7 +1175,7 @@ const child = spawn(executable, ["--safe-mode"], {
     AUXORA_TEST_ROAMING_ROOT: roaming,
     AUXORA_TEST_LOCAL_ROOT: local,
     AUXORA_TEST_INSTANCE_ID: profileRoot,
-    AUXORA_DISABLE_TRAY_ICON_FOR_TESTS: "1",
+    AUXORA_DISABLE_TRAY_ICON_FOR_TESTS: launchMode === "normal" ? "0" : "1",
     TEMP: profileRoot,
     TMP: profileRoot
   },
@@ -1048,6 +1211,7 @@ try {
   assert(sessionTokenMatch, "live dashboard must include an inline mutation session token");
   sessionToken = JSON.parse(sessionTokenMatch[1]);
   const embeddedBoot = await waitForEmbeddedDashboardBoot();
+  verifyStartupMode(launchMode, readFileSync(join(local, "Auxora", "logs", "host.log"), "utf8"), embeddedBoot.companionDisplayCount);
   if (embeddedBoot.companionDisplayCount === 0) {
     assert(
       embeddedBoot.displayStatus === "waiting-for-companion-display"
@@ -1131,6 +1295,13 @@ try {
     "legacy edge candidate count must remain a companion-count alias"
   );
   assert(companionDisplays.every(display => display && display.primary !== true), "display diagnostics must never expose the Windows primary display as a candidate");
+  if (normalStartupCompanion) {
+    const savedCompanion = companionDisplays.find(display => display.deviceName === normalStartupCompanion.DeviceName);
+    assert(savedCompanion && savedCompanion.preferred === true
+      && displayDiagnostics.status === "ready" && displayDiagnostics.selectedDisplayId === savedCompanion.id
+      && config.dashboard?.preferredDisplayId === normalStartupCompanion.DeviceName,
+    "normal startup did not honor the companion preference seeded only in its isolated profile");
+  }
 
   const monitorControlsStartedAt = performance.now();
   const monitorControlsResponse = await fetchWithTimeout("/api/displays/controls", {}, 10000);
@@ -1222,9 +1393,10 @@ try {
   });
   assert(rejectedMutation.status === 403, `mutation without session token must be rejected; received HTTP ${rejectedMutation.status}`);
 
-  // Safe Mode deliberately chooses and locks the best companion even when the
-  // fresh profile's preference diagnostics still report selection-required.
-  const settledPlacement = captureSettledWindowPlacement(child.pid, displayDiagnostics.companionDisplayCount > 0);
+  // Safe Mode locks the best companion without a saved preference. Ordinary
+  // startup uses a verified preference seeded only into its isolated profile.
+  const settledPlacement = captureSettledWindowPlacement(child.pid, displayDiagnostics.companionDisplayCount > 0,
+    normalStartupCompanion?.DeviceName || "");
   console.log(displayDiagnostics.companionDisplayCount > 0
     ? `settled native presentation verified exact outer/client companion bounds and borderless, tool-window, no-activate, topmost styles over ${settledPlacement.stableDurationMs} ms`
     : `settled primary-only native presentation remained hidden over ${settledPlacement.stableDurationMs} ms`);
@@ -1276,7 +1448,19 @@ await finishNativeTest(primaryFailure, async () => {
     }
   }
   try {
-    await cleanupNativeProfile(child, sessionToken, profileRoot);
+    await cleanupNativeProfile(child, sessionToken, profileRoot, {
+      retainProfile: Boolean(primaryFailure),
+      reportRetainedProfile: directory => console.log(`native host failure profile and log retained: ${directory}`),
+      verifyShutdown: receipt => {
+        const shutdownLog = readFileSync(join(local, "Auxora", "logs", "host.log"), "utf8");
+        verifyGracefulShutdown(child, receipt, shutdownLog);
+        if (launchMode === "normal") {
+          assert(/Tray icon created\./.test(shutdownLog) && /Tray icon removed\./.test(shutdownLog),
+            "normal startup did not confirm tray creation and removal; preserving its log");
+        }
+        console.log(`${launchMode} native host quit completed with resource disposal and no emergency watchdog (${receipt.elapsedMs} ms)`);
+      }
+    });
   } catch (error) {
     cleanupErrors.push(error);
   }

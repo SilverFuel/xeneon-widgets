@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace XenonEdgeHost;
 
-public sealed class BridgeManager : IDisposable
+public sealed class BridgeManager : IAsyncDisposable
 {
     private const string SessionHeaderName = "X-Xenon-Session";
     private const int MaxConcurrentRequestCount = 8;
@@ -303,7 +303,7 @@ public sealed class BridgeManager : IDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
-        await _lifecycleLock.WaitAsync(cancellationToken);
+        await _lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             StartCore();
@@ -316,12 +316,12 @@ public sealed class BridgeManager : IDisposable
 
     public async Task RestartAsync(CancellationToken cancellationToken = default)
     {
-        await _lifecycleLock.WaitAsync(cancellationToken);
+        await _lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             ThrowIfDisposed();
             RaiseStatus("Restarting native dashboard server...");
-            await StopCoreAsync();
+            await StopCoreAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             StartCore();
         }
@@ -331,7 +331,7 @@ public sealed class BridgeManager : IDisposable
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed)
         {
@@ -340,10 +340,10 @@ public sealed class BridgeManager : IDisposable
 
         _disposed = true;
 
-        _lifecycleLock.Wait();
+        await _lifecycleLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            StopCoreAsync().GetAwaiter().GetResult();
+            await StopCoreAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -386,7 +386,7 @@ public sealed class BridgeManager : IDisposable
             listener.Close();
             if (serverTask is not null)
             {
-                await serverTask;
+                await serverTask.ConfigureAwait(false);
             }
         }
         catch (Exception error)
@@ -435,7 +435,17 @@ public sealed class BridgeManager : IDisposable
 
         _listener = listener;
         _serverCancellation = new CancellationTokenSource();
-        _serverTask = RunServerAsync(listener, _serverCancellation.Token);
+        _serverTask = NativeRequestServer.RunAsync(
+            listener,
+            _serverCancellation.Token,
+            MaxConcurrentRequestCount,
+            HandleRequestAsync,
+            error => _logger.Error("Unhandled native dashboard request failure.", error),
+            error =>
+            {
+                _logger.Error("Native dashboard server loop failed.", error);
+                BridgeStopped?.Invoke("Native dashboard server stopped unexpectedly.");
+            });
 
         _logger.Info($"Native dashboard server listening on {BuildBaseUri(_configStore.Current.Port)}");
         RaiseStatus("Native dashboard server ready.");
@@ -456,62 +466,6 @@ public sealed class BridgeManager : IDisposable
                 _logger.Error("Automatic provisioning failed.", error);
             }
         });
-    }
-
-    private async Task RunServerAsync(HttpListener listener, CancellationToken cancellationToken)
-    {
-        await using var requests = new BoundedTaskDispatcher(
-            MaxConcurrentRequestCount,
-            error => _logger.Error("Unhandled native dashboard request failure.", error));
-
-        try
-        {
-            while (listener.IsListening && !cancellationToken.IsCancellationRequested)
-            {
-                HttpListenerContext context;
-                try
-                {
-                    context = await listener.GetContextAsync();
-                }
-                catch (HttpListenerException)
-                {
-                    break;
-                }
-                catch (ObjectDisposedException)
-                {
-                    break;
-                }
-
-                var acceptedContext = context;
-                bool dispatched;
-                try
-                {
-                    dispatched = await requests.DispatchAsync(
-                        token => HandleRequestAsync(acceptedContext, token),
-                        cancellationToken);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    AbortResponse(acceptedContext.Response);
-                    break;
-                }
-
-                if (!dispatched)
-                {
-                    AbortResponse(acceptedContext.Response);
-                    break;
-                }
-            }
-        }
-        catch (Exception error)
-        {
-            _logger.Error("Native dashboard server loop failed.", error);
-            BridgeStopped?.Invoke("Native dashboard server stopped unexpectedly.");
-        }
-        finally
-        {
-            await requests.StopAsync();
-        }
     }
 
     private async Task HandleRequestAsync(HttpListenerContext context, CancellationToken cancellationToken)

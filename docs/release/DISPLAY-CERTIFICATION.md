@@ -18,6 +18,7 @@ For each available physical resolution, verify Home, Modes, Apps & Controls, Set
 Also verify all of these exact-candidate behaviors:
 
 - Auxora starts only on the active non-primary companion display and never intersects the primary display.
+- Repeat startup while another application has focus and is receiving input. Auxora must still fill the companion, stay above its taskbar, and leave the other application's focus unchanged.
 - With no companion active, Auxora stays tray-only; it does not fall back to the primary display.
 - Physical unplug/replug recovers onto the companion display.
 - Making the companion display primary causes Auxora to fail closed; restoring roles recovers safely.
@@ -27,6 +28,10 @@ Also verify all of these exact-candidate behaviors:
 - Refreshes do not cause visible periodic flicker, duplicated layers, stale overlays, or focus loss.
 
 The locked dashboard uses a borderless overlapped window sized to the full monitor bounds, not the Windows fullscreen presenter. Verify both outer and client bounds and taskbar coverage after startup, picker cancellation (including a maximized picker), and HDMI removal/reconnection. A sampled window-position log cannot rule out a visible flash between samples; a human-observed primary-screen flash fails this gate even when the sampled positions look safe.
+
+For local regression testing after a Release build, `node scripts/test-native-host-api.mjs --normal-startup` uses an isolated profile with the tray enabled and a verified companion preference (preferring an active 2560 x 720 companion). The default command exercises Safe Mode with the tray disabled. Both require verified native placement and a clean resource-disposal receipt on quit; neither mode changes the user's saved display preference. Run them serially. These checks do not replace physical certification or the installed-candidate gate below.
+
+For the touch-pointer check, park the mouse on the main monitor, use a finger to open Quick controls, switch Night to On and back to Automatic, then close the drawer. Lift the finger and move the mouse slightly. Record where the actual arrow reappears; a temporary touch marker or hidden arrow is not evidence that the mouse position moved.
 
 Record only privacy-safe screenshot identifiers. Do not put local paths, URLs, serial numbers, EDID/device-instance data, credentials, or other private device data in the receipt.
 

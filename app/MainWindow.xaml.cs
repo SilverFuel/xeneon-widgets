@@ -49,6 +49,7 @@ public sealed partial class MainWindow : Window
     private readonly string _webViewUserDataPath;
     private bool _initialized;
     private bool _disposed;
+    private Task? _disposeResourcesTask;
     private bool _webViewInitializationFailed;
     private bool _dashboardLoaded;
     private bool _bridgeReady;
@@ -250,6 +251,7 @@ public sealed partial class MainWindow : Window
             presenter.IsResizable = false;
             presenter.IsMaximizable = false;
             presenter.IsMinimizable = false;
+            presenter.IsAlwaysOnTop = !needsDisplaySelection;
         }
 
         if (needsDisplaySelection)
@@ -335,6 +337,7 @@ public sealed partial class MainWindow : Window
             presenter.IsResizable = true;
             presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
+            presenter.IsAlwaysOnTop = false;
         }
 
         RestoreDisplayWindowToTaskbar(windowHandle);
@@ -742,6 +745,11 @@ public sealed partial class MainWindow : Window
 
     private async Task InitializeHostAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         try
         {
             SetOverlayText("Starting native dashboard services...");
@@ -751,7 +759,10 @@ public sealed partial class MainWindow : Window
         catch (Exception error)
         {
             _logger.Error("Host initialization failed", error);
-            SetOverlayText(_webViewInitializationFailed ? BuildWebView2HelpText() : $"Startup failed: {error.Message}");
+            if (!_disposed)
+            {
+                SetOverlayText(_webViewInitializationFailed ? BuildWebView2HelpText() : $"Startup failed: {error.Message}");
+            }
         }
     }
 
@@ -1265,9 +1276,18 @@ public sealed partial class MainWindow : Window
 
     private async Task OpenSettingsAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         try
         {
             await _bridgeManager.StartAsync();
+            if (_disposed)
+            {
+                return;
+            }
             Process.Start(new ProcessStartInfo
             {
                 FileName = _settingsUri.ToString(),
@@ -1277,12 +1297,20 @@ public sealed partial class MainWindow : Window
         catch (Exception error)
         {
             _logger.Error("Failed to open settings", error);
-            SetOverlayText(error.Message);
+            if (!_disposed)
+            {
+                SetOverlayText(error.Message);
+            }
         }
     }
 
     private async Task RestartBridgeAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         try
         {
             var wasVisible = IsWindowVisible(_windowHandle);
@@ -1294,13 +1322,20 @@ public sealed partial class MainWindow : Window
             SetOverlayText("Restarting native dashboard server...");
             _logger.Info("Restarting native dashboard server from tray menu.");
             await _bridgeManager.RestartAsync();
+            if (_disposed)
+            {
+                return;
+            }
             _navigationFailures = 0;
             NavigateDashboard(forceReload: true);
         }
         catch (Exception error)
         {
             _logger.Error("Bridge restart failed", error);
-            SetOverlayText(error.Message);
+            if (!_disposed)
+            {
+                SetOverlayText(error.Message);
+            }
         }
     }
 
@@ -1493,28 +1528,32 @@ public sealed partial class MainWindow : Window
             executeOnlyOnce: false);
     }
 
-    private void QuitApplication()
+    private async void QuitApplication()
     {
         if (Interlocked.Exchange(ref _quitRequested, 1) == 1)
         {
             return;
         }
 
-        _logger.Info("Quit requested from tray menu.");
+        _logger.Info("Quit requested.");
         ScheduleForceExitIfShutdownStalls();
 
         try
         {
-            DisposeWindowHooks();
+            ShowWindow(_windowHandle, SwHide);
+            // Keep the UI dispatcher running until active native requests have
+            // drained: media, clipboard and reset requests can still need it.
+            await DisposeResourcesAsync();
         }
         catch (Exception error)
         {
-            _logger.Warn($"Window hook cleanup failed during quit: {error.Message}");
+            _logger.Error("Resource cleanup failed during quit.", error);
         }
 
         try
         {
             Close();
+            DisposeWindowHooks();
         }
         catch (Exception error)
         {
@@ -1532,10 +1571,17 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void HandleClosed(object sender, WindowEventArgs args)
+    private async void HandleClosed(object sender, WindowEventArgs args)
     {
         _logger.Info("Window closing.");
-        DisposeResources();
+        try
+        {
+            await DisposeResourcesAsync();
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Resource cleanup failed while closing the window.", error);
+        }
     }
 
     private void HandleAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -1728,17 +1774,17 @@ public sealed partial class MainWindow : Window
             || actualExtendedStyle != DisplayWindowPlacementPolicy.LockedExtendedStyle(actualExtendedStyle))
         {
             ShowWindow(windowHandle, SwHide);
-            _logger.Error("Borderless companion-window styles could not be verified; keeping the dashboard hidden.");
+            _logger.Error($"Borderless companion-window styles could not be verified; keeping the dashboard hidden. style=0x{actualWindowStyle:X8}; extendedStyle=0x{actualExtendedStyle:X8}.");
             return false;
         }
 
-        var positionApplied = KeepDisplayWindowOnTop(windowHandle, includeFrameChanged: styleChanged);
+        var positionApplied = KeepDisplayWindowOnTop(windowHandle, out var positionError, includeFrameChanged: styleChanged);
         if (!DisplayWindowPlacementPolicy.IsLockedPresentationApplied(positionApplied,
-            GetWindowLongPtr(windowHandle, GwlStyle).ToInt64(),
-            GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64()))
+            actualWindowStyle = GetWindowLongPtr(windowHandle, GwlStyle).ToInt64(),
+            actualExtendedStyle = GetWindowLongPtr(windowHandle, GwlExStyle).ToInt64()))
         {
             ShowWindow(windowHandle, SwHide);
-            _logger.Error("Companion-window frame or topmost placement failed; keeping the dashboard hidden.");
+            _logger.Error($"Companion-window frame or topmost placement failed; keeping the dashboard hidden. positionApplied={positionApplied}; win32Error={positionError}; style=0x{actualWindowStyle:X8}; extendedStyle=0x{actualExtendedStyle:X8}; frameChanged={styleChanged}.");
             return false;
         }
         if (styleChanged || !_taskbarStyleApplied)
@@ -1867,6 +1913,7 @@ public sealed partial class MainWindow : Window
                 presenter.IsResizable = _waitingForEdgeDisplay;
                 presenter.IsMaximizable = _waitingForEdgeDisplay;
                 presenter.IsMinimizable = _waitingForEdgeDisplay;
+                presenter.IsAlwaysOnTop = !_waitingForEdgeDisplay;
             }
 
             AppWindow.MoveAndResize(_waitingForEdgeDisplay
@@ -1946,10 +1993,16 @@ public sealed partial class MainWindow : Window
     private static bool KeepDisplayWindowOnTop(
         IntPtr windowHandle,
         bool includeFrameChanged = false)
+        => KeepDisplayWindowOnTop(windowHandle, out _, includeFrameChanged);
+
+    private static bool KeepDisplayWindowOnTop(
+        IntPtr windowHandle,
+        out int win32Error,
+        bool includeFrameChanged = false)
     {
         var flags = DisplayPresentationGate.BuildTopmostFlags(includeFrameChanged);
 
-        return SetWindowPos(
+        var applied = SetWindowPos(
             windowHandle,
             HwndTopmost,
             0,
@@ -1957,6 +2010,10 @@ public sealed partial class MainWindow : Window
             0,
             0,
             flags);
+        // Capture immediately, before style reads or logging can replace the
+        // native failure code. A successful call has no meaningful last error.
+        win32Error = applied ? 0 : Marshal.GetLastWin32Error();
+        return applied;
     }
 
     private void ScheduleForceExitIfShutdownStalls()
@@ -1977,7 +2034,7 @@ public sealed partial class MainWindow : Window
         if (_displayWindowGuard?.IsAttached == true)
         {
             // Keep the callback rooted and the tray chain intact until window
-            // destruction; DisposeResources retries after Close completes.
+            // destruction; QuitApplication retries after Close completes.
             return;
         }
         _displayWindowGuard = null;
@@ -1985,7 +2042,12 @@ public sealed partial class MainWindow : Window
         _trayIcon = null;
     }
 
-    private void DisposeResources()
+    private Task DisposeResourcesAsync()
+    {
+        return _disposeResourcesTask ??= DisposeResourcesCoreAsync();
+    }
+
+    private async Task DisposeResourcesCoreAsync()
     {
         if (_disposed)
         {
@@ -2010,7 +2072,7 @@ public sealed partial class MainWindow : Window
         _showDisplayEvent?.Dispose();
         _displayRecoveryCancellation?.Cancel();
         _displayRecoveryCancellation?.Dispose();
-        _bridgeManager.Dispose();
+        await _bridgeManager.DisposeAsync();
         _logger.Info("Resources disposed. Exiting.");
     }
 

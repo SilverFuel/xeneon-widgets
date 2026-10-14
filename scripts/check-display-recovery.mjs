@@ -202,6 +202,17 @@ assert(
   "dashboard placement must restore without activation, fill exact companion bounds as a borderless overlapped window without fullscreen transitions, and reassert taskbar-free topmost styles"
 );
 
+const configureWindowBody = mainWindow.match(/private bool ConfigureWindow\([^]*?(?=\r?\n    private )/)?.[0] || "";
+const pickerWindowBody = mainWindow.match(/private void ApplyDisplaySelectionWindow\([^]*?(?=\r?\n    private )/)?.[0] || "";
+const revealWindowBody = mainWindow.match(/private bool RevealConfiguredWindow\([^]*?(?=\r?\n    private )/)?.[0] || "";
+assert(
+  /BeginPlacement\(\)[\s\S]+presenter\.IsAlwaysOnTop = !needsDisplaySelection;/.test(configureWindowBody)
+    && /BeginPlacement\(\)[\s\S]+presenter\.IsAlwaysOnTop = false;[\s\S]+RestoreDisplayWindowToTaskbar\(windowHandle\)/.test(pickerWindowBody)
+    && /BeginPlacement\(\)[\s\S]+presenter\.IsAlwaysOnTop = !_waitingForEdgeDisplay;/.test(revealWindowBody)
+    && (mainWindow.match(/presenter\.IsAlwaysOnTop\s*=/g) || []).length === 3,
+  "native topmost verification must be backed by matching presenter state in locked configuration and reveal, and disabled in every shared picker path while the placement guard is active"
+);
+
 assert(
   !/\bpreferPrimary\b/.test(mainWindow)
     && !/\bpreferPrimary\b/.test(bridgeManager)
@@ -240,8 +251,8 @@ assert(
 assert(
   /_trayIcon \?\?= new TrayIcon[\s\S]+StartDisplayWindowGuard\(\)/.test(mainWindow)
     && /_displayWindowGuard\?\.Dispose\(\);[\s\S]+_trayIcon\?\.Dispose\(\)/.test(mainWindow)
-    && /private void QuitApplication\(\)[\s\S]+DisposeWindowHooks\(\);[\s\S]+Close\(\)/.test(mainWindow)
-    && /private void DisposeResources\(\)[\s\S]+DisposeWindowHooks\(\);/.test(mainWindow)
+    && /private async void QuitApplication\(\)[\s\S]+await DisposeResourcesAsync\(\);[\s\S]+Close\(\);[\s\S]+DisposeWindowHooks\(\);/.test(mainWindow)
+    && /private async Task DisposeResourcesCoreAsync\(\)[\s\S]+DisposeWindowHooks\(\);[\s\S]+await _bridgeManager\.DisposeAsync\(\)/.test(mainWindow)
     && /private void DisposeWindowHooks\(\)[\s\S]+IsAttached == true\)[\s\S]+return;[\s\S]+_displayWindowGuard = null/.test(mainWindow)
     && /_topologyChanged\(message\)[\s\S]+DefSubclassProc\(window, message, wParam, lParam\)/.test(nativeDisplayGuard)
     && /DefSubclassProc\(window, message, wParam, lParam\)[\s\S]+FilterNativePositionFlags/.test(nativeDisplayGuard)

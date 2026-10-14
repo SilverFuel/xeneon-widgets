@@ -31,8 +31,8 @@ public sealed class DisplayPresentationGateTests
         Assert.That(gate.IsCurrentPresentation(generation), Is.False, "settling topology must not revive stale work");
     }
 
-    [TestCase(false, 0x0013u)]
-    [TestCase(true, 0x0033u)]
+    [TestCase(false, 0x0213u)]
+    [TestCase(true, 0x0233u)]
     public void AlreadyCheckedReassertion_CannotShowAfterTopologyHide(bool frameChanged, uint expectedFlags)
     {
         var gate = new DisplayPresentationGate();
@@ -53,7 +53,7 @@ public sealed class DisplayPresentationGateTests
 
         Assert.Multiple((Action)(() =>
         {
-            Assert.That(flags, Is.EqualTo(expectedFlags), "preserve size, position, focus, and optional frame update");
+            Assert.That(flags, Is.EqualTo(expectedFlags), "preserve size, position, focus, owner z-order, and optional frame update");
             Assert.That(visible, Is.False, "z-order maintenance cannot undo a topology hide");
         }));
     }
