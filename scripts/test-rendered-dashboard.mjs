@@ -1,5 +1,5 @@
 // Navigation migration coverage map:
-// Favorites/catalog -> five-section order/visibility, Settings categories, all-25 two-click reach.
+// Favorites/catalog -> five-section order/visibility, Settings categories, all-26 two-click reach.
 // Reachability includes scrolling before clicks; this is not physical touch/DPI acceptance.
 // Catalog modal focus -> Quick modal inertness/Escape/focus return plus stable section/tab focus.
 // Panel options -> Appearance form persistence, focused edits, and opacity reset.
@@ -2006,7 +2006,7 @@ async function validateSectionNavigation(cdp) {
             ids.push(tab.id);
           }
         }
-        check(new Set(ids).size === 25, 'Navigation did not expose every panel');
+        check(new Set(ids).size === 26, 'Navigation did not expose every panel');
         window.__auxoraTestOpenWidget('layout-editor'); await wait(150);
         const visibility = document.querySelector('[data-section-visible="gaming"]'); await target(visibility); visibility.click(); await wait(150);
         check(!document.querySelector('#dashboard-section-nav [data-section-id="gaming"]') && document.getElementById('dashboard-settings-toggle'), 'Hidden section or permanent Settings contract failed');
@@ -2019,7 +2019,7 @@ async function validateSectionNavigation(cdp) {
       })()`, awaitPromise: true, returnByValue: true
     });
     const result = evaluation.result?.value;
-    assert(!evaluation.exceptionDetails && result?.ids.length === 25 && result.errors.length === 0, `section navigation ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
+    assert(!evaluation.exceptionDetails && result?.ids.length === 26 && result.errors.length === 0, `section navigation ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
     await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=wow-forever&sectionHiddenReload=${width}` });
     await waitForCommittedUrl(cdp, `sectionHiddenReload=${width}`);
     const reload = await cdp.send('Runtime.evaluate', { expression: `(async () => {
@@ -3356,7 +3356,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
     console.error(`surface failure screenshot: ${screenshotPath}`);
   }
   const expectedIds = [
-    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
+    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-blocklist", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
     "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
   ];
@@ -3668,7 +3668,7 @@ async function validateForcedColorsProductSurfaces(cdp) {
   }
 
   const expectedIds = [
-    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
+    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-blocklist", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
     "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
   ];

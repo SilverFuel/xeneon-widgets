@@ -871,7 +871,7 @@ async function assertForcedColorsPalette(cdp, label, palette) {
   assert(probe.focusVisible, `${label}: keyboard focus was not visibly outlined in forced colors`);
   assert(probe.forcedColorOptOuts.length === 0, `${label}: elements opted out of Windows forced colors: ${JSON.stringify(probe.forcedColorOptOuts)}`);
   assert(!probe.overflow && !probe.fatal, `${label}: forced colors created overflow or a fatal state: ${JSON.stringify(probe)}`);
-  assert(navigationProbe.length === 6 && navigationProbe.flatMap(section => section.ids).length === 25, `${label}: section/category inventory incomplete: ${JSON.stringify(navigationProbe)}`);
+  assert(navigationProbe.length === 6 && navigationProbe.flatMap(section => section.ids).length === 26, `${label}: section/category inventory incomplete: ${JSON.stringify(navigationProbe)}`);
   for (const section of navigationProbe) {
     assert(section.borderless.length === 0 && section.selectionDistinct && section.focusAccepted && section.focusOutlined, `${label}: ${section.section} lost forced-color boundaries, selection, or keyboard focus: ${JSON.stringify(section)}`);
   }

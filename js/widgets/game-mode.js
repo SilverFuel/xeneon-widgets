@@ -152,7 +152,25 @@
       sessionDurationMs: optionalNumber(game.sessionDurationMs) || 0,
       artworkUrl: text(game.artworkUrl, ""),
       iconUrl: text(game.iconUrl, ""),
-      tileLabel: text(game.tileLabel, "G")
+      tileLabel: text(game.tileLabel, "G"),
+      selected: Boolean(game.selected),
+      manual: Boolean(game.manual)
+    };
+  }
+
+  function normalizeGameActivitySelection(selection) {
+    selection = selection || {};
+    return {
+      mode: text(selection.mode, "auto") === "manual" ? "manual" : "auto",
+      candidateId: text(selection.candidateId, "")
+    };
+  }
+
+  function normalizeGameActivityBlocklist(blocklist) {
+    blocklist = blocklist || {};
+    return {
+      status: text(blocklist.status, "ready") === "unavailable" ? "unavailable" : "ready",
+      count: optionalNumber(blocklist.count) || 0
     };
   }
 
@@ -173,7 +191,10 @@
       foregroundAppActive: Boolean(payload.foregroundAppActive),
       activeGame: normalizeGameActivityGame(payload.activeGame),
       lastGame: normalizeGameActivityGame(payload.lastGame),
-      candidates: Array.isArray(payload.candidates) ? payload.candidates.map(normalizeGameActivityGame).filter(Boolean) : []
+      candidates: Array.isArray(payload.candidates) ? payload.candidates.map(normalizeGameActivityGame).filter(Boolean) : [],
+      trackable: Array.isArray(payload.trackable) ? payload.trackable.map(normalizeGameActivityGame).filter(Boolean) : [],
+      selection: normalizeGameActivitySelection(payload.selection),
+      blocklist: normalizeGameActivityBlocklist(payload.blocklist)
     };
   }
 
@@ -605,6 +626,115 @@
       || message.indexOf("approve") !== -1;
   }
 
+  var GAME_SWITCHER_CHIP_LIMIT = 4;
+  var GAME_CANDIDATE_GONE_MESSAGE = "That app is no longer running.";
+
+  function gameSwitcherTile(candidate, className) {
+    var artUrl = text(candidate && (candidate.artworkUrl || candidate.iconUrl), "");
+    return '<span class="' + className + '" aria-hidden="true">' + (artUrl
+      ? '<img src="' + escapeHtml(artUrl) + '" alt="" loading="lazy">'
+      : escapeHtml(text(candidate && candidate.tileLabel, "G"))) + '</span>';
+  }
+
+  function isFollowedCandidate(activity, candidate) {
+    var activeGame = activity && activity.activeGame;
+    return Boolean(candidate && (candidate.selected || (activeGame && activeGame.id && activeGame.id === candidate.id)));
+  }
+
+  // Carousel: top candidates by rating plus "More". No "Automatic" chip, no tooltip, no score.
+  function renderGameFocusSwitcher(activity, switcher) {
+    var trackable = activity && Array.isArray(activity.trackable) ? activity.trackable : [];
+    var open = Boolean(switcher && switcher.carouselOpen);
+    var pendingId = text(switcher && switcher.pendingId, "");
+    var status = text(switcher && switcher.status, "");
+    if (trackable.length < 2) {
+      return status ? '<span class="game-focus-switcher-status" role="status">' + escapeHtml(status) + '</span>' : '';
+    }
+
+    var chips = trackable.slice(0, GAME_SWITCHER_CHIP_LIMIT).map(function (candidate) {
+      var followed = isFollowedCandidate(activity, candidate);
+      var pending = pendingId && pendingId === candidate.id;
+      return '' +
+        '<button class="game-focus-carousel-chip' + (followed ? " is-followed" : "") + (pending ? " is-pending" : "") + '" type="button" data-action="game-select-candidate" data-candidate-id="' + escapeHtml(candidate.id) + '"' + (followed ? ' aria-current="true"' : '') + (pending ? ' aria-busy="true"' : '') + '>' +
+          gameSwitcherTile(candidate, "game-focus-carousel-tile") +
+          '<span class="game-focus-carousel-name">' + escapeHtml(text(candidate.name, "Game")) + '</span>' +
+        '</button>';
+    }).join("");
+
+    return '' +
+      (status ? '<span class="game-focus-switcher-status" role="status">' + escapeHtml(status) + '</span>' : '') +
+      '<div class="game-focus-carousel' + (open ? " is-open" : "") + '">' +
+        '<div class="game-focus-carousel-track" id="game-focus-carousel-track"' + (open ? '' : ' aria-hidden="true" inert') + '>' +
+          chips +
+          '<button class="game-focus-carousel-chip game-focus-carousel-more" type="button" data-action="game-candidates-more" aria-haspopup="dialog">More</button>' +
+        '</div>' +
+        '<button class="game-focus-carousel-toggle" type="button" data-action="game-carousel-toggle" aria-expanded="' + (open ? "true" : "false") + '" aria-controls="game-focus-carousel-track" aria-label="' + (open ? "Hide running candidates" : "Show running candidates") + '">' + (open ? "&gt;" : "&lt;") + '</button>' +
+      '</div>';
+  }
+
+  function renderGameFocusFlags(activity) {
+    var flags = "";
+    if (activity && activity.selection && activity.selection.mode === "manual") {
+      flags += '<em class="game-focus-chosen">Chosen</em>';
+    }
+    if (activity && activity.blocklist && activity.blocklist.status === "unavailable") {
+      flags += '<em class="game-focus-blocklist-unavailable" role="status">Blocklist unavailable</em>';
+    }
+    return flags;
+  }
+
+  // "More" sheet: Automatic first, then every trackable candidate. No confidence meter or score.
+  function renderGameCandidateSheet(activity, switcher) {
+    if (!switcher || !switcher.sheetOpen) {
+      return "";
+    }
+
+    var trackable = activity && Array.isArray(activity.trackable) ? activity.trackable : [];
+    var manual = Boolean(activity && activity.selection && activity.selection.mode === "manual");
+    var pendingId = text(switcher.pendingId, "");
+    var rows = trackable.map(function (candidate) {
+      var followed = isFollowedCandidate(activity, candidate);
+      var pending = pendingId && pendingId === candidate.id;
+      return '' +
+        '<li>' +
+          '<button class="game-candidate-row' + (followed ? " is-followed" : "") + (pending ? " is-pending" : "") + '" type="button" data-action="game-select-candidate" data-candidate-id="' + escapeHtml(candidate.id) + '"' + (followed ? ' aria-current="true"' : '') + (pending ? ' aria-busy="true"' : '') + '>' +
+            gameSwitcherTile(candidate, "game-candidate-row-tile") +
+            '<span class="game-candidate-row-main">' +
+              '<strong>' + escapeHtml(text(candidate.name, "Game")) + '</strong>' +
+              '<small>' + escapeHtml(text(candidate.platform, "Game") + " · " + text(candidate.source, "running app")) + '</small>' +
+            '</span>' +
+            (followed ? '<span class="game-candidate-pill is-following">Following</span>' : '') +
+          '</button>' +
+        '</li>';
+    }).join("");
+
+    return '' +
+      '<div class="game-candidate-sheet" data-action="game-candidates-close" data-sheet-backdrop="1">' +
+        '<div class="game-candidate-sheet-card" role="dialog" aria-modal="true" aria-labelledby="game-candidate-sheet-title">' +
+          '<header class="game-candidate-sheet-head">' +
+            '<div>' +
+              '<h3 id="game-candidate-sheet-title">Choose what to follow</h3>' +
+              '<p>Sorted by current rating</p>' +
+            '</div>' +
+            '<button class="game-candidate-sheet-close" type="button" data-action="game-candidates-close" aria-label="Close">&times;</button>' +
+          '</header>' +
+          '<ul class="game-candidate-sheet-list">' +
+            '<li>' +
+              '<button class="game-candidate-row is-auto" type="button" data-action="game-select-auto"' + (manual ? '' : ' aria-current="true"') + '>' +
+                '<span class="game-candidate-row-tile" aria-hidden="true">A</span>' +
+                '<span class="game-candidate-row-main">' +
+                  '<strong>Automatic</strong>' +
+                  '<small>Follows the highest rated candidate</small>' +
+                '</span>' +
+                (manual ? '' : '<span class="game-candidate-pill is-active">Active</span>') +
+              '</button>' +
+            '</li>' +
+            rows +
+          '</ul>' +
+        '</div>' +
+      '</div>';
+  }
+
   function renderGameFocusScene(game, theme, system, performance, audio, network, env, introActive, performanceRestarting) {
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
@@ -645,7 +775,9 @@
           '<div class="game-focus-identity">' +
             '<strong>' + escapeHtml(gameName) + '</strong>' +
             '<small>' + escapeHtml(platform + " - " + source) + '</small>' +
+            '<div class="game-focus-flags" data-game-focus-flags></div>' +
           '</div>' +
+          '<div class="game-focus-switcher" data-game-focus-switcher></div>' +
           '<button class="inline-button game-focus-home" type="button" data-action="game-face-home">Home</button>' +
         '</header>' +
         '<main class="game-focus-board">' +
@@ -694,6 +826,7 @@
             '<div class="game-focus-reason">' + escapeHtml(gameFocusReasonText(detail, source, activeAudioSessions)) + '</div>' +
           '</aside>' +
         '</main>' +
+      '<div class="game-candidate-sheet-host" data-game-candidate-sheet-host></div>' +
       '</section>';
   }
 
@@ -901,8 +1034,18 @@
       focusIntroGameId: "",
       performanceRestarting: false,
       collectorTimings: [],
-      interacting: false
+      interacting: false,
+      switcher: {
+        carouselOpen: false,
+        sheetOpen: false,
+        pendingId: "",
+        status: ""
+      }
     };
+    var switcherStatusTimerId = 0;
+    var renderedSwitcherMarkup = null;
+    var renderedFlagsMarkup = null;
+    var renderedSheetMarkup = null;
     var suppressNextSteamLaunchId = "";
     var longPressTimerId = 0;
     var focusIntroTimerId = 0;
@@ -1011,6 +1154,124 @@
       }
     }
 
+    function resetGameSwitcher() {
+      state.switcher.carouselOpen = false;
+      state.switcher.sheetOpen = false;
+      renderedSwitcherMarkup = null;
+      renderedFlagsMarkup = null;
+      renderedSheetMarkup = null;
+    }
+
+    function syncHost(selector, markup, previous) {
+      var host = container.querySelector(selector);
+      if (!host) {
+        return null;
+      }
+      // Compare against the last generated markup only: the browser normalizes innerHTML, and
+      // rewriting unchanged hosts on every refresh would drop focus from the carousel.
+      if (previous !== markup) {
+        host.innerHTML = markup;
+      }
+      return markup;
+    }
+
+    function syncGameFocusExtras() {
+      renderedFlagsMarkup = syncHost("[data-game-focus-flags]", renderGameFocusFlags(state.activity), renderedFlagsMarkup);
+      renderedSwitcherMarkup = syncHost("[data-game-focus-switcher]", renderGameFocusSwitcher(state.activity, state.switcher), renderedSwitcherMarkup);
+      renderedSheetMarkup = syncHost("[data-game-candidate-sheet-host]", renderGameCandidateSheet(state.activity, state.switcher), renderedSheetMarkup);
+    }
+
+    function setSwitcherStatus(message) {
+      state.switcher.status = message || "";
+      if (switcherStatusTimerId) {
+        window.clearTimeout(switcherStatusTimerId);
+        switcherStatusTimerId = 0;
+      }
+      if (message) {
+        switcherStatusTimerId = window.setTimeout(function () {
+          switcherStatusTimerId = 0;
+          state.switcher.status = "";
+          syncGameFocusExtras();
+        }, 4000);
+      }
+    }
+
+    function focusInContainer(selector) {
+      var node = container.querySelector(selector);
+      if (node && typeof node.focus === "function") {
+        node.focus({ preventScroll: true });
+      }
+    }
+
+    function openCandidateSheet() {
+      state.switcher.sheetOpen = true;
+      syncGameFocusExtras();
+      focusInContainer(".game-candidate-sheet-close");
+    }
+
+    function closeCandidateSheet(returnFocus) {
+      if (!state.switcher.sheetOpen) {
+        return;
+      }
+      state.switcher.sheetOpen = false;
+      syncGameFocusExtras();
+      if (returnFocus) {
+        focusInContainer(state.switcher.carouselOpen ? '[data-action="game-candidates-more"]' : '[data-action="game-carousel-toggle"]');
+      }
+    }
+
+    function trapSheetFocus(event) {
+      var card = container.querySelector(".game-candidate-sheet-card");
+      if (!card) {
+        return;
+      }
+      var focusable = card.querySelectorAll("button:not([disabled])");
+      if (!focusable.length) {
+        return;
+      }
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        last.focus();
+        event.preventDefault();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        first.focus();
+        event.preventDefault();
+      }
+    }
+
+    function selectGameCandidate(body, pendingId) {
+      if (state.switcher.pendingId) {
+        return;
+      }
+
+      state.switcher.pendingId = pendingId;
+      syncGameFocusExtras();
+      requestJson(buildBridgeUrl(env, "/api/game/activity/select"), {
+        method: "POST",
+        body: body
+      }, 6000).then(function (payload) {
+        state.switcher.pendingId = "";
+        state.activity = normalizeGameActivityPayload(payload);
+        state.switcher.carouselOpen = false;
+        state.switcher.sheetOpen = false;
+        setSwitcherStatus("");
+        redraw();
+        focusInContainer('[data-action="game-carousel-toggle"]');
+        refreshGameModeSession({ activityRefresh: true, performanceSession: true });
+      }, function (error) {
+        var message = text(error && error.message, "Could not change the followed game.");
+        state.switcher.pendingId = "";
+        if (message === GAME_CANDIDATE_GONE_MESSAGE && state.activity && Array.isArray(state.activity.trackable)) {
+          state.activity.trackable = state.activity.trackable.filter(function (candidate) {
+            return candidate.id !== pendingId;
+          });
+        }
+        setSwitcherStatus(message);
+        syncGameFocusExtras();
+      });
+    }
+
     function redraw() {
       var savedGame = settingValue(env, "gameModeGame", "");
       var profile = activeGameModeProfile(env);
@@ -1045,11 +1306,17 @@
           ));
           container.setAttribute("data-game-focus-active-id", focusRenderId);
           container.setAttribute("data-game-focus-intro", introActive ? "1" : "0");
+          renderedSwitcherMarkup = null;
+          renderedFlagsMarkup = null;
+          renderedSheetMarkup = null;
         }
+        syncGameFocusExtras();
         startGameSessionClock();
         return;
       }
 
+      // Leaving the tracking view closes the sheet and collapses the carousel.
+      resetGameSwitcher();
       stopGameSessionClock();
       container.removeAttribute("data-game-focus-active-id");
       container.removeAttribute("data-game-focus-intro");
@@ -1279,7 +1546,7 @@
           id: String(target.getAttribute("data-candidate-id") || "")
         }
       }, 6000).then(function (payload) {
-        state.statusText = text(payload && payload.message, "Game pinned");
+        state.statusText = text(payload && payload.message, "Game pinned") + (payload && payload.unblocked ? " Also removed from the blocklist." : "");
         state.statusTone = "good";
         return refreshGameModeSession({ refresh: true, activityRefresh: true, performanceSession: true });
       }, function (error) {
@@ -1402,6 +1669,23 @@
         toggleGameSessionMute(String(target.getAttribute("data-session-id") || ""));
       } else if (action === "game-pin-candidate") {
         pinGameCandidate(target);
+      } else if (action === "game-carousel-toggle") {
+        state.switcher.carouselOpen = !state.switcher.carouselOpen;
+        syncGameFocusExtras();
+        focusInContainer('[data-action="game-carousel-toggle"]');
+      } else if (action === "game-candidates-more") {
+        openCandidateSheet();
+      } else if (action === "game-candidates-close") {
+        if (!target.hasAttribute("data-sheet-backdrop") || event.target === target) {
+          closeCandidateSheet(true);
+        }
+      } else if (action === "game-select-candidate") {
+        var candidateId = String(target.getAttribute("data-candidate-id") || "");
+        if (candidateId) {
+          selectGameCandidate({ candidateId: candidateId }, candidateId);
+        }
+      } else if (action === "game-select-auto") {
+        selectGameCandidate({ mode: "auto" }, "auto");
       } else if (action === "restart-game-admin") {
         restartHostAsAdmin();
       } else if (action === "steam-theme") {
@@ -1416,10 +1700,22 @@
       }
     });
 
+    addListener(cleanups, document, "keydown", function (event) {
+      if (!state.switcher.sheetOpen) {
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCandidateSheet(true);
+      } else if (event.key === "Tab") {
+        trapSheetFocus(event);
+      }
+    });
+
     var gameModeLoop = createTimerLoop(function () {
       return refreshGameModeSession({ performanceSession: shouldContinuePerformanceSession() });
     }, 2500, function () {
-      return state.interacting;
+      return state.interacting || state.switcher.sheetOpen;
     });
     redraw();
     gameModeLoop.start();
@@ -1431,6 +1727,10 @@
         clearSteamLongPress();
         gameModeLoop.destroy();
         stopGameSessionClock();
+        if (switcherStatusTimerId) {
+          window.clearTimeout(switcherStatusTimerId);
+          switcherStatusTimerId = 0;
+        }
         clearFocusIntroTimer();
         runCleanups(cleanups);
         patchStableDom(container, "");

@@ -1817,3 +1817,639 @@
 .dashboard-native-page--motion-off .game-focus-shell.is-intro .game-focus-wake::before {
   animation: none;
 }
+
+/* Game Mode tracking view: followed-game switcher (carousel + More sheet). */
+.game-focus-identity .game-focus-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.game-focus-identity .game-focus-flags:empty {
+  display: none;
+}
+
+.game-focus-chosen,
+.game-focus-blocklist-unavailable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--theme-accent-border);
+  border-radius: 999px;
+  background: var(--theme-accent-soft);
+  color: var(--game-accent, var(--theme-accent));
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.game-focus-chosen::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.game-focus-blocklist-unavailable {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-surface);
+  color: var(--status-warning-text);
+}
+
+.game-focus-switcher {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.game-focus-switcher:empty {
+  display: none;
+}
+
+.game-focus-switcher-status {
+  max-width: 34ch;
+  color: var(--status-warning-text);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.game-focus-carousel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.game-focus-carousel-track {
+  display: flex;
+  gap: 8px;
+  max-width: 0;
+  min-width: 0;
+  overflow-x: auto;
+  opacity: 0;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  transition: max-width 220ms ease, opacity 160ms ease;
+}
+
+.game-focus-carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+.game-focus-carousel.is-open .game-focus-carousel-track {
+  max-width: min(760px, 52vw);
+  opacity: 1;
+}
+
+.game-focus-carousel-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  max-width: 200px;
+  min-height: 44px;
+  padding: 4px 14px 4px 4px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 999px;
+  background: rgba(var(--theme-surface-elevated-rgb), 0.82);
+  color: var(--theme-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.game-focus-carousel-chip[aria-current="true"] {
+  border-color: var(--game-accent, var(--theme-accent));
+  background: var(--theme-selected-surface);
+}
+
+.game-focus-carousel-chip.is-pending,
+.game-candidate-row.is-pending {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.game-focus-carousel-tile,
+.game-candidate-row-tile {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  background: var(--theme-accent-soft);
+  color: var(--game-accent, var(--theme-accent));
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.game-focus-carousel-tile {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.game-focus-carousel-tile img,
+.game-candidate-row-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.game-focus-carousel-name {
+  overflow: hidden;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-focus-carousel-chip[aria-current="true"] .game-focus-carousel-name::after {
+  content: " \2713";
+  color: var(--game-accent, var(--theme-accent));
+}
+
+.game-focus-carousel-more {
+  padding: 4px 16px;
+  color: var(--game-accent, var(--theme-accent));
+  font-weight: 700;
+}
+
+.game-focus-carousel-toggle {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--theme-accent-border);
+  border-radius: 50%;
+  background: var(--theme-accent-soft);
+  color: var(--game-accent, var(--theme-accent));
+  font: 700 1.05rem/1 "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+  cursor: pointer;
+}
+
+.game-focus-carousel-toggle:focus-visible,
+.game-focus-carousel-chip:focus-visible,
+.game-candidate-row:focus-visible,
+.game-candidate-sheet-close:focus-visible {
+  outline: 2px solid var(--theme-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Absolutely positioned so the host never takes a row in the shell grid. */
+.game-candidate-sheet-host {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+}
+
+.game-candidate-sheet-host:empty {
+  display: none;
+}
+
+.game-candidate-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--theme-vignette);
+  -webkit-backdrop-filter: blur(10px) saturate(115%);
+  backdrop-filter: blur(10px) saturate(115%);
+}
+
+.game-candidate-sheet-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(560px, 100%);
+  max-height: 80%;
+  overflow: hidden;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: var(--theme-panel-radius);
+  background: rgba(var(--theme-surface-primary-rgb), 0.95);
+  box-shadow: var(--theme-panel-shadow);
+}
+
+.game-candidate-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.game-candidate-sheet-head h3 {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 1rem;
+}
+
+.game-candidate-sheet-head p {
+  margin: 2px 0 0;
+  color: var(--theme-text-muted);
+  font-size: 0.8rem;
+}
+
+.game-candidate-sheet-close {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--theme-border);
+  border-radius: 50%;
+  background: var(--theme-surface-muted);
+  color: var(--theme-text);
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+
+.game-candidate-sheet-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.game-candidate-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+  color: var(--theme-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-candidate-row:hover {
+  background: var(--theme-hover-surface);
+}
+
+.game-candidate-row[aria-current="true"] {
+  border-color: var(--theme-accent-border);
+}
+
+.game-candidate-row.is-auto {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-accent-soft);
+}
+
+.game-candidate-row.is-auto small {
+  color: var(--game-accent, var(--theme-accent));
+}
+
+.game-candidate-row-tile {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.game-candidate-row-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.game-candidate-row-main strong {
+  overflow: hidden;
+  font-size: 0.95rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-candidate-row-main small {
+  color: var(--theme-text-muted);
+  font-size: 0.8rem;
+}
+
+.game-candidate-pill {
+  padding: 2px 9px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.game-candidate-pill.is-active,
+.game-candidate-pill.is-following {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-accent-soft);
+  color: var(--game-accent, var(--theme-accent));
+}
+
+@media (max-width: 1280px) {
+  .game-focus-carousel.is-open .game-focus-carousel-track {
+    max-width: min(520px, 46vw);
+  }
+}
+
+@media (max-width: 600px) {
+  .game-focus-carousel.is-open .game-focus-carousel-track {
+    max-width: 58vw;
+  }
+
+  .game-focus-carousel-chip {
+    max-width: 150px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-focus-carousel-track {
+    transition: none;
+  }
+}
+
+/* Settings: Game Mode blocklist panel. */
+.game-blocklist {
+  display: grid;
+  gap: 14px;
+}
+
+.game-blocklist-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-blocklist-add,
+.game-blocklist-ignore,
+.game-blocklist-remove {
+  min-height: 40px;
+}
+
+.game-blocklist-confirmation {
+  min-width: 0;
+  color: var(--status-success-text);
+  font-size: 0.86rem;
+}
+
+.game-blocklist-confirmation[data-tone="warn"] {
+  color: var(--status-warning-text);
+}
+
+.game-blocklist-warning {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--status-warning-border);
+  border-radius: 12px;
+  background: var(--status-warning-surface);
+}
+
+.game-blocklist-warning strong {
+  color: var(--status-warning-text);
+}
+
+.game-blocklist-warning span,
+.game-blocklist-empty span,
+.game-blocklist-system p {
+  color: var(--theme-text-muted);
+}
+
+.game-blocklist-group-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px 6px;
+  color: var(--theme-text-muted);
+  font-size: 0.82rem;
+}
+
+.game-blocklist-entries,
+.game-blocklist-pick-list,
+.game-blocklist-rules {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-blocklist-entry {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+}
+
+.game-blocklist-entry.is-new {
+  border-color: var(--status-success-border);
+  background: var(--status-success-surface);
+}
+
+.game-blocklist-tile {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent-text);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.game-blocklist-entry-main,
+.game-blocklist-pick-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.game-blocklist-entry-main strong,
+.game-blocklist-pick-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-blocklist-entry-main small,
+.game-blocklist-pick-main small {
+  color: var(--theme-text-muted);
+  font-size: 0.8rem;
+}
+
+.game-blocklist-empty,
+.game-blocklist-empty-row {
+  padding: 16px;
+  border: 1px dashed var(--theme-border-strong);
+  border-radius: 12px;
+  color: var(--theme-text-muted);
+  text-align: center;
+}
+
+.game-blocklist-empty {
+  display: grid;
+  gap: 4px;
+}
+
+.game-blocklist-empty strong {
+  color: var(--theme-text);
+}
+
+.game-blocklist-picker {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--theme-accent-border);
+  border-radius: 14px;
+  background: var(--theme-selected-surface);
+}
+
+.game-blocklist-picker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-blocklist-picker-head strong {
+  flex: 1 1 auto;
+}
+
+.game-blocklist-filter {
+  flex: 1 1 220px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 10px;
+  background: var(--theme-surface-secondary);
+  color: var(--theme-text);
+  font: inherit;
+}
+
+.game-blocklist-pick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--theme-surface-muted);
+}
+
+.game-blocklist-tag {
+  padding: 2px 9px;
+  border: 1px solid var(--theme-accent-border);
+  border-radius: 999px;
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent-text);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.game-blocklist-system-toggle {
+  justify-self: start;
+  min-height: 40px;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--theme-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.game-blocklist-system-toggle::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 120ms ease;
+}
+
+.game-blocklist-system-toggle[aria-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+
+.game-blocklist-system {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+}
+
+.game-blocklist-system p {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.game-blocklist-rule-group {
+  display: grid;
+  gap: 6px;
+}
+
+.game-blocklist-rule-group h4 {
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.game-blocklist-rules {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.game-blocklist-rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-secondary);
+  color: var(--theme-text-muted);
+  font: 0.78rem "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.game-blocklist-rule-lock {
+  width: 8px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.game-blocklist-rule-kind {
+  font-size: 0.68rem;
+  opacity: 0.75;
+}
+
+@media (max-width: 600px) {
+  .game-blocklist-pick-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .game-blocklist-pick-row .game-blocklist-tag {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-blocklist-system-toggle::before {
+    transition: none;
+  }
+}

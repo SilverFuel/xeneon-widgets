@@ -40,6 +40,7 @@
       { id: "theme-studio", label: "Appearance" },
       { id: "layout-editor", label: "Layout" },
       { id: "scenes", label: "Modes & automation" },
+      { id: "game-blocklist", label: "Game blocklist" },
       { id: "updates", label: "Updates" },
       { id: "privacy", label: "Privacy & Backup" },
       { id: "remote", label: "Phone Remote" },
