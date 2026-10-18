@@ -220,7 +220,7 @@
 
       if (!unavailable && !state.loadError) {
         parts.push('<section class="game-blocklist-list" aria-label="Ignored by you">' +
-          '<div class="game-blocklist-group-label"><span>Ignored by you</span><span>' + (state.loading ? "…" : entries.length) + '</span></div>' +
+          '<div class="game-blocklist-group-label"><span>Ignored by you</span><span>' +  '</span></div>' +
           (state.loading
             ? '<div class="game-blocklist-empty-row" role="status">Loading the blocklist…</div>'
             : entries.length

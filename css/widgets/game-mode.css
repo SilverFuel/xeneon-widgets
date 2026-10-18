@@ -818,10 +818,23 @@
 
 .game-focus-topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 14px;
   min-height: 0;
+}
+
+/* Switcher and Home share the top row so Home never wraps below the carousel toggle. */
+.game-focus-topbar > .game-focus-switcher {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+}
+
+.game-focus-topbar > .game-focus-home {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: start;
 }
 
 .game-focus-identity {
@@ -1568,8 +1581,22 @@
 
   .game-focus-topbar {
     align-items: stretch;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 14px;
+  }
+
+  .game-focus-topbar > .game-focus-identity {
+    grid-column: 1 / -1;
+  }
+
+  .game-focus-topbar > .game-focus-switcher {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .game-focus-topbar > .game-focus-home {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .game-focus-identity {
@@ -1882,11 +1909,28 @@
 }
 
 .game-focus-carousel {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   max-width: 100%;
+}
+
+/* Outline drawn on a pseudo-element so opening the carousel never shifts the topbar layout. */
+.game-focus-carousel::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1px solid var(--game-accent, var(--theme-accent));
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.game-focus-carousel.is-open::before {
+  opacity: 0.55;
 }
 
 .game-focus-carousel-track {
@@ -2169,7 +2213,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .game-focus-carousel-track {
+  .game-focus-carousel-track,
+  .game-focus-carousel::before {
     transition: none;
   }
 }
