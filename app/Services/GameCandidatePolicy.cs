@@ -241,15 +241,22 @@ public static class GameCandidatePolicy
 
     private static bool MatchesSelection(GameActivityPayload candidate, ManualSelection selection)
     {
-        if (string.Equals(candidate.Id, selection.CandidateId, StringComparison.OrdinalIgnoreCase))
+        var sameId = string.Equals(candidate.Id, selection.CandidateId, StringComparison.OrdinalIgnoreCase);
+        if (!selection.ProcessId.HasValue)
         {
-            return true;
+            return sameId;
         }
 
-        return selection.ProcessId.HasValue
-            && candidate.ProcessId == selection.ProcessId
-            && !string.IsNullOrWhiteSpace(selection.ExecutablePath)
-            && string.Equals(candidate.ExecutablePath, selection.ExecutablePath, StringComparison.OrdinalIgnoreCase);
+        // Ids come from the path or Steam app id, so a relaunched app reuses them. When the choice
+        // was bound to a process, a different process is a different run and must not inherit it.
+        if (candidate.ProcessId != selection.ProcessId)
+        {
+            return false;
+        }
+
+        return sameId
+            || (!string.IsNullOrWhiteSpace(selection.ExecutablePath)
+                && string.Equals(candidate.ExecutablePath, selection.ExecutablePath, StringComparison.OrdinalIgnoreCase));
     }
 
     private static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)

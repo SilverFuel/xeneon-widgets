@@ -430,6 +430,41 @@ public sealed class GameCandidatePolicyTests
     }
 
     [Test]
+    public void Apply_ManualSelectionClearsWhenSameIdReturnsWithAnotherProcess()
+    {
+        var selection = new ManualSelection("steam:1", 2, @"C:\Steam\A.exe", DateTimeOffset.UtcNow);
+        var result = GameCandidatePolicy.Apply(
+            [Candidate("steam:1", 96, 7, @"C:\Steam\A.exe"), Candidate("game:other", 70, 8, @"C:\Games\B.exe")],
+            NothingBlocked,
+            selection,
+            null);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.SelectionCleared, Is.True);
+            Assert.That(result.Selection, Is.Null);
+            Assert.That(result.ActiveGame?.Manual, Is.False);
+        }));
+    }
+
+    [Test]
+    public void Apply_ManualSelectionKeepsPathlessSelectionById()
+    {
+        var selection = new ManualSelection("steam:1", null, "", DateTimeOffset.UtcNow);
+        var result = GameCandidatePolicy.Apply(
+            [Candidate("steam:1", 60), Candidate("game:other", 99, 8, @"C:\Games\B.exe")],
+            NothingBlocked,
+            selection,
+            "steam:1");
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.SelectionCleared, Is.False);
+            Assert.That(result.ActiveGame?.Id, Is.EqualTo("steam:1"));
+        }));
+    }
+
+    [Test]
     public void Apply_ManualSelectionClearsWhenItemBecomesBlocked()
     {
         const string chosen = @"C:\Games\Chosen.exe";
