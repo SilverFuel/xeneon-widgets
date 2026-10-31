@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added a Game Mode blocklist in Settings. Apps that keep running in the background, such as wallpaper tools or docks, can be ignored so Game Mode follows the real game and its metrics. Built-in exclusions can be reviewed read-only.
+- Added a running-candidates carousel to the Game Mode tracking view. Choose which detected game or app to follow, or return to Automatic from the More list. A manual choice lasts until that app closes.
+
 ## 0.3.0-beta.1 - 2026-08-18
 
 ### Recent UI polish

@@ -1945,7 +1945,7 @@ function validateProbe(probe, viewport) {
 
 async function validateFavoritesNavigation(cdp) {
   const expectedIds = [
-    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
+    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-blocklist", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
     "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather"
   ];
@@ -2089,7 +2089,7 @@ async function validateFavoritesNavigation(cdp) {
     }
     assert(!evaluation.exceptionDetails, `favorites ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(evaluation.exceptionDetails)}`);
     const result = evaluation.result?.value;
-    assert(result?.ids.length === 23 && result.favorites.join("|") === "system|audio|quick-actions|weather", `favorites test produced no navigation evidence: ${JSON.stringify(result)}`);
+    assert(result?.ids.length === 24 && result.favorites.join("|") === "system|audio|quick-actions|weather", `favorites test produced no navigation evidence: ${JSON.stringify(result)}`);
     await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=system&favoritesReloadTest=${width}` });
     await waitForCommittedUrl(cdp, `favoritesReloadTest=${width}`);
     const reload = await cdp.send("Runtime.evaluate", {
@@ -3571,7 +3571,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
     console.error(`surface failure screenshot: ${screenshotPath}`);
   }
   const expectedIds = [
-    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
+    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-blocklist", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
     "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather"
   ];
@@ -3895,7 +3895,7 @@ async function validateForcedColorsProductSurfaces(cdp) {
   }
 
   const expectedIds = [
-    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
+    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-blocklist", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
     "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather"
   ];

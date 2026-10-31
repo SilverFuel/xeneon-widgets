@@ -88,6 +88,8 @@ Auxora now includes:
 - release channel and local-hosted GitHub release checks
 - local-only OBS reachability and streaming-layout preview; this beta sends no OBS commands
 - Game Mode profile and launcher handoff
+- Game Mode blocklist in Settings to ignore background apps such as wallpaper tools or docks, with the built-in exclusions available read-only
+- choose which running game or app Game Mode follows from the tracking view, or return to Automatic
 - built-in widget packs for local dashboard layouts
 - directly discoverable, optional local Frigate object detections and event snapshots with an in-panel setup path
 - installer readiness panel

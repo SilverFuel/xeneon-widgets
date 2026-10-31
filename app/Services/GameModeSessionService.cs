@@ -74,6 +74,27 @@ public sealed class GameModeSessionService
                 Message = "Game activity snapshot failed.",
                 SampledAt = DateTimeOffset.UtcNow
             });
+        // The Steam snapshot is not filtered by the blocklist; hide its active game when the
+        // activity policy blocked the same app, or the widget falls back to showing it (FR-002).
+        if (steam.ActiveGame is not null && activity.BlockedIds.Contains($"steam:{steam.ActiveGame.AppId}"))
+        {
+            // Copy: SteamService returns its cached instance, which other readers share.
+            steam = new SteamGamesSnapshot
+            {
+                Supported = steam.Supported,
+                Configured = steam.Configured,
+                Status = steam.Status,
+                SampledAt = steam.SampledAt,
+                Stale = steam.Stale,
+                Message = steam.Message,
+                Source = steam.Source,
+                SteamDetected = steam.SteamDetected,
+                LibraryCount = steam.LibraryCount,
+                ActiveGame = null,
+                Games = steam.Games
+            };
+        }
+
         var performance = Capture(
             "performance",
             140,

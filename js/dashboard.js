@@ -268,6 +268,7 @@
     streaming: { destination: "settings", category: "Creator", defaultStatus: "Preview", alwaysVisible: true },
     marketplace: { destination: "settings", category: "Widget Packs", defaultStatus: "Available", alwaysVisible: true },
     privacy: { destination: "settings", category: "Privacy", defaultStatus: "Available", alwaysVisible: true },
+    "game-blocklist": { destination: "settings", category: "Gaming", defaultStatus: "Available", alwaysVisible: true },
     remote: { destination: "settings", category: "Remote", defaultStatus: "Unavailable", alwaysVisible: true },
     installer: { destination: "settings", category: "Recovery", defaultStatus: "Checking", alwaysVisible: true },
     "game-mode": { destination: "library", category: "Gaming", defaultStatus: "Available" },
@@ -2782,6 +2783,15 @@
         kicker: "Trust and portability",
         copy: "Local settings, sanitized diagnostics, backup, reset, and recovery.",
         viewerLabel: "Local-first"
+      },
+      {
+        id: "game-blocklist",
+        title: "Game Mode blocklist",
+        requiresBridge: true,
+        tier: "product",
+        kicker: "Blocklist",
+        copy: "Apps Game Mode ignores even while they keep running.",
+        viewerLabel: "Local"
       },
       {
         id: "remote",

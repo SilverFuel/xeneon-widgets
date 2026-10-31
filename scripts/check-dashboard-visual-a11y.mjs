@@ -142,6 +142,7 @@ const expectedJsAssets = [
   "js/widgets/actions.js",
   "js/widgets/integrations.js",
   "js/widgets/game-mode.js",
+  "js/widgets/game-blocklist.js",
   "js/quick-controls.js",
   "js/dashboard.js"
 ];

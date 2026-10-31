@@ -232,6 +232,24 @@ public sealed class ApiRouter
             case "/api/game/activity/pin" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _gameController.PinCandidate(await ReadJsonAsync<GameActivityPinRequest>(request, cancellationToken)), cancellationToken);
                 return;
+            case "/api/game/activity/select" when request.HttpMethod == "POST":
+                var selectRequest = await ReadJsonAsync<GameActivitySelectRequest>(request, cancellationToken);
+                await HandleGameRequestAsync(response, () => _gameController.Select(selectRequest), cancellationToken);
+                return;
+            case "/api/game/blocklist" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _gameController.GetBlocklist(), cancellationToken);
+                return;
+            case "/api/game/blocklist/sources" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _gameController.GetBlocklistSources(), cancellationToken);
+                return;
+            case "/api/game/blocklist" when request.HttpMethod == "POST":
+                var addRequest = await ReadJsonAsync<GameBlocklistAddRequest>(request, cancellationToken);
+                await HandleGameRequestAsync(response, () => _gameController.AddToBlocklist(addRequest), cancellationToken);
+                return;
+            case "/api/game/blocklist/remove" when request.HttpMethod == "POST":
+                var removeRequest = await ReadJsonAsync<GameBlocklistRemoveRequest>(request, cancellationToken);
+                await HandleGameRequestAsync(response, () => _gameController.RemoveFromBlocklist(removeRequest), cancellationToken);
+                return;
             case "/api/system":
                 await WriteJsonAsync(response, 200, _telemetryController.GetSystemSnapshot(), cancellationToken);
                 return;
@@ -510,6 +528,40 @@ public sealed class ApiRouter
         {
             await WriteJsonAsync(response, 502, new { error = error.Message }, cancellationToken);
         }
+    }
+
+    private static async Task HandleGameRequestAsync(HttpListenerResponse response, Func<object> action, CancellationToken cancellationToken)
+    {
+        int statusCode;
+        string message;
+        try
+        {
+            var payload = action();
+            await WriteJsonAsync(response, 200, payload, cancellationToken);
+            return;
+        }
+        catch (GameBlocklistReferenceNotFoundException error)
+        {
+            statusCode = 404;
+            message = error.Message;
+        }
+        catch (GameCandidateNotFoundException error)
+        {
+            statusCode = 404;
+            message = error.Message;
+        }
+        catch (GameBlocklistUnavailableException error)
+        {
+            statusCode = 409;
+            message = error.Message;
+        }
+        catch (ArgumentException error)
+        {
+            statusCode = 400;
+            message = error.Message;
+        }
+
+        await WriteJsonAsync(response, statusCode, new { ok = false, message, error = message }, cancellationToken);
     }
 
     private static object BuildUnsupportedFeaturePayload(string status, string message)

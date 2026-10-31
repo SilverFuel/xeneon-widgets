@@ -62,8 +62,11 @@ public sealed class LocalDataResetServiceTests
         File.WriteAllText(Path.Combine(legacyLocal, "Telemetry", "presentmon-old.csv"), "old");
         File.WriteAllText(Path.Combine(legacyLocal, "logs", "host.log"), "old log");
         _logger!.Info("delete me");
+        var blocklistPath = Path.Combine(configDirectory, GameBlocklistStore.FileName);
+        var blocklist = new GameBlocklistStore(_logger, blocklistPath);
+        blocklist.Add("Wallpaper Engine", executable, "steam:431960", "Steam library");
         var runtimeClearCalls = 0;
-        var service = new LocalDataResetService(store, launcher, performance, _logger, legacyRoaming, legacyLocal, () => runtimeClearCalls++);
+        var service = new LocalDataResetService(store, launcher, performance, blocklist, _logger, legacyRoaming, legacyLocal, () => runtimeClearCalls++);
         var browserClearCalls = 0;
         service.SetBrowserDataClearer(_ =>
         {
@@ -97,6 +100,9 @@ public sealed class LocalDataResetServiceTests
             Assert.That(File.Exists(Path.Combine(legacyLocal, "recent-apps.json")), Is.False);
             Assert.That(File.Exists(Path.Combine(legacyLocal, "Telemetry", "presentmon-old.csv")), Is.False);
             Assert.That(File.Exists(_logger.LogPath), Is.False);
+            Assert.That(receipt.Steps.Single(step => step.Id == "game-blocklist").Required, Is.True);
+            Assert.That(File.Exists(blocklistPath), Is.False);
+            Assert.That(blocklist.Count, Is.Zero);
         }));
     }
 
@@ -106,8 +112,9 @@ public sealed class LocalDataResetServiceTests
         var store = new ConfigStore(_logger!, Path.Combine(_root, "config"));
         using var launcher = new LauncherService(_logger!, store, Path.Combine(_root, "recent-apps.json"), () => null, startTimer: false);
         using var performance = new GamePerformanceService(_logger!, store, Path.Combine(_root, "telemetry"));
+        var blocklist = new GameBlocklistStore(_logger!, Path.Combine(_root, "config", GameBlocklistStore.FileName));
         var service = new LocalDataResetService(
-            store, launcher, performance, _logger!, Path.Combine(_root, "legacy-roaming"), Path.Combine(_root, "legacy-local"));
+            store, launcher, performance, blocklist, _logger!, Path.Combine(_root, "legacy-roaming"), Path.Combine(_root, "legacy-local"));
 
         var receipt = await service.ResetAllAsync(CancellationToken.None);
         var browserStep = receipt.Steps.Single(step => step.Id == "webview-data");
@@ -136,7 +143,8 @@ public sealed class LocalDataResetServiceTests
         var blocked = Path.Combine(legacyRoaming, "config.json");
         File.WriteAllText(blocked, "{}");
         File.SetAttributes(blocked, FileAttributes.ReadOnly);
-        var service = new LocalDataResetService(store, launcher, performance, _logger!, legacyRoaming, legacyLocal);
+        var blocklist = new GameBlocklistStore(_logger!, Path.Combine(_root, "config", GameBlocklistStore.FileName));
+        var service = new LocalDataResetService(store, launcher, performance, blocklist, _logger!, legacyRoaming, legacyLocal);
 
         var receipt = await service.ResetAllAsync(CancellationToken.None);
         var failed = receipt.Steps.Single(step => step.Id == "legacy-data");

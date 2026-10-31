@@ -51,6 +51,7 @@ public sealed class BridgeManager : IAsyncDisposable
     private readonly LauncherService _launcherService;
     private readonly SteamService _steamService;
     private readonly GameActivityService _gameActivityService;
+    private readonly GameBlocklistStore _gameBlocklistStore;
     private readonly GamePerformanceService _gamePerformanceService;
     private readonly GameModeSessionService _gameModeSessionService;
     private readonly GameController _gameController;
@@ -100,7 +101,8 @@ public sealed class BridgeManager : IAsyncDisposable
         _mediaService = new MediaService(_logger, _configStore);
         _launcherService = new LauncherService(_logger, _configStore);
         _steamService = new SteamService(_logger);
-        _gameActivityService = new GameActivityService(_steamService, _launcherService, _configStore, _logger);
+        _gameBlocklistStore = new GameBlocklistStore(_logger);
+        _gameActivityService = new GameActivityService(_steamService, _launcherService, _configStore, _gameBlocklistStore, _logger);
         _gamePerformanceService = new GamePerformanceService(_logger, _configStore);
         _gameModeSessionService = new GameModeSessionService(
             _systemMetrics,
@@ -131,6 +133,7 @@ public sealed class BridgeManager : IAsyncDisposable
             _configStore,
             _launcherService,
             _gamePerformanceService,
+            _gameBlocklistStore,
             _logger,
             _frigateService.ClearSensitiveState);
         var localDataResetController = new LocalDataResetController(_localDataResetService);

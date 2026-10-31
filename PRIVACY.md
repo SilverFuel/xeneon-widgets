@@ -41,10 +41,12 @@ Windows data is stored under:
 
 macOS beta data is stored under the app's standard Electron user-data folder.
 
+The Game Mode blocklist is stored in `%APPDATA%\Auxora\game-blocklist.json`. It contains the names and executable paths of the apps you chose to ignore, is never uploaded, and is not included in portable backups. When you add an app from Settings, Auxora reads the list of running apps on request only and does not keep it.
+
 Legacy `%APPDATA%\XenonEdgeHost` and `%LOCALAPPDATA%\XenonEdgeHost` folders may remain temporarily after migration so an older build can be restored. The Remove Auxora and Local Data shortcut deletes both current and legacy data.
 
 ## Data Removal
 
-Use Reset all app data from the in-app Privacy or Setup panel to clear current configuration and protected integration secrets, recent-app history, host logs, retained PresentMon game telemetry, dashboard browser storage, known legacy data files, and the active WebView browsing profile when that profile is available. The reset response shows a deletion receipt. If a required deletion fails, Auxora reports the failure instead of claiming the reset completed. The Windows Start Menu also includes a Remove Auxora and Local Data cleanup shortcut.
+Use Reset all app data from the in-app Privacy or Setup panel to clear current configuration and protected integration secrets, recent-app history, the Game Mode blocklist, host logs, retained PresentMon game telemetry, dashboard browser storage, known legacy data files, and the active WebView browsing profile when that profile is available. The reset response shows a deletion receipt. If a required deletion fails, Auxora reports the failure instead of claiming the reset completed. The Windows Start Menu also includes a Remove Auxora and Local Data cleanup shortcut.
 
 Uninstalling removes the installed app. Local settings can remain so the dashboard keeps user preferences across upgrades, so reset local app data first if the machine is being sold, returned, or handed to another person.

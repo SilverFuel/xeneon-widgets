@@ -10,163 +10,6 @@ public sealed class GameActivityService
 {
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan WmiProcessScanCooldown = TimeSpan.FromSeconds(30);
-    private static readonly HashSet<string> IgnoredProcessNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "agent",
-        "applicationframehost",
-        "battle.net",
-        "blizzardbrowser",
-        "chrome",
-        "cmd",
-        "codex",
-        "code",
-        "conhost",
-        "corsair.service",
-        "corsaircue",
-        "discord",
-        "dotnet",
-        "eadesktop",
-        "epicgameslauncher",
-        "epicwebhelper",
-        "explorer",
-        "firefox",
-        "galaxyclient",
-        "gamingservices",
-        "gamingservicesnet",
-        "git",
-        "gog galaxy",
-        "msedge",
-        "msbuild",
-        "ms-teams",
-        "msteams",
-        "msteams_autostarter",
-        "node",
-        "nvidia app",
-        "nvcontainer",
-        "origin",
-        "openconsole",
-        "powershell",
-        "pwsh",
-        "python",
-        "riotclientservices",
-        "skype",
-        "slack",
-        "steam",
-        "steamwebhelper",
-        "systemsettings",
-        "teams",
-        "windowsterminal",
-        "webex",
-        "zoom",
-        "ubisoftconnect",
-        "xboxappservices",
-        "xenonedgehost"
-    };
-
-    private static readonly HashSet<string> LauncherProcessNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "amazon games",
-        "amazon games ui",
-        "battle.net",
-        "battle.net helper",
-        "bethesda.net_launcher",
-        "blizzardbrowser",
-        "curseforge",
-        "eabackgroundservice",
-        "eadesktop",
-        "ealauncher",
-        "epicgameslauncher",
-        "epicwebhelper",
-        "galaxyclient",
-        "galaxyclient helper",
-        "galaxycommunication",
-        "gamebar",
-        "gamebarftserver",
-        "gamebarpresencewriter",
-        "gamingservices",
-        "gamingservicesnet",
-        "gog galaxy notifications renderer",
-        "heroic",
-        "itch",
-        "legendary",
-        "minecraftlauncher",
-        "modrinth app",
-        "origin",
-        "originwebhelperservice",
-        "overwolf",
-        "prismlauncher",
-        "riotclientcrashhandler",
-        "riotclientservices",
-        "riotclientux",
-        "riotclientuxrender",
-        "rockstar games launcher",
-        "rockstarservice",
-        "socialclubhelper",
-        "steam",
-        "steamservice",
-        "steamwebhelper",
-        "ubisoftconnect",
-        "ubisoftgamelauncher",
-        "upc",
-        "xboxapp",
-        "xboxappservices",
-        "xboxpcapp",
-        "xboxpcappft"
-    };
-
-    private static readonly string[] IgnoredProcessFragments =
-    [
-        "crashpad",
-        "crashreport",
-        "helper",
-        "installer",
-        "launcher",
-        "overlay",
-        "setup",
-        "unins",
-        "update"
-    ];
-
-    private static readonly string[] IgnoredExecutablePathFragments =
-    [
-        @"\microsoft teams\",
-        @"\msteams_",
-        @"\slack\",
-        @"\teams\current\",
-        @"\webex\",
-        @"\zoom\"
-    ];
-
-    private static readonly string[] LauncherExecutablePathFragments =
-    [
-        @"\amazon games\app\",
-        @"\battle.net\",
-        @"\bethesda.net launcher\",
-        @"\curseforge\",
-        @"\ea desktop\",
-        @"\electronic arts\ea desktop\",
-        @"\epic games\launcher\",
-        @"\gog galaxy\galaxyclient",
-        @"\gog galaxy\gog galaxy notifications renderer",
-        @"\gog.com\galaxy\redists\galaxycommunication",
-        @"\heroic\",
-        @"\itch\",
-        @"\minecraft launcher\",
-        @"\modrinth app\",
-        @"\origin\origin",
-        @"\overwolf\",
-        @"\prismlauncher\",
-        @"\riot client\",
-        @"\rockstar games\launcher\",
-        @"\rockstar games\social club\",
-        @"\steam\bin\",
-        @"\steam\steam.exe",
-        @"\ubisoft game launcher\ubisoftconnect",
-        @"\ubisoft game launcher\upc.exe",
-        @"\windowsapps\microsoft.gamingapp_",
-        @"\windowsapps\microsoft.xboxapp_"
-    ];
-
     private static readonly string[] GameKeywordFragments =
     [
         "battle.net",
@@ -215,6 +58,7 @@ public sealed class GameActivityService
     private readonly SteamService _steamService;
     private readonly LauncherService _launcherService;
     private readonly ConfigStore _configStore;
+    private readonly GameBlocklistStore _gameBlocklistStore;
     private readonly HostLogger _logger;
     private readonly object _sync = new();
     private GameActivitySnapshot? _cachedSnapshot;
@@ -224,20 +68,34 @@ public sealed class GameActivityService
     private DateTimeOffset? _sessionStartedAt;
     private DateTimeOffset? _lastEndedAt;
     private DateTimeOffset _lastWmiProcessScanAt = DateTimeOffset.MinValue;
+    private ManualSelection? _manualSelection;
 
     public GameActivityService(
         SteamService steamService,
         LauncherService launcherService,
         ConfigStore configStore,
+        GameBlocklistStore gameBlocklistStore,
         HostLogger logger)
     {
         _steamService = steamService;
         _launcherService = launcherService;
         _configStore = configStore;
+        _gameBlocklistStore = gameBlocklistStore;
         _logger = logger;
     }
 
     public GameActivitySnapshot GetSnapshot(bool forceRefresh = false)
+    {
+        return GetSnapshot(forceRefresh, steamRefresh: forceRefresh);
+    }
+
+    // Blocklist and selection actions need fresh process data, not a Steam library rescan.
+    private GameActivitySnapshot GetFreshProcessSnapshot()
+    {
+        return GetSnapshot(forceRefresh: true, steamRefresh: false);
+    }
+
+    private GameActivitySnapshot GetSnapshot(bool forceRefresh, bool steamRefresh)
     {
         lock (_sync)
         {
@@ -248,7 +106,7 @@ public sealed class GameActivityService
                 return _cachedSnapshot;
             }
 
-            _cachedSnapshot = BuildSnapshot(forceRefresh);
+            _cachedSnapshot = BuildSnapshot(steamRefresh);
             _cachedAt = DateTimeOffset.UtcNow;
             return _cachedSnapshot;
         }
@@ -299,16 +157,15 @@ public sealed class GameActivityService
             return current;
         });
 
-        lock (_sync)
-        {
-            _cachedSnapshot = null;
-            _cachedAt = DateTimeOffset.MinValue;
-        }
+        // A pinned game and a blocked item are mutually exclusive; the newest action wins.
+        var unblocked = _gameBlocklistStore.RemoveByExecutablePath(candidate.ExecutablePath);
+        InvalidateCache();
 
         return new GameActivityPinResult
         {
             Ok = true,
             Added = added,
+            Unblocked = unblocked,
             Game = candidate,
             Message = added
                 ? $"{candidate.Name} will be treated as a game from now on."
@@ -316,14 +173,260 @@ public sealed class GameActivityService
         };
     }
 
-    private GameActivitySnapshot BuildSnapshot(bool forceRefresh)
+    public GameBlocklistSnapshot GetBlocklist()
+    {
+        var snapshot = _gameBlocklistStore.Snapshot();
+        snapshot.SystemExclusions = SystemGameExclusions.DescribeRules().ToList();
+        return snapshot;
+    }
+
+    public GameBlocklistSources GetBlocklistSources()
+    {
+        var snapshot = GetFreshProcessSnapshot();
+        var detected = new List<GameBlocklistSourceItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var detectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in EnumerateDetected(snapshot))
+        {
+            if (!seen.Add(candidate.Id))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(candidate.ExecutablePath))
+            {
+                detectedPaths.Add(NormalizePath(candidate.ExecutablePath));
+            }
+
+            detected.Add(new GameBlocklistSourceItem
+            {
+                Ref = "candidate:" + candidate.Id,
+                Name = TextOr(candidate.Name, "App"),
+                Source = TextOr(candidate.Source, candidate.Platform),
+                ExecutableName = string.IsNullOrWhiteSpace(candidate.ExecutablePath) ? "" : Path.GetFileName(candidate.ExecutablePath),
+                Confidence = candidate.Confidence,
+                Active = snapshot.ActiveGame is not null
+                    && string.Equals(snapshot.ActiveGame.Id, candidate.Id, StringComparison.OrdinalIgnoreCase)
+            });
+        }
+
+        var running = ReadRunningProcesses()
+            .Where(process => !string.IsNullOrWhiteSpace(process.ExecutablePath)
+                && !SystemGameExclusions.IsExcluded(process.ProcessName, process.ExecutablePath)
+                && !_gameBlocklistStore.IsBlocked(process.ExecutablePath, null)
+                && !detectedPaths.Contains(NormalizePath(process.ExecutablePath)))
+            .GroupBy(process => NormalizePath(process.ExecutablePath), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Select(process => new GameBlocklistSourceItem
+            {
+                Ref = "process:" + process.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Name = TextOr(CleanGameName(process.ProcessName), Path.GetFileNameWithoutExtension(process.ExecutablePath)),
+                Source = "Running app",
+                ExecutableName = Path.GetFileName(process.ExecutablePath)
+            })
+            .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new GameBlocklistSources
+        {
+            Detected = detected,
+            Running = running
+        };
+    }
+
+    public GameBlocklistAddResult AddToBlocklist(GameBlocklistAddRequest request)
+    {
+        var reference = request.Ref?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            throw new ArgumentException("Choose an app to ignore.");
+        }
+
+        string displayName;
+        string executablePath;
+        string launcherId;
+        string source;
+        if (reference.StartsWith("candidate:", StringComparison.OrdinalIgnoreCase))
+        {
+            var candidateId = reference["candidate:".Length..];
+            var candidate = FindDetected(GetSnapshot(), candidateId)
+                ?? FindDetected(GetFreshProcessSnapshot(), candidateId)
+                ?? throw new GameBlocklistReferenceNotFoundException();
+            displayName = TextOr(candidate.Name, "App");
+            executablePath = candidate.ExecutablePath;
+            launcherId = GameCandidatePolicy.LauncherIdOf(candidate);
+            source = TextOr(candidate.Source, candidate.Platform);
+        }
+        else if (reference.StartsWith("process:", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(reference["process:".Length..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var processId)
+            && processId > 0)
+        {
+            var process = ReadRunningProcesses().FirstOrDefault(entry => entry.ProcessId == processId);
+            if (process is null || string.IsNullOrWhiteSpace(process.ExecutablePath) || !File.Exists(process.ExecutablePath))
+            {
+                throw new GameBlocklistReferenceNotFoundException();
+            }
+
+            displayName = TextOr(CleanGameName(process.ProcessName), Path.GetFileNameWithoutExtension(process.ExecutablePath));
+            executablePath = process.ExecutablePath;
+            launcherId = "";
+            source = "Running app";
+        }
+        else
+        {
+            throw new GameBlocklistReferenceNotFoundException();
+        }
+
+        var (entry, added) = _gameBlocklistStore.Add(displayName, executablePath, launcherId, source);
+
+        var unpinned = false;
+        var normalizedPath = NormalizePath(executablePath);
+        if (!string.IsNullOrWhiteSpace(normalizedPath)
+            && _configStore.Snapshot().PinnedGames.Any(pinned =>
+                string.Equals(NormalizePath(pinned.ExecutablePath), normalizedPath, StringComparison.OrdinalIgnoreCase)))
+        {
+            _configStore.Update(current =>
+            {
+                current.PinnedGames = (current.PinnedGames ?? [])
+                    .Where(pinned => !string.Equals(NormalizePath(pinned.ExecutablePath), normalizedPath, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                return current;
+            });
+            unpinned = true;
+        }
+
+        var selectionCleared = false;
+        lock (_sync)
+        {
+            if (_manualSelection is not null
+                && (_gameBlocklistStore.IsBlocked(_manualSelection.ExecutablePath, null)
+                    || _gameBlocklistStore.IsBlocked(null, LauncherIdOfSelection(_manualSelection))))
+            {
+                _manualSelection = null;
+                selectionCleared = true;
+            }
+
+            InvalidateCache();
+        }
+
+        return new GameBlocklistAddResult
+        {
+            Ok = true,
+            Added = added,
+            Entry = entry,
+            Unpinned = unpinned,
+            SelectionCleared = selectionCleared,
+            Message = added
+                ? $"{entry.DisplayName} is now ignored by Game Mode."
+                : $"{entry.DisplayName} is already ignored by Game Mode."
+        };
+    }
+
+    public GameBlocklistRemoveResult RemoveFromBlocklist(GameBlocklistRemoveRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Id))
+        {
+            throw new ArgumentException("Choose an entry to remove.");
+        }
+
+        var removed = _gameBlocklistStore.Remove(request.Id);
+        InvalidateCache();
+        return new GameBlocklistRemoveResult
+        {
+            Ok = true,
+            Removed = removed
+        };
+    }
+
+    public GameActivitySnapshot Select(GameActivitySelectRequest request)
+    {
+        var wantsAuto = string.Equals(request.Mode?.Trim(), "auto", StringComparison.OrdinalIgnoreCase);
+        var candidateId = request.CandidateId?.Trim() ?? "";
+        if (wantsAuto == !string.IsNullOrWhiteSpace(candidateId)
+            || (!wantsAuto && !string.IsNullOrWhiteSpace(request.Mode)))
+        {
+            throw new ArgumentException("Send either a candidateId or mode \"auto\".");
+        }
+
+        lock (_sync)
+        {
+            if (wantsAuto)
+            {
+                _manualSelection = null;
+            }
+            else
+            {
+                var candidate = FindTrackable(GetSnapshot(), candidateId)
+                    ?? FindTrackable(GetFreshProcessSnapshot(), candidateId)
+                    ?? throw new GameCandidateNotFoundException();
+                _manualSelection = new ManualSelection(
+                    candidate.Id,
+                    candidate.ProcessId,
+                    NormalizePath(candidate.ExecutablePath),
+                    DateTimeOffset.UtcNow);
+                // Force the next read to treat the choice as a new session, even when the chosen
+                // candidate is already the active one.
+                _lastActiveGameId = "";
+                _sessionStartedAt = null;
+            }
+
+            InvalidateCache();
+            return GetFreshProcessSnapshot();
+        }
+    }
+
+    private static GameActivityPayload? FindDetected(GameActivitySnapshot snapshot, string candidateId)
+    {
+        return EnumerateDetected(snapshot)
+            .FirstOrDefault(entry => string.Equals(entry.Id, candidateId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static GameActivityPayload? FindTrackable(GameActivitySnapshot snapshot, string candidateId)
+    {
+        return snapshot.Trackable
+            .FirstOrDefault(entry => string.Equals(entry.Id, candidateId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void InvalidateCache()
+    {
+        lock (_sync)
+        {
+            _cachedSnapshot = null;
+            _cachedAt = DateTimeOffset.MinValue;
+        }
+    }
+
+    private static IEnumerable<GameActivityPayload> EnumerateDetected(GameActivitySnapshot snapshot)
+    {
+        if (snapshot.ActiveGame is not null)
+        {
+            yield return snapshot.ActiveGame;
+        }
+
+        foreach (var candidate in snapshot.Trackable)
+        {
+            yield return candidate;
+        }
+
+        foreach (var candidate in snapshot.Candidates)
+        {
+            yield return candidate;
+        }
+    }
+
+    private static string LauncherIdOfSelection(ManualSelection selection)
+    {
+        return GameCandidatePolicy.LauncherIdOf(new GameActivityPayload { Id = selection.CandidateId });
+    }
+
+    private GameActivitySnapshot BuildSnapshot(bool steamRefresh)
     {
         try
         {
             var sampledAt = DateTimeOffset.UtcNow;
             var config = _configStore.Snapshot();
             var launcherSnapshot = _launcherService.GetSnapshot(config);
-            var steamSnapshot = _steamService.GetSnapshot(forceRefresh);
+            var steamSnapshot = _steamService.GetSnapshot(steamRefresh);
             var epicGames = ReadEpicInstalledGames();
             var launcherEntries = launcherSnapshot.Entries
                 .Where(entry => IsUsableExecutablePath(entry.ExecutablePath))
@@ -362,17 +465,27 @@ public sealed class GameActivityService
                 AddFallbackProcessCandidate(candidates, process);
             }
 
-            var orderedCandidates = candidates
-                .GroupBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(SelectBestCandidate)
-                .OrderByDescending(candidate => candidate.Confidence)
-                .ThenByDescending(candidate => candidate.StartedAt.HasValue)
-                .ThenByDescending(candidate => candidate.StartedAt ?? DateTimeOffset.MinValue)
-                .Take(8)
-                .ToList();
-            var activeGame = orderedCandidates.FirstOrDefault(candidate => candidate.Confidence >= 60);
+            var policy = GameCandidatePolicy.Apply(
+                candidates,
+                _gameBlocklistStore.IsBlocked,
+                _manualSelection,
+                steamSnapshot.ActiveGame is null ? null : $"steam:{steamSnapshot.ActiveGame.AppId}");
+            if (policy.SelectionCleared)
+            {
+                _manualSelection = null;
+            }
+
+            var activeGame = policy.ActiveGame;
             var mode = ResolveMode(activeGame, foregroundProcess, sampledAt);
-            var lastGame = mode == "ended" ? _lastActiveGame : null;
+            var lastGame = mode == "ended" && !GameCandidatePolicy.ShouldSuppressEnded(_lastActiveGame, _gameBlocklistStore.IsBlocked)
+                ? _lastActiveGame
+                : null;
+            if (mode == "ended" && lastGame is null)
+            {
+                mode = "idle";
+            }
+
+            var blocklist = _gameBlocklistStore.Snapshot();
 
             return new GameActivitySnapshot
             {
@@ -385,7 +498,20 @@ public sealed class GameActivityService
                 ActiveGame = activeGame,
                 LastGame = lastGame,
                 LastEndedAt = mode == "ended" ? _lastEndedAt : null,
-                Candidates = orderedCandidates,
+                Candidates = policy.Candidates,
+                Trackable = policy.Trackable,
+                BlockedIds = policy.BlockedIds,
+                Selection = new GameActivitySelectionState
+                {
+                    Mode = _manualSelection is null ? "auto" : "manual",
+                    CandidateId = _manualSelection?.CandidateId ?? "",
+                    SelectedAt = _manualSelection?.SelectedAt
+                },
+                Blocklist = new GameActivityBlocklistState
+                {
+                    Status = blocklist.Status,
+                    Count = blocklist.Entries.Count
+                },
                 ForegroundProcessId = foregroundProcess?.ProcessId,
                 ForegroundProcessName = foregroundProcess?.ProcessName ?? "",
                 ForegroundAppActive = foregroundProcess is not null,
@@ -418,6 +544,16 @@ public sealed class GameActivityService
     {
         if (activeGame is null)
         {
+            if (GameCandidatePolicy.ShouldSuppressEnded(_lastActiveGame, _gameBlocklistStore.IsBlocked))
+            {
+                // The game went away because the user blocked it: no "ended" state (FR-002).
+                _lastActiveGame = null;
+                _lastActiveGameId = "";
+                _sessionStartedAt = null;
+                _lastEndedAt = null;
+                return "idle";
+            }
+
             if (!string.IsNullOrWhiteSpace(_lastActiveGameId))
             {
                 _lastEndedAt = sampledAt;
@@ -434,12 +570,12 @@ public sealed class GameActivityService
         var activeId = TextOr(activeGame.Id, BuildStableId(activeGame.Platform, activeGame.Name, activeGame.ExecutablePath));
         if (!string.Equals(_lastActiveGameId, activeId, StringComparison.OrdinalIgnoreCase))
         {
-            _sessionStartedAt = activeGame.StartedAt ?? sampledAt;
+            _sessionStartedAt = GameCandidatePolicy.ResolveSessionStart(activeGame, sampledAt);
             _lastActiveGameId = activeId;
         }
         else
         {
-            _sessionStartedAt ??= activeGame.StartedAt ?? sampledAt;
+            _sessionStartedAt ??= GameCandidatePolicy.ResolveSessionStart(activeGame, sampledAt);
         }
 
         _lastActiveGame = activeGame;
@@ -469,37 +605,6 @@ public sealed class GameActivityService
             "ended" => "Ended",
             _ => "Idle"
         };
-    }
-
-    private static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)
-    {
-        var candidateList = candidates.ToList();
-        var best = candidateList
-            .OrderByDescending(candidate => candidate.Confidence)
-            .ThenByDescending(candidate => candidate.StartedAt.HasValue)
-            .ThenByDescending(candidate => candidate.StartedAt ?? DateTimeOffset.MinValue)
-            .First();
-        var runtime = candidateList
-            .Where(candidate => candidate.ProcessId.HasValue
-                || candidate.StartedAt.HasValue
-                || !string.IsNullOrWhiteSpace(candidate.ProcessName))
-            .OrderByDescending(candidate => candidate.StartedAt.HasValue)
-            .ThenByDescending(candidate => candidate.StartedAt ?? DateTimeOffset.MinValue)
-            .FirstOrDefault();
-
-        if (runtime is null || ReferenceEquals(best, runtime))
-        {
-            return best;
-        }
-
-        best.ProcessId ??= runtime.ProcessId;
-        if (string.IsNullOrWhiteSpace(best.ProcessName))
-        {
-            best.ProcessName = runtime.ProcessName;
-        }
-
-        best.StartedAt ??= runtime.StartedAt;
-        return best;
     }
 
     private static bool HasExistingInstallPath(string? installPath)
@@ -917,23 +1022,7 @@ public sealed class GameActivityService
 
     private static bool IsIgnoredProcess(RunningProcessInfo process)
     {
-        var processName = process.ProcessName ?? "";
-        var processBaseName = Path.GetFileNameWithoutExtension(processName);
-        var lowerName = processName.ToLowerInvariant();
-        var executablePath = process.ExecutablePath ?? "";
-        var lowerPath = executablePath.ToLowerInvariant();
-        if (IgnoredProcessNames.Contains(processName)
-            || IgnoredProcessNames.Contains(processBaseName)
-            || LauncherProcessNames.Contains(processName)
-            || LauncherProcessNames.Contains(processBaseName)
-            || lowerPath.Contains(@"\windows\", StringComparison.OrdinalIgnoreCase)
-            || IgnoredExecutablePathFragments.Any(fragment => lowerPath.Contains(fragment, StringComparison.OrdinalIgnoreCase))
-            || LauncherExecutablePathFragments.Any(fragment => lowerPath.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
-        {
-            return true;
-        }
-
-        return IgnoredProcessFragments.Any(fragment => lowerName.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+        return SystemGameExclusions.IsExcluded(process.ProcessName, process.ExecutablePath);
     }
 
     private static bool LooksLikeGameLauncherEntry(LauncherEntryPayload launcher, RunningProcessInfo process)
@@ -1462,11 +1551,20 @@ public sealed class GameActivitySnapshot
 
     public List<GameActivityPayload> Candidates { get; set; } = [];
 
+    public List<GameActivityPayload> Trackable { get; set; } = [];
+
+    public GameActivitySelectionState Selection { get; set; } = new();
+
+    public GameActivityBlocklistState Blocklist { get; set; } = new();
+
     [JsonIgnore]
     public int? ForegroundProcessId { get; set; }
 
     [JsonIgnore]
     public string ForegroundProcessName { get; set; } = "";
+
+    [JsonIgnore]
+    public HashSet<string> BlockedIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public bool ForegroundAppActive { get; set; }
 }
@@ -1507,6 +1605,10 @@ public sealed class GameActivityPayload
 
     public DateTimeOffset? StartedAt { get; set; }
 
+    public bool Selected { get; set; }
+
+    public bool Manual { get; set; }
+
     public DateTimeOffset? SessionStartedAt { get; set; }
 
     public long SessionDurationMs { get; set; }
@@ -1516,6 +1618,29 @@ public sealed class GameActivityPayload
     public string IconUrl { get; set; } = "";
 
     public string TileLabel { get; set; } = "G";
+}
+
+public sealed class GameActivitySelectionState
+{
+    public string Mode { get; set; } = "auto";
+
+    public string CandidateId { get; set; } = "";
+
+    public DateTimeOffset? SelectedAt { get; set; }
+}
+
+public sealed class GameActivityBlocklistState
+{
+    public string Status { get; set; } = "ready";
+
+    public int Count { get; set; }
+}
+
+public sealed class GameActivitySelectRequest
+{
+    public string? CandidateId { get; set; }
+
+    public string? Mode { get; set; }
 }
 
 public sealed class GameActivityPinRequest
@@ -1530,6 +1655,8 @@ public sealed class GameActivityPinResult
     public bool Ok { get; set; }
 
     public bool Added { get; set; }
+
+    public bool Unblocked { get; set; }
 
     public string Message { get; set; } = "";
 

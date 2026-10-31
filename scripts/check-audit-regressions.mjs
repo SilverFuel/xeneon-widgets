@@ -108,7 +108,11 @@ const networkMetricsService = readWorkspaceFile("app/Services/NetworkMetricsServ
 const audioService = readWorkspaceFile("app/Services/AudioService.cs");
 const mediaService = readWorkspaceFile("app/Services/MediaService.cs");
 const steamService = readWorkspaceFile("app/Services/SteamService.cs");
-const gameActivityService = readWorkspaceFile("app/Services/GameActivityService.cs");
+// System exclusions moved to SystemGameExclusions.cs; detection checks cover both files.
+const gameActivityService = [
+  readWorkspaceFile("app/Services/GameActivityService.cs"),
+  readWorkspaceFile("app/Services/SystemGameExclusions.cs")
+].join("\n");
 const gamePerformanceService = readWorkspaceFile("app/Services/GamePerformanceService.cs");
 const gameModeSessionService = readWorkspaceFile("app/Services/GameModeSessionService.cs");
 const hueService = readWorkspaceFile("app/Services/HueService.cs");
