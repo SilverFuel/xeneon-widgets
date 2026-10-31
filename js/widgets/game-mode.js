@@ -1176,14 +1176,21 @@
       return markup;
     }
 
-    function syncGameFocusExtras() {
-      renderedFlagsMarkup = syncHost("[data-game-focus-flags]", renderGameFocusFlags(state.activity), renderedFlagsMarkup);
-      renderedSwitcherMarkup = syncHost("[data-game-focus-switcher]", renderGameFocusSwitcher(state.activity, state.switcher), renderedSwitcherMarkup);
+    function captureSheetFocus() {
       var focused = document.activeElement;
       var sheetHost = container.querySelector("[data-game-candidate-sheet-host]");
-      var focusKey = sheetHost && focused && sheetHost.contains(focused)
+      return sheetHost && focused && sheetHost.contains(focused)
         ? { id: focused.getAttribute("data-candidate-id"), action: focused.getAttribute("data-action") }
         : null;
+    }
+
+    // savedFocus lets a caller that rebuilds the scene first (redraw) hand over the focus it captured
+    // before the rebuild detached the focused node.
+    function syncGameFocusExtras(savedFocus) {
+      renderedFlagsMarkup = syncHost("[data-game-focus-flags]", renderGameFocusFlags(state.activity), renderedFlagsMarkup);
+      renderedSwitcherMarkup = syncHost("[data-game-focus-switcher]", renderGameFocusSwitcher(state.activity, state.switcher), renderedSwitcherMarkup);
+      var sheetHost = container.querySelector("[data-game-candidate-sheet-host]");
+      var focusKey = savedFocus || captureSheetFocus();
       var sheetMarkup = renderGameCandidateSheet(state.activity, state.switcher);
       var sheetRewritten = sheetMarkup !== renderedSheetMarkup;
       renderedSheetMarkup = syncHost("[data-game-candidate-sheet-host]", sheetMarkup, renderedSheetMarkup);
@@ -1305,6 +1312,8 @@
       var focusRenderId = activeGameId || text(activeGame && activeGame.name, "active-game");
       var introActive;
       var idleStatusPanels = renderGameModeEndedPanel(state.activity) + renderGameModeCandidatesPanel(state.activity);
+      // Capture before the scene is rebuilt below: a new followed game replaces the sheet's nodes.
+      var sheetFocus = state.switcher.sheetOpen ? captureSheetFocus() : null;
       syncGameFocusIntro(activeGame);
       introActive = Boolean(activeGameId && state.focusIntroGameId === activeGameId);
 
@@ -1331,7 +1340,7 @@
           renderedFlagsMarkup = null;
           renderedSheetMarkup = null;
         }
-        syncGameFocusExtras();
+        syncGameFocusExtras(sheetFocus);
         startGameSessionClock();
         return;
       }

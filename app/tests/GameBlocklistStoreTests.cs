@@ -189,6 +189,18 @@ public sealed class GameBlocklistStoreTests
     }
 
     [Test]
+    public void SystemExclusions_IgnoreEngineCrashHandlerBesideTheGame()
+    {
+        var gameDir = @"E:\Games\Steam\steamapps\common\Yu-Gi-Oh!  Master Duel\";
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(SystemGameExclusions.IsExcluded("UnityCrashHandler64.exe", gameDir + "UnityCrashHandler64.exe"), Is.True);
+            Assert.That(SystemGameExclusions.IsExcluded("masterduel.exe", gameDir + "masterduel.exe"), Is.False);
+        }));
+    }
+
+    [Test]
     public void SystemExclusions_DescribeBuiltInRulesWithoutNewEntries()
     {
         var rules = SystemGameExclusions.DescribeRules();

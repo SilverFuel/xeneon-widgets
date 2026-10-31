@@ -110,6 +110,7 @@ public static class SystemGameExclusions
 
     private static readonly string[] IgnoredProcessFragments =
     [
+        "crashhandler",
         "crashpad",
         "crashreport",
         "helper",
