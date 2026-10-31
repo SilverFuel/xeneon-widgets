@@ -14,6 +14,10 @@ public sealed class GameCandidatePolicyResult
 
     public List<GameActivityPayload> Candidates { get; init; } = [];
 
+    // Ids of the candidate groups dropped by the blocklist, so other Steam-derived views of the
+    // same app (SteamService.ActiveGame) can be hidden too.
+    public HashSet<string> BlockedIds { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
     public bool SelectionCleared { get; init; }
 
     public ManualSelection? Selection { get; init; }
@@ -26,20 +30,33 @@ public static class GameCandidatePolicy
     public const int AutomaticConfidenceThreshold = 60;
     public const int CandidateLimit = 8;
 
+    private const char InstanceSeparator = '#';
+
     public static GameCandidatePolicyResult Apply(
         IEnumerable<GameActivityPayload> rawCandidates,
         Func<string?, string?, bool> isBlocked,
         ManualSelection? selection,
         string? steamReportedActiveId)
     {
-        var ordered = rawCandidates
-            .Where(candidate => !isBlocked(candidate.ExecutablePath, LauncherIdOf(candidate)))
-            .GroupBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)
+        var clusters = MergeFragments(rawCandidates);
+        // Block per cluster: a path-only entry matches just the process fragment, so a path-less
+        // Steam-reported fragment of the same app would otherwise survive.
+        var blockedClusters = clusters
+            .Where(cluster => cluster.Any(candidate => isBlocked(candidate.ExecutablePath, LauncherIdOf(candidate))))
+            .ToList();
+        var blockedIds = blockedClusters
+            .SelectMany(cluster => cluster)
+            .Select(candidate => candidate.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ordered = clusters
+            .Where(cluster => !blockedClusters.Contains(cluster))
             .Select(SelectBestCandidate)
             .OrderByDescending(candidate => candidate.Confidence)
             .ThenByDescending(candidate => candidate.StartedAt.HasValue)
             .ThenByDescending(candidate => candidate.StartedAt ?? DateTimeOffset.MinValue)
             .ToList();
+        MakeInstanceIdsUnique(ordered);
 
         var trackable = ordered
             .Where(candidate => candidate.ProcessId.HasValue
@@ -78,6 +95,7 @@ public static class GameCandidatePolicy
             ActiveGame = activeGame,
             Trackable = trackable,
             Candidates = ordered.Take(CandidateLimit).ToList(),
+            BlockedIds = blockedIds,
             SelectionCleared = selectionCleared,
             Selection = keptSelection
         };
@@ -87,7 +105,14 @@ public static class GameCandidatePolicy
     {
         // Only real launcher ids qualify: steam:<appid> from the Steam library, or epic:<id>.
         // Path-inferred candidates also start with "steam:" but carry a hash, not an app id.
+        // The "#<pid>" instance suffix (see MakeInstanceIdsUnique) is not part of the launcher id.
         var id = candidate.Id ?? "";
+        var suffix = id.IndexOf(InstanceSeparator);
+        if (suffix >= 0)
+        {
+            id = id[..suffix];
+        }
+
         if (id.StartsWith("steam:", StringComparison.OrdinalIgnoreCase))
         {
             var appId = id["steam:".Length..];
@@ -102,6 +127,116 @@ public static class GameCandidatePolicy
     {
         return lastActiveGame is not null
             && isBlocked(lastActiveGame.ExecutablePath, LauncherIdOf(lastActiveGame));
+    }
+
+    // The session always counts from when the game itself started, also for a manual selection,
+    // so choosing a candidate never resets its time (FR-021).
+    internal static DateTimeOffset ResolveSessionStart(GameActivityPayload activeGame, DateTimeOffset sampledAt)
+    {
+        return activeGame.StartedAt ?? sampledAt;
+    }
+
+    // Groups the fragments that describe one running thing into clusters. Fragments of the same
+    // process always merge, whatever Id each detector gave them (steam:<appid>, steam:<hash>,
+    // running app). Different processes never merge, so duplicate open instances stay separate;
+    // different install paths stay separate too. Path-less fragments (Steam-reported games) join
+    // the process cluster that shares their Id or, for Steam, the one folder-recognised process
+    // with the same name. Anything less certain stays separate.
+    private static List<List<GameActivityPayload>> MergeFragments(IEnumerable<GameActivityPayload> rawCandidates)
+    {
+        var clusters = new List<List<GameActivityPayload>>();
+        var byProcess = new Dictionary<int, List<GameActivityPayload>>();
+        var pathless = new List<GameActivityPayload>();
+        foreach (var fragment in rawCandidates)
+        {
+            if (!fragment.ProcessId.HasValue)
+            {
+                pathless.Add(fragment);
+                continue;
+            }
+
+            if (!byProcess.TryGetValue(fragment.ProcessId.Value, out var cluster))
+            {
+                cluster = [];
+                byProcess[fragment.ProcessId.Value] = cluster;
+                clusters.Add(cluster);
+            }
+
+            cluster.Add(fragment);
+        }
+
+        var processClusters = clusters.ToList();
+        foreach (var group in pathless.GroupBy(fragment => fragment.Id, StringComparer.OrdinalIgnoreCase))
+        {
+            var target = FindProcessCluster(group.First(), processClusters);
+            if (target is null)
+            {
+                clusters.Add(group.ToList());
+            }
+            else
+            {
+                target.AddRange(group);
+            }
+        }
+
+        return clusters;
+    }
+
+    private static List<GameActivityPayload>? FindProcessCluster(
+        GameActivityPayload pathless,
+        List<List<GameActivityPayload>> processClusters)
+    {
+        var sameId = processClusters
+            .Where(cluster => cluster.Any(fragment => string.Equals(fragment.Id, pathless.Id, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(cluster => cluster.Max(fragment => fragment.Confidence))
+            .ThenBy(cluster => cluster.Min(fragment => fragment.StartedAt ?? DateTimeOffset.MaxValue))
+            .FirstOrDefault();
+        if (sameId is not null || LauncherIdOf(pathless).Length == 0 || !IsSteam(pathless))
+        {
+            return sameId;
+        }
+
+        // A Steam-reported app whose process was only recognised by its folder (steam:<hash>). Only
+        // an unambiguous name match links them: guessing would attach a blocked or unrelated Steam
+        // app to a different game and hide or rename it.
+        var pathlessName = NormalizeName(pathless.Name);
+        if (pathlessName.Length == 0)
+        {
+            return null;
+        }
+
+        var byName = processClusters
+            .Where(cluster => cluster.Any(IsSteam)
+                && cluster.All(fragment => LauncherIdOf(fragment).Length == 0)
+                && cluster.Any(fragment => NormalizeName(fragment.Name) == pathlessName))
+            .ToList();
+        return byName.Count == 1 ? byName[0] : null;
+    }
+
+    private static bool IsSteam(GameActivityPayload fragment)
+    {
+        return string.Equals(fragment.Platform, "Steam", StringComparison.OrdinalIgnoreCase)
+            || (fragment.Id ?? "").StartsWith("steam:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeName(string? name)
+    {
+        return new string((name ?? "").Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+    }
+
+    // Two clusters can still share an Id (the same app opened twice). Each needs its own Id so the
+    // user can pick one; an unambiguous Id is left untouched, so single instances keep stable Ids.
+    private static void MakeInstanceIdsUnique(List<GameActivityPayload> ordered)
+    {
+        foreach (var duplicated in ordered
+            .GroupBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1))
+        {
+            foreach (var candidate in duplicated.Where(candidate => candidate.ProcessId.HasValue))
+            {
+                candidate.Id = $"{candidate.Id}{InstanceSeparator}{candidate.ProcessId!.Value}";
+            }
+        }
     }
 
     private static bool MatchesSelection(GameActivityPayload candidate, ManualSelection selection)

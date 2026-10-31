@@ -363,6 +363,10 @@ public sealed class GameActivityService
                     candidate.ProcessId,
                     NormalizePath(candidate.ExecutablePath),
                     DateTimeOffset.UtcNow);
+                // Force the next read to treat the choice as a new session, even when the chosen
+                // candidate is already the active one.
+                _lastActiveGameId = "";
+                _sessionStartedAt = null;
             }
 
             InvalidateCache();
@@ -495,6 +499,7 @@ public sealed class GameActivityService
                 LastEndedAt = mode == "ended" ? _lastEndedAt : null,
                 Candidates = policy.Candidates,
                 Trackable = policy.Trackable,
+                BlockedIds = policy.BlockedIds,
                 Selection = new GameActivitySelectionState
                 {
                     Mode = _manualSelection is null ? "auto" : "manual",
@@ -1612,6 +1617,9 @@ public sealed class GameActivitySnapshot
 
     [JsonIgnore]
     public string ForegroundProcessName { get; set; } = "";
+
+    [JsonIgnore]
+    public HashSet<string> BlockedIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public bool ForegroundAppActive { get; set; }
 }

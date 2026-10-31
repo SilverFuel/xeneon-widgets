@@ -1039,6 +1039,7 @@
         carouselOpen: false,
         sheetOpen: false,
         pendingId: "",
+        pressing: false,
         status: ""
       }
     };
@@ -1178,7 +1179,27 @@
     function syncGameFocusExtras() {
       renderedFlagsMarkup = syncHost("[data-game-focus-flags]", renderGameFocusFlags(state.activity), renderedFlagsMarkup);
       renderedSwitcherMarkup = syncHost("[data-game-focus-switcher]", renderGameFocusSwitcher(state.activity, state.switcher), renderedSwitcherMarkup);
-      renderedSheetMarkup = syncHost("[data-game-candidate-sheet-host]", renderGameCandidateSheet(state.activity, state.switcher), renderedSheetMarkup);
+      var focused = document.activeElement;
+      var sheetHost = container.querySelector("[data-game-candidate-sheet-host]");
+      var focusKey = sheetHost && focused && sheetHost.contains(focused)
+        ? { id: focused.getAttribute("data-candidate-id"), action: focused.getAttribute("data-action") }
+        : null;
+      var sheetMarkup = renderGameCandidateSheet(state.activity, state.switcher);
+      var sheetRewritten = sheetMarkup !== renderedSheetMarkup;
+      renderedSheetMarkup = syncHost("[data-game-candidate-sheet-host]", sheetMarkup, renderedSheetMarkup);
+      if (focusKey && sheetRewritten && sheetHost) {
+        // The live refresh rewrote the rows: put focus back on the same row, or on the close button
+        // when that candidate is gone, so keyboard users do not lose their place.
+        var restored = focusKey.id
+          ? Array.prototype.find.call(sheetHost.querySelectorAll("[data-candidate-id]"), function (node) {
+            return node.getAttribute("data-candidate-id") === focusKey.id;
+          })
+          : sheetHost.querySelector('[data-action="' + focusKey.action + '"]');
+        var target = restored || sheetHost.querySelector(".game-candidate-sheet-close");
+        if (target && typeof target.focus === "function") {
+          target.focus({ preventScroll: true });
+        }
+      }
     }
 
     function setSwitcherStatus(message) {
@@ -1712,10 +1733,24 @@
       }
     });
 
+    // Track a press on a sheet row so a live refresh never rebuilds the row under the finger.
+    addListener(cleanups, container, "pointerdown", function (event) {
+      if (event.target && event.target.closest && event.target.closest(".game-candidate-sheet")) {
+        state.switcher.pressing = true;
+      }
+    }, { passive: true });
+    ["pointerup", "pointercancel"].forEach(function (type) {
+      addListener(cleanups, document, type, function () {
+        state.switcher.pressing = false;
+      }, { passive: true });
+    });
+
     var gameModeLoop = createTimerLoop(function () {
       return refreshGameModeSession({ performanceSession: shouldContinuePerformanceSession() });
     }, 2500, function () {
-      return state.interacting || state.switcher.sheetOpen;
+      // The open "More" sheet keeps refreshing so closed games drop out of it (FR-019); only an
+      // in-flight selection or an active press pauses the loop.
+      return state.interacting || Boolean(state.switcher.pendingId) || state.switcher.pressing === true;
     });
     redraw();
     gameModeLoop.start();

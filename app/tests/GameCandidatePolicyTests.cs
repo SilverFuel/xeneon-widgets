@@ -98,6 +98,33 @@ public sealed class GameCandidatePolicyTests
     }
 
     [Test]
+    public void Apply_DropsPathLessSteamFragment_WhenRunningFragmentIsBlockedByPath()
+    {
+        const string wallpaper = @"D:\SteamLibrary\steamapps\common\wallpaper_engine\wallpaper64.exe";
+        var result = GameCandidatePolicy.Apply(
+            [Candidate("steam:431960", 98), Candidate("steam:431960", 96, 1, wallpaper)],
+            BlockPath(wallpaper),
+            null,
+            "steam:431960");
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.ActiveGame, Is.Null);
+            Assert.That(result.Trackable, Is.Empty);
+            Assert.That(result.Candidates, Is.Empty);
+            Assert.That(result.BlockedIds, Is.EquivalentTo(new[] { "steam:431960" }));
+        }));
+    }
+
+    [Test]
+    public void Apply_BlockedIdsIsEmptyWhenNothingIsBlocked()
+    {
+        var result = GameCandidatePolicy.Apply([Candidate("steam:1", 96, 2, @"C:\Steam\A.exe")], NothingBlocked, null, null);
+
+        Assert.That(result.BlockedIds, Is.Empty);
+    }
+
+    [Test]
     public void Apply_BlockedSteamAppIdRemovesSteamReportedCandidateWithoutProcess()
     {
         var steamReported = Candidate("steam:431960", 98);
@@ -171,6 +198,220 @@ public sealed class GameCandidatePolicyTests
             Assert.That(result.ActiveGame?.Id, Is.EqualTo("game:low"));
             Assert.That(result.ActiveGame?.Confidence, Is.EqualTo(44));
             Assert.That(result.ActiveGame?.Manual, Is.True);
+        }));
+    }
+
+    [Test]
+    public void ResolveSessionStart_KeepsGameStartForManualCandidate()
+    {
+        var sampledAt = DateTimeOffset.UtcNow;
+        var longRunning = Candidate("game:long", 70, 1, @"C:\Games\Long.exe", startedMinutesAgo: 300);
+        longRunning.Manual = true;
+
+        var start = GameCandidatePolicy.ResolveSessionStart(longRunning, sampledAt);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(start, Is.EqualTo(longRunning.StartedAt));
+            Assert.That(sampledAt - start, Is.GreaterThan(TimeSpan.FromMinutes(299)));
+        }));
+    }
+
+    [Test]
+    public void ResolveSessionStart_UsesProcessStartForAutomaticCandidate()
+    {
+        var sampledAt = DateTimeOffset.UtcNow;
+        var automatic = Candidate("game:auto", 96, 1, @"C:\Games\Auto.exe", startedMinutesAgo: 30);
+
+        var start = GameCandidatePolicy.ResolveSessionStart(automatic, sampledAt);
+
+        Assert.That(start, Is.EqualTo(automatic.StartedAt));
+        Assert.That(
+            GameCandidatePolicy.ResolveSessionStart(Candidate("steam:2", 98), sampledAt),
+            Is.EqualTo(sampledAt));
+    }
+
+    private static GameActivityPayload Named(
+        string id,
+        string name,
+        string platform,
+        int confidence,
+        int? processId = null,
+        string path = "")
+    {
+        var fragment = Candidate(id, confidence, processId, path);
+        fragment.Name = name;
+        fragment.Platform = platform;
+        return fragment;
+    }
+
+    [Test]
+    public void Apply_MergesFragmentsOfTheSameProcessIntoOneCandidate()
+    {
+        const string path = @"D:\Steam\steamapps\common\Dota 2\dota2.exe";
+        var result = GameCandidatePolicy.Apply(
+            [
+                Named("steam:570", "Dota 2", "Steam", 96, 7, path),
+                Named("steam:9f3ab2", "dota2", "Steam", 86, 7, path),
+                Named("game:77aa", "Dota2", "Game", 44, 7, path)
+            ],
+            NothingBlocked,
+            null,
+            null);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Trackable, Has.Count.EqualTo(1));
+            Assert.That(result.ActiveGame?.Id, Is.EqualTo("steam:570"));
+            Assert.That(result.ActiveGame?.Name, Is.EqualTo("Dota 2"));
+            Assert.That(result.ActiveGame?.ProcessId, Is.EqualTo(7));
+        }));
+    }
+
+    [Test]
+    public void Apply_MergesPathlessSteamReportWithTheSameNamedSteamProcess()
+    {
+        const string path = @"E:\Library\steamapps\common\Dota\dota2.exe";
+        var result = GameCandidatePolicy.Apply(
+            [
+                Named("steam:570", "Dota 2", "Steam", 98),
+                Named("steam:9f3ab2", "dota2", "Steam", 86, 9, path)
+            ],
+            NothingBlocked,
+            null,
+            "steam:570");
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.ActiveGame?.Id, Is.EqualTo("steam:570"));
+            Assert.That(result.ActiveGame?.ProcessId, Is.EqualTo(9));
+            Assert.That(result.ActiveGame?.ExecutablePath, Is.EqualTo(path));
+        }));
+    }
+
+    [Test]
+    public void Apply_MergesPathlessSteamReportByNameWhenSeveralSteamProcessesRun()
+    {
+        var result = GameCandidatePolicy.Apply(
+            [
+                Named("steam:570", "Dota 2", "Steam", 98),
+                Named("steam:aaa111", "Other Game", "Steam", 86, 4, @"D:\steamapps\common\Other\other.exe"),
+                Named("steam:bbb222", "Dota-2", "Steam", 86, 5, @"D:\steamapps\common\Dota\dota2.exe")
+            ],
+            NothingBlocked,
+            null,
+            "steam:570");
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(2));
+            Assert.That(result.Candidates.Single(candidate => candidate.ProcessId == 5).Id, Is.EqualTo("steam:570"));
+            Assert.That(result.Candidates.Single(candidate => candidate.ProcessId == 4).Id, Is.EqualTo("steam:aaa111"));
+        }));
+    }
+
+    [Test]
+    public void Apply_KeepsPathlessSteamReportSeparate_WhenSeveralSteamProcessesAreAmbiguous()
+    {
+        var result = GameCandidatePolicy.Apply(
+            [
+                Named("steam:570", "Dota 2", "Steam", 98),
+                Named("steam:aaa111", "Alpha", "Steam", 86, 4, @"D:\steamapps\common\Alpha\a.exe"),
+                Named("steam:bbb222", "Beta", "Steam", 86, 5, @"D:\steamapps\common\Beta\b.exe")
+            ],
+            NothingBlocked,
+            null,
+            "steam:570");
+
+        Assert.That(result.Candidates, Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public void Apply_DoesNotAttachABlockedSteamReportToAnUnrelatedSteamProcess()
+    {
+        // Steam still reports the blocked dock app while a different, folder-recognised Steam game runs.
+        var result = GameCandidatePolicy.Apply(
+            [
+                Named("steam:1787090", "MyDockFinder", "Steam", 98),
+                Named("steam:9f3ab2", "Real Game", "Steam", 86, 9, @"D:\steamapps\common\Real Game\real.exe")
+            ],
+            BlockLauncher("steam:1787090"),
+            null,
+            "steam:1787090");
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.ActiveGame?.Name, Is.EqualTo("Real Game"));
+            Assert.That(result.Candidates.Select(candidate => candidate.Name), Is.EqualTo(new[] { "Real Game" }));
+            Assert.That(result.Trackable, Has.Count.EqualTo(1));
+        }));
+    }
+
+    [Test]
+    public void Apply_KeepsDuplicateOpenInstancesAsDistinctCandidates()
+    {
+        const string path = @"C:\Games\Twin\twin.exe";
+        var result = GameCandidatePolicy.Apply(
+            [
+                Named("game:abc", "Twin", "Game", 78, 11, path),
+                Named("game:abc", "Twin", "Game", 78, 12, path)
+            ],
+            NothingBlocked,
+            null,
+            null);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(2));
+            Assert.That(result.Trackable, Has.Count.EqualTo(2));
+            Assert.That(result.Candidates.Select(candidate => candidate.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count(), Is.EqualTo(2));
+            Assert.That(result.Candidates.All(candidate => candidate.Id.StartsWith("game:abc", StringComparison.Ordinal)), Is.True);
+        }));
+    }
+
+    [Test]
+    public void Apply_KeepsSeparateInstallsAsDistinctCandidates()
+    {
+        var result = GameCandidatePolicy.Apply(
+            [
+                Named("game:aaa", "Twin", "Game", 78, 11, @"C:\Games\Twin\twin.exe"),
+                Named("game:bbb", "Twin", "Game", 78, 12, @"D:\Other\Twin\twin.exe")
+            ],
+            NothingBlocked,
+            null,
+            null);
+
+        Assert.That(result.Candidates, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public void Apply_BlocksEveryInstanceOfALauncherId()
+    {
+        var result = GameCandidatePolicy.Apply(
+            [
+                Named("steam:570", "Dota 2", "Steam", 96, 1, @"D:\steamapps\common\Dota\dota2.exe"),
+                Named("steam:570", "Dota 2", "Steam", 96, 2, @"D:\steamapps\common\Dota\dota2.exe")
+            ],
+            BlockLauncher("steam:570"),
+            null,
+            null);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(result.Candidates, Is.Empty);
+            Assert.That(result.BlockedIds, Is.EquivalentTo(new[] { "steam:570" }));
+        }));
+    }
+
+    [Test]
+    public void LauncherIdOf_IgnoresTheInstanceSuffix()
+    {
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(GameCandidatePolicy.LauncherIdOf(new GameActivityPayload { Id = "steam:570#12" }), Is.EqualTo("steam:570"));
+            Assert.That(GameCandidatePolicy.LauncherIdOf(new GameActivityPayload { Id = "game:abc#12" }), Is.EqualTo(""));
         }));
     }
 
