@@ -42,13 +42,15 @@ for (const display of displays) {
     const width = display.width / factor;
     const height = display.height / factor;
     const profile = classifyViewport(width, height);
+    const portrait = width / height < 1;
+    const ultrawide = width / height >= 2.8;
     const expectedProfile = {
       width,
       height,
       browser: width < 1100,
-      compact: width < 900 || height < 480,
-      portrait: width / height < 1,
-      ultrawide: width / height >= 2.8
+      compact: !portrait && !ultrawide && (width < 900 || height < 480),
+      portrait,
+      ultrawide
     };
     for (const [key, value] of Object.entries(expectedProfile)) {
       assert(profile[key] === value, `${display.width}x${display.height} at ${factor * 100}% expected ${key}=${value}, got ${profile[key]}`);
@@ -57,8 +59,15 @@ for (const display of displays) {
       profile.layoutClass === display.expected[index],
       `${display.width}x${display.height} at ${factor * 100}% expected ${display.expected[index]}, got ${profile.layoutClass}`
     );
+    assert(
+      [profile.compact, profile.portrait, profile.ultrawide].filter(Boolean).length <= 1,
+      `${display.width}x${display.height} at ${factor * 100}% must not activate overlapping layout classes`
+    );
   });
 }
 
 assert(classifyViewport(0, 0).layoutClass === "compact", "zero-sized transient viewports must classify safely");
+const shortCompanion = classifyViewport(1280, 360);
+assert(shortCompanion.layoutClass === "ultrawide", "1280x360 companion displays must use the ultrawide layout");
+assert(!shortCompanion.compact, "1280x360 companion displays must not also activate the compact layout");
 console.log(`checked ${displays.length * scaling.length} adaptive display and scaling combinations`);

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-standalone-ui>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Network Widget</title>
-  <link rel="stylesheet" href="../css/theme.css?v=20260712-01">
-  <link rel="stylesheet" href="../css/widgets.css?v=20260712-01">
+  <link rel="stylesheet" href="../css/theme.css?v=20260818-02">
+  <link rel="stylesheet" href="../css/widgets.css?v=20260818-02">
   <style>
     .widget-header--compact {
       justify-content: flex-end;
@@ -47,7 +47,7 @@
       border-radius: 999px;
       color: #bfffe1;
       background: rgba(68, 209, 122, 0.16);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
     }
 
     @media (max-width: 1100px) {
@@ -64,6 +64,8 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="../css/standalone-theme.css">
+  <script src="../js/theme-bootstrap.js"></script>
 </head>
 <body class="widget-page">
   <main class="widget-shell">
@@ -74,12 +76,12 @@
       <article class="metric-card">
         <div class="metric-label">Download</div>
         <div id="download-speed" class="metric-value">--</div>
-        <div class="metric-detail">Live throughput</div>
+        <div id="download-detail" class="metric-detail">Live throughput</div>
       </article>
       <article class="metric-card">
         <div class="metric-label">Upload</div>
         <div id="upload-speed" class="metric-value">--</div>
-        <div class="metric-detail">Live throughput</div>
+        <div id="upload-detail" class="metric-detail">Live throughput</div>
       </article>
       <article class="metric-card">
         <div class="metric-label">Ping</div>
@@ -110,11 +112,11 @@
       </article>
     </section>
   </main>
-  <script src="../js/widget-core.js?v=20260712-01"></script>
+  <script src="../js/widget-core.js?v=20260818-02"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
-      var endpoint = params.get("endpoint") || "";
+      var endpoint = params.get("endpoint") || "/api/network";
       var unifiEndpoint = params.get("unifiEndpoint") || "/api/unifi/network";
 
       function fetchJson(url) {
@@ -133,11 +135,12 @@
         var ping = connection && typeof connection.rtt === "number" ? connection.rtt : null;
         var type = connection && connection.effectiveType ? connection.effectiveType : "Unknown";
         return {
-          download: downlink,
+          download: downlink === null ? null : downlink * 1000 * 1000 / 8,
           upload: null,
           ping: ping,
           type: type,
-          source: connection ? "Browser estimate" : "Native host"
+          source: connection ? "Browser estimate" : "Unavailable",
+          estimated: Boolean(connection)
         };
       }
 
@@ -186,15 +189,18 @@
               sourceText = snapshot.source || "Local bridge";
             } catch (error) {
               snapshot = getLocalNetworkSnapshot();
-              sourceText = "Unavailable";
+              sourceText = snapshot.estimated ? "Estimated" : "Unavailable";
             }
           } else {
             snapshot = getLocalNetworkSnapshot();
             sourceText = snapshot.source || "Live";
           }
 
+          var nativeTelemetry = !snapshot.estimated && snapshot.source !== "Unavailable";
           document.getElementById("download-speed").textContent = WidgetCore.formatBytesPerSecond(snapshot.download);
           document.getElementById("upload-speed").textContent = WidgetCore.formatBytesPerSecond(snapshot.upload);
+          document.getElementById("download-detail").textContent = snapshot.estimated ? "Browser connection estimate" : (nativeTelemetry ? "Live throughput" : "Unavailable");
+          document.getElementById("upload-detail").textContent = snapshot.estimated ? "Not reported by browser" : (nativeTelemetry ? "Live throughput" : "Unavailable");
           document.getElementById("ping-speed").textContent = typeof snapshot.ping === "number" && isFinite(snapshot.ping) ? Math.round(snapshot.ping) + " ms" : "--";
           document.getElementById("network-connection").textContent = snapshot.type || "--";
           document.getElementById("network-detail").textContent = snapshot.source || "Native host";

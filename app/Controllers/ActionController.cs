@@ -40,19 +40,19 @@ public sealed class ActionController
         _gamePerformanceService = gamePerformanceService;
     }
 
-    public ProvisioningSnapshot GetProvisioningSnapshot()
+    public ProvisioningPublicSnapshot GetProvisioningSnapshot()
     {
-        return _provisioningService.GetSnapshot();
+        return ProvisioningPublicSnapshot.FromSnapshot(_provisioningService.GetSnapshot());
     }
 
-    public ProvisioningSnapshot RunProvisioning()
+    public ProvisioningPublicSnapshot RunProvisioning()
     {
-        return _provisioningService.RunStartupProvisioning(forceLauncherScan: true);
+        return ProvisioningPublicSnapshot.FromSnapshot(_provisioningService.RunStartupProvisioning(forceLauncherScan: true));
     }
 
-    public ProvisioningSnapshot ApplyLauncherSuggestions(LauncherSuggestionApplyRequest request)
+    public ProvisioningPublicSnapshot ApplyLauncherSuggestions(LauncherSuggestionApplyRequest request)
     {
-        return _provisioningService.ApplyLauncherSuggestions(request.Ids);
+        return ProvisioningPublicSnapshot.FromSnapshot(_provisioningService.ApplyLauncherSuggestions(request.Ids));
     }
 
     public LauncherSnapshot GetLaunchers()

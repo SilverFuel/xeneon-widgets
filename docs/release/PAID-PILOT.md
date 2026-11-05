@@ -29,7 +29,7 @@ Participant IDs and support ticket IDs are pseudonymous operational records, not
 - At least 10 participants complete seven days of normal use.
 - At least 90% complete installation and first launch without live assistance.
 - No unresolved data-loss, secret-exposure, unsafe uninstall, or update-integrity issue exists.
-- No unresolved issue blocks Home, Scenes, Library, Settings, Safe Mode, Repair, or uninstall.
+- No unresolved issue blocks Home, Modes, Apps & Controls, Settings, Safe Mode, Repair, or uninstall.
 - Every support request receives an initial response within the published support target.
 - Refund and cancellation handling matches the published checkout policy.
 - All pilot builds and their SHA256 values remain traceable to a Git commit.

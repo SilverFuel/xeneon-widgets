@@ -156,7 +156,91 @@ function Assert-SafeInstallPath($installPath) {
 function Remove-DirectoryIfPresent($path, $rootPath, $label) {
   if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path)) {
     Assert-SafePathUnder $path $rootPath $label | Out-Null
-    Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+    if (Test-Path -LiteralPath $path) {
+      throw "$label could not be removed completely: $path"
+    }
+  }
+}
+
+function Remove-DirectoryBestEffort($path, $rootPath, $label) {
+  try {
+    if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path)) {
+      return
+    }
+    Remove-DirectoryIfPresent $path $rootPath $label
+  } catch {
+    Write-Warning "$label was retained at $path because cleanup failed: $($_.Exception.Message)" -WarningAction Continue
+  }
+}
+
+function Restore-BackupInstall($backupPath, $restorePath, $rootPath) {
+  $safeBackupPath = Assert-SafePathUnder $backupPath $rootPath "Backup install folder"
+  $safeRestorePath = Assert-SafePathUnder $restorePath $rootPath "Restore target"
+
+  if (-not (Test-Path -LiteralPath $safeBackupPath -PathType Container)) {
+    throw "Backup install folder is missing: $safeBackupPath"
+  }
+  if (Test-Path -LiteralPath $safeRestorePath) {
+    throw "Restore target already exists; refusing to nest or overwrite the backup: $safeRestorePath"
+  }
+
+  [System.IO.Directory]::Move($safeBackupPath, $safeRestorePath)
+  if ((Test-Path -LiteralPath $safeBackupPath) -or -not (Test-Path -LiteralPath $safeRestorePath -PathType Container)) {
+    throw "The previous installation was not restored exactly to $safeRestorePath. Backup source: $safeBackupPath"
+  }
+
+  return $safeRestorePath
+}
+
+function Get-RegistryKeySnapshot($path) {
+  if (-not (Test-Path -LiteralPath $path)) {
+    return [pscustomobject]@{
+      Exists = $false
+      Values = @()
+    }
+  }
+
+  $key = Get-Item -LiteralPath $path
+  $values = @($key.GetValueNames() | ForEach-Object {
+    [pscustomobject]@{
+      Name = $_
+      Value = $key.GetValue($_, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+      Kind = $key.GetValueKind($_)
+    }
+  })
+
+  return [pscustomobject]@{
+    Exists = $true
+    Values = $values
+  }
+}
+
+function Restore-RegistryKeySnapshot($path, $snapshot) {
+  $currentUserPrefix = "HKCU:\"
+  if (-not $path.StartsWith($currentUserPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Registry snapshot restore supports only current-user keys."
+  }
+
+  if (Test-Path -LiteralPath $path) {
+    Remove-Item -LiteralPath $path -Recurse -Force
+  }
+
+  if ($null -eq $snapshot -or -not $snapshot.Exists) {
+    return
+  }
+
+  $subKeyPath = $path.Substring($currentUserPrefix.Length)
+  $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($subKeyPath, $true)
+  if ($null -eq $key) {
+    throw "Could not reopen the uninstall registry key for rollback."
+  }
+  try {
+    foreach ($value in $snapshot.Values) {
+      $key.SetValue($value.Name, $value.Value, $value.Kind)
+    }
+  } finally {
+    $key.Dispose()
   }
 }
 
@@ -168,12 +252,14 @@ $supportUninstall = Join-Path $SourceRoot "uninstall.ps1"
 $supportRemove = Join-Path $SourceRoot "Remove-XenonEdgeHost.ps1"
 $supportSafeMode = Join-Path $SourceRoot "Launch-XenonSafeMode.ps1"
 $supportRepair = Join-Path $SourceRoot "repair.ps1"
+$runtimeProbeScript = Join-Path $SourceRoot "WebView2RuntimeProbe.ps1"
 
-foreach ($requiredPath in @($payloadZip, $supportInstall, $supportUninstall, $supportRemove, $supportSafeMode, $supportRepair)) {
+foreach ($requiredPath in @($payloadZip, $supportInstall, $supportUninstall, $supportRemove, $supportSafeMode, $supportRepair, $runtimeProbeScript)) {
   if (-not (Test-Path $requiredPath)) {
     throw "Missing installer payload file: $requiredPath"
   }
 }
+. $runtimeProbeScript
 
 $InstallRoot = Assert-SafeInstallPath $InstallRoot
 $programsRoot = Get-ProgramsRoot
@@ -187,19 +273,39 @@ if (Test-Path -LiteralPath $InstallRoot -PathType Leaf) {
 
 Write-Info "Install root: $InstallRoot"
 
-Write-Step "Stopping running processes"
-Stop-RunningHost
-Stop-LegacyBridgeIfPresent
-
 $legacyInstallRoot = Assert-SafeInstallPath (Join-Path $env:LOCALAPPDATA "Programs\XenonEdgeHost")
-if (-not (Test-Path -LiteralPath $InstallRoot) -and (Test-Path -LiteralPath $legacyInstallRoot -PathType Container)) {
-  Move-Item -LiteralPath $legacyInstallRoot -Destination $InstallRoot -Force
-  Write-Info "Migrated the previous XENEON installation into the Auxora upgrade transaction."
-}
 
-$extractRoot = Join-Path $env:TEMP ("Auxora-Payload-" + [guid]::NewGuid().ToString("N"))
+$shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Auxora"
+$legacyShortcutRoots = @(
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"),
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"),
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host")
+)
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Auxora.lnk"
+$legacyDesktopShortcuts = @(
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"),
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"),
+  (Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk")
+)
+$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Auxora"
+$legacyUninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost"
+
+$installerTempRoot = [System.IO.Path]::GetTempPath()
+$extractRoot = Join-Path $installerTempRoot ("Auxora-Payload-" + [guid]::NewGuid().ToString("N"))
 $stagedInstallRoot = Join-Path $installParent ("Auxora.installing-" + [guid]::NewGuid().ToString("N"))
 $backupInstallRoot = Join-Path $installParent ("Auxora.backup-" + [guid]::NewGuid().ToString("N"))
+$metadataBackupRoot = Join-Path $installerTempRoot ("Auxora-Metadata-" + [guid]::NewGuid().ToString("N"))
+$shortcutBackupRoot = Join-Path $metadataBackupRoot "StartMenu"
+$desktopShortcutBackupPath = Join-Path $metadataBackupRoot "Auxora.desktop.lnk"
+$registrySnapshotBackupPath = Join-Path $metadataBackupRoot "Auxora-uninstall-registry.xml"
+$backupRestoreRoot = ""
+$priorUninstallSnapshot = $null
+$hadShortcutRoot = $false
+$hadDesktopShortcut = $false
+$metadataSnapshotCreated = $false
+$metadataMutationStarted = $false
+$metadataRestoreFailed = $false
+$startupConfigurationAttempted = $false
 $installMoved = $false
 $installationCompleted = $false
 try {
@@ -215,25 +321,75 @@ try {
   Copy-Item $supportRemove (Join-Path $stagedInstallRoot "Remove-XenonEdgeHost.ps1") -Force
   Copy-Item $supportSafeMode (Join-Path $stagedInstallRoot "Launch-XenonSafeMode.ps1") -Force
   Copy-Item $supportRepair (Join-Path $stagedInstallRoot "repair.ps1") -Force
+  Copy-Item $runtimeProbeScript (Join-Path $stagedInstallRoot "WebView2RuntimeProbe.ps1") -Force
 
   $stagedExePath = Join-Path $stagedInstallRoot "XenonEdgeHost.exe"
   if (-not (Test-Path $stagedExePath)) {
     throw "Staged executable was not found at $stagedExePath"
   }
 
+  Write-Step "Checking embedded browser runtime"
+  try {
+    $webView2Runtime = Get-UsableWebView2Runtime $stagedInstallRoot
+  } catch {
+    throw "Auxora requires a usable Microsoft Edge WebView2 Runtime. Install or repair the Evergreen WebView2 Runtime from Microsoft, then run setup again. No existing Auxora files were replaced. Probe failure: $($_.Exception.Message)"
+  }
+  Write-Info "Verified $($webView2Runtime.Kind) WebView2 Runtime $($webView2Runtime.Version) with the candidate WebView2 loader."
+
+  Write-Step "Stopping running processes"
+  Stop-RunningHost
+  Stop-LegacyBridgeIfPresent
+
+  if ($NoAutoStart) {
+    # Deliberate fail-safe: public setup removes known login startup before any
+    # install mutation and never re-enables it after failure. This protects remote
+    # access and display recovery even when an older install had startup enabled.
+    Write-Step "Preflighting automatic startup removal"
+    if ($Quiet) {
+      & $supportUninstall -Quiet -KeepRunning
+    } else {
+      & $supportUninstall -KeepRunning
+    }
+  }
+
+  Write-Step "Protecting existing app registration"
+  New-Item -ItemType Directory -Path $metadataBackupRoot -Force | Out-Null
+  if (Test-Path -LiteralPath $shortcutRoot -PathType Container) {
+    Copy-Item -LiteralPath $shortcutRoot -Destination $shortcutBackupRoot -Recurse -Force
+    $hadShortcutRoot = $true
+  }
+  if (Test-Path -LiteralPath $desktopShortcut -PathType Leaf) {
+    Copy-Item -LiteralPath $desktopShortcut -Destination $desktopShortcutBackupPath -Force
+    $hadDesktopShortcut = $true
+  }
+  $priorUninstallSnapshot = Get-RegistryKeySnapshot $uninstallKey
+  $priorUninstallSnapshot | Export-Clixml -LiteralPath $registrySnapshotBackupPath
+  $metadataSnapshotCreated = $true
+
   Write-Step "Installing app files"
-  if (Test-Path -LiteralPath $InstallRoot) {
-    Move-Item -LiteralPath $InstallRoot -Destination $backupInstallRoot -Force
+  if (Test-Path -LiteralPath $InstallRoot -PathType Container) {
+    $backupRestoreRoot = $InstallRoot
+    [System.IO.Directory]::Move($InstallRoot, $backupInstallRoot)
+  } elseif (Test-Path -LiteralPath $legacyInstallRoot -PathType Container) {
+    $backupRestoreRoot = $legacyInstallRoot
+    [System.IO.Directory]::Move($legacyInstallRoot, $backupInstallRoot)
+    Write-Info "Staged the previous XENEON installation for transactional migration."
   }
 
   try {
-    Move-Item -LiteralPath $stagedInstallRoot -Destination $InstallRoot -Force
+    [System.IO.Directory]::Move($stagedInstallRoot, $InstallRoot)
     $installMoved = $true
   } catch {
+    $stageMoveError = $_
     if (Test-Path -LiteralPath $backupInstallRoot -PathType Container) {
-      Move-Item -LiteralPath $backupInstallRoot -Destination $InstallRoot -Force
+      try {
+        Restore-BackupInstall $backupInstallRoot $backupRestoreRoot $programsRoot | Out-Null
+        Write-Info "Restored previous install after the staged install move failed."
+      } catch {
+        Write-Warning "The staged install move failed and the previous install could not be restored. Backup remains at $backupInstallRoot; intended target: $backupRestoreRoot"
+      }
     }
-    throw
+    throw $stageMoveError
   }
 
   $exePath = Join-Path $InstallRoot "XenonEdgeHost.exe"
@@ -241,18 +397,35 @@ try {
     throw "Installed executable was not found at $exePath"
   }
 
-  Write-Step "Creating simple launch shortcuts"
-  $shortcutRoot = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Auxora"
-  $legacyShortcutRoots = @(
-    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge"),
-    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\XENEON Edge Host"),
-    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Xenon Edge Host")
-  )
-  foreach ($legacyShortcutRoot in $legacyShortcutRoots) {
-    if (Test-Path $legacyShortcutRoot) {
-      Remove-Item -LiteralPath $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+  if (-not $NoAutoStart) {
+    Write-Step "Configuring auto-start"
+    $autoStartScript = Join-Path $InstallRoot "install.ps1"
+    $startupConfigurationAttempted = $true
+    if ($Quiet) {
+      & $autoStartScript -Quiet
+    } else {
+      & $autoStartScript
+    }
+  } else {
+    Write-Step "Configuring runtime without automatic startup"
+    $runtimeScript = Join-Path $InstallRoot "install.ps1"
+    if ($Quiet) {
+      & $runtimeScript -Quiet -RuntimeOnly
+    } else {
+      & $runtimeScript -RuntimeOnly
+    }
+
+    Write-Step "Verifying automatic startup remains disabled"
+    $autoStartRemoveScript = Join-Path $InstallRoot "uninstall.ps1"
+    if ($Quiet) {
+      & $autoStartRemoveScript -Quiet -KeepRunning
+    } else {
+      & $autoStartRemoveScript -KeepRunning
     }
   }
+
+  Write-Step "Creating simple launch shortcuts"
+  $metadataMutationStarted = $true
   New-Item -ItemType Directory -Path $shortcutRoot -Force | Out-Null
 
   New-Shortcut `
@@ -291,18 +464,8 @@ try {
     -iconLocation $exePath
 
   if (-not $NoDesktopShortcut) {
-    $legacyDesktopShortcuts = @(
-      (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge.lnk"),
-      (Join-Path ([Environment]::GetFolderPath("Desktop")) "XENEON Edge Host.lnk"),
-      (Join-Path ([Environment]::GetFolderPath("Desktop")) "Xenon Edge Host.lnk")
-    )
-    foreach ($legacyDesktopShortcut in $legacyDesktopShortcuts) {
-      if (Test-Path $legacyDesktopShortcut) {
-        Remove-Item -LiteralPath $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
-      }
-    }
     New-Shortcut `
-      -shortcutPath (Join-Path ([Environment]::GetFolderPath("Desktop")) "Auxora.lnk") `
+      -shortcutPath $desktopShortcut `
       -targetPath $exePath `
       -arguments "" `
       -workingDirectory $InstallRoot `
@@ -311,24 +474,62 @@ try {
 
   Write-Step "Registering app"
   Register-UninstallEntry -installPath $InstallRoot -exePath $exePath
-  Remove-Item -LiteralPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\XenonEdgeHost" -Recurse -Force -ErrorAction SilentlyContinue
 
-  if (-not $NoAutoStart) {
-    Write-Step "Configuring auto-start"
-    $autoStartScript = Join-Path $InstallRoot "install.ps1"
-    if ($Quiet) {
-      & $autoStartScript -Quiet
-    } else {
-      & $autoStartScript
+  # Keep this inert-by-default seam in the release bytes so the disposable-VM test
+  # can prove rollback on the exact candidate. The action is accepted only when the
+  # caller supplies the full embedded commit and a one-time marker under the local
+  # temp root. Public release metadata alone cannot trigger the injected failure.
+  $qualificationCommit = [string]$env:AUXORA_RELEASE_QUALIFICATION_COMMIT
+  $qualificationMarkerPath = [string]$env:AUXORA_RELEASE_QUALIFICATION_MARKER
+  $installedProductVersion = [string](Get-Item -LiteralPath $exePath).VersionInfo.ProductVersion
+  $qualificationCommitMatches = $qualificationCommit -match '^[0-9a-fA-F]{40}$' -and
+    $installedProductVersion.EndsWith(".$qualificationCommit", [System.StringComparison]::OrdinalIgnoreCase)
+  $qualificationMarkerMatches = $false
+  if ($qualificationCommitMatches -and -not [string]::IsNullOrWhiteSpace($qualificationMarkerPath)) {
+    try {
+      $safeQualificationMarkerPath = Assert-SafePathUnder $qualificationMarkerPath $installerTempRoot "Release qualification marker"
+      if (Test-Path -LiteralPath $safeQualificationMarkerPath -PathType Leaf) {
+        $qualificationMarkerItem = Get-Item -LiteralPath $safeQualificationMarkerPath -Force -ErrorAction Stop
+        $markerParent = [System.IO.Path]::GetFullPath($qualificationMarkerItem.DirectoryName).TrimEnd('\')
+        $expectedMarkerParent = [System.IO.Path]::GetFullPath($installerTempRoot).TrimEnd('\')
+        $markerIsDirectTempFile = $markerParent.Equals($expectedMarkerParent, [System.StringComparison]::OrdinalIgnoreCase) -and
+          $qualificationMarkerItem.Name -match '^Auxora-ReleaseQualification-[0-9a-fA-F]{32}\.marker$'
+        $markerIsReparsePoint = ($qualificationMarkerItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+        if ($markerIsDirectTempFile -and -not $markerIsReparsePoint) {
+          $expectedMarker = "Auxora:$qualificationCommit`:after-registration"
+          $actualMarker = (Get-Content -LiteralPath $qualificationMarkerItem.FullName -Raw).Trim()
+          $qualificationMarkerMatches = $actualMarker -ceq $expectedMarker
+        }
+      }
+    } catch {
+      $qualificationMarkerMatches = $false
     }
-  } else {
-    Write-Step "Disabling auto-start"
-    $autoStartRemoveScript = Join-Path $InstallRoot "uninstall.ps1"
-    if ($Quiet) {
-      & $autoStartRemoveScript -Quiet
-    } else {
-      & $autoStartRemoveScript
+  }
+  if ($qualificationCommitMatches -and $qualificationMarkerMatches -and $env:AUXORA_INSTALLER_TEST_FAILURE -ceq "after-registration") {
+    Write-Info "Release qualification requested an injected failure after app registration."
+    throw "Injected release-test failure after app registration."
+  }
+
+  Write-Step "Removing superseded XENEON registration"
+  foreach ($legacyShortcutRoot in $legacyShortcutRoots) {
+    if (Test-Path -LiteralPath $legacyShortcutRoot) {
+      Remove-Item -LiteralPath $legacyShortcutRoot -Recurse -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $legacyShortcutRoot) {
+        Write-Warning "A superseded XENEON Start Menu folder was retained at $legacyShortcutRoot"
+      }
     }
+  }
+  foreach ($legacyDesktopShortcut in $legacyDesktopShortcuts) {
+    if (Test-Path -LiteralPath $legacyDesktopShortcut) {
+      Remove-Item -LiteralPath $legacyDesktopShortcut -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $legacyDesktopShortcut) {
+        Write-Warning "A superseded XENEON desktop shortcut was retained at $legacyDesktopShortcut"
+      }
+    }
+  }
+  Remove-Item -LiteralPath $legacyUninstallKey -Recurse -Force -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $legacyUninstallKey) {
+    Write-Warning "The superseded XenonEdgeHost uninstall registration was retained at $legacyUninstallKey"
   }
 
   $installationCompleted = $true
@@ -350,16 +551,34 @@ try {
   }
 }
 catch {
-  if (-not $installationCompleted -and (Test-Path -LiteralPath $backupInstallRoot -PathType Container)) {
+  $installationError = $_
+  $restoredPreviousInstall = $false
+
+  if (-not $installationCompleted -and $startupConfigurationAttempted -and $installMoved) {
     try {
-      if (Test-Path -LiteralPath $InstallRoot) {
+      $partialUninstallScript = Join-Path $InstallRoot "uninstall.ps1"
+      if (Test-Path -LiteralPath $partialUninstallScript -PathType Leaf) {
+        & $partialUninstallScript -Quiet -KeepRunning
+      } else {
+        & $supportUninstall -Quiet -KeepRunning
+      }
+    } catch {
+      Write-Warning "Setup failed and the partial automatic-startup registration could not be removed. See $logPath"
+    }
+  }
+
+  if (-not $installationCompleted -and (Test-Path -LiteralPath $backupInstallRoot -PathType Container)) {
+    $restoreTarget = if ([string]::IsNullOrWhiteSpace($backupRestoreRoot)) { $InstallRoot } else { $backupRestoreRoot }
+    try {
+      if ($installMoved -and (Test-Path -LiteralPath $InstallRoot)) {
         Remove-DirectoryIfPresent $InstallRoot $programsRoot "Partial install folder"
       }
 
-      Move-Item -LiteralPath $backupInstallRoot -Destination $InstallRoot -Force
+      Restore-BackupInstall $backupInstallRoot $restoreTarget $programsRoot | Out-Null
+      $restoredPreviousInstall = $true
       Write-Info "Restored previous install after setup failed."
     } catch {
-      Write-Warning "Setup failed and rollback could not restore the previous install. Backup remains at $backupInstallRoot"
+      Write-Warning "Setup failed and rollback could not restore the previous install. Backup remains at $backupInstallRoot; intended target: $restoreTarget"
     }
   } elseif (-not $installationCompleted -and $installMoved -and (Test-Path -LiteralPath $InstallRoot -PathType Container)) {
     try {
@@ -370,19 +589,68 @@ catch {
     }
   }
 
+  if (-not $installationCompleted -and $metadataMutationStarted -and $metadataSnapshotCreated) {
+    try {
+      if (Test-Path -LiteralPath $shortcutRoot) {
+        Remove-Item -LiteralPath $shortcutRoot -Recurse -Force
+      }
+      if (Test-Path -LiteralPath $desktopShortcut) {
+        Remove-Item -LiteralPath $desktopShortcut -Force
+      }
+      if ($hadShortcutRoot) {
+        Copy-Item -LiteralPath $shortcutBackupRoot -Destination $shortcutRoot -Recurse -Force
+      }
+      if ($hadDesktopShortcut) {
+        Copy-Item -LiteralPath $desktopShortcutBackupPath -Destination $desktopShortcut -Force
+      }
+      Restore-RegistryKeySnapshot $uninstallKey $priorUninstallSnapshot
+      Write-Info "Restored previous shortcuts and uninstall registration after setup failed."
+    } catch {
+      $metadataRestoreFailed = $true
+      Write-Warning "Setup failed and rollback could not fully restore the previous shortcuts or uninstall registration. See $logPath"
+    }
+  }
+
+  if (-not $installationCompleted -and $startupConfigurationAttempted -and $restoredPreviousInstall) {
+    try {
+      $restoredInstallRoot = if ([string]::IsNullOrWhiteSpace($restoreTarget)) {
+        if ([string]::IsNullOrWhiteSpace($backupRestoreRoot)) { $InstallRoot } else { $backupRestoreRoot }
+      } else {
+        $restoreTarget
+      }
+      $restoredAutoStartScript = Join-Path $restoredInstallRoot "install.ps1"
+      if (Test-Path -LiteralPath $restoredAutoStartScript -PathType Leaf) {
+        & $restoredAutoStartScript -Quiet
+      } else {
+        Write-Warning "The previous install was restored, but its automatic-startup script was not available."
+      }
+    } catch {
+      Write-Warning "The previous install was restored, but its automatic-startup registration could not be restored. See $logPath"
+    }
+  }
+
   if (-not $Quiet) {
     Write-Host ""
     Write-Host "Installation failed. See $logPath" -ForegroundColor Red
   }
-  throw
+  throw $installationError
 }
 finally {
-  Remove-Item -LiteralPath $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-DirectoryBestEffort $extractRoot $installerTempRoot "Extracted installer payload"
+  if ($metadataRestoreFailed) {
+    Write-Warning "Metadata rollback backup was retained at $metadataBackupRoot" -WarningAction Continue
+  } else {
+    Remove-DirectoryBestEffort $metadataBackupRoot $installerTempRoot "Installer metadata backup"
+  }
   if (-not $installMoved) {
-    Remove-DirectoryIfPresent $stagedInstallRoot $programsRoot "Staged install folder"
+    Remove-DirectoryBestEffort $stagedInstallRoot $programsRoot "Staged install folder"
   }
   if ($installationCompleted) {
-    Remove-DirectoryIfPresent $backupInstallRoot $programsRoot "Backup install folder"
+    Remove-DirectoryBestEffort $backupInstallRoot $programsRoot "Backup install folder"
   }
-  Stop-Transcript | Out-Null
+  try {
+    Stop-Transcript | Out-Null
+  } catch {
+    Write-Warning "Installer transcript could not be closed cleanly. The durable log remains at $logPath" -WarningAction Continue
+  }
 }

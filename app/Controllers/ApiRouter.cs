@@ -25,8 +25,11 @@ public sealed class ApiRouter
     private readonly MonitorControlController _monitorControlController;
     private readonly ExtensionController _extensionController;
     private readonly RemoteSessionController _remoteSessionController;
+    private readonly LocalDataResetController _localDataResetController;
+    private readonly RecoveryController _recoveryController;
     private readonly WeatherService _weatherService;
     private readonly CalendarService _calendarService;
+    private readonly FrigateService _frigateService;
 
     public ApiRouter(
         ConfigStore configStore,
@@ -42,8 +45,11 @@ public sealed class ApiRouter
         MonitorControlController monitorControlController,
         ExtensionController extensionController,
         RemoteSessionController remoteSessionController,
+        LocalDataResetController localDataResetController,
+        RecoveryController recoveryController,
         WeatherService weatherService,
-        CalendarService calendarService)
+        CalendarService calendarService,
+        FrigateService frigateService)
     {
         _configStore = configStore;
         _staticAssets = staticAssets;
@@ -58,8 +64,11 @@ public sealed class ApiRouter
         _monitorControlController = monitorControlController;
         _extensionController = extensionController;
         _remoteSessionController = remoteSessionController;
+        _localDataResetController = localDataResetController;
+        _recoveryController = recoveryController;
         _weatherService = weatherService;
         _calendarService = calendarService;
+        _frigateService = frigateService;
     }
 
     public async Task HandleAsync(
@@ -104,6 +113,12 @@ public sealed class ApiRouter
                 return;
             case "/api/config/reset" when request.HttpMethod == "POST":
                 await HandleConfigResetAsync(response, cancellationToken);
+                return;
+            case "/api/recovery" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _recoveryController.Get(), cancellationToken);
+                return;
+            case "/api/recovery/action" when request.HttpMethod == "POST":
+                await HandleRecoveryActionAsync(request, response, cancellationToken);
                 return;
             case "/api/config/backup" when request.HttpMethod == "GET":
                 await WriteJsonAsync(response, 200, _configController.BuildPortableBackup(), cancellationToken);
@@ -175,6 +190,9 @@ public sealed class ApiRouter
             case "/api/config/calendar" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _configController.UpdateCalendar(await ReadJsonAsync<CalendarConfigRequest>(request, cancellationToken)), cancellationToken);
                 return;
+            case "/api/config/frigate" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _configController.UpdateFrigate(await ReadJsonAsync<FrigateConfigRequest>(request, cancellationToken)), cancellationToken);
+                return;
             case "/api/config/network" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _configController.UpdateNetwork(await ReadJsonAsync<NetworkConfigRequest>(request, cancellationToken)), cancellationToken);
                 return;
@@ -238,6 +256,15 @@ public sealed class ApiRouter
             case "/api/unifi/network/disconnect" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _telemetryController.DisconnectUniFi(), cancellationToken);
                 return;
+            case "/api/frigate" when request.HttpMethod == "GET":
+                await HandleFrigateRequestAsync(response, dashboardUri, cancellationToken);
+                return;
+            case "/api/frigate/test" when request.HttpMethod == "POST":
+                await HandleFrigateTestAsync(response, dashboardUri, cancellationToken);
+                return;
+            case "/api/frigate/snapshot" when request.HttpMethod == "GET":
+                await HandleFrigateSnapshotAsync(request, response, dashboardUri, cancellationToken);
+                return;
             case "/api/quick-actions" when request.HttpMethod == "GET":
                 await WriteJsonAsync(response, 200, _actionController.GetQuickActions(), cancellationToken);
                 return;
@@ -270,6 +297,15 @@ public sealed class ApiRouter
                 return;
             case "/api/audio/session-mute" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _telemetryController.SetAudioSessionMuteAsync(await ReadJsonAsync<AudioSessionMuteRequest>(request, cancellationToken), cancellationToken), cancellationToken);
+                return;
+            case "/api/audio/equalizer" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _telemetryController.GetAudioEqualizer(), cancellationToken);
+                return;
+            case "/api/audio/equalizer/connect" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _telemetryController.EnableAudioEqualizer(), cancellationToken);
+                return;
+            case "/api/audio/equalizer" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _telemetryController.UpdateAudioEqualizer(await ReadJsonAsync<EqualizerApoUpdateRequest>(request, cancellationToken)), cancellationToken);
                 return;
             case "/api/weather":
                 await HandleWeatherRequestAsync(request, response, cancellationToken);
@@ -353,7 +389,7 @@ public sealed class ApiRouter
         {
             await WriteJsonAsync(response, 501, BuildUnsupportedFeaturePayload(
                 "unsupported",
-                "This native endpoint is not implemented yet."), cancellationToken);
+                "No matching native endpoint is available for this request."), cancellationToken);
             return;
         }
 
@@ -367,14 +403,17 @@ public sealed class ApiRouter
 
     private async Task HandleConfigResetAsync(HttpListenerResponse response, CancellationToken cancellationToken)
     {
-        _configController.ResetLocalData();
-        await WriteJsonAsync(response, 200, new
-        {
-            ok = true,
-            message = "Local settings and protected secrets were reset.",
-            config = _configController.GetSnapshot(),
-            health = await _telemetryController.BuildHealthPayloadAsync(cancellationToken)
-        }, cancellationToken);
+        var receipt = await _localDataResetController.ResetAllAsync(cancellationToken);
+        await WriteJsonAsync(response, receipt.Ok ? 200 : 500, receipt, cancellationToken);
+    }
+
+    private async Task HandleRecoveryActionAsync(
+        HttpListenerRequest request,
+        HttpListenerResponse response,
+        CancellationToken cancellationToken)
+    {
+        var result = _recoveryController.Execute(await ReadJsonAsync<RecoveryActionRequest>(request, cancellationToken));
+        await WriteJsonAsync(response, result.Ok ? 200 : 409, result, cancellationToken);
     }
 
     private async Task HandleLauncherIconAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
@@ -410,6 +449,62 @@ public sealed class ApiRouter
         {
             var snapshot = await _weatherService.GetSnapshotAsync(config, city, units, cancellationToken);
             await WriteJsonAsync(response, 200, snapshot, cancellationToken);
+        }
+        catch (InvalidOperationException error)
+        {
+            await WriteJsonAsync(response, 502, new { error = error.Message }, cancellationToken);
+        }
+    }
+
+    private async Task HandleFrigateRequestAsync(
+        HttpListenerResponse response,
+        Uri dashboardUri,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var localBaseUri = new Uri(dashboardUri.GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute);
+            var snapshot = await _frigateService.GetSnapshotAsync(_configStore.Snapshot(), localBaseUri, cancellationToken);
+            await WriteJsonAsync(response, 200, snapshot, cancellationToken);
+        }
+        catch (InvalidOperationException error)
+        {
+            await WriteJsonAsync(response, 502, new { error = error.Message }, cancellationToken);
+        }
+    }
+
+    private async Task HandleFrigateTestAsync(
+        HttpListenerResponse response,
+        Uri dashboardUri,
+        CancellationToken cancellationToken)
+    {
+        var localBaseUri = new Uri(dashboardUri.GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute);
+        var status = await _frigateService.TestConnectionAsync(
+            _configStore.Snapshot(),
+            localBaseUri,
+            cancellationToken);
+        await WriteJsonAsync(response, 200, status, cancellationToken);
+    }
+
+    private async Task HandleFrigateSnapshotAsync(
+        HttpListenerRequest request,
+        HttpListenerResponse response,
+        Uri dashboardUri,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var localBaseUri = new Uri(dashboardUri.GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute);
+            var asset = await _frigateService.GetEventSnapshotAsync(
+                _configStore.Snapshot(),
+                localBaseUri,
+                GetQueryValue(request, "id"),
+                cancellationToken);
+            await WriteBinaryAsync(response, 200, asset.ContentType, asset.Content, cancellationToken, "private, no-store");
+        }
+        catch (FrigateSnapshotUnavailableException error)
+        {
+            await WriteJsonAsync(response, 404, new { error = error.Message }, cancellationToken);
         }
         catch (InvalidOperationException error)
         {
@@ -508,11 +603,17 @@ public sealed class ApiRouter
         response.Close();
     }
 
-    private static async Task WriteBinaryAsync(HttpListenerResponse response, int statusCode, string contentType, byte[] content, CancellationToken cancellationToken)
+    private static async Task WriteBinaryAsync(
+        HttpListenerResponse response,
+        int statusCode,
+        string contentType,
+        byte[] content,
+        CancellationToken cancellationToken,
+        string cacheControl = "public, max-age=604800")
     {
         response.StatusCode = statusCode;
         response.ContentType = contentType;
-        response.Headers["Cache-Control"] = "public, max-age=604800";
+        response.Headers["Cache-Control"] = cacheControl;
         response.Headers["X-Content-Type-Options"] = "nosniff";
         response.Headers["Referrer-Policy"] = "no-referrer";
         response.ContentLength64 = content.LongLength;

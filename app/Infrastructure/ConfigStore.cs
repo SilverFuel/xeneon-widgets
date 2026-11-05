@@ -131,6 +131,7 @@ public sealed class ConfigStore
         normalized.Calendar ??= new CalendarConfig();
         normalized.Hue ??= new HueConfig();
         normalized.UniFi ??= new UniFiConfig();
+        normalized.Frigate ??= new FrigateConfig();
         normalized.Network ??= new NetworkConfig();
         normalized.Dashboard ??= new DashboardConfig();
         normalized.Scenes = SceneDefaults.Normalize(normalized.Scenes);
@@ -144,6 +145,15 @@ public sealed class ConfigStore
         normalized.UniFi.Username = normalized.UniFi.Username?.Trim() ?? "";
         normalized.UniFi.Site = NormalizeSite(normalized.UniFi.Site);
         normalized.UniFi.CertificateThumbprint = NormalizeThumbprint(normalized.UniFi.CertificateThumbprint);
+        normalized.Frigate.BaseUrl = NormalizeFrigateBaseUrl(normalized.Frigate.BaseUrl);
+        normalized.Frigate.Camera = NormalizeFrigateCamera(normalized.Frigate.Camera);
+        normalized.Frigate.Username = NormalizeFrigateUsername(normalized.Frigate.Username);
+        if (string.IsNullOrWhiteSpace(normalized.Frigate.BaseUrl)
+            || string.IsNullOrWhiteSpace(normalized.Frigate.Username))
+        {
+            normalized.Frigate.Username = "";
+            normalized.Frigate.Password = "";
+        }
         normalized.Network.HealthTarget = NormalizePingTarget(normalized.Network.HealthTarget);
         normalized.Dashboard.AutoProvisioningVersion = normalized.Dashboard.AutoProvisioningVersion <= 0 ? 1 : normalized.Dashboard.AutoProvisioningVersion;
         normalized.Dashboard.OnboardingVersion = normalized.Dashboard.OnboardingVersion <= 0 ? 1 : normalized.Dashboard.OnboardingVersion;
@@ -152,9 +162,19 @@ public sealed class ConfigStore
         normalized.Dashboard.DisplaySelectedAt = normalized.Dashboard.DisplaySelectedAt?.Trim() ?? "";
         normalized.Dashboard.PerformanceBudget = NormalizeChoice(normalized.Dashboard.PerformanceBudget, "balanced", "balanced", "battery", "game", "max");
         normalized.Dashboard.ThemeReadability = NormalizeChoice(normalized.Dashboard.ThemeReadability, "normal", "normal", "clean", "high-contrast", "visor");
-        normalized.Dashboard.ReleaseChannel = NormalizeChoice(normalized.Dashboard.ReleaseChannel, "stable", "stable", "beta", "nightly");
-        normalized.Dashboard.LastKnownGoodVersion = normalized.Dashboard.LastKnownGoodVersion?.Trim() ?? "";
-        normalized.Dashboard.LastKnownGoodPath = normalized.Dashboard.LastKnownGoodPath?.Trim() ?? "";
+        normalized.Dashboard.ThemeId = SceneDefaults.NormalizeThemeId(normalized.Dashboard.ThemeId);
+        normalized.Dashboard.AccentMode = NormalizeChoice(normalized.Dashboard.AccentMode, "preset", "preset", "custom");
+        normalized.Dashboard.CustomAccentColor = SceneDefaults.NormalizeAccentColor(normalized.Dashboard.CustomAccentColor);
+        if (normalized.Dashboard.AccentMode != "custom" || string.IsNullOrWhiteSpace(normalized.Dashboard.CustomAccentColor))
+        {
+            normalized.Dashboard.AccentMode = "preset";
+            normalized.Dashboard.CustomAccentColor = "";
+        }
+        normalized.Dashboard.ThemeVariant = NormalizeChoice(normalized.Dashboard.ThemeVariant, "auto", "auto", "standard", "night");
+        normalized.Dashboard.AnimationIntensity = Math.Clamp(normalized.Dashboard.AnimationIntensity, 0, 140);
+        normalized.Dashboard.DashboardOpacity = Math.Clamp(normalized.Dashboard.DashboardOpacity, 35, 100);
+        normalized.Dashboard.ReleaseChannel = AppBuildIdentity.NormalizeReleaseChannel(
+            NormalizeChoice(normalized.Dashboard.ReleaseChannel, "stable", "stable", "beta", "nightly"));
         var normalizedLaunchers = NormalizeLaunchers(normalized.Launchers);
         var migratedGamePins = normalizedLaunchers.Where(IsGamePin).ToList();
         normalized.Launchers = normalizedLaunchers.Where(entry => !IsGamePin(entry)).ToList();
@@ -205,6 +225,35 @@ public sealed class ConfigStore
         return value.All(ch => char.IsLetterOrDigit(ch) || ch is '.' or '-' or ':')
             ? value
             : "";
+    }
+
+    private static string NormalizeFrigateBaseUrl(string? input)
+    {
+        try
+        {
+            return NetworkEndpointGuard.NormalizeLocalHttpBaseUrl(input, "Frigate address");
+        }
+        catch (InvalidOperationException)
+        {
+            return "";
+        }
+    }
+
+    internal static string NormalizeFrigateCamera(string? input)
+    {
+        var value = input?.Trim() ?? "";
+        if (value.Length > 80)
+        {
+            return "";
+        }
+
+        return value.All(ch => char.IsLetterOrDigit(ch) || ch is '_' or '-') ? value : "";
+    }
+
+    internal static string NormalizeFrigateUsername(string? input)
+    {
+        var value = input?.Trim() ?? "";
+        return value.Length <= 128 && value.All(ch => !char.IsControl(ch)) ? value : "";
     }
 
     private static string NormalizeThumbprint(string? input)
@@ -282,6 +331,11 @@ public sealed class ConfigStore
             _secretStore.Set("weather.apiKey", config.Weather.ApiKey);
         }
 
+        if (!string.IsNullOrWhiteSpace(config.Calendar.IcsUrl))
+        {
+            _secretStore.Set("calendar.icsUrl", config.Calendar.IcsUrl);
+        }
+
         if (!string.IsNullOrWhiteSpace(config.Hue.AppKey))
         {
             _secretStore.Set("hue.appKey", config.Hue.AppKey);
@@ -296,6 +350,11 @@ public sealed class ConfigStore
         {
             _secretStore.Set("unifi.password", config.UniFi.Password);
         }
+
+        if (!string.IsNullOrWhiteSpace(config.Frigate.Password))
+        {
+            _secretStore.Set("frigate.password", config.Frigate.Password);
+        }
     }
 
     private void ApplyProtectedSecrets(AppConfig config)
@@ -304,6 +363,12 @@ public sealed class ConfigStore
         if (!string.IsNullOrWhiteSpace(weatherApiKey))
         {
             config.Weather.ApiKey = weatherApiKey;
+        }
+
+        var calendarIcsUrl = _secretStore.Get("calendar.icsUrl");
+        if (!string.IsNullOrWhiteSpace(calendarIcsUrl))
+        {
+            config.Calendar.IcsUrl = calendarIcsUrl;
         }
 
         var hueAppKey = _secretStore.Get("hue.appKey");
@@ -323,21 +388,31 @@ public sealed class ConfigStore
         {
             config.UniFi.Password = unifiPassword;
         }
+
+        var frigatePassword = _secretStore.Get("frigate.password");
+        if (!string.IsNullOrWhiteSpace(frigatePassword))
+        {
+            config.Frigate.Password = frigatePassword;
+        }
     }
 
     private void SaveProtectedSecrets(AppConfig config)
     {
         _secretStore.Set("weather.apiKey", config.Weather.ApiKey);
+        _secretStore.Set("calendar.icsUrl", config.Calendar.IcsUrl);
         _secretStore.Set("hue.appKey", config.Hue.AppKey);
         _secretStore.Set("hue.clientKey", config.Hue.ClientKey);
         _secretStore.Set("unifi.password", config.UniFi.Password);
+        _secretStore.Set("frigate.password", config.Frigate.Password);
     }
 
     private static void RemoveSecretsFromDiskConfig(AppConfig config)
     {
         config.Weather.ApiKey = "";
+        config.Calendar.IcsUrl = "";
         config.Hue.AppKey = "";
         config.Hue.ClientKey = "";
         config.UniFi.Password = "";
+        config.Frigate.Password = "";
     }
 }
