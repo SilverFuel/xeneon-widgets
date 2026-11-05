@@ -257,7 +257,7 @@
       copy: "Muted amber and rose for media, evening, and comfortable long sessions."
     }
   ];
-  var localProductWidgetIds = ["game-mode"];
+  var localProductWidgetIds = ["game-mode", "wow-forever"];
   var surfaceContracts = {
     home: { destination: "home", category: "Home", defaultStatus: "Available" },
     scenes: { destination: "scenes", category: "Modes", defaultStatus: "Available" },
@@ -271,6 +271,7 @@
     remote: { destination: "settings", category: "Remote", defaultStatus: "Unavailable", alwaysVisible: true },
     installer: { destination: "settings", category: "Recovery", defaultStatus: "Checking", alwaysVisible: true },
     "game-mode": { destination: "library", category: "Gaming", defaultStatus: "Available" },
+    "wow-forever": { destination: "library", category: "Gaming", defaultStatus: "Local journal" },
     system: { destination: "library", category: "System", defaultStatus: "Checking" },
     network: { destination: "library", category: "System", defaultStatus: "Checking" },
     audio: { destination: "library", category: "Media", defaultStatus: "Checking" },
@@ -1482,7 +1483,7 @@
   }
 
   function activeGameIdFromPayload(payload) {
-    var activeGame = payload && payload.active && payload.activeGame ? payload.activeGame : null;
+    var activeGame = gameForAutoOpen(payload);
     if (!activeGame) {
       return "";
     }
@@ -1492,6 +1493,43 @@
 
   function isGameFaceAutoOpenEnabled() {
     return String(getSetting("gameModeAutoFace") || "1") !== "0";
+  }
+
+  function isWowForeverGame(game) {
+    if (!game) {
+      return false;
+    }
+
+    // The native host identifies the client without exposing its install path.
+    if (Object.prototype.hasOwnProperty.call(game, "gameKey")) {
+      return game.gameKey === "wow-forever";
+    }
+
+    // Older hosts can supply an explicit title. Never infer Forever from Wow alone.
+    var executablePath = String(game.executablePath || "").replace(/\\/g, "/").toLowerCase();
+    if (executablePath) {
+      return /(?:^|\/)_forever_\/wow\.exe$/.test(executablePath);
+    }
+    var processName = String(game.processName || "").toLowerCase();
+    if (processName && processName !== "wow" && processName !== "wow.exe") {
+      return false;
+    }
+    var name = String(game.name || "").toLowerCase().replace(/[:_-]+/g, " ").replace(/\s+/g, " ").trim();
+    return name === "world of warcraft forever" || name === "wow forever";
+  }
+
+  function gameForAutoOpen(payload) {
+    var game = payload && payload.active && payload.activeGame;
+    if (!game || isWowForeverGame(game)) {
+      return game || null;
+    }
+    // A higher-confidence game may remain open while the Forever client starts.
+    var candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+    return candidates.filter(isWowForeverGame)[0] || game;
+  }
+
+  function gameFaceWidgetIdFromPayload(payload) {
+    return isWowForeverGame(gameForAutoOpen(payload)) ? "wow-forever" : "game-mode";
   }
 
   function clearPendingGameFaceAutoOpen() {
@@ -1519,15 +1557,17 @@
   }
 
   function openGameFaceForActiveId(activeId) {
+    var targetWidgetId = gameFaceWidgetIdFromPayload(gameActivity);
     if (!activeId
       || !isGameFaceAutoOpenEnabled()
       || gameFaceSuppressedGameId === activeId
       || gameFaceAutoOpenedGameId === activeId
-      || currentWidgetId === "setup") {
+      || currentWidgetId === "setup"
+      || (currentWidgetId === "wow-forever" && targetWidgetId !== "wow-forever")) {
       return false;
     }
 
-    if (currentWidgetId === "game-mode") {
+    if (currentWidgetId === targetWidgetId) {
       gameFaceAutoOpenedGameId = activeId;
       clearPendingGameFaceAutoOpen();
       return true;
@@ -1536,8 +1576,8 @@
     gameFacePreviousWidgetId = currentWidgetId || getFallbackPrimaryWidget();
     gameFaceAutoOpenedGameId = activeId;
     clearPendingGameFaceAutoOpen();
-    selectWidget("game-mode", false);
-    showTouchFeedback("Game focus");
+    selectWidget(targetWidgetId, false);
+    showTouchFeedback(targetWidgetId === "wow-forever" ? "For the Horde" : "Game focus");
     return true;
   }
 
@@ -1568,7 +1608,8 @@
     if (gameFaceSuppressedGameId === activeId
       || gameFaceAutoOpenedGameId === activeId
       || !isGameFaceAutoOpenEnabled()
-      || currentWidgetId === "setup") {
+      || currentWidgetId === "setup"
+      || (currentWidgetId === "wow-forever" && gameFaceWidgetIdFromPayload(gameActivity) !== "wow-forever")) {
       clearPendingGameFaceAutoOpen();
       return;
     }
@@ -1619,9 +1660,13 @@
     if (!activeGame || !activeId) {
       restorePreGamePerformanceBudget();
       clearTransientGameTheme();
-      gameFaceLastActiveId = "";
-      gameFaceAutoOpenedGameId = "";
-      gameFaceSuppressedGameId = "";
+      // Transport failures and native detection errors do not end a play session.
+      if (payload && payload.active === false && payload.supported !== false && !payload.stale
+        && (payload.status === "idle" || payload.status === "ended")) {
+        gameFaceLastActiveId = "";
+        gameFaceAutoOpenedGameId = "";
+        gameFaceSuppressedGameId = "";
+      }
       clearPendingGameFaceAutoOpen();
       renderDashboardChromeState();
       return;
@@ -1639,13 +1684,14 @@
     if (!isGameFaceAutoOpenEnabled()
       || gameFaceSuppressedGameId === activeId
       || gameFaceAutoOpenedGameId === activeId
-      || currentWidgetId === "setup") {
+      || currentWidgetId === "setup"
+      || (currentWidgetId === "wow-forever" && gameFaceWidgetIdFromPayload(gameActivity) !== "wow-forever")) {
       clearPendingGameFaceAutoOpen();
       renderDashboardChromeState();
       return;
     }
 
-    if (currentWidgetId === "game-mode") {
+    if (currentWidgetId === gameFaceWidgetIdFromPayload(gameActivity)) {
       gameFaceAutoOpenedGameId = activeId;
       clearPendingGameFaceAutoOpen();
       renderDashboardChromeState();
@@ -2728,6 +2774,15 @@
         kicker: "Launch mode",
         copy: "Launch games, then let the touch surface switch into a focused in-game HUD.",
         viewerLabel: "Game focus"
+      },
+      {
+        id: "wow-forever",
+        title: "WoW Forever",
+        requiresBridge: false,
+        tier: "product",
+        kicker: "Adventure companion",
+        copy: "Your character, quests, session goals, and travel notes for the journey through Azeroth.",
+        viewerLabel: "Saved on this device"
       },
       {
         id: "theme-studio",

@@ -38,6 +38,7 @@ The 64-character result must exactly match the manifest's SHA-256 value and the 
 ## What Is Included
 
 - Native Windows host for landscape, ultrawide, and portrait touch displays.
+- Horde-themed WoW Forever adventure journal with manual character and quest tracking. It opens when Forever starts if Auxora is running and Game Mode auto-open is enabled.
 - A simpler Layout Editor with numbered order, direct behavior and width choices, and a Home preview.
 - Larger responsive now-playing artwork plus plain-language equalizer presets and guidance.
 - Mixed-DPI placement and WebView2 startup fixes.

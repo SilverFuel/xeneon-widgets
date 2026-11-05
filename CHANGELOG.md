@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added a Horde-themed WoW Forever adventure journal with a character profile, quest and gear goals, field notes, session timer, preparation checklist, and local backup import/export.
+- Automatically open the journal when the Forever client starts, without treating Retail, Classic, or the Battle.net launcher as Forever. Manual panel changes remain in place during that play session.
+
 ## 0.3.0-beta.1 - 2026-08-18
 
 ### Recent UI polish

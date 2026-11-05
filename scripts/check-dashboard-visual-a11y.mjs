@@ -127,7 +127,8 @@ const expectedCssAssets = [
   "css/widgets/product.css",
   "css/widgets/actions.css",
   "css/widgets/integrations.css",
-  "css/widgets/game-mode.css"
+  "css/widgets/game-mode.css",
+  "css/widgets/wow-forever.css"
 ];
 const expectedJsAssets = [
   "js/widget-core.js",
@@ -142,6 +143,7 @@ const expectedJsAssets = [
   "js/widgets/actions.js",
   "js/widgets/integrations.js",
   "js/widgets/game-mode.js",
+  "js/widgets/wow-forever.js",
   "js/quick-controls.js",
   "js/dashboard.js"
 ];

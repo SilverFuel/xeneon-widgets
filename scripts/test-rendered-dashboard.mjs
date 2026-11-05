@@ -1947,7 +1947,7 @@ async function validateFavoritesNavigation(cdp) {
   const expectedIds = [
     "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather"
+    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather", "wow-forever"
   ];
   const defaults = ["system", "audio", "network", "quick-actions"];
   const storageKey = "auxora-dashboard-favorites-v1";
@@ -3573,7 +3573,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
   const expectedIds = [
     "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather"
+    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather", "wow-forever"
   ];
   const actualIds = (audit.results || []).map(result => result.id).sort();
   const viewportLabel = `${viewport.name} ${viewport.width}x${viewport.height}`;
@@ -3897,7 +3897,7 @@ async function validateForcedColorsProductSurfaces(cdp) {
   const expectedIds = [
     "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather"
+    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather", "wow-forever"
   ];
   const actualIds = (audit.results || []).map(result => result.id).sort();
   assert(audit.mediaActive && audit.ambientHidden, `forced-colors dashboard media contract failed: ${JSON.stringify(audit)}`);
