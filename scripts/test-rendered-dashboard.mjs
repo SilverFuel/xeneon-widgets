@@ -2089,7 +2089,7 @@ async function validateFavoritesNavigation(cdp) {
     }
     assert(!evaluation.exceptionDetails, `favorites ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(evaluation.exceptionDetails)}`);
     const result = evaluation.result?.value;
-    assert(result?.ids.length === 23 && result.favorites.join("|") === "system|audio|quick-actions|weather", `favorites test produced no navigation evidence: ${JSON.stringify(result)}`);
+    assert(result?.ids.length === expectedIds.length && result.favorites.join("|") === "system|audio|quick-actions|weather", `favorites test produced no navigation evidence: ${JSON.stringify(result)}`);
     await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=system&favoritesReloadTest=${width}` });
     await waitForCommittedUrl(cdp, `favoritesReloadTest=${width}`);
     const reload = await cdp.send("Runtime.evaluate", {
@@ -2100,7 +2100,7 @@ async function validateFavoritesNavigation(cdp) {
       })()`, awaitPromise: true, returnByValue: true
     });
     assert(JSON.stringify(reload.result?.value) === JSON.stringify(result.favorites), `favorites ${width}x${height}: edits did not survive reload: ${JSON.stringify(reload.result?.value)}`);
-    console.log(`rendered favorites and All panels ${width}x${height}: passed; 23 panels, editable four favorites, persistence, keyboard trap, focus return, lock, and target geometry`);
+    console.log(`rendered favorites and All panels ${width}x${height}: passed; ${expectedIds.length} panels, editable four favorites, persistence, keyboard trap, focus return, lock, and target geometry`);
   }
   for (const invalid of ["{broken", JSON.stringify({ ids: ["system"] }), JSON.stringify(["unknown", "system", "system", 7, "audio", "network", "quick-actions", "weather"])]) {
     await cdp.send("Runtime.evaluate", { expression: `localStorage.setItem('${storageKey}', ${JSON.stringify(invalid)})` });
@@ -2439,7 +2439,7 @@ async function checkQuickControlsInPage(deep) {
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames();
   check(drawer.classList.contains("is-hidden") && document.activeElement === opener, "Escape did not close Quick and restore its opener");
   query("#dashboard-panels-toggle").click(); await frames();
-  check(!query("#dashboard-panels-drawer").classList.contains("is-hidden") && document.querySelectorAll("#dashboard-widget-picker [data-widget-id]").length >= 23, "Quick controls broke access to All panels");
+  check(!query("#dashboard-panels-drawer").classList.contains("is-hidden") && document.querySelectorAll("#dashboard-widget-picker [data-widget-id]").length >= 24, "Quick controls broke access to All panels");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames();
   check(fixture.unexpected.length === 0, "Unexpected audio/media endpoint was safely blocked: " + JSON.stringify(fixture.unexpected));
   check((window.__auxoraRenderedRuntimeErrors || []).length === 0, "Quick controls emitted runtime errors: " + JSON.stringify(window.__auxoraRenderedRuntimeErrors));
@@ -4359,7 +4359,7 @@ try {
     cdp.close();
   }
   console.log(surfaceOnlyViewport
-    ? `launched isolated hidden native host and checked all 23 product surfaces at ${surfaceOnlyViewport.width}x${surfaceOnlyViewport.height}`
+    ? `launched isolated hidden native host and checked all 24 product surfaces at ${surfaceOnlyViewport.width}x${surfaceOnlyViewport.height}`
     : process.argv.includes("--quick-controls-only")
     ? "launched isolated hidden native host and checked direct Quick controls with hardware-isolated fixtures at four viewports"
     : process.argv.includes("--favorites-only")
