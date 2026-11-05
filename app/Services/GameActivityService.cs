@@ -471,7 +471,7 @@ public sealed class GameActivityService
         };
     }
 
-    private static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)
+    internal static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)
     {
         var candidateList = candidates.ToList();
         var best = candidateList
@@ -496,6 +496,11 @@ public sealed class GameActivityService
         if (string.IsNullOrWhiteSpace(best.ProcessName))
         {
             best.ProcessName = runtime.ProcessName;
+        }
+
+        if (string.IsNullOrWhiteSpace(best.ExecutablePath))
+        {
+            best.ExecutablePath = runtime.ExecutablePath;
         }
 
         best.StartedAt ??= runtime.StartedAt;
@@ -1067,8 +1072,38 @@ public sealed class GameActivityService
         return true;
     }
 
-    private static bool TryInferBattleNetGamePath(string lowerPath, out InferredGamePath inferred)
+    internal static bool IsWowForeverExecutable(string? executablePath)
     {
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var path = executablePath.Trim().Replace('/', '\\');
+            return Path.IsPathFullyQualified(path)
+                && Path.GetFullPath(path).EndsWith(@"\_forever_\Wow.exe", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static bool TryInferBattleNetGamePath(string lowerPath, out InferredGamePath inferred)
+    {
+        if (IsWowForeverExecutable(lowerPath))
+        {
+            inferred = new InferredGamePath(
+                "World of Warcraft: Forever",
+                "Battle.net",
+                "Battle.net library",
+                84,
+                "Matched the World of Warcraft: Forever game client.");
+            return true;
+        }
+
         foreach (var game in BattleNetKnownGames)
         {
             if (!game.PathMarkers.Any(marker => lowerPath.Contains(marker, StringComparison.OrdinalIgnoreCase)))
@@ -1424,7 +1459,7 @@ public sealed class GameActivityService
         string Name,
         string[] PathMarkers);
 
-    private readonly record struct InferredGamePath(
+    internal readonly record struct InferredGamePath(
         string Name,
         string Platform,
         string Source,
@@ -1489,6 +1524,9 @@ public sealed class GameActivityPayload
 
     [JsonIgnore]
     public string ExecutablePath { get; set; } = "";
+
+    // Stable routing identity without exposing the user's installation path.
+    public string GameKey => GameActivityService.IsWowForeverExecutable(ExecutablePath) ? "wow-forever" : "";
 
     public int Confidence { get; set; }
 

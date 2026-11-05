@@ -119,6 +119,18 @@ The native host:
 - stores Weather, Hue, UniFi, and Frigate secrets with Windows per-user protection instead of plain dashboard config
 - does not require Node.js for the normal app path
 
+## WoW Forever Adventure Journal
+
+While Auxora is running, launching WoW Forever automatically opens the Horde adventure journal when **Game Mode auto-open** is enabled (the default). The host recognizes Forever's `_forever_\Wow.exe` client separately from Retail, Classic, and the Battle.net launcher. The journal opens once per detected game session; switching panels afterward keeps your choice. Open drawers, touch lock, and Diagnostics retain their existing protections against automatic navigation.
+
+You can also open **All panels > Gaming > WoW Forever**, then choose **Keep** to make it a favorite. The panel is available directly at `dashboard.html?widget=wow-forever`, and other games do not replace an already selected journal with Game Mode. This feature switches tabs inside the running Auxora dashboard; it does not start Auxora if it is closed.
+
+The journal uses a permanent Horde theme. Use **Edit character** to set your character, level, current zone, hearthstone destination, and professions. The quest ledger tracks quests, dungeons, gear goals, professions, and exploration. Field notes save as you type; the session timer runs until paused, including time spent outside the tab. Progress is entered manually, with no connection to game data.
+
+Journal data stays in this dashboard's browser storage. Use **Export journal** for a backup and **Import backup** to restore it. Import asks before replacing the current journal, and entry removal and timer resets can be undone. The standard presentation backup does not include the journal. Clearing Auxora's local data removes it.
+
+Validate the journal state and backup handling with `npm run test:wow-forever`.
+
 ## Camera Detection
 
 Camera Detection is optional but remains visible as Setup in Apps & Controls before configuration. Open the panel and choose **Set up Camera Detection** to reveal its Diagnostics form, scroll it into view, and focus the Frigate address field. Enter the base address of a Frigate server on the local/private network and, optionally, a camera name such as `driveway`. For Frigate's authenticated port `8971`, use an HTTPS address and enter a Frigate username and password; Auxora logs in through `/api/login`, keeps the issued token in memory, retries authentication once after an HTTP 401, and protects the saved password with Windows DPAPI. Authenticated non-loopback HTTP is rejected so credentials cannot cross the LAN in plaintext. Leave both credential fields blank when using a trusted internal unauthenticated endpoint such as port `5000`. HTTPS certificates must already be trusted by Windows—Auxora never disables certificate validation.
