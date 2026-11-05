@@ -1,0 +1,75 @@
+name: Resolve WoW release dependency blockers
+
+on:
+  push:
+    branches:
+      - codex/wow-release-dependency-repair
+    paths:
+      - .github/workflows/wow-dependency-repair.yml
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out proposed source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+
+      - name: Read dependency metadata
+        run: |
+          npm view electron@45.2.3 version dependencies engines --json
+          npm view electron-builder version dependencies --json
+          npm view minimatch@11.0.1 version dependencies engines exports --json
+
+      - name: Resolve patched dependencies without install scripts
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'desktop/electron/package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          pkg.devDependencies.electron = '45.2.3';
+          pkg.overrides['minimatch@>=7.0.0 <11.0.1'] = '11.0.1';
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+          npm --prefix desktop/electron install --package-lock-only --ignore-scripts --audit-level=moderate
+          npm --prefix desktop/electron audit fix --package-lock-only --ignore-scripts --audit-level=moderate
+
+      - name: Verify dependency compatibility and security audit
+        run: |
+          npm --prefix desktop/electron ci --ignore-scripts
+          npm --prefix desktop/electron run check
+          npm --prefix desktop/electron audit --audit-level=moderate
+
+      - name: Report exact resolved manifests
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const zlib = require('node:zlib');
+          const crypto = require('node:crypto');
+          for (const path of ['desktop/electron/package.json', 'desktop/electron/package-lock.json']) {
+            const content = fs.readFileSync(path);
+            console.log('MANIFEST_BEGIN ' + path + ' ' + crypto.createHash('sha256').update(content).digest('hex'));
+            const encoded = zlib.gzipSync(content).toString('base64');
+            for (let i = 0; i < encoded.length; i += 2000) console.log('MANIFEST_DATA ' + encoded.slice(i, i + 2000));
+            console.log('MANIFEST_END ' + path);
+          }
+          NODE
+
+      - name: Preserve resolved manifests
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: resolved-electron-manifests
+          path: |
+            desktop/electron/package.json
+            desktop/electron/package-lock.json
+          retention-days: 3
