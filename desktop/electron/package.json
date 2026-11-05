@@ -79,13 +79,14 @@
     }
   },
   "devDependencies": {
-    "electron": "41.10.7",
+    "electron": "45.2.3",
     "electron-builder": "26.15.3"
   },
   "overrides": {
     "global-agent@3.0.0": {
       "roarr": "3.3.0"
-    }
+    },
+    "minimatch@>=7.0.0 <11.0.1": "11.0.1"
   },
   "engines": {
     "node": ">=22.12.0"

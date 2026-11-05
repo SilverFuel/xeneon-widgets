@@ -19,6 +19,23 @@ process.env.ELECTRON_GET_NO_PROGRESS = "1";
 const lock = require("../package-lock.json");
 assert(!Object.keys(lock.packages).some(name => name.endsWith("/sprintf-js")), "unpatched sprintf-js returned to the lockfile");
 const builderRequire = createRequire(require.resolve("app-builder-lib/package.json"));
+// The patched minimatch major must preserve the builder's inclusion/exclusion API.
+const { FileMatcher } = builderRequire("./out/fileMatcher.js");
+const matcherRoot = join(__dirname, "matcher-fixture");
+const matcher = new FileMatcher(matcherRoot, join(matcherRoot, "output"), value => value, [
+  "src", "build", "!**/*.test.cjs"
+]);
+const matchesPackageFile = matcher.createFilter();
+const fileStat = { isDirectory: () => false };
+const directoryStat = { isDirectory: () => true };
+for (const name of ["src/main.cjs", "src/nested/window.cjs", "src/.hidden.cjs", "build/entitlements.mac.plist"]) {
+  assert(matchesPackageFile(join(matcherRoot, name), fileStat), `builder omitted ${name}`);
+}
+for (const name of ["README.md", "src/main.test.cjs", "node_modules/package/index.js"]) {
+  assert(!matchesPackageFile(join(matcherRoot, name), fileStat), `builder included ${name}`);
+}
+assert(matchesPackageFile(join(matcherRoot, "src/nested"), directoryStat), "builder must traverse included directories");
+assert(!matchesPackageFile(join(matcherRoot, "other"), directoryStat), "builder must reject unrelated directories");
 const getRequire = createRequire(builderRequire.resolve("@electron/get"));
 const proxyRequire = createRequire(getRequire.resolve("global-agent"));
 const logger = proxyRequire("roarr").default;
