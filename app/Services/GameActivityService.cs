@@ -10,6 +10,8 @@ public sealed class GameActivityService
 {
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan WmiProcessScanCooldown = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ProcessListCacheDuration = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan BlocklistSourcesCacheDuration = TimeSpan.FromSeconds(5);
     private static readonly string[] GameKeywordFragments =
     [
         "battle.net",
@@ -61,6 +63,10 @@ public sealed class GameActivityService
     private readonly GameBlocklistStore _gameBlocklistStore;
     private readonly HostLogger _logger;
     private readonly object _sync = new();
+    // A snapshot scan and the blocklist picker read the same processes within one request; sharing the
+    // list avoids scanning every process (and the slow WMI fallback) twice.
+    private readonly ShortLivedCache<List<RunningProcessInfo>> _processListCache = new(ProcessListCacheDuration);
+    private readonly ShortLivedCache<GameBlocklistSources> _blocklistSourcesCache = new(BlocklistSourcesCacheDuration);
     private GameActivitySnapshot? _cachedSnapshot;
     private DateTimeOffset _cachedAt = DateTimeOffset.MinValue;
     private GameActivityPayload? _lastActiveGame;
@@ -181,6 +187,11 @@ public sealed class GameActivityService
 
     public GameBlocklistSources GetBlocklistSources()
     {
+        return _blocklistSourcesCache.GetOrCreate(BuildBlocklistSources);
+    }
+
+    private GameBlocklistSources BuildBlocklistSources()
+    {
         var snapshot = GetFreshProcessSnapshot();
         var detected = new List<GameBlocklistSourceItem>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -209,7 +220,7 @@ public sealed class GameActivityService
             });
         }
 
-        var running = ReadRunningProcesses()
+        var running = _processListCache.GetOrCreate(ScanRunningProcesses)
             .Where(process => !string.IsNullOrWhiteSpace(process.ExecutablePath)
                 && !SystemGameExclusions.IsExcluded(process.ProcessName, process.ExecutablePath)
                 && !_gameBlocklistStore.IsBlocked(process.ExecutablePath, null)
@@ -277,6 +288,7 @@ public sealed class GameActivityService
         }
 
         var (entry, added) = _gameBlocklistStore.Add(displayName, executablePath, launcherId, source);
+        _blocklistSourcesCache.Invalidate();
 
         var unpinned = false;
         var normalizedPath = NormalizePath(executablePath);
@@ -329,6 +341,7 @@ public sealed class GameActivityService
         }
 
         var removed = _gameBlocklistStore.Remove(request.Id);
+        _blocklistSourcesCache.Invalidate();
         InvalidateCache();
         return new GameBlocklistRemoveResult
         {
@@ -941,7 +954,13 @@ public sealed class GameActivityService
                 StringComparison.OrdinalIgnoreCase);
     }
 
+    // Always scans, and shares the result with readers that accept a few seconds of age.
     private List<RunningProcessInfo> ReadRunningProcesses()
+    {
+        return _processListCache.Refresh(ScanRunningProcesses);
+    }
+
+    private List<RunningProcessInfo> ScanRunningProcesses()
     {
         var results = new Dictionary<int, RunningProcessInfo>();
         var inaccessibleProcessModules = 0;

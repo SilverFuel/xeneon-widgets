@@ -4406,6 +4406,38 @@ input[type="range"]:focus-visible {
   }
 }
 
+.xn-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.6em;
+  vertical-align: -0.15em;
+  border: 2px solid var(--theme-border-strong);
+  border-top-color: var(--theme-accent);
+  border-radius: 50%;
+  animation: xn-spinner-rotate 0.9s linear infinite;
+}
+
+@keyframes xn-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A frozen spinner reads as a hang, so reduced motion slows it instead of removing it. */
+@media (prefers-reduced-motion: reduce) {
+  .xn-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+@media (forced-colors: active) {
+  .xn-spinner {
+    border-color: GrayText;
+    border-top-color: Highlight;
+  }
+}
+
 @media (forced-colors: active) {
   .auxora-brand::after {
     display: none;

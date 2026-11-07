@@ -14,6 +14,8 @@
   var statusPill = runtime.statusPill;
   var text = runtime.text;
 
+  // Listing every running app can take well over ten seconds on a busy machine.
+  var SOURCES_TIMEOUT_MS = 30000;
   var SELECTION_CLEARED_MESSAGE = "You had chosen this app to follow, so Game Mode is back to automatic selection.";
   var RULE_KIND_LABELS = {
     name: "Process names",
@@ -147,7 +149,7 @@
 
       var body;
       if (state.sourcesLoading) {
-        body = '<div class="game-blocklist-empty-row" role="status">Looking for running apps…</div>';
+        body = '<div class="game-blocklist-empty-row" role="status"><span class="xn-spinner" aria-hidden="true"></span>Looking for running apps…</div>';
       } else if (state.sourcesError) {
         body = '<div class="game-blocklist-empty-row" role="status">' + escapeHtml(state.sourcesError) + '</div>';
       } else {
@@ -222,7 +224,7 @@
         parts.push('<section class="game-blocklist-list" aria-label="Ignored by you">' +
           '<div class="game-blocklist-group-label"><span>Ignored by you</span><span>' +  '</span></div>' +
           (state.loading
-            ? '<div class="game-blocklist-empty-row" role="status">Loading the blocklist…</div>'
+            ? '<div class="game-blocklist-empty-row" role="status"><span class="xn-spinner" aria-hidden="true"></span>Loading the blocklist…</div>'
             : entries.length
               ? '<ul class="game-blocklist-entries">' + entries.map(renderEntry).join("") + '</ul>'
               : '<div class="game-blocklist-empty"><strong>You are not ignoring any apps yet</strong><span>Use Add app to hide docks, wallpapers or overlays from Game Mode.</span></div>') +
@@ -264,7 +266,7 @@
       state.sourcesLoading = true;
       state.sourcesError = "";
       redraw();
-      return requestJson(buildBridgeUrl(env, "/api/game/blocklist/sources"), {}, 8000).then(function (payload) {
+      return requestJson(buildBridgeUrl(env, "/api/game/blocklist/sources"), {}, SOURCES_TIMEOUT_MS).then(function (payload) {
         state.sources = normalizeSources(payload);
       }, function (error) {
         state.sourcesError = text(error && error.message, "Running apps could not be listed.");

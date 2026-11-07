@@ -70,6 +70,9 @@ assert(/runtime\.registerRenderer\("game-blocklist", mountGameBlocklistWidget\)/
 assert(/js\/widgets\/game-blocklist\.js\?v=/.test(dashboardHtml), "dashboard.html must load the blocklist panel script");
 assert(/Show system exclusions/.test(blocklistWidget) && /Hide system exclusions/.test(blocklistWidget), "system exclusions must be hidden behind a toggle (FR-006a)");
 assert(/showSystem: false/.test(blocklistWidget), "system exclusions must start hidden");
+const sourcesTimeout = Number((blocklistWidget.match(/SOURCES_TIMEOUT_MS = (\d+)/) || [])[1]);
+assert(sourcesTimeout >= 20000, "listing running apps must wait long enough for a slow process scan");
+assert(/blocklist\/sources"\), \{\}, SOURCES_TIMEOUT_MS\)/.test(blocklistWidget), "the running-apps request must use the sources timeout");
 assert(/You had chosen this app to follow, so Game Mode is back to automatic selection\./.test(blocklistWidget), "blocking the chosen app must explain the return to automatic selection once");
 
 assert(/AppPaths\.RoamingDataDirectory/.test(store) && /AtomicFile\.WriteAllText/.test(store), "the blocklist must be stored atomically in the Roaming Auxora folder (FR-009)");
