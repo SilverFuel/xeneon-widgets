@@ -93,6 +93,29 @@
 
     .header--compact {
       justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .refresh-button {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 10px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      background: var(--panel-soft);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .refresh-button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .refresh-button:disabled {
+      cursor: wait;
+      opacity: .65;
     }
 
     .header,
@@ -327,6 +350,7 @@
 <body>
   <main class="widget">
     <header class="header header--compact">
+      <button id="frigate-refresh" class="refresh-button" type="button" aria-label="Refresh camera detection" hidden>Refresh</button>
       <div id="frigate-status" class="status" data-tone="good">Monitoring</div>
     </header>
 
@@ -488,6 +512,7 @@
         var timeoutId = 0;
         var busy = false;
         var destroyed = false;
+        var refreshButton = document.getElementById("frigate-refresh");
 
         function schedule() {
           window.clearTimeout(timeoutId);
@@ -501,16 +526,28 @@
           if (busy || destroyed) {
             return;
           }
+          window.clearTimeout(timeoutId);
           busy = true;
-          Promise.resolve(widget.updateWidget()).then(function () {
+          refreshButton.disabled = true;
+          refreshButton.textContent = "Refreshing";
+          return Promise.resolve().then(function () {
+            return widget.updateWidget();
+          }).then(function () {
             busy = false;
+            refreshButton.disabled = false;
+            refreshButton.textContent = "Refresh";
             schedule();
           }, function (error) {
             busy = false;
+            refreshButton.disabled = false;
+            refreshButton.textContent = "Refresh";
             console.warn(error);
             schedule();
           });
         }
+
+        refreshButton.hidden = !getParam("endpoint", "") || Boolean(getJsonParam("payload", null));
+        refreshButton.addEventListener("click", tick);
 
         if (typeof widget.initWidget === "function") {
           widget.initWidget();
@@ -521,6 +558,7 @@
         window.addEventListener("beforeunload", function () {
           destroyed = true;
           window.clearTimeout(timeoutId);
+          refreshButton.removeEventListener("click", tick);
           if (typeof widget.destroyWidget === "function") {
             widget.destroyWidget();
           }
@@ -602,7 +640,7 @@
         if (!data.alerts.length) {
           var emptyCopy = error
             ? (error.message || "Frigate is unavailable.")
-            : data.message || (data.configured ? "No recent object detections." : "Add a local Frigate address in Diagnostics to enable Camera Detection.");
+            : data.message || (data.configured ? "No recent object detections." : "Add a local Frigate address in Diagnostics to enable Camera Detection." + (document.getElementById("frigate-refresh").hidden ? "" : " After saving, select Refresh."));
           document.getElementById("alert-list").innerHTML = '<div class="empty-state">' + escapeHtml(emptyCopy) + '</div>';
           return;
         }
@@ -645,7 +683,7 @@
           return fetchJson(endpoint).then(function (data) {
             render(normalizeData(data));
           }, function (error) {
-            render(emptyData(), error);
+            render(lastData || emptyData(), error);
           });
         },
         destroyWidget: function () {}

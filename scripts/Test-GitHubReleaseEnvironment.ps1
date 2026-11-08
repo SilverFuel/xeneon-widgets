@@ -92,8 +92,8 @@ if ($soloOwnerMode) {
     $_.reviewer.login -is [string] -and
     ([string]$_.reviewer.login).Equals($SoloOwnerLogin, [StringComparison]::OrdinalIgnoreCase)
   })
-  if ($ownerReviewers.Count -ne 1) {
-    throw "GitHub environment '$EnvironmentName' must name solo owner '$SoloOwnerLogin' exactly once as a required User reviewer."
+  if ($reviewers.Count -ne 1 -or $ownerReviewers.Count -ne 1) {
+    throw "GitHub environment '$EnvironmentName' must name solo owner '$SoloOwnerLogin' as its sole required User reviewer."
   }
   Write-Host "GitHub environment '$EnvironmentName' requires an explicit approval from solo owner '$SoloOwnerLogin' and disables administrator bypass."
   return

@@ -88,6 +88,29 @@ try {
   Invoke-ExpectedResult "duplicate solo owner rejected" $fixture $false "release-reviewer"
 
   $fixture = New-ValidEnvironmentFixture
+  $fixture.protection_rules[0].prevent_self_review = $false
+  $fixture.protection_rules[0].reviewers += [ordered]@{
+    type = "User"
+    reviewer = [ordered]@{ login = "another-reviewer"; id = 456 }
+  }
+  Invoke-ExpectedResult "solo owner plus another user rejected" $fixture $false "release-reviewer"
+
+  $fixture = New-ValidEnvironmentFixture
+  $fixture.protection_rules[0].prevent_self_review = $false
+  $fixture.protection_rules[0].reviewers += [ordered]@{
+    type = "Team"
+    reviewer = [ordered]@{ slug = "release-team"; id = 789 }
+  }
+  Invoke-ExpectedResult "solo owner plus a team rejected" $fixture $false "release-reviewer"
+
+  $fixture = New-ValidEnvironmentFixture
+  $fixture.protection_rules[0].reviewers += [ordered]@{
+    type = "User"
+    reviewer = [ordered]@{ login = "another-reviewer"; id = 456 }
+  }
+  Invoke-ExpectedResult "multiple reviewers accepted outside solo-owner mode" $fixture $true
+
+  $fixture = New-ValidEnvironmentFixture
   $fixture.protection_rules[0].prevent_self_review = "true"
   Invoke-ExpectedResult "string self-review evidence rejected" $fixture $false
 

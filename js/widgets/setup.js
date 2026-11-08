@@ -454,6 +454,16 @@
       }
     }
 
+    function clearSubmittedSecret(formId, fieldName, submittedValue) {
+      var input = container.querySelector('form[data-form="' + formId + '"] input[name="' + fieldName + '"]');
+      // A saved secret is acknowledged even if the following status refresh fails.
+      // Keep any replacement the user typed while the save request was pending.
+      if (input && input.value === submittedValue) {
+        input.value = "";
+        input.defaultValue = "";
+      }
+    }
+
     function refresh() {
       if (refreshPromise) {
         return refreshPromise;
@@ -697,6 +707,7 @@
           method: "POST",
           body: payload
         }, 8000).then(function () {
+          clearSubmittedSecret("weather", "apiKey", payload.apiKey);
           return setupUpdate(env, "weather");
         }).then(function () {
           state.busy = false;
@@ -750,6 +761,7 @@
           body: payload
         }, 8000).then(function () {
           frigateSaved = true;
+          clearSubmittedSecret("frigate", "password", payload.password);
           if (!payload.baseUrl.trim()) {
             return { configured: false, connected: false, state: "Optional", message: "Camera Detection was removed." };
           }

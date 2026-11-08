@@ -23,7 +23,7 @@
 .tmog-eyebrow { margin: 0; color: var(--color-accent); font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
 .tmog-source, .tmog-footer, .tmog-card-footer, .tmog-card-head > span { margin: 0; color: var(--color-text-dim); font-size: 12px; line-height: 1.5; }
 .tmog-controls { justify-content: flex-end; gap: 8px; }
-.tmog-controls button { min-height: 42px; }
+.tmog-controls button { min-width: 44px; min-height: 44px; }
 .tmog-open { border-color: var(--color-accent); }
 .tmog-status { color: var(--color-text-dim); font-size: 12px; padding: 0 6px; }
 .tmog-status[data-live="true"] { color: var(--color-accent); }
@@ -48,10 +48,10 @@
   background: var(--color-panel, transparent);
 }
 .tmog-card h3 { margin: 0; font-size: 14px; font-weight: 650; }
-.tmog-card-head > span { font-size: 11px; }
+.tmog-card-head > span { font-size: 12px; }
 .tmog-readings { display: flex; gap: 22px; flex-wrap: wrap; }
 .tmog-reading { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.tmog-reading > span { font-size: 11px; color: var(--color-text-dim); }
+.tmog-reading > span { font-size: 12px; color: var(--color-text-dim); }
 .tmog-reading > strong { font-size: clamp(20px, 2.1vw, 32px); font-variant-numeric: tabular-nums; font-weight: 650; line-height: 1.1; letter-spacing: -.025em; }
 .tmog-reading > .tmog-unavailable { color: var(--color-text-dim); font-size: 16px; letter-spacing: normal; }
 .tmog-series-0 { color: var(--tmog-first); }

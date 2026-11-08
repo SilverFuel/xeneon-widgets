@@ -57,7 +57,6 @@ proxy and timeout options. Remove the override once the builder's dependency
 tree no longer needs it, and rerun `npm --prefix desktop/electron run check`
 and `npm run audit:deps` after dependency changes.
 
-Electron 41.10.7 closes the reported advisories within the existing major
-version, but Electron 41 is end-of-support. A supported-major upgrade and the
-Intel/Apple silicon tests above remain required before a Mac release. See the
-[upstream release notice](https://github.com/electron/electron/releases/tag/v41.10.7).
+The prototype now pins Electron 45.2.3 in its package and lockfile. The
+Intel/Apple silicon tests above remain required before a Mac release, along
+with the dependency compatibility check and audit for the exact candidate.
