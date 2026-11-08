@@ -382,6 +382,10 @@ for (const token of REQUIRED_THEME_TOKENS) {
 for (const path of cssFiles) {
   const source = readWorkspaceFile(path);
   for (const block of extractCssBlocks(source)) {
+    check(
+      !/(?:^|;)\s*forced-color-adjust\s*:\s*none\s*(?:!important\s*)?(?:;|$)/i.test(block.body.replace(/\/\*[\s\S]*?\*\//g, "")),
+      `${path} ${block.selector.replace(/\s+/g, " ")} opts out of Windows forced colors`
+    );
     // Unknown vendor pseudo-elements invalidate a whole ordinary selector list.
     // Keep Chromium and Firefox range rules separate so theme/motion declarations survive parsing.
     check(

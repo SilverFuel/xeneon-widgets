@@ -67,4 +67,6 @@ The follow-up review also corrected these outstanding findings:
 - Solo-owner publication approval requires the owner to be the sole reviewer. Environment fixtures cover extra users and teams.
 - Calendar and system-monitor cache references match the asset revision and are included in version checks. Setup failures retain the server's reason; privacy and dependency documentation match the implementation.
 
-The normal check pipeline includes these new regression tests. Hosted CI, installed application validation, and public installer qualification remain distinct checks.
+Hosted CI at `048d08a9a85b4d482a0ba94a16efb239587e64ec` confirmed all 25 product surfaces at all ten viewport sizes, including touch targets, text sizes, naming, focus, and overflow. It then detected TMOG graph paths opting out of Windows forced colors. The follow-up removes that opt-out, retains system-color tokens and dashed-series differentiation, and adds a fast CSS contract check. Native and API checks now run before the longer rendered matrix; no checks were removed.
+
+The normal check pipeline includes the new regression tests. A complete passing run is still required on the final patch. Hosted CI, installed application validation, and public installer qualification remain distinct checks.
