@@ -170,11 +170,21 @@ public sealed class GpuPowerMonitorService : IDisposable
                 @"root\cimv2",
                 "SELECT Name FROM Win32_VideoController WHERE Name IS NOT NULL");
 
-            return searcher.Get()
-                .Cast<ManagementObject>()
-                .Select(item => Convert.ToString(item["Name"]) ?? "")
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var results = searcher.Get();
+            foreach (ManagementObject item in results)
+            {
+                using (item)
+                {
+                    var name = Convert.ToString(item["Name"]) ?? "";
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        names.Add(name);
+                    }
+                }
+            }
+
+            return names
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
@@ -194,33 +204,37 @@ public sealed class GpuPowerMonitorService : IDisposable
                 namespacePath,
                 "SELECT Name, Identifier, Parent, Value, SensorType FROM Sensor");
 
-            foreach (ManagementObject sensor in searcher.Get())
+            using var results = searcher.Get();
+            foreach (ManagementObject sensor in results)
             {
-                var name = Convert.ToString(sensor["Name"]) ?? "";
-                var identifier = Convert.ToString(sensor["Identifier"]) ?? "";
-                var parent = Convert.ToString(sensor["Parent"]) ?? "";
-                var sensorType = Convert.ToString(sensor["SensorType"]) ?? "";
-                var combined = string.Join(" ", name, identifier, parent, sensorType);
-
-                if (!IsGpuSensorCandidate(combined) || !IsInterestingSensor(combined, sensorType))
+                using (sensor)
                 {
-                    continue;
-                }
+                    var name = Convert.ToString(sensor["Name"]) ?? "";
+                    var identifier = Convert.ToString(sensor["Identifier"]) ?? "";
+                    var parent = Convert.ToString(sensor["Parent"]) ?? "";
+                    var sensorType = Convert.ToString(sensor["SensorType"]) ?? "";
+                    var combined = string.Join(" ", name, identifier, parent, sensorType);
 
-                var value = ToNullableDouble(sensor["Value"]);
-                if (!value.HasValue)
-                {
-                    continue;
-                }
+                    if (!IsGpuSensorCandidate(combined) || !IsInterestingSensor(combined, sensorType))
+                    {
+                        continue;
+                    }
 
-                readings.Add(BuildReading(
-                    source,
-                    name,
-                    parent,
-                    sensorType,
-                    UnitForSensorType(sensorType),
-                    value.Value.ToString("0.###", CultureInfo.InvariantCulture),
-                    value));
+                    var value = ToNullableDouble(sensor["Value"]);
+                    if (!value.HasValue)
+                    {
+                        continue;
+                    }
+
+                    readings.Add(BuildReading(
+                        source,
+                        name,
+                        parent,
+                        sensorType,
+                        UnitForSensorType(sensorType),
+                        value.Value.ToString("0.###", CultureInfo.InvariantCulture),
+                        value));
+                }
             }
         }
         catch

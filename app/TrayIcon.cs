@@ -11,11 +11,13 @@ public sealed class TrayIcon : IDisposable
     private const int CommandQuit = 1004;
     private const int CommandOpenLogs = 1005;
     private const int CommandResetDashboard = 1006;
+    private const int CommandMoveDisplay = 1007;
 
     private readonly IntPtr _windowHandle;
     private readonly Action _onOpenSettings;
     private readonly Action _onRestartBridge;
     private readonly Action _onShowDisplay;
+    private readonly Action _onMoveDisplay;
     private readonly Action _onOpenLogs;
     private readonly Action _onResetDashboard;
     private readonly Action _onQuit;
@@ -32,6 +34,7 @@ public sealed class TrayIcon : IDisposable
         Action onOpenSettings,
         Action onRestartBridge,
         Action onShowDisplay,
+        Action onMoveDisplay,
         Action onOpenLogs,
         Action onResetDashboard,
         Action onQuit,
@@ -40,6 +43,7 @@ public sealed class TrayIcon : IDisposable
         ArgumentNullException.ThrowIfNull(onOpenSettings);
         ArgumentNullException.ThrowIfNull(onRestartBridge);
         ArgumentNullException.ThrowIfNull(onShowDisplay);
+        ArgumentNullException.ThrowIfNull(onMoveDisplay);
         ArgumentNullException.ThrowIfNull(onOpenLogs);
         ArgumentNullException.ThrowIfNull(onResetDashboard);
         ArgumentNullException.ThrowIfNull(onQuit);
@@ -54,6 +58,7 @@ public sealed class TrayIcon : IDisposable
         _onOpenSettings = onOpenSettings;
         _onRestartBridge = onRestartBridge;
         _onShowDisplay = onShowDisplay;
+        _onMoveDisplay = onMoveDisplay;
         _onOpenLogs = onOpenLogs;
         _onResetDashboard = onResetDashboard;
         _onQuit = onQuit;
@@ -132,6 +137,9 @@ public sealed class TrayIcon : IDisposable
                 case CommandShowDisplay:
                     _onShowDisplay();
                     return IntPtr.Zero;
+                case CommandMoveDisplay:
+                    _onMoveDisplay();
+                    return IntPtr.Zero;
                 case CommandRestartServer:
                     _onRestartBridge();
                     return IntPtr.Zero;
@@ -163,6 +171,7 @@ public sealed class TrayIcon : IDisposable
         {
             AppendMenu(menu, MenuFlags.String, CommandOpenSettings, "Open Settings");
             AppendMenu(menu, MenuFlags.String, CommandShowDisplay, "Show Auxora Display");
+            AppendMenu(menu, MenuFlags.String, CommandMoveDisplay, "Move Auxora Display...");
             AppendMenu(menu, MenuFlags.String, CommandRestartServer, "Restart Server");
             AppendMenu(menu, MenuFlags.String, CommandResetDashboard, "Reset Dashboard State");
             AppendMenu(menu, MenuFlags.String, CommandOpenLogs, "Open Logs");

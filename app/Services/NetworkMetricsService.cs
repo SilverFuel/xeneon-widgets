@@ -1,4 +1,6 @@
 using System.Net.NetworkInformation;
+using System.Net;
+using System.Runtime.InteropServices;
 
 namespace XenonEdgeHost;
 
@@ -10,11 +12,10 @@ public sealed class NetworkMetricsService : IDisposable
     private System.Threading.Timer? _throughputTimer;
     private System.Threading.Timer? _pingTimer;
     private NetworkSnapshot _snapshot = new();
-    private long _lastBytesReceived;
-    private long _lastBytesSent;
-    private DateTimeOffset _lastSampleTime = DateTimeOffset.MinValue;
+    private readonly NetworkThroughputCounter _throughputCounter = new();
     private DateTimeOffset _nextPingAt = DateTimeOffset.MinValue;
     private int _pingSampling;
+    private int _throughputSampling;
     private int _pingFailureCount;
     private bool _started;
 
@@ -32,10 +33,11 @@ public sealed class NetworkMetricsService : IDisposable
         }
 
         _started = true;
-        SampleThroughput();
-        SamplePing();
-        _throughputTimer = new System.Threading.Timer(_ => SampleThroughput(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
-        _pingTimer = new System.Threading.Timer(_ => SamplePing(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        // Interface discovery and gateway probes are telemetry work, not startup
+        // prerequisites. Run the first samples on the timer queue so the local API
+        // becomes healthy even when Windows networking is slow to answer.
+        _throughputTimer = new System.Threading.Timer(_ => SampleThroughput(), null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+        _pingTimer = new System.Threading.Timer(_ => SamplePing(), null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
         _logger.Info("Native network metrics service started.");
     }
 
@@ -44,6 +46,12 @@ public sealed class NetworkMetricsService : IDisposable
         lock (_sync)
         {
             var snapshot = _snapshot.Clone();
+            if (!snapshot.ThroughputSampledAt.HasValue
+                || DateTimeOffset.UtcNow - snapshot.ThroughputSampledAt.Value > TimeSpan.FromSeconds(12))
+            {
+                snapshot.Download = null;
+                snapshot.Upload = null;
+            }
             var sampledAt = snapshot.SampledAt;
             snapshot.Stale = !sampledAt.HasValue || DateTimeOffset.UtcNow - sampledAt.Value > TimeSpan.FromSeconds(12);
             if (!snapshot.Supported)
@@ -70,6 +78,11 @@ public sealed class NetworkMetricsService : IDisposable
 
     private void SampleThroughput()
     {
+        if (Interlocked.Exchange(ref _throughputSampling, 1) == 1)
+        {
+            return;
+        }
+
         try
         {
             var interfaces = NetworkInterface
@@ -79,16 +92,18 @@ public sealed class NetworkMetricsService : IDisposable
                                   && network.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
                 .ToList();
 
+            var primaryInterface = SelectPrimaryInterface(interfaces);
             var totalBytesReceived = 0L;
             var totalBytesSent = 0L;
-
-            foreach (var network in interfaces)
+            var countersRead = false;
+            if (primaryInterface is not null)
             {
                 try
                 {
-                    var statistics = network.GetIPv4Statistics();
-                    totalBytesReceived += statistics.BytesReceived;
-                    totalBytesSent += statistics.BytesSent;
+                    var statistics = primaryInterface.GetIPv4Statistics();
+                    totalBytesReceived = statistics.BytesReceived;
+                    totalBytesSent = statistics.BytesSent;
+                    countersRead = true;
                 }
                 catch
                 {
@@ -96,23 +111,10 @@ public sealed class NetworkMetricsService : IDisposable
             }
 
             var now = DateTimeOffset.UtcNow;
-            var elapsedSeconds = _lastSampleTime == DateTimeOffset.MinValue
-                ? 0
-                : Math.Max(0.001, (now - _lastSampleTime).TotalSeconds);
-            var deltaReceived = _lastSampleTime == DateTimeOffset.MinValue
-                ? 0
-                : Math.Max(0, totalBytesReceived - _lastBytesReceived);
-            var deltaSent = _lastSampleTime == DateTimeOffset.MinValue
-                ? 0
-                : Math.Max(0, totalBytesSent - _lastBytesSent);
+            var throughput = _throughputCounter.Sample(primaryInterface?.Id,
+                countersRead ? totalBytesReceived : null,
+                countersRead ? totalBytesSent : null, now);
 
-            _lastBytesReceived = totalBytesReceived;
-            _lastBytesSent = totalBytesSent;
-            _lastSampleTime = now;
-
-            var primaryInterface = interfaces
-                .OrderByDescending(network => network.Speed)
-                .FirstOrDefault();
             var type = MapNetworkType(primaryInterface);
             var details = ReadInterfaceDetails(primaryInterface);
             var healthTarget = ResolveHealthTarget(details);
@@ -120,8 +122,9 @@ public sealed class NetworkMetricsService : IDisposable
             lock (_sync)
             {
                 var sampledAt = DateTimeOffset.UtcNow;
-                _snapshot.Download = RoundMbps(deltaReceived, elapsedSeconds);
-                _snapshot.Upload = RoundMbps(deltaSent, elapsedSeconds);
+                _snapshot.Download = throughput.Download;
+                _snapshot.Upload = throughput.Upload;
+                _snapshot.ThroughputSampledAt = countersRead ? now : null;
                 _snapshot.Type = type;
                 _snapshot.Name = details.Name;
                 _snapshot.Description = details.Description;
@@ -141,7 +144,12 @@ public sealed class NetworkMetricsService : IDisposable
         }
         catch (Exception error)
         {
+            _throughputCounter.Reset();
             _logger.Error("Failed to sample native network throughput.", error);
+        }
+        finally
+        {
+            Volatile.Write(ref _throughputSampling, 0);
         }
     }
 
@@ -233,6 +241,84 @@ public sealed class NetworkMetricsService : IDisposable
         return TimeSpan.FromSeconds(Math.Min(60, 5 * Math.Pow(2, _pingFailureCount)));
     }
 
+    private static NetworkInterface? SelectPrimaryInterface(IReadOnlyList<NetworkInterface> interfaces)
+    {
+        var candidates = interfaces
+            .Select(CreateSelectionCandidate)
+            .Where(candidate => candidate is not null)
+            .Cast<NetworkAdapterCandidate>()
+            .ToList();
+        var selectedId = SelectPrimaryInterfaceId(candidates, TryGetBestInterfaceIndex());
+        return selectedId is null
+            ? null
+            : interfaces.FirstOrDefault(network => string.Equals(network.Id, selectedId, StringComparison.Ordinal));
+    }
+
+    private static NetworkAdapterCandidate? CreateSelectionCandidate(NetworkInterface network)
+    {
+        try
+        {
+            var properties = network.GetIPProperties();
+            var ipv4Properties = properties.GetIPv4Properties();
+            return new NetworkAdapterCandidate(
+                network.Id,
+                ipv4Properties?.Index,
+                properties.UnicastAddresses.Any(address => address.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork),
+                properties.GatewayAddresses.Any(address => address.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                                                           && !address.Address.Equals(IPAddress.Any)),
+                network.Speed);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static string? SelectPrimaryInterfaceId(
+        IReadOnlyList<NetworkAdapterCandidate> candidates,
+        int? bestRouteInterfaceIndex)
+    {
+        var usable = candidates.Where(candidate => candidate.HasIpv4Address).ToList();
+        if (bestRouteInterfaceIndex.HasValue)
+        {
+            var routed = usable.FirstOrDefault(candidate => candidate.Ipv4Index == bestRouteInterfaceIndex.Value);
+            if (routed is not null)
+            {
+                return routed.Id;
+            }
+        }
+
+        return usable
+            .OrderByDescending(candidate => candidate.HasIpv4Gateway)
+            .ThenByDescending(candidate => candidate.Speed)
+            .ThenBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .Select(candidate => candidate.Id)
+            .FirstOrDefault();
+    }
+
+    private static int? TryGetBestInterfaceIndex()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        try
+        {
+            var destination = BitConverter.ToUInt32(IPAddress.Parse("1.1.1.1").GetAddressBytes(), 0);
+            return GetBestInterface(destination, out var interfaceIndex) == 0
+                ? checked((int)interfaceIndex)
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern uint GetBestInterface(uint destinationAddress, out uint bestInterfaceIndex);
+
     private static string MapNetworkType(NetworkInterface? networkInterface)
     {
         if (networkInterface is null)
@@ -289,7 +375,7 @@ public sealed class NetworkMetricsService : IDisposable
         return details;
     }
 
-    private static double RoundMbps(long deltaBytes, double elapsedSeconds)
+    internal static double RoundMbps(long deltaBytes, double elapsedSeconds)
     {
         if (elapsedSeconds <= 0)
         {
@@ -297,7 +383,7 @@ public sealed class NetworkMetricsService : IDisposable
         }
 
         var bitsPerSecond = (deltaBytes * 8d) / elapsedSeconds;
-        return Math.Round(bitsPerSecond / 1024d / 1024d, 2);
+        return Math.Round(bitsPerSecond / 1_000_000d, 2);
     }
 }
 
@@ -308,6 +394,9 @@ public sealed class NetworkSnapshot
     public string Status { get; set; } = "starting";
 
     public DateTimeOffset? SampledAt { get; set; }
+
+    // Ping updates SampledAt independently and must not freshen old byte counters.
+    public DateTimeOffset? ThroughputSampledAt { get; set; }
 
     public bool Stale { get; set; }
 
@@ -346,6 +435,7 @@ public sealed class NetworkSnapshot
             Supported = Supported,
             Status = Status,
             SampledAt = SampledAt,
+            ThroughputSampledAt = ThroughputSampledAt,
             Stale = Stale,
             Message = Message,
             Download = Download,
@@ -365,7 +455,52 @@ public sealed class NetworkSnapshot
     }
 }
 
+internal sealed class NetworkThroughputCounter
+{
+    private string? _interfaceId;
+    private long _received;
+    private long _sent;
+    private DateTimeOffset? _sampledAt;
+
+    public (double? Download, double? Upload) Sample(string? interfaceId, long? received, long? sent, DateTimeOffset sampledAt)
+    {
+        if (string.IsNullOrWhiteSpace(interfaceId) || received is null or < 0 || sent is null or < 0)
+        {
+            Reset();
+            return (null, null);
+        }
+
+        var elapsed = _sampledAt.HasValue ? (sampledAt - _sampledAt.Value).TotalSeconds : 0;
+        var continuous = elapsed > 0
+            && string.Equals(_interfaceId, interfaceId, StringComparison.Ordinal)
+            && received.Value >= _received && sent.Value >= _sent;
+        var rates = continuous
+            ? (Download: (double?)NetworkMetricsService.RoundMbps(received.Value - _received, elapsed),
+               Upload: (double?)NetworkMetricsService.RoundMbps(sent.Value - _sent, elapsed))
+            : (Download: (double?)null, Upload: (double?)null);
+
+        _interfaceId = interfaceId;
+        _received = received.Value;
+        _sent = sent.Value;
+        _sampledAt = sampledAt;
+        return rates;
+    }
+
+    public void Reset()
+    {
+        _sampledAt = null;
+        _interfaceId = null;
+    }
+}
+
 internal sealed record NetworkHealthTarget(string Target, string Source);
+
+internal sealed record NetworkAdapterCandidate(
+    string Id,
+    int? Ipv4Index,
+    bool HasIpv4Address,
+    bool HasIpv4Gateway,
+    long Speed);
 
 internal sealed class NetworkInterfaceDetails
 {

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -13,9 +12,6 @@ public sealed class SystemMetricsService : IDisposable
     private System.Threading.Timer? _usageTimer;
     private System.Threading.Timer? _temperatureTimer;
     private SystemSnapshot _snapshot = new();
-    private readonly Dictionary<int, ProcessUsageSample> _processSamples = new();
-    private readonly int _logicalProcessorCount = Math.Max(1, Environment.ProcessorCount);
-    private DateTimeOffset? _processSampledAt;
     private ulong _lastIdleTime;
     private ulong _lastKernelTime;
     private ulong _lastUserTime;
@@ -37,8 +33,9 @@ public sealed class SystemMetricsService : IDisposable
         }
 
         _started = true;
-        SampleUsage();
-        _usageTimer = new System.Threading.Timer(_ => SampleUsage(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        // Hardware/WMI discovery can be slow on some PCs. Queue the first sample so
+        // native HTTP startup and the companion-display UI never wait on telemetry.
+        _usageTimer = new System.Threading.Timer(_ => SampleUsage(), null, TimeSpan.Zero, TimeSpan.FromSeconds(3));
         _temperatureTimer = new System.Threading.Timer(_ => SampleHardwareTemperatures(), null, TimeSpan.Zero, TimeSpan.FromSeconds(15));
         _logger.Info("Native system metrics service started.");
     }
@@ -85,17 +82,19 @@ public sealed class SystemMetricsService : IDisposable
             var cpu = ReadCpuUsage();
             var memory = ReadMemoryUsage();
             var gpu = TryReadGpuUsage();
+            var disk = TryReadDiskThroughput();
             var primaryDisplay = DisplayManager.ReadPrimaryDisplaySnapshot();
             var sampledAt = DateTimeOffset.UtcNow;
-            var topProcesses = ReadTopProcesses(sampledAt);
-
             lock (_sync)
             {
-                _snapshot.Cpu = Round(cpu);
-                _snapshot.Ram = Round(memory);
+                _snapshot.Cpu = cpu.HasValue ? Round(cpu.Value) : null;
+                _snapshot.Ram = memory.Percent;
+                _snapshot.MemoryUsedBytes = memory.Used;
+                _snapshot.MemoryTotalBytes = memory.Total;
+                _snapshot.DiskReadBytesPerSecond = disk.Read;
+                _snapshot.DiskWriteBytesPerSecond = disk.Write;
                 _snapshot.Gpu = gpu;
                 _snapshot.PrimaryDisplay = primaryDisplay;
-                _snapshot.TopProcesses = topProcesses;
                 _snapshot.Supported = true;
                 _snapshot.Status = "live";
                 _snapshot.SampledAt = sampledAt;
@@ -114,11 +113,11 @@ public sealed class SystemMetricsService : IDisposable
         }
     }
 
-    private double ReadCpuUsage()
+    private double? ReadCpuUsage()
     {
         if (!GetSystemTimes(out var idleTime, out var kernelTime, out var userTime))
         {
-            return 0;
+            return null;
         }
 
         var idle = idleTime.ToUInt64();
@@ -130,7 +129,7 @@ public sealed class SystemMetricsService : IDisposable
             _lastIdleTime = idle;
             _lastKernelTime = kernel;
             _lastUserTime = user;
-            return 0;
+            return null;
         }
 
         var idleDelta = idle - _lastIdleTime;
@@ -144,91 +143,46 @@ public sealed class SystemMetricsService : IDisposable
 
         if (total == 0)
         {
-            return _snapshot.Cpu ?? 0;
+            return null;
         }
 
-        return ((total - idleDelta) * 100d) / total;
+        return idleDelta > total ? null : ((total - idleDelta) * 100d) / total;
     }
 
-    private static double ReadMemoryUsage()
+    private static (double? Percent, ulong? Used, ulong? Total) ReadMemoryUsage()
     {
         var memoryStatus = new MemoryStatusEx();
-        if (!GlobalMemoryStatusEx(ref memoryStatus) || memoryStatus.TotalPhys == 0)
+        if (!GlobalMemoryStatusEx(ref memoryStatus) || memoryStatus.TotalPhys == 0 || memoryStatus.AvailPhys > memoryStatus.TotalPhys)
         {
-            return 0;
+            return (null, null, null);
         }
 
-        return ((memoryStatus.TotalPhys - memoryStatus.AvailPhys) * 100d) / memoryStatus.TotalPhys;
+        var used = memoryStatus.TotalPhys - memoryStatus.AvailPhys;
+        return (Round(used * 100d / memoryStatus.TotalPhys), used, memoryStatus.TotalPhys);
     }
 
-    private List<SystemProcessSnapshot> ReadTopProcesses(DateTimeOffset sampledAt)
+    private static (double? Read, double? Write) TryReadDiskThroughput()
     {
-        var totalMemory = ReadTotalPhysicalMemory();
-        var elapsedMs = _processSampledAt.HasValue
-            ? Math.Max(1, (sampledAt - _processSampledAt.Value).TotalMilliseconds)
-            : 0;
-        var nextSamples = new Dictionary<int, ProcessUsageSample>();
-        var processes = new List<SystemProcessSnapshot>();
-
-        foreach (var process in Process.GetProcesses())
+        try
         {
-            try
+            using var searcher = new ManagementObjectSearcher(@"root\cimv2",
+                "SELECT DiskReadBytesPersec, DiskWriteBytesPersec FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk WHERE Name = '_Total'");
+            searcher.Options.Timeout = TimeSpan.FromSeconds(2);
+            using var results = searcher.Get();
+            foreach (ManagementObject item in results)
             {
-                if (process.Id <= 0 || string.IsNullOrWhiteSpace(process.ProcessName))
+                using (item)
                 {
-                    continue;
+                    return (item["DiskReadBytesPersec"] is { } read ? Convert.ToDouble(read) : null,
+                            item["DiskWriteBytesPersec"] is { } write ? Convert.ToDouble(write) : null);
                 }
-
-                var totalProcessorMs = process.TotalProcessorTime.TotalMilliseconds;
-                var workingSet = Math.Max(0, process.WorkingSet64);
-                var previous = _processSamples.TryGetValue(process.Id, out var sample) ? sample : null;
-                var cpu = 0d;
-
-                if (elapsedMs > 0 && previous is not null)
-                {
-                    var cpuDelta = Math.Max(0, totalProcessorMs - previous.TotalProcessorMs);
-                    cpu = Math.Clamp((cpuDelta / elapsedMs / _logicalProcessorCount) * 100d, 0d, 100d);
-                }
-
-                nextSamples[process.Id] = new ProcessUsageSample(totalProcessorMs);
-                processes.Add(new SystemProcessSnapshot
-                {
-                    Name = process.ProcessName,
-                    ProcessId = process.Id,
-                    Cpu = Round(cpu),
-                    MemoryMb = Math.Round(workingSet / 1024d / 1024d, 1),
-                    MemoryPercent = totalMemory > 0 ? Round((workingSet / (double)totalMemory) * 100d) : 0
-                });
-            }
-            catch
-            {
-            }
-            finally
-            {
-                process.Dispose();
             }
         }
-
-        _processSamples.Clear();
-        foreach (var sample in nextSamples)
+        catch
         {
-            _processSamples[sample.Key] = sample.Value;
+            // Counter availability varies. Absence must not become measured zero.
         }
-
-        _processSampledAt = sampledAt;
-
-        return processes
-            .OrderByDescending(process => process.Cpu)
-            .ThenByDescending(process => process.MemoryMb)
-            .ThenBy(process => process.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(5)
-            .ToList();
-    }
-
-    private static ulong ReadTotalPhysicalMemory()
-    {
-        var memoryStatus = new MemoryStatusEx();
-        return GlobalMemoryStatusEx(ref memoryStatus) ? memoryStatus.TotalPhys : 0;
+        return (null, null);
     }
 
     private void SampleHardwareTemperatures()
@@ -264,6 +218,7 @@ public sealed class SystemMetricsService : IDisposable
                 _snapshot.CpuTemp = cpuTemp;
                 _snapshot.GpuTemp = gpuTemp;
                 _snapshot.TemperatureSource = source;
+                _snapshot.TemperatureSampledAt = DateTimeOffset.UtcNow;
                 _snapshot.Message = BuildTelemetryMessage(_snapshot);
             }
         }
@@ -287,21 +242,25 @@ public sealed class SystemMetricsService : IDisposable
 
             var graphicsMaximum = double.MinValue;
             var fallbackMaximum = double.MinValue;
-            foreach (ManagementObject item in searcher.Get())
+            using var results = searcher.Get();
+            foreach (ManagementObject item in results)
             {
-                var name = Convert.ToString(item["Name"]) ?? "";
-                var utilization = Convert.ToDouble(item["UtilizationPercentage"] ?? 0);
-                if (name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("engtype_Graphics", StringComparison.OrdinalIgnoreCase))
+                using (item)
                 {
-                    graphicsMaximum = Math.Max(graphicsMaximum, utilization);
-                    continue;
-                }
+                    var name = Convert.ToString(item["Name"]) ?? "";
+                    var utilization = Convert.ToDouble(item["UtilizationPercentage"] ?? 0);
+                    if (name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase)
+                        || name.Contains("engtype_Graphics", StringComparison.OrdinalIgnoreCase))
+                    {
+                        graphicsMaximum = Math.Max(graphicsMaximum, utilization);
+                        continue;
+                    }
 
-                if (name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("engtype_Copy", StringComparison.OrdinalIgnoreCase))
-                {
-                    fallbackMaximum = Math.Max(fallbackMaximum, utilization);
+                    if (name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase)
+                        || name.Contains("engtype_Copy", StringComparison.OrdinalIgnoreCase))
+                    {
+                        fallbackMaximum = Math.Max(fallbackMaximum, utilization);
+                    }
                 }
             }
 
@@ -334,30 +293,34 @@ public sealed class SystemMetricsService : IDisposable
                 "SELECT Name, Identifier, Parent, Value, SensorType FROM Sensor WHERE SensorType = 'Temperature'");
 
             double? bestValue = null;
-            foreach (ManagementObject sensor in searcher.Get())
+            using var results = searcher.Get();
+            foreach (ManagementObject sensor in results)
             {
-                var combined = string.Join(" ",
-                    Convert.ToString(sensor["Name"]) ?? "",
-                    Convert.ToString(sensor["Identifier"]) ?? "",
-                    Convert.ToString(sensor["Parent"]) ?? "");
-
-                if (!patterns.Any(pattern => combined.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
+                using (sensor)
                 {
-                    continue;
-                }
+                    var combined = string.Join(" ",
+                        Convert.ToString(sensor["Name"]) ?? "",
+                        Convert.ToString(sensor["Identifier"]) ?? "",
+                        Convert.ToString(sensor["Parent"]) ?? "");
 
-                if (sensor["Value"] is null)
-                {
-                    continue;
-                }
+                    if (!patterns.Any(pattern => combined.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
 
-                var value = Convert.ToDouble(sensor["Value"]);
-                if (value <= 0 || value > 130)
-                {
-                    continue;
-                }
+                    if (sensor["Value"] is null)
+                    {
+                        continue;
+                    }
 
-                bestValue = bestValue.HasValue ? Math.Max(bestValue.Value, value) : value;
+                    var value = Convert.ToDouble(sensor["Value"]);
+                    if (value <= 0 || value > 130)
+                    {
+                        continue;
+                    }
+
+                    bestValue = bestValue.HasValue ? Math.Max(bestValue.Value, value) : value;
+                }
             }
 
             return bestValue.HasValue ? Round(bestValue.Value) : null;
@@ -396,8 +359,6 @@ public sealed class SystemMetricsService : IDisposable
     {
         return Math.Round(Math.Clamp(value, 0, 100), 1);
     }
-
-    private sealed record ProcessUsageSample(double TotalProcessorMs);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetSystemTimes(out FileTime idleTime, out FileTime kernelTime, out FileTime userTime);
@@ -455,6 +416,16 @@ public sealed class SystemSnapshot
 
     public double? Ram { get; set; }
 
+    public ulong? MemoryUsedBytes { get; set; }
+
+    public ulong? MemoryTotalBytes { get; set; }
+
+    public double? DiskReadBytesPerSecond { get; set; }
+
+    public double? DiskWriteBytesPerSecond { get; set; }
+
+    public DateTimeOffset? TemperatureSampledAt { get; set; }
+
     public double? CpuTemp { get; set; }
 
     public double? GpuTemp { get; set; }
@@ -464,8 +435,6 @@ public sealed class SystemSnapshot
     public string Source { get; set; } = "native host";
 
     public DisplaySnapshot? PrimaryDisplay { get; set; }
-
-    public List<SystemProcessSnapshot> TopProcesses { get; set; } = [];
 
     public SystemSnapshot Clone()
     {
@@ -479,37 +448,16 @@ public sealed class SystemSnapshot
             Cpu = Cpu,
             Gpu = Gpu,
             Ram = Ram,
+            MemoryUsedBytes = MemoryUsedBytes,
+            MemoryTotalBytes = MemoryTotalBytes,
+            DiskReadBytesPerSecond = DiskReadBytesPerSecond,
+            DiskWriteBytesPerSecond = DiskWriteBytesPerSecond,
+            TemperatureSampledAt = TemperatureSampledAt,
             CpuTemp = CpuTemp,
             GpuTemp = GpuTemp,
             TemperatureSource = TemperatureSource,
             Source = Source,
-            PrimaryDisplay = PrimaryDisplay?.Clone(),
-            TopProcesses = TopProcesses.Select(process => process.Clone()).ToList()
-        };
-    }
-}
-
-public sealed class SystemProcessSnapshot
-{
-    public string Name { get; set; } = "";
-
-    public int ProcessId { get; set; }
-
-    public double Cpu { get; set; }
-
-    public double MemoryMb { get; set; }
-
-    public double MemoryPercent { get; set; }
-
-    public SystemProcessSnapshot Clone()
-    {
-        return new SystemProcessSnapshot
-        {
-            Name = Name,
-            ProcessId = ProcessId,
-            Cpu = Cpu,
-            MemoryMb = MemoryMb,
-            MemoryPercent = MemoryPercent
+            PrimaryDisplay = PrimaryDisplay?.Clone()
         };
     }
 }

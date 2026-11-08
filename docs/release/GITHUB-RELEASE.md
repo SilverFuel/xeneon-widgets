@@ -8,10 +8,11 @@ For the first free public beta, upload:
 
 - `app\dist\Auxora-Setup-<version>-<date>.exe`
 - `app\dist\Auxora-Setup-<version>-<date>.exe.sha256`
+- `release-manifest.json`
 - release notes from `docs\release\FREE-BETA-RELEASE-NOTES.md`
 - plain install/uninstall notes from `docs\release\WINDOWS-INSTALL-UNINSTALL.md`
 
-Mark the release as a pre-release. Do not attach a Mac package unless it was built and tested on an actual Mac and is clearly labeled beta.
+Mark the release as a pre-release. The beta workflow is Windows-only and must not attach Mac assets.
 
 ## Paid/Stable Assets
 
@@ -23,7 +24,9 @@ Upload:
 - `desktop/electron/dist\*.zip`
 - release notes copied from `CHANGELOG.md`
 
-The `Release Artifacts` GitHub Actions workflow builds Windows and macOS artifacts on `v*.*.*` tags and creates a public GitHub pre-release using the free beta notes. Change it back to a draft workflow before using it for a paid/stable release.
+The `Windows Beta Candidate` workflow builds an immutable Windows candidate on an exact `v*.*.*-beta.*` tag. It does not publish on tag push. After the exact artifact passes the disposable-VM lifecycle, physical Frigate/camera, and physical companion-display gates, manually run the workflow with the successful candidate run id, the same tag, and all three base64 receipts. Publication rejects a run from any other workflow and fails if the release already exists; use a new version and tag instead of replacing bytes.
+
+Before any publication dispatch, create the GitHub environment named `beta-publication`. This solo-maintainer beta deliberately names repository owner `SilverFuel` as the required reviewer and leaves **Prevent self-review** off so the owner can approve a run they dispatched. Disable administrator bypass so publication still requires that explicit approval click. The workflow verifies the exact solo owner, self-review setting, and disabled administrator bypass before the publication job can reference the environment and again immediately before upload.
 
 ## Naming
 
@@ -36,18 +39,21 @@ v0.3.0-beta.1
 Use release titles like:
 
 ```text
-Auxora 0.3.0 Free Public Beta
+Auxora 0.3.0-beta.1 Free Public Beta
 ```
 
 ## Before Upload
 
-- `npm run release:ready` passes.
+- `npm run release:ready-beta -- -InstallerPath .\app\dist\Auxora-Setup-<version>-<date>.exe` passes and confirms the exact installer is `NotSigned` rather than signed or invalidly signed.
 - Free beta releases clearly say when the Windows installer is unsigned.
-- Release notes clearly say install and uninstall are hands-free after any Windows SmartScreen warning.
+- Release notes clearly say install and uninstall are hands-free after Windows permits the verified installer.
 - Paid/stable Windows installers are signed.
 - Paid/stable macOS packages are signed and notarized.
 - SHA256 files match the uploaded files.
+- Manifest schema 2 binds the exact tag, project version, full commit SHA, installer filename, SHA-256, signature status, installed `XenonEdgeHost.exe` SHA-256/ProductName/ProductVersion/commit, and five-file asset allowlist.
+- A schema-3 disposable-VM lifecycle receipt for that exact installer SHA passes `scripts\Test-BetaLifecycleReceipt.ps1`, including the injected failed-upgrade rollback proof.
+- The GitHub `beta-publication` environment exists, names `SilverFuel` as a required User reviewer, allows that solo owner to review their own dispatch, and has administrator bypass disabled; `scripts\Test-GitHubReleaseEnvironment.ps1 -Repository SilverFuel/xeneon-widgets -SoloOwnerLogin SilverFuel` passes against the live repository.
 - `support.html` and `refund-policy.html` are included in the app package.
 - GitHub Issues and Security Advisories are enabled, or monitored support/security inboxes are published.
-- The in-app Updates panel can see this release and expose installer links.
+- The in-app Updates panel can see this release and open its official Releases page. The unsigned beta keeps direct installer links hidden because Auxora has not downloaded and verified the installer bytes itself.
 - Release notes list known limitations plainly.

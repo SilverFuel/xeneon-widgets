@@ -21,15 +21,24 @@ public sealed class SceneService
         _configStore.Update(config =>
         {
             var scene = config.Scenes.Profiles.FirstOrDefault(item => string.Equals(item.Id, requestedId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Scene not found.");
-            config.Scenes.ActiveSceneId = scene.Id;
-            config.Scenes.ManualOverrideUntil = request.ManualOverrideMinutes switch
+                ?? throw new InvalidOperationException("Mode not found.");
+            var overrideUntil = CalculateOverrideUntil(request.ManualOverrideMinutes);
+            if (string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
             {
-                < 0 => "indefinite",
-                0 => "",
-                _ => DateTimeOffset.UtcNow.AddMinutes(Math.Clamp(request.ManualOverrideMinutes ?? 120, 5, 1440)).ToString("O")
-            };
-            config.Scenes.LastActivationReason = "Manual selection";
+                config.Scenes.ThemeVariant = string.Equals(config.Scenes.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase)
+                    ? "standard"
+                    : "night";
+                config.Scenes.VariantOverrideUntil = overrideUntil;
+                config.Scenes.LastActivationReason = config.Scenes.ThemeVariant == "night"
+                    ? "Night variant enabled manually"
+                    : "Night variant disabled manually";
+            }
+            else
+            {
+                config.Scenes.ActiveSceneId = scene.Id;
+                config.Scenes.ManualOverrideUntil = overrideUntil;
+                config.Scenes.LastActivationReason = "Manual selection";
+            }
             return config;
         });
         return GetSnapshot();
@@ -49,7 +58,7 @@ public sealed class SceneService
 
     public object Save(SceneSaveRequest request)
     {
-        var incoming = request.Scene ?? throw new InvalidOperationException("Scene payload is required.");
+        var incoming = request.Scene ?? throw new InvalidOperationException("Mode configuration is required.");
         incoming.IsBuiltIn = false;
         var normalized = SceneDefaults.NormalizeProfile(incoming);
         _configStore.Update(config =>
@@ -57,7 +66,7 @@ public sealed class SceneService
             var existingIndex = config.Scenes.Profiles.FindIndex(scene => string.Equals(scene.Id, normalized.Id, StringComparison.OrdinalIgnoreCase));
             if (existingIndex >= 0 && config.Scenes.Profiles[existingIndex].IsBuiltIn)
             {
-                throw new InvalidOperationException("Built-in Scenes must be duplicated before editing.");
+                throw new InvalidOperationException("Built-in Modes must be duplicated before editing.");
             }
 
             if (existingIndex >= 0)
@@ -79,13 +88,14 @@ public sealed class SceneService
         _configStore.Update(config =>
         {
             var source = config.Scenes.Profiles.FirstOrDefault(scene => string.Equals(scene.Id, requestedId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Scene not found.");
+                ?? throw new InvalidOperationException("Mode not found.");
             var copy = SceneDefaults.NormalizeProfile(new SceneProfile
             {
                 Id = $"scene-{Guid.NewGuid():N}",
                 Name = string.IsNullOrWhiteSpace(request.Name) ? $"{source.Name} Copy" : request.Name.Trim(),
                 Icon = source.Icon,
                 ThemeId = source.ThemeId,
+                ThemeVariant = source.ThemeVariant,
                 AccentColor = source.AccentColor,
                 Density = source.Density,
                 Brightness = source.Brightness,
@@ -101,9 +111,17 @@ public sealed class SceneService
                 }).ToList()
             });
             config.Scenes.Profiles.Add(copy);
-            config.Scenes.ActiveSceneId = copy.Id;
-            config.Scenes.ManualOverrideUntil = "indefinite";
-            config.Scenes.LastActivationReason = "Scene duplicated";
+            if (string.Equals(copy.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
+            {
+                config.Scenes.ThemeVariant = "night";
+                config.Scenes.VariantOverrideUntil = "indefinite";
+            }
+            else
+            {
+                config.Scenes.ActiveSceneId = copy.Id;
+                config.Scenes.ManualOverrideUntil = "indefinite";
+            }
+            config.Scenes.LastActivationReason = "Mode duplicated";
             return config;
         });
         return GetSnapshot();
@@ -115,10 +133,10 @@ public sealed class SceneService
         _configStore.Update(config =>
         {
             var scene = config.Scenes.Profiles.FirstOrDefault(item => string.Equals(item.Id, requestedId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Scene not found.");
+                ?? throw new InvalidOperationException("Mode not found.");
             if (scene.IsBuiltIn)
             {
-                throw new InvalidOperationException("Built-in Scenes cannot be deleted.");
+                throw new InvalidOperationException("Built-in Modes cannot be deleted.");
             }
             config.Scenes.Profiles.Remove(scene);
             if (string.Equals(config.Scenes.ActiveSceneId, scene.Id, StringComparison.OrdinalIgnoreCase))
@@ -132,21 +150,46 @@ public sealed class SceneService
 
     public object AssignDisplay(DisplaySceneAssignmentRequest request)
     {
-        var displayId = request.DisplayId?.Trim() ?? "";
+        var displayId = DisplayManager.ResolveCompanionDisplay(request.DisplayId).StableId;
         var sceneId = request.SceneId?.Trim() ?? "";
-        if (string.IsNullOrWhiteSpace(displayId))
-        {
-            throw new InvalidOperationException("Display ID is required.");
-        }
         _configStore.Update(config =>
         {
-            var scene = config.Scenes.Profiles.FirstOrDefault(item => string.Equals(item.Id, sceneId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Scene not found.");
-            config.Scenes.DisplayAssignments.RemoveAll(item => string.Equals(item.DisplayId, displayId, StringComparison.OrdinalIgnoreCase));
-            config.Scenes.DisplayAssignments.Add(new DisplaySceneAssignment { DisplayId = displayId, SceneId = scene.Id });
+            SetDisplayAssignment(config.Scenes, displayId, sceneId);
             return config;
         });
         return GetSnapshot();
+    }
+
+    internal static void SetDisplayAssignment(SceneCollectionConfig scenes, string displayId, string? sceneId)
+    {
+        ArgumentNullException.ThrowIfNull(scenes);
+
+        var normalizedDisplayId = displayId?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(normalizedDisplayId))
+        {
+            throw new InvalidOperationException("Companion display is required.");
+        }
+
+        var normalizedSceneId = sceneId?.Trim() ?? "";
+        SceneProfile? scene = null;
+        if (!string.IsNullOrWhiteSpace(normalizedSceneId))
+        {
+            scene = scenes.Profiles.FirstOrDefault(item =>
+                string.Equals(item.Id, normalizedSceneId, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(item.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Mode not found.");
+        }
+
+        scenes.DisplayAssignments.RemoveAll(item =>
+            string.Equals(item.DisplayId, normalizedDisplayId, StringComparison.OrdinalIgnoreCase));
+        if (scene is not null)
+        {
+            scenes.DisplayAssignments.Add(new DisplaySceneAssignment
+            {
+                DisplayId = normalizedDisplayId,
+                SceneId = scene.Id
+            });
+        }
     }
 
     public void ActivateAssignedDisplayScene(string displayId)
@@ -164,33 +207,55 @@ public sealed class SceneService
         var sampledAt = DateTimeOffset.TryParse(request.SampledAt, out var parsed) ? parsed : DateTimeOffset.Now;
         _configStore.Update(config =>
         {
-            if (!config.Scenes.AutomationEnabled || HasManualOverride(config.Scenes, sampledAt))
+            if (!config.Scenes.AutomationEnabled)
             {
                 return config;
             }
 
-            var match = config.Scenes.Profiles
-                .SelectMany(scene => scene.Rules.Where(rule => rule.Enabled).Select(rule => (Scene: scene, Rule: rule)))
-                .Where(candidate => RuleMatches(candidate.Rule, request, sampledAt))
-                .OrderByDescending(candidate => candidate.Rule.Priority)
-                .ThenBy(candidate => candidate.Scene.Name)
-                .FirstOrDefault();
-            var next = match.Scene ?? config.Scenes.Profiles.First(scene => string.Equals(scene.Id, config.Scenes.DefaultSceneId, StringComparison.OrdinalIgnoreCase));
-            config.Scenes.ActiveSceneId = next.Id;
-            config.Scenes.LastActivationReason = match.Scene is null ? "Default scene" : $"Automatic {match.Rule.Type} rule";
+            if (!HasOverride(config.Scenes.ManualOverrideUntil, sampledAt))
+            {
+                var match = config.Scenes.Profiles
+                    .Where(scene => !string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(scene => scene.Rules.Where(rule => rule.Enabled).Select(rule => (Scene: scene, Rule: rule)))
+                    .Where(candidate => RuleMatches(candidate.Rule, request, sampledAt))
+                    .OrderByDescending(candidate => candidate.Rule.Priority)
+                    .ThenBy(candidate => candidate.Scene.Name)
+                    .FirstOrDefault();
+                var next = match.Scene ?? config.Scenes.Profiles.First(scene =>
+                    string.Equals(scene.Id, config.Scenes.DefaultSceneId, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase));
+                config.Scenes.ActiveSceneId = next.Id;
+                config.Scenes.LastActivationReason = match.Scene is null ? "Default mode" : $"Automatic {match.Rule.Type} rule";
+            }
+
+            if (!HasOverride(config.Scenes.VariantOverrideUntil, sampledAt))
+            {
+                var nightActive = config.Scenes.Profiles
+                    .Where(scene => string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(scene => scene.Rules)
+                    .Any(rule => rule.Enabled
+                        && string.Equals(rule.Type, "schedule", StringComparison.OrdinalIgnoreCase)
+                        && RuleMatches(rule, request, sampledAt));
+                config.Scenes.ThemeVariant = nightActive ? "night" : "standard";
+            }
             return config;
         });
         return GetSnapshot();
     }
 
-    private static bool HasManualOverride(SceneCollectionConfig scenes, DateTimeOffset now)
+    private static string CalculateOverrideUntil(int? manualOverrideMinutes)
     {
-        if (string.Equals(scenes.ManualOverrideUntil, "indefinite", StringComparison.OrdinalIgnoreCase))
+        return manualOverrideMinutes switch
         {
-            return true;
-        }
-        return DateTimeOffset.TryParse(scenes.ManualOverrideUntil, out var until) && until > now;
+            < 0 => "indefinite",
+            0 => "",
+            _ => DateTimeOffset.UtcNow.AddMinutes(Math.Clamp(manualOverrideMinutes ?? 120, 5, 1440)).ToString("O")
+        };
     }
+
+    private static bool HasOverride(string? overrideUntil, DateTimeOffset now) =>
+        string.Equals(overrideUntil, "indefinite", StringComparison.OrdinalIgnoreCase)
+        || DateTimeOffset.TryParse(overrideUntil, out var until) && until > now;
 
     private static bool RuleMatches(SceneRule rule, SceneEvaluationRequest context, DateTimeOffset sampledAt)
     {
@@ -218,7 +283,12 @@ public sealed class SceneService
 
     private static object BuildSnapshot(SceneCollectionConfig scenes)
     {
-        var active = scenes.Profiles.FirstOrDefault(scene => string.Equals(scene.Id, scenes.ActiveSceneId, StringComparison.OrdinalIgnoreCase));
+        var profiles = scenes.Profiles
+            .Where(scene => !string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var profileIds = profiles.Select(scene => scene.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var active = profiles.FirstOrDefault(scene => string.Equals(scene.Id, scenes.ActiveSceneId, StringComparison.OrdinalIgnoreCase));
+        var manualOverrideActive = HasOverride(scenes.ManualOverrideUntil, DateTimeOffset.UtcNow);
         return new
         {
             supported = true,
@@ -228,10 +298,14 @@ public sealed class SceneService
             defaultSceneId = scenes.DefaultSceneId,
             automationEnabled = scenes.AutomationEnabled,
             manualOverrideUntil = scenes.ManualOverrideUntil,
+            manualOverrideActive,
+            automaticSwitchingActive = scenes.AutomationEnabled && !manualOverrideActive,
+            themeVariant = scenes.ThemeVariant,
+            variantOverrideUntil = scenes.VariantOverrideUntil,
             lastActivationReason = scenes.LastActivationReason,
-            profiles = scenes.Profiles,
-            displayAssignments = scenes.DisplayAssignments,
-            message = $"{active?.Name ?? "Work"} Scene is active."
+            profiles,
+            displayAssignments = scenes.DisplayAssignments.Where(assignment => profileIds.Contains(assignment.SceneId)).ToList(),
+            message = $"{active?.Name ?? "Work"} Mode is active."
         };
     }
 }

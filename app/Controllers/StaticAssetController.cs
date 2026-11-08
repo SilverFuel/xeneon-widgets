@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace XenonEdgeHost;
 
@@ -9,6 +10,9 @@ public sealed class StaticAssetController
 {
     private const string FallbackDashboardAssetRevision = "local";
     private const string SessionHeaderName = "X-Xenon-Session";
+    private static readonly Regex ScriptStartTagPattern = new(
+        "<script(?<attributes>[^>]*)>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private readonly EmbeddedAssetProvider _assetProvider;
     private readonly string _sessionToken;
 
@@ -83,22 +87,43 @@ public sealed class StaticAssetController
     private byte[] InjectSessionBootstrap(byte[] content, string nonce)
     {
         var html = Encoding.UTF8.GetString(content);
-        if (!html.Contains("</head>", StringComparison.OrdinalIgnoreCase)
-            || html.Contains("window.XenonSessionToken", StringComparison.OrdinalIgnoreCase))
+        if (!html.Contains("</head>", StringComparison.OrdinalIgnoreCase))
         {
             return content;
         }
 
         var nonceAttribute = WebUtility.HtmlEncode(nonce);
-        var script = BuildSessionBootstrapScript();
-        var injection = $$"""
-          <script nonce="{{nonceAttribute}}">
-          {{script}}
-          </script>
-        """;
+        html = AddNonceToInlineScripts(html, nonceAttribute);
 
-        var index = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
-        return Encoding.UTF8.GetBytes(html.Insert(index, injection));
+        if (!html.Contains("window.XenonSessionToken", StringComparison.OrdinalIgnoreCase))
+        {
+            var script = BuildSessionBootstrapScript();
+            var injection = $$"""
+              <script nonce="{{nonceAttribute}}">
+              {{script}}
+              </script>
+            """;
+
+            var index = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
+            html = html.Insert(index, injection);
+        }
+
+        return Encoding.UTF8.GetBytes(html);
+    }
+
+    private static string AddNonceToInlineScripts(string html, string nonceAttribute)
+    {
+        return ScriptStartTagPattern.Replace(html, match =>
+        {
+            var attributes = match.Groups["attributes"].Value;
+            if (Regex.IsMatch(attributes, @"\bsrc\s*=", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                || Regex.IsMatch(attributes, @"\bnonce\s*=", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            {
+                return match.Value;
+            }
+
+            return $"<script nonce=\"{nonceAttribute}\"{attributes}>";
+        });
     }
 
     private string BuildSessionBootstrapScript()

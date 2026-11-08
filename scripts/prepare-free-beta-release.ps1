@@ -1,63 +1,64 @@
 param(
-  [switch]$SkipBuild
+  [string]$ReleaseAssetsPath = "",
+  [string]$LifecycleReceiptPath = "",
+  [string]$FrigateQualificationReceiptPath = "",
+  [string]$DisplayQualificationReceiptPath = ""
 )
 
 $ErrorActionPreference = "Stop"
-
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$projectPath = Join-Path $repoRoot "app\XenonEdgeHost.csproj"
-$appVersion = "local"
-try {
-  [xml]$projectXml = Get-Content -Path $projectPath -Raw
-  $versionNode = $projectXml.Project.PropertyGroup | Select-Object -First 1
-  if ($versionNode -and -not [string]::IsNullOrWhiteSpace($versionNode.Version)) {
-    $appVersion = $versionNode.Version
-  }
-} catch {
-  $appVersion = "local"
-}
 
 function Write-Step($message) {
   Write-Host ""
   Write-Host "== $message ==" -ForegroundColor Cyan
 }
 
+if ([string]::IsNullOrWhiteSpace($ReleaseAssetsPath) -or
+    [string]::IsNullOrWhiteSpace($LifecycleReceiptPath) -or
+    [string]::IsNullOrWhiteSpace($FrigateQualificationReceiptPath) -or
+    [string]::IsNullOrWhiteSpace($DisplayQualificationReceiptPath)) {
+  throw "Free beta publication preparation requires -ReleaseAssetsPath, -LifecycleReceiptPath, -FrigateQualificationReceiptPath, and -DisplayQualificationReceiptPath for the exact candidate. Build an immutable tag candidate with the Windows Beta Candidate workflow, complete all qualification receipts, then rerun this command."
+}
+
+$resolvedAssets = (Resolve-Path -LiteralPath $ReleaseAssetsPath -ErrorAction Stop).Path
+$resolvedLifecycleReceipt = (Resolve-Path -LiteralPath $LifecycleReceiptPath -ErrorAction Stop).Path
+$resolvedFrigateReceipt = (Resolve-Path -LiteralPath $FrigateQualificationReceiptPath -ErrorAction Stop).Path
+$resolvedDisplayReceipt = (Resolve-Path -LiteralPath $DisplayQualificationReceiptPath -ErrorAction Stop).Path
+$manifestPath = Join-Path $resolvedAssets "release-manifest.json"
+$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+$installerPath = Join-Path $resolvedAssets ([string]$manifest.installer.fileName)
+$appVersion = [string]$manifest.version
+
 Push-Location $repoRoot
 try {
-  if (-not $SkipBuild) {
-    Write-Step "Building the Windows free beta installer"
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-release.ps1 -SkipReadiness
+  Write-Step "Verifying the exact free beta candidate and all physical receipts"
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-release-gauntlet.ps1 `
+    -InstallerPath $installerPath `
+    -AllowGitHubSupportPath `
+    -AllowUnsignedBeta `
+    -ReleaseAssetsPath $resolvedAssets `
+    -LifecycleReceiptPath $resolvedLifecycleReceipt `
+    -FrigateQualificationReceiptPath $resolvedFrigateReceipt `
+    -DisplayQualificationReceiptPath $resolvedDisplayReceipt
+  if ($LASTEXITCODE -ne 0) {
+    throw "The receipt-bound free beta gauntlet failed with exit code $LASTEXITCODE."
   }
 
-  $latestInstaller = Get-ChildItem app\dist -Filter "*.exe" -File |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-
-  if (-not $latestInstaller) {
-    throw "No installer was found in app\dist. Run npm run release:windows first."
-  }
-
-  Write-Step "Checking free beta readiness"
-  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\assert-release-ready.ps1 -AllowGitHubSupportPath -InstallerPath $latestInstaller.FullName
-
-  $hashPath = "$($latestInstaller.FullName).sha256"
-  if (-not (Test-Path -LiteralPath $hashPath)) {
-    throw "The installer SHA256 file is missing: $hashPath"
-  }
-
-  Write-Step "Free beta upload list"
+  Write-Step "Verified free beta publication list"
   Write-Host "GitHub Release title:"
   Write-Host "  Auxora $appVersion Free Public Beta"
   Write-Host ""
   Write-Host "Mark it as:"
   Write-Host "  Pre-release"
   Write-Host ""
-  Write-Host "Upload these files:"
-  Write-Host "  $($latestInstaller.FullName)"
-  Write-Host "  $hashPath"
+  Write-Host "Upload only these manifest-bound files:"
+  Write-Host "  $(Join-Path $resolvedAssets ([string]$manifest.installer.fileName))"
+  Write-Host "  $(Join-Path $resolvedAssets ([string]$manifest.installer.sha256FileName))"
+  Write-Host "  $(Join-Path $resolvedAssets ([string]$manifest.installNotesFileName))"
+  Write-Host "  $(Join-Path $resolvedAssets ([string]$manifest.releaseNotesFileName))"
+  Write-Host "  $manifestPath"
   Write-Host ""
-  Write-Host "Release notes:"
-  Write-Host "  $(Join-Path $repoRoot 'docs\release\FREE-BETA-RELEASE-NOTES.md')"
+  Write-Host "The qualification receipts are gates, not public release assets."
 } finally {
   Pop-Location
 }

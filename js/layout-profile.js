@@ -17,7 +17,7 @@
     var aspect = safeWidth / safeHeight;
     var portrait = aspect < 1;
     var ultrawide = aspect >= 2.8;
-    var compact = safeWidth < 900 || safeHeight < 480;
+    var compact = !portrait && !ultrawide && (safeWidth < 900 || safeHeight < 480);
 
     return {
       width: safeWidth,

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const widgets = readWorkspaceFile("js/widgets/network.js");
+const inlineWidgets = readWorkspaceFile("js/inline-widgets.js");
 const styles = readWorkspaceFile("css/widgets/network.css");
 const packageJson = JSON.parse(readWorkspaceFile("package.json"));
 
@@ -70,6 +71,17 @@ assert(
   /network-unifi-card" data-link-state=/.test(widgets)
     && /\.network-unifi-card\[data-link-state="connect"\]\s+\.network-unifi-kpis\s*\{\s*display:\s*none;/s.test(styles),
   "detected but unlinked UniFi cards must prioritize the credential form over KPI rows"
+);
+
+assert(
+  /function liveRegionAttributes\(mode\)[\s\S]*?role="alert" aria-live="assertive" aria-atomic="true"[\s\S]*?role="status" aria-live="polite" aria-atomic="true"[\s\S]*?return "";/.test(inlineWidgets)
+    && /function statusPill\(textValue, tone, liveMode\)[\s\S]*?liveRegionAttributes\(liveMode\)/.test(inlineWidgets),
+  "status pills must expose opt-in alert or polite status semantics without making static polling pills live"
+);
+
+assert(
+  /state\.formMessage \? '<div class="network-form-message"[\s\S]*?liveRegionAttributes\(state\.formTone === "danger" \? "alert" : "status"\)/.test(widgets),
+  "UniFi action feedback must announce errors as alerts and other results as polite status updates"
 );
 
 assert(
