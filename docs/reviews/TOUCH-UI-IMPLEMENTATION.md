@@ -70,7 +70,7 @@ Before a later authorized installation, export Privacy & Backup, pass the requir
 
 ## Local commits
 
-The final web asset revision is `20261108-02`. The diagnostic branch remains separate. Production and test commits, in chronological order:
+The web asset revision for this earlier pass was `20261108-02`. The diagnostic branch remains separate. Production and test commits, in chronological order:
 
 - `b2bf6fe` Stop treating html/body as touch-pressable controls
 - `3855b72` Refresh web asset revision for the touch press fix

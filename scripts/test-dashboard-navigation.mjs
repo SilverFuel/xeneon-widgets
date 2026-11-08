@@ -197,3 +197,72 @@ test("hiding every configurable section preserves all deep links and automatic g
   }
   assert.deepEqual(navigation.normalizeSectionLayout().hidden, []);
 });
+
+function selectionHarness(panel) {
+  const context = {
+    navigation, widgets: canonicalIds.map(id => ({ id })),
+    currentWidgetId: panel, primaryDestination: navigation.sectionForWidget(panel),
+    perfMode: false, bridgeReachable: true, bridgeOrigin: "http://127.0.0.1:8976", widgetBase: "http://127.0.0.1:8976",
+    lastPrimaryWidgetStorageKey: "last", widgetStorageKey: "current", lastBridgeSnapshotKey: "", bridgeSetup: { onboardingCompleted: false },
+    readStoredWidget: () => panel, rendered: [], selected: [], feedback: [], gameFacePreviousWidgetId: "", gameActivity: { activeGameId: "fixture-game" },
+    gameFaceSuppressedGameId: "", activeGameIdFromPayload: () => "fixture-game",
+    storage: {},
+    window: { localStorage: { setItem(key, value) { context.storage[key] = value; } } }, console,
+    primaryDestinationStorageKey: "section", persistDestinationPanel() {}, renderPrimaryNavigation() {},
+    setQueryParam(key, value) { context.query = { key, value }; }, markDashboardInteractionIdleSoon() {},
+    updateWidgetMeta(widget) { context.metadata = widget.id; },
+    renderPicker() {}, renderDiagnostics() {}, renderSettings() {}, renderOriginStatus() {}, renderLauncherDock() {}, updateNowPlayingStrip() {},
+    widgetRequiresBridge: () => false,
+    showInlineWidget(widget) { context.rendered.push(widget.id); },
+    fetchBridgeHealth: async () => ({}), fetchBridgeConfig: async () => ({}),
+    applyBridgeState() { context.bridgeSetup.onboardingCompleted = true; }, refreshLauncherDock() {},
+    showTouchFeedback(message) { context.feedback.push(message); },
+
+  };
+  const functions = extractBetween(dashboard, "  function getWidgetById(", "  function getSchemaForWidget(")
+    + extractBetween(dashboard, "  function renderCurrentSelection(", "  function resolveInitialWidget(")
+    + extractBetween(dashboard, "  function selectWidget(", "  function showLocalhostWarning(")
+    + extractBetween(dashboard, "  function refreshBridgeState(", "  function checkBridgeAndRender(");
+  runInNewContext(functions, context);
+  return context;
+}
+
+test("finishing setup moves to Home and updates the active section", async () => {
+  const context = selectionHarness("setup");
+  await context.refreshBridgeState({ moveOffSetup: true });
+  assert.equal(context.currentWidgetId, "home");
+  assert.equal(context.primaryDestination, "home");
+  assert.equal(context.metadata, "home");
+  assert.equal(context.storage.section, "home");
+  assert.equal(context.query.value, "home");
+  assert.deepEqual(context.rendered, ["home"]);
+});
+
+test("Game Mode's Home action leaves the Gaming section when there is no previous panel", () => {
+  const context = selectionHarness("game-mode");
+  const start = dashboard.indexOf("returnHomeFromGameFace: function () {");
+  const end = dashboard.indexOf("\n      showTouchFeedback: showTouchFeedback", start);
+  assert.ok(start >= 0 && end > start, "real Game Mode return action must exist");
+  const callback = dashboard.slice(start, end).replace("returnHomeFromGameFace: function", "function returnHomeFromGameFace").replace(/,\s*$/, "");
+  runInNewContext(callback + "\nreturnHomeFromGameFace();", context);
+  assert.equal(context.currentWidgetId, "home");
+  assert.equal(context.primaryDestination, "home");
+  assert.equal(context.gameFaceSuppressedGameId, "fixture-game");
+  assert.deepEqual(context.rendered, ["home"]);
+  assert.equal(context.storage.section, "home");
+});
+
+test("rendering a known panel derives its section instead of displacing the requested panel", () => {
+  for (const id of canonicalIds) {
+    const context = selectionHarness(id);
+    context.primaryDestination = "settings";
+    context.renderCurrentSelection(true);
+    assert.equal(context.currentWidgetId, id);
+    assert.equal(context.primaryDestination, navigation.sectionForWidget(id));
+    assert.deepEqual(context.rendered, [id]);
+  }
+  const invalid = selectionHarness("missing");
+  invalid.renderCurrentSelection(true);
+  assert.equal(invalid.currentWidgetId, "home");
+  assert.equal(invalid.primaryDestination, "home");
+});

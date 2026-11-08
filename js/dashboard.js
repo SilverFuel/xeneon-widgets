@@ -3012,7 +3012,7 @@
         id: "frigate",
         title: "Camera Detection",
         requiresBridge: true,
-        copy: "Recent local Frigate object detections and event snapshots, with setup available directly from Apps & Controls.",
+        copy: "Recent local Frigate object detections and event snapshots, with setup in Settings > Setup & status.",
         getViewerLabel: function () {
           var frigate = bridgeConfig.frigate || {};
           return frigate.configured ? (frigate.camera || "All cameras") : "Setup";
@@ -3645,7 +3645,7 @@
 
   function renderNoSettingsCopy(widget) {
     if (widget.id === "setup") {
-      return "Diagnostics covers first-run setup, bridge health, and repairs.";
+      return "Setup & status covers first-run setup, bridge health, and repairs.";
     }
 
     if (widget.id === "system" || widget.id === "network" || widget.id === "audio" || widget.id === "media") {
@@ -3657,11 +3657,11 @@
     }
 
     if (widget.id === "calendar") {
-      return "Use Diagnostics to set or repair the ICS calendar feed.";
+      return "Use Settings > Setup & status to set or repair the ICS calendar feed.";
     }
 
     if (widget.id === "hue") {
-      return "Use Diagnostics to link or repair the Hue bridge.";
+      return "Use Settings > Setup & status to link or repair the Hue bridge.";
     }
 
     if (widget.tier === "product" || isLocalProductWidget(widget.id)) {
@@ -3974,11 +3974,11 @@
 
   function renderCurrentSelection(reloadFrame) {
     var widget = getWidgetById(currentWidgetId || "system");
-    var destinationIds = getDestinationWidgets().map(function (entry) { return entry.id; });
-    if (destinationIds.indexOf(widget.id) === -1 || (perfMode && widget.id === "setup")) {
-      currentWidgetId = destinationIds[0] || getFallbackPrimaryWidget();
-      widget = getWidgetById(currentWidgetId || "system");
+    if (!widget || (perfMode && widget.id === "setup")) {
+      widget = getWidgetById(getFallbackPrimaryWidget());
     }
+    currentWidgetId = widget.id;
+    primaryDestination = navigation.sectionForWidget(widget.id) || "home";
 
     updateWidgetMeta(widget);
     renderPicker();
@@ -4016,18 +4016,14 @@
     var storedLastPrimary = readStoredWidget(lastPrimaryWidgetStorageKey);
     var storedWidget = readStoredWidget(widgetStorageKey);
     var candidates = ["home", storedLastPrimary, storedWidget, "system"];
-    var visibleIds = getDestinationWidgets(primaryDestination).map(function (widget) {
-      return widget.id;
-    });
-
     for (var index = 0; index < candidates.length; index += 1) {
       var candidate = candidates[index];
-      if (candidate && candidate !== "setup" && visibleIds.indexOf(candidate) !== -1) {
+      if (candidate && candidate !== "setup" && candidate !== "game-mode" && hasWidgetId(candidate)) {
         return candidate;
       }
     }
 
-    return visibleIds[0] || "home";
+    return "home";
   }
 
   function resolveInitialWidget(preferredWidgetId, explicitWidgetParam) {
@@ -4244,8 +4240,9 @@
         persistWidgetChoice(currentWidgetId);
         renderPrimaryNavigation();
       } else if (settings.moveOffSetup && currentWidgetId === "setup" && bridgeSetup.onboardingCompleted) {
-        currentWidgetId = getFallbackPrimaryWidget();
-        persistWidgetChoice(currentWidgetId);
+        selectWidget(getFallbackPrimaryWidget(), true);
+        refreshLauncherDock();
+        return;
       }
 
       if (!bridgeStateChanged

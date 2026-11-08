@@ -8,7 +8,7 @@ The literal `npm run check` stopped at an assertion for the retired camera navig
 - Commercial evidence: diagnostic whitespace is normalized before checking both missing-file messages, nonzero exit, and the exact three-blocker summary. The production gate is unchanged.
 - Audit coverage: full-width geometry and preserved legacy-layout data replace retired width-cap/control names; all panel, viewport, Network-state, focus and accessibility requirements remain.
 
-Source/test commit before this results document: `db4684bf250ff8a6d508b3fd2ba8a07187fac4d0`. Compiled host source: `52ae8de623a5c2f3ce2b7da97193e5a7986403de`; subsequent changes were tests and documentation. Asset revision: `20261108-02`.
+Source/test commit before this results document: `db4684bf250ff8a6d508b3fd2ba8a07187fac4d0`. Compiled host source: `52ae8de623a5c2f3ce2b7da97193e5a7986403de`; subsequent changes were tests and documentation. Asset revision at validation time: `20261108-02`.
 
 | Required stage | Result | Evidence log |
 | --- | --- | --- |
