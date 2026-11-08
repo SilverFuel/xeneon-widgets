@@ -379,7 +379,7 @@ public sealed partial class MainWindow : Window
             content.Children.Add(new TextBlock
             {
                 Text = displayName,
-                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 245, 248, 250)),
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 43, 77, 125)),
                 FontSize = 19,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextWrapping = TextWrapping.WrapWholeWords
@@ -387,14 +387,14 @@ public sealed partial class MainWindow : Window
             content.Children.Add(new TextBlock
             {
                 Text = $"{display.Bounds.Width} × {display.Bounds.Height}{refreshRate}{primaryLabel}",
-                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 184, 199, 209)),
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 43, 77, 125)),
                 FontSize = 14,
                 TextWrapping = TextWrapping.WrapWholeWords
             });
             content.Children.Add(new TextBlock
             {
                 Text = $"Windows position {display.Bounds.X}, {display.Bounds.Y} — tap to use this display",
-                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 116, 221, 255)),
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 43, 77, 125)),
                 FontSize = 13,
                 TextWrapping = TextWrapping.WrapWholeWords
             });
@@ -407,8 +407,8 @@ public sealed partial class MainWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 MinHeight = 88,
-                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 25, 39, 49)),
-                BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(102, 0, 217, 255)),
+                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 244, 245, 247)),
+                BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 43, 77, 125)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(14)
             };
@@ -421,9 +421,9 @@ public sealed partial class MainWindow : Window
             : "Choose one display to continue. You can change it later in Settings → Diagnostics.";
         DisplayPickerStatus.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(
             255,
-            displayCandidates.Count == 0 ? (byte)255 : (byte)145,
-            displayCandidates.Count == 0 ? (byte)165 : (byte)168,
-            displayCandidates.Count == 0 ? (byte)120 : (byte)183));
+            displayCandidates.Count == 0 ? (byte)205 : (byte)43,
+            displayCandidates.Count == 0 ? (byte)36 : (byte)77,
+            displayCandidates.Count == 0 ? (byte)53 : (byte)125));
         OverlayPanel.Visibility = Visibility.Collapsed;
         DashboardView.Visibility = Visibility.Collapsed;
         DisplayPickerPanel.Visibility = Visibility.Visible;
@@ -454,7 +454,7 @@ public sealed partial class MainWindow : Window
             if (ConfigureWindow(saveSelection: false))
             {
                 DisplayPickerStatus.Text = "That display is no longer available. Choose an active companion display.";
-                DisplayPickerStatus.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 165, 120));
+                DisplayPickerStatus.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 205, 36, 53));
                 foreach (var child in DisplayPickerList.Children.OfType<Button>())
                 {
                     child.IsEnabled = true;

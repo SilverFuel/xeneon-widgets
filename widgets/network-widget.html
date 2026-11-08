@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Network Widget</title>
-  <link rel="stylesheet" href="../css/theme.css?v=20261107-01">
-  <link rel="stylesheet" href="../css/widgets.css?v=20261107-01">
+  <link rel="stylesheet" href="../css/theme.css?v=20261107-02">
+  <link rel="stylesheet" href="../css/widgets.css?v=20261107-02">
   <style>
     .widget-header--compact {
       justify-content: flex-end;
@@ -45,8 +45,8 @@
       min-height: 30px;
       padding: 6px 10px;
       border-radius: 999px;
-      color: #bfffe1;
-      background: rgba(68, 209, 122, 0.16);
+      color: var(--status-success-text);
+      background: var(--status-success-surface);
       font-size: 0.75rem;
     }
 
@@ -112,7 +112,7 @@
       </article>
     </section>
   </main>
-  <script src="../js/widget-core.js?v=20261107-01"></script>
+  <script src="../js/widget-core.js?v=20261107-02"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);

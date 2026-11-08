@@ -37,4 +37,15 @@ jobs:
         run: npm run audit:deps
 
       - name: Validate JavaScript and native app
+        env:
+          AUXORA_THEME_ARTIFACT_DIR: ${{ runner.temp }}/auxora-theme-rendered
         run: npm run check
+
+      - name: Preserve rendered theme previews
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rendered-theme-previews
+          path: ${{ runner.temp }}/auxora-theme-rendered/*.png
+          if-no-files-found: ignore
+          retention-days: 14

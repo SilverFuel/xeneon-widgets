@@ -51,7 +51,7 @@
       padding: 16px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: linear-gradient(180deg, rgba(22, 31, 44, 0.97), rgba(11, 17, 25, 0.98));
+      background: linear-gradient(180deg, var(--theme-surface-primary), var(--theme-surface-secondary));
       box-shadow: var(--shadow);
       overflow: hidden;
       isolation: isolate;
@@ -61,7 +61,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 35%);
+      background: linear-gradient(120deg, var(--theme-inner-highlight), transparent 35%);
       pointer-events: none;
       z-index: 0;
     }
@@ -76,15 +76,15 @@
       padding: 9px 14px;
       border-radius: 999px;
       border: 1px solid transparent;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--theme-surface-muted);
       color: var(--text);
       font-size: 0.8rem;
       white-space: nowrap;
     }
 
-    .status[data-tone="good"], .badge[data-tone="good"] { color: #c8ffe4; background: rgba(73, 209, 125, 0.16); border-color: rgba(73, 209, 125, 0.2); }
-    .status[data-tone="warn"], .badge[data-tone="warn"] { color: #ffe5c3; background: rgba(255, 191, 105, 0.16); border-color: rgba(255, 191, 105, 0.22); }
-    .status[data-tone="danger"], .badge[data-tone="danger"] { color: #ffd5d5; background: rgba(255, 107, 107, 0.16); border-color: rgba(255, 107, 107, 0.22); }
+    .status[data-tone="good"], .badge[data-tone="good"] { color: var(--status-success-text); background: var(--status-success-surface); border-color: var(--status-success-border); }
+    .status[data-tone="warn"], .badge[data-tone="warn"] { color: var(--status-warning-text); background: var(--status-warning-surface); border-color: var(--status-warning-border); }
+    .status[data-tone="danger"], .badge[data-tone="danger"] { color: var(--status-danger-text); background: var(--status-danger-surface); border-color: var(--status-danger-border); }
 
     .shell {
       display: grid;
@@ -125,7 +125,7 @@
       padding: 8px 10px;
       border-radius: 16px;
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--theme-surface-muted);
       font-size: 0.78rem;
     }
     .site-strip__item strong { color: var(--text); font-size: 0.92rem; }
@@ -145,7 +145,7 @@
       padding: 14px;
       border-radius: 18px;
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--theme-surface-muted);
     }
     .metric-box__value { margin-top: 6px; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.03em; }
     .metric-box__detail { margin-top: 6px; font-size: 0.78rem; color: var(--muted); }
@@ -156,14 +156,14 @@
       margin-top: 10px;
       border-radius: 999px;
       overflow: hidden;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--theme-surface-muted);
     }
     .meter > span { display: block; height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #7ed1ff); }
 
     .health-grid { display: grid; gap: 12px; }
     .health-group { display: grid; gap: 10px; }
     .health-row { justify-content: space-between; font-size: 0.84rem; }
-    .health-bar { position: relative; height: 14px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.06); }
+    .health-bar { position: relative; height: 14px; border-radius: 999px; overflow: hidden; background: var(--theme-surface-muted); }
     .health-bar > span { display: block; height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, #ff8f8f, #ffd280, #86d9a4); }
 
     .toolbar-card .card__body { display: grid; gap: 12px; }
@@ -177,10 +177,10 @@
       align-items: center;
       min-height: 44px;
       gap: 8px;
-      border-color: rgba(255, 255, 255, 0.08);
+      border-color: var(--theme-border);
       transition: background 160ms ease, border-color 160ms ease;
     }
-    .toggle button[data-active="true"], .range button[data-active="true"] { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.2); }
+    .toggle button[data-active="true"], .range button[data-active="true"] { background: var(--theme-selected-surface); border-color: var(--theme-accent-border); }
     .toggle-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
     .chart-card .card__body { display: grid; gap: 12px; }
     .chart-shell {
@@ -189,8 +189,8 @@
       border-radius: 20px;
       border: 1px solid var(--border);
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
-        rgba(7, 12, 18, 0.72);
+        linear-gradient(180deg, var(--theme-inner-highlight), transparent 28%),
+        var(--theme-surface-secondary);
       overflow: hidden;
     }
     .chart-svg { width: 100%; height: 100%; display: block; }
@@ -209,7 +209,7 @@
       padding: 10px 12px;
       border-radius: 16px;
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--theme-surface-muted);
     }
     .legend-value strong { display: block; font-size: 1.1rem; }
 
@@ -232,7 +232,7 @@
       padding: 10px 12px;
       border-radius: 16px;
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--theme-surface-muted);
     }
     .list-rank {
       width: 28px;
@@ -240,7 +240,7 @@
       display: grid;
       place-items: center;
       border-radius: 10px;
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--theme-hover-surface);
       color: var(--muted);
       font-size: 0.78rem;
       font-weight: 700;
@@ -252,11 +252,11 @@
       padding: 6px 10px;
       border-radius: 999px;
       font-size: 0.75rem;
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--theme-hover-surface);
     }
-    .list-item__badge[data-tone="good"] { color: #c8ffe4; background: rgba(73, 209, 125, 0.15); }
-    .list-item__badge[data-tone="warn"] { color: #ffe5c3; background: rgba(255, 191, 105, 0.15); }
-    .list-item__badge[data-tone="danger"] { color: #ffd5d5; background: rgba(255, 107, 107, 0.15); }
+    .list-item__badge[data-tone="good"] { color: var(--status-success-text); background: var(--status-success-surface); }
+    .list-item__badge[data-tone="warn"] { color: var(--status-warning-text); background: var(--status-warning-surface); }
+    .list-item__badge[data-tone="danger"] { color: var(--status-danger-text); background: var(--status-danger-surface); }
 
     .chip-card .card__body { display: grid; gap: 10px; }
     .chip-list, .icon-list { flex-wrap: wrap; }
@@ -265,7 +265,7 @@
       padding: 8px 10px;
       border-radius: 16px;
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--theme-surface-muted);
       font-size: 0.78rem;
     }
     .chip strong, .icon-chip strong { color: var(--text); }
@@ -275,8 +275,8 @@
       display: grid;
       place-items: center;
       border-radius: 10px;
-      background: rgba(62, 181, 255, 0.14);
-      color: var(--accent);
+      background: var(--theme-accent-soft);
+      color: var(--theme-accent-text);
       font-size: 0.75rem;
       font-weight: 700;
       letter-spacing: 0.06em;
@@ -287,7 +287,7 @@
     .rail::-webkit-scrollbar-thumb, .board::-webkit-scrollbar-thumb {
       border: 3px solid transparent;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.18);
+      background: var(--theme-border-strong);
       background-clip: padding-box;
     }
     .rail::-webkit-scrollbar-track, .board::-webkit-scrollbar-track { background: transparent; }
@@ -648,26 +648,26 @@
       function renderChart(data) {
         var width = 1120;
         var height = 310;
-        var svg = ['<defs><linearGradient id="activity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(62,181,255,0.28)"></stop><stop offset="100%" stop-color="rgba(62,181,255,0)"></stop></linearGradient></defs>'];
+        var svg = ['<defs><linearGradient id="activity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--theme-accent)" stop-opacity="0.28"></stop><stop offset="100%" stop-color="var(--theme-accent)" stop-opacity="0"></stop></linearGradient></defs>'];
         var index;
         var keys = ["activity", "latency", "loss", "connections"];
         var styles = {
-          activity: { color: "#3eb5ff" },
-          latency: { color: "#9b6dff" },
-          loss: { color: "#ff6b6b" },
-          connections: { color: "#c8d4e2" }
+          activity: { color: "var(--theme-accent)" },
+          latency: { color: "var(--theme-accent-secondary)" },
+          loss: { color: "var(--status-danger-text)" },
+          connections: { color: "var(--theme-text-muted)" }
         };
 
         for (index = 0; index < 6; index += 1) {
           var y = 10 + ((height - 20) / 5) * index;
-          svg.push('<line x1="0" y1="' + y + '" x2="' + width + '" y2="' + y + '" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>');
+          svg.push('<line x1="0" y1="' + y + '" x2="' + width + '" y2="' + y + '" stroke="var(--theme-border)" stroke-width="1"></line>');
         }
         for (index = 0; index < 8; index += 1) {
           var x = (width / 7) * index;
-          svg.push('<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + height + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"></line>');
+          svg.push('<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + height + '" stroke="var(--theme-border)" stroke-width="1"></line>');
         }
         if (!data.hasChartData) {
-          svg.push('<text x="' + (width / 2) + '" y="' + (height / 2) + '" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="18">Auxora will add richer UniFi charts after credentials are connected.</text>');
+          svg.push('<text x="' + (width / 2) + '" y="' + (height / 2) + '" text-anchor="middle" fill="var(--theme-text-muted)" font-size="18">Auxora will add richer UniFi charts after credentials are connected.</text>');
           document.getElementById("chart-svg").innerHTML = svg.join("");
           document.getElementById("chart-labels").innerHTML = "";
           document.getElementById("legend-values").innerHTML = [
@@ -795,10 +795,10 @@
 
       function renderSeriesToggles() {
         var meta = [
-          { key: "activity", label: "Internet Activity", color: "#3eb5ff" },
-          { key: "latency", label: "Avg. Latency", color: "#9b6dff" },
-          { key: "loss", label: "Packet Loss", color: "#ff6b6b" },
-          { key: "connections", label: "Connections", color: "#c8d4e2" }
+          { key: "activity", label: "Internet Activity", color: "var(--theme-accent)" },
+          { key: "latency", label: "Avg. Latency", color: "var(--theme-accent-secondary)" },
+          { key: "loss", label: "Packet Loss", color: "var(--status-danger-text)" },
+          { key: "connections", label: "Connections", color: "var(--theme-text-muted)" }
         ];
         document.getElementById("series-toggles").innerHTML = meta.map(function (item) {
           return '<button type="button" data-series="' + item.key + '" data-active="' + seriesState[item.key] + '"><span class="toggle-dot" style="color:' + item.color + '"></span>' + item.label + '</button>';

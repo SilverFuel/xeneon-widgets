@@ -786,9 +786,9 @@
   }
 
   var fallbackProductThemes = [
-    { id: "focus", name: "Focus", accent: "#46bce8", secondary: "#7f9fb3", copy: "Calm charcoal surfaces and restrained cyan." },
-    { id: "gaming", name: "Gaming", accent: "#9a7cff", secondary: "#36c8f0", copy: "Deep black, purple, and cyan performance energy." },
-    { id: "warm", name: "Warm", accent: "#d9a35f", secondary: "#ce7d86", copy: "Muted amber and rose for comfortable sessions." }
+    { id: "focus", name: "Focus", background: "#f4f5f7", accent: "#2b4d7d", secondary: "#d4ac63", copy: "Lunar light surfaces with Cosmic Blue controls and warm gold details." },
+    { id: "gaming", name: "Gaming", background: "#132238", accent: "#d4ac63", secondary: "#e56335", copy: "Deep Cosmic Blue surfaces with gold highlights and orange details." },
+    { id: "warm", name: "Warm", background: "#f5f1e9", accent: "#e56335", secondary: "#d4ac63", copy: "Warm Lunar surfaces with orange controls and gold details." }
   ];
 
   function productThemes(env) {

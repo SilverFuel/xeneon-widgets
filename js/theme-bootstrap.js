@@ -14,9 +14,14 @@
     themeReadability: "normal"
   };
   var themeBackgrounds = {
-    focus: "#0b0e12",
-    gaming: "#05060a",
-    warm: "#120c0d"
+    focus: "#f4f5f7",
+    gaming: "#132238",
+    warm: "#f5f1e9"
+  };
+  var themeAccents = {
+    focus: "#2b4d7d",
+    gaming: "#d4ac63",
+    warm: "#e56335"
   };
   var themeOverrideProperties = [
     "--theme-accent",
@@ -99,7 +104,7 @@
   function rgbaFromHex(value, alpha) {
     var rgb = hexToRgb(value);
     if (!rgb) {
-      return "rgba(0, 224, 255, " + alpha + ")";
+      return "rgba(43, 77, 125, " + alpha + ")";
     }
     return "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + alpha + ")";
   }
@@ -341,12 +346,12 @@
         style.getPropertyValue("--theme-surface-primary").trim(),
         style.getPropertyValue("--theme-surface-secondary").trim(),
         style.getPropertyValue("--theme-surface-elevated").trim()
-      ];
+      ].map(parseHexColor).filter(Boolean);
     } catch (error) {
       colors = [];
     }
-    colors.push(themeBackgrounds[themeId]);
-    return colors.filter(Boolean);
+    // Computed variant surfaces take precedence over the preset's page color.
+    return colors.length ? colors : [themeBackgrounds[themeId]].filter(Boolean);
   }
 
   function removeInlineThemeOverrides(node) {
@@ -403,6 +408,7 @@
       effectiveIntensity: effectiveIntensity,
       reducedMotion: Boolean(reducedMotionQuery && reducedMotionQuery.matches)
     };
+    var accent = customAccent || themeAccents[state.themeId];
     var accentText;
 
     root.setAttribute("data-standalone-ui", "");
@@ -411,17 +417,17 @@
     applyStateToNode(root, state);
     applyStateToNode(body, state);
 
-    if (customAccent) {
-      accentText = contrastSafeAccentTextColor(customAccent, getThemeSurfaceColors(state.themeId));
-      [root, body].forEach(function (node) {
+    accentText = contrastSafeAccentTextColor(accent, getThemeSurfaceColors(state.themeId));
+    [root, body].forEach(function (node) {
+      setInlineThemeOverride(node, "--theme-accent-text", accentText);
+      if (customAccent) {
         setInlineThemeOverride(node, "--theme-accent", customAccent);
-        setInlineThemeOverride(node, "--theme-accent-text", accentText);
         setInlineThemeOverride(node, "--theme-on-accent", contrastSafeTextColor(customAccent));
         setInlineThemeOverride(node, "--theme-accent-soft", rgbaFromHex(customAccent, 0.14));
         setInlineThemeOverride(node, "--theme-accent-border", rgbaFromHex(customAccent, 0.58));
         setInlineThemeOverride(node, "--theme-accent-glow", rgbaFromHex(customAccent, 0.22));
-      });
-    }
+      }
+    });
 
     root.style.setProperty("--dashboard-aura-opacity", String(effectiveIntensity / 100));
   }

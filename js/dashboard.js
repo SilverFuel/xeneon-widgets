@@ -234,29 +234,29 @@
     {
       id: "focus",
       name: "Focus",
-      accent: "#46bce8",
-      secondary: "#7f9fb3",
-      warm: "#e6b85c",
-      background: "#0b0e12",
-      copy: "Calm charcoal surfaces and restrained cyan for maximum readability."
+      accent: "#2b4d7d",
+      secondary: "#d4ac63",
+      warm: "#e56335",
+      background: "#f4f5f7",
+      copy: "Lunar light surfaces with Cosmic Blue controls and warm gold details."
     },
     {
       id: "gaming",
       name: "Gaming",
-      accent: "#9a7cff",
-      secondary: "#36c8f0",
-      warm: "#e7b85e",
-      background: "#05060a",
-      copy: "Deep black, purple, and cyan with controlled performance energy."
+      accent: "#d4ac63",
+      secondary: "#e56335",
+      warm: "#cd2435",
+      background: "#132238",
+      copy: "Deep Cosmic Blue surfaces with gold highlights and orange details."
     },
     {
       id: "warm",
       name: "Warm",
-      accent: "#d9a35f",
-      secondary: "#ce7d86",
-      warm: "#e4b861",
-      background: "#120c0d",
-      copy: "Muted amber and rose for media, evening, and comfortable long sessions."
+      accent: "#e56335",
+      secondary: "#d4ac63",
+      warm: "#cd2435",
+      background: "#f5f1e9",
+      copy: "Warm Lunar surfaces with orange controls and gold details."
     }
   ];
   var localProductWidgetIds = ["game-mode", "wow-forever", "tmog"];
@@ -706,7 +706,7 @@
   function rgbaFromHex(value, alpha) {
     var rgb = hexToRgb(value);
     if (!rgb) {
-      return "rgba(0, 224, 255, " + alpha + ")";
+      return "rgba(43, 77, 125, " + alpha + ")";
     }
 
     return "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + alpha + ")";
@@ -814,13 +814,15 @@
 
   function getThemeSurfaceColors(theme) {
     var style = window.getComputedStyle(document.documentElement);
-    return [
+    var colors = [
       style.getPropertyValue("--theme-page").trim(),
       style.getPropertyValue("--theme-surface-primary").trim(),
       style.getPropertyValue("--theme-surface-secondary").trim(),
-      style.getPropertyValue("--theme-surface-elevated").trim(),
-      theme && theme.background
-    ].filter(Boolean);
+      style.getPropertyValue("--theme-surface-elevated").trim()
+    ].map(parseHexColor).filter(Boolean);
+    // Night and high contrast may use a different palette from the preset.
+    // Mixing the light preset fallback with those dark surfaces is unreadable.
+    return colors.length ? colors : [theme && theme.background].filter(Boolean);
   }
 
   function removeInlineThemeOverrides() {
@@ -911,18 +913,7 @@
     removeInlineThemeOverrides();
     document.documentElement.setAttribute("data-theme", theme.id);
     document.documentElement.setAttribute("data-theme-variant", variant);
-    if (customAccent || gameAccent) {
-      setInlineThemeOverride("--theme-accent", accent);
-      setInlineThemeOverride("--theme-accent-text", contrastSafeAccentTextColor(accent, getThemeSurfaceColors(theme)));
-      setInlineThemeOverride("--theme-on-accent", contrastSafeTextColor(accent));
-      setInlineThemeOverride("--theme-accent-soft", rgbaFromHex(accent, 0.14));
-      setInlineThemeOverride("--theme-accent-border", rgbaFromHex(accent, 0.58));
-      setInlineThemeOverride("--theme-accent-glow", rgbaFromHex(accent, 0.22));
-    }
-    if (gameSecondary) {
-      setInlineThemeOverride("--theme-accent-secondary", gameSecondary);
-    }
-    document.documentElement.style.setProperty("--dashboard-aura-opacity", String(effectiveIntensity / 100));
+    document.documentElement.setAttribute("data-readability", readability);
     if (document.body) {
       document.body.setAttribute("data-theme", theme.id);
       document.body.setAttribute("data-theme-variant", variant);
@@ -937,6 +928,19 @@
       document.body.classList.toggle("dashboard-native-page--readability-high-contrast", readability === "high-contrast");
       document.body.classList.toggle("dashboard-native-page--readability-visor", readability === "visor");
     }
+
+    setInlineThemeOverride("--theme-accent-text", contrastSafeAccentTextColor(accent, getThemeSurfaceColors(theme)));
+    if (customAccent || gameAccent) {
+      setInlineThemeOverride("--theme-accent", accent);
+      setInlineThemeOverride("--theme-on-accent", contrastSafeTextColor(accent));
+      setInlineThemeOverride("--theme-accent-soft", rgbaFromHex(accent, 0.14));
+      setInlineThemeOverride("--theme-accent-border", rgbaFromHex(accent, 0.58));
+      setInlineThemeOverride("--theme-accent-glow", rgbaFromHex(accent, 0.22));
+    }
+    if (gameSecondary) {
+      setInlineThemeOverride("--theme-accent-secondary", gameSecondary);
+    }
+    document.documentElement.style.setProperty("--dashboard-aura-opacity", String(effectiveIntensity / 100));
 
     refreshAmbientCanvasPalette();
 

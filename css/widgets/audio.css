@@ -13,10 +13,10 @@
   --audio-accent-border: var(--theme-accent-border, color-mix(in srgb, var(--audio-accent) 38%, transparent));
   --audio-accent-secondary: var(--theme-accent-secondary, var(--dashboard-secondary));
   --audio-border: var(--theme-border, var(--color-border));
-  --audio-danger: var(--color-danger, #ff6b7a);
+  --audio-danger: var(--status-danger-text);
   --audio-motion-duration: var(--theme-motion-duration, 160ms);
   --audio-selected-surface: var(--theme-selected-surface, color-mix(in srgb, var(--audio-accent) 13%, transparent));
-  --audio-surface-strong: var(--theme-surface-strong, rgba(8, 13, 20, 0.94));
+  --audio-surface-strong: var(--theme-surface-elevated);
   --audio-surface-muted: var(--theme-surface-muted, rgba(255, 255, 255, 0.055));
   --audio-warning: var(--status-warning-text, #f0b86a);
   min-height: auto;
@@ -633,7 +633,7 @@
   padding: 5px 9px;
   border-radius: 999px;
   overflow: hidden;
-  background: rgba(8, 13, 20, 0.78);
+  background: rgba(var(--theme-surface-elevated-rgb), 0.96);
   color: var(--color-text-dim);
   font-size: max(12px, 0.75rem);
   font-weight: 800;
@@ -654,9 +654,9 @@
   height: 52px;
   min-height: 44px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--audio-border);
   border-radius: 14px;
-  background: rgba(8, 13, 20, 0.82);
+  background: rgba(var(--theme-surface-elevated-rgb), 0.96);
   color: var(--color-text);
   font: inherit;
   font-size: 2rem;
@@ -677,7 +677,7 @@
 .audio-album-carousel__nav:hover,
 .audio-album-carousel__nav:focus-visible {
   border-color: var(--audio-accent-border);
-  background: color-mix(in srgb, var(--audio-selected-surface) 86%, rgba(8, 13, 20, 0.88));
+  background: color-mix(in srgb, var(--audio-selected-surface) 86%, var(--audio-surface-strong));
 }
 
 .audio-album-carousel__nav:focus-visible {

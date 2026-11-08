@@ -95,9 +95,9 @@ assert(
 
 assert(
   /x:Name="DisplayPickerPanel"/.test(mainWindowXaml)
-    && /Background="#FF070B10"/.test(mainWindowXaml)
+    && /Background="#FFF4F5F7"/.test(mainWindowXaml)
     && /x:Name="DisplayPickerList"/.test(mainWindowXaml)
-    && /Foreground="#FFF5F8FA"/.test(mainWindowXaml)
+    && /Foreground="#FF2B4D7D"/.test(mainWindowXaml)
     && /ShowDisplayPicker/.test(mainWindow)
     && /HandleDisplayChoice/.test(mainWindow)
     && /SetDisplayPreference/.test(bridgeManager)

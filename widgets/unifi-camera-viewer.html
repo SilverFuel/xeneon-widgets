@@ -59,7 +59,7 @@
       padding: 20px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(14, 20, 28, 0.98));
+      background: linear-gradient(180deg, var(--theme-surface-primary), var(--theme-surface-secondary));
       box-shadow: var(--shadow);
       overflow: hidden;
     }
@@ -68,7 +68,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 38%);
+      background: linear-gradient(120deg, var(--theme-inner-highlight), transparent 38%);
       pointer-events: none;
     }
 
@@ -105,8 +105,8 @@
       display: grid;
       place-items: center;
       border-radius: 14px;
-      background: rgba(0, 224, 255, 0.16);
-      color: var(--accent);
+      background: var(--theme-accent-soft);
+      color: var(--theme-accent-text);
       font-size: 1rem;
       font-weight: 700;
       letter-spacing: 0.1em;
@@ -134,38 +134,38 @@
       padding: 10px 14px;
       border-radius: 999px;
       border: 1px solid transparent;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--theme-surface-muted);
       font-size: 0.82rem;
       white-space: nowrap;
     }
 
     .status[data-tone="good"],
     .chip[data-tone="good"] {
-      color: #bfffe1;
-      background: rgba(68, 209, 122, 0.16);
-      border-color: rgba(68, 209, 122, 0.25);
+      color: var(--status-success-text);
+      background: var(--status-success-surface);
+      border-color: var(--status-success-border);
     }
 
     .status[data-tone="warn"],
     .chip[data-tone="warn"] {
-      color: #ffe4bd;
-      background: rgba(255, 179, 71, 0.16);
-      border-color: rgba(255, 179, 71, 0.24);
+      color: var(--status-warning-text);
+      background: var(--status-warning-surface);
+      border-color: var(--status-warning-border);
     }
 
     .status[data-tone="danger"],
     .chip[data-tone="danger"] {
-      color: #ffd0d0;
-      background: rgba(255, 107, 107, 0.16);
-      border-color: rgba(255, 107, 107, 0.24);
+      color: var(--status-danger-text);
+      background: var(--status-danger-surface);
+      border-color: var(--status-danger-border);
     }
 
     .chip {
       min-height: 34px;
       padding: 8px 12px;
       font-size: 0.75rem;
-      background: rgba(7, 14, 22, 0.72);
-      border-color: rgba(255, 255, 255, 0.08);
+      background: rgba(var(--theme-surface-elevated-rgb), 0.96);
+      border-color: var(--theme-border);
     }
 
     .content,
@@ -223,9 +223,9 @@
       bottom: 18px;
       z-index: 3;
       padding: 14px 16px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      border: 1px solid var(--theme-border);
       border-radius: 16px;
-      background: rgba(7, 14, 22, 0.84);
+      background: rgba(var(--theme-surface-elevated-rgb), 0.96);
       backdrop-filter: blur(10px);
       font-size: 0.9rem;
       line-height: 1.4;
@@ -255,7 +255,7 @@
       gap: 4px;
       padding: 10px 14px;
       border-radius: 16px;
-      background: rgba(7, 14, 22, 0.7);
+      background: rgba(var(--theme-surface-elevated-rgb), 0.96);
       backdrop-filter: blur(10px);
     }
 
@@ -274,7 +274,7 @@
       height: 12px;
       border-radius: 999px;
       background: var(--good);
-      box-shadow: 0 0 0 8px rgba(68, 209, 122, 0.12);
+      box-shadow: 0 0 0 8px var(--status-success-surface);
     }
 
     .sidebar {
@@ -787,10 +787,10 @@
         document.getElementById("camera-path").textContent = feedLabel;
         liveDotNode.style.background = tone === "good" ? "var(--good)" : tone === "warn" ? "var(--warn)" : "var(--danger)";
         liveDotNode.style.boxShadow = tone === "good"
-          ? "0 0 0 8px rgba(68, 209, 122, 0.12)"
+          ? "0 0 0 8px var(--status-success-surface)"
           : tone === "warn"
-            ? "0 0 0 8px rgba(255, 179, 71, 0.12)"
-            : "0 0 0 8px rgba(255, 107, 107, 0.12)";
+            ? "0 0 0 8px var(--status-warning-surface)"
+            : "0 0 0 8px var(--status-danger-surface)";
 
         if (error) {
           setStatus("Unavailable", "danger");
