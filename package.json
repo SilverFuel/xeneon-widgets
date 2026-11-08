@@ -64,7 +64,7 @@
     "bridge:install": "powershell -ExecutionPolicy Bypass -File .\\bridge\\install-bridge.ps1",
     "bridge:uninstall": "powershell -ExecutionPolicy Bypass -File .\\bridge\\uninstall-bridge.ps1",
     "test:visible-window-guard": "node scripts/test-visible-window-guard.mjs",
-    "test:setup-secrets": "node scripts/test-setup-secrets.mjs",
+    "test:setup-secrets": "node scripts/test-setup-secrets.mjs && node scripts/test-setup-display.mjs",
     "test:frigate-standalone-refresh": "node scripts/test-frigate-standalone-refresh.mjs",
     "test:json-lexical-types": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-json-lexical-types.ps1 && pwsh -NoProfile -File scripts/test-json-lexical-types.ps1",
     "test:installer-architecture": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-installer-architecture.ps1 && pwsh -NoProfile -File scripts/test-installer-architecture.ps1",

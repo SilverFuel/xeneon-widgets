@@ -141,9 +141,6 @@
           '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected companion display") : "No active companion display selected") + '</strong>' +
           '<span>' + escapeHtml(selected ? describeDisplay(selected) : companionDisplayCount ? "Choose one of the companion displays below." : "Connect or extend a secondary display, then refresh diagnostics.") + '</span>' +
         '</div>' +
-        '<details class="setup-diagnostics-details">' +
-          '<summary>Manage companion displays</summary>' +
-          '<div class="setup-diagnostics-details__body">' +
           '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
           var reasons = Array.isArray(entry.reasons) ? entry.reasons.slice(0, 2).join(" / ") : "";
           return '' +
@@ -162,8 +159,6 @@
           '<button class="inline-button is-primary" type="button" data-action="run-repair">Repair scan</button>' +
           (repairActions.length ? '<span class="router-inline-copy">' + escapeHtml(text(repairActions[0], "Repair actions are available.")) + '</span>' : '') +
         '</div>' +
-          '</div>' +
-        '</details>' +
       '</article>';
   }
 
