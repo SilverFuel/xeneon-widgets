@@ -3347,6 +3347,11 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
     assert(audit.layoutState?.browser === false && audit.layoutState?.compact === false && audit.layoutState?.ultrawide === true, `${viewportLabel}: expected browser=false, compact=false, ultrawide=true: ${JSON.stringify(audit.layoutState || null)}`);
   }
   assert(audit.runtimeCaptureReady, `${viewportLabel}: early runtime error capture was not installed`);
+  const layoutFailures = (audit.results || []).filter(result => result.fatal || result.widgetErrorVisible
+    || result.documentOverflow || result.panelOverflow || !result.contentFocusAccepted || !result.contentFocusReachable
+    || result.undersizedControls.length || result.distanceUndersizedControls.length || result.distanceSmallControlText.length
+    || result.clippedControls.length || result.unnamedControls.length || result.undersizedText.length);
+  if (layoutFailures.length) console.error("Product-surface failure details: " + JSON.stringify({ viewport: viewport.name, results: layoutFailures }));
   for (const result of audit.results || []) {
     const surfaceLabel = `${viewport.name}/${result.id}`;
     const displayPaused = result.id === "display-controls" && result.status === "Still checking"
@@ -3980,6 +3985,7 @@ try {
       validateProbe(probe, viewport);
       console.log(`rendered ${viewport.name} ${viewport.width}x${viewport.height}: passed`);
     }
+    const surfaceFailures = [];
     for (const viewport of surfaceAuditViewports) {
       await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
       await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -3988,8 +3994,14 @@ try {
         deviceScaleFactor: 1,
         mobile: false
       });
-      await validateAllVisibleProductSurfaces(cdp, viewport);
+      try {
+        await validateAllVisibleProductSurfaces(cdp, viewport);
+      } catch (error) {
+        console.error(error.stack || error.message);
+        surfaceFailures.push(viewport.name + ": " + error.message);
+      }
     }
+    assert(surfaceFailures.length === 0, "Product-surface matrix failed:\n" + surfaceFailures.join("\n"));
     await validateLegacyLayoutPreservation(cdp);
     await validateDeletableMusicCards(cdp);
     await validateForcedColorsProductSurfaces(cdp);
