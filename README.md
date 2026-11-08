@@ -66,6 +66,8 @@ On first launch, Auxora scans the PC and prepares the normal dashboard automatic
 - builds the recent-app dock from safe Start Menu shortcuts, Steam games, and live app activity
 - marks the core dashboard ready without asking the user to finish setup manually
 
+In Settings > Diagnostics > Companion display targeting, use **Use this companion display** to save a detected secondary display as the target. A single secondary display is also chosen automatically. Auxora uses Windows display enumeration rather than touchscreen identification, so displays such as the HYTE Y70 Touch can be selected when Windows has extended the desktop to them; configure touch mapping separately in Windows. The Windows primary display cannot be selected.
+
 Only permission-based extras still need user input: Weather needs an API key, Calendar needs an ICS feed or account permission, Philips Hue needs the bridge link button, UniFi needs local console credentials if you want client and AP detail, and Camera Detection needs the address of a Frigate server on the local/private network.
 
 Uninstall is also meant to be hands-free:
