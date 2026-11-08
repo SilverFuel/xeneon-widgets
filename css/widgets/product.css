@@ -462,11 +462,9 @@
 .product-privacy-list > div,
 .product-code-preview,
 .product-checklist {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, calc(0.07 * var(--dashboard-surface-opacity))), rgba(255, 255, 255, calc(0.025 * var(--dashboard-surface-opacity)))),
-    rgba(7, 13, 19, calc(0.68 * var(--dashboard-widget-opacity)));
+  background: var(--theme-surface-muted);
 }
 
 .product-card,
@@ -559,9 +557,9 @@
   height: 34px;
   border-radius: 10px;
   background:
-    linear-gradient(90deg, var(--swatch-a), var(--swatch-b)),
-    var(--color-accent);
-  box-shadow: 0 0 28px rgba(255, 255, 255, 0.08);
+    linear-gradient(90deg, var(--swatch-a), var(--swatch-b)) bottom / 100% 6px no-repeat,
+    var(--swatch-bg, var(--theme-surface-elevated));
+  box-shadow: inset 0 0 0 1px var(--theme-border);
 }
 
 .product-control-panel {
@@ -642,7 +640,7 @@
 
 .product-layout-row.is-hidden {
   border-style: dashed;
-  background: rgba(7, 13, 19, calc(0.48 * var(--dashboard-widget-opacity)));
+  background: var(--theme-surface-secondary);
 }
 
 .product-layout-row__handle {

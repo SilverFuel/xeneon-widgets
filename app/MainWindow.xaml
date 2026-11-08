@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     Title="Auxora">
-    <Grid Background="#0B0F14" RequestedTheme="Dark">
+    <Grid Background="#F4F5F7" RequestedTheme="Light">
         <controls:WebView2
             x:Name="DashboardView"
             HorizontalAlignment="Stretch"
@@ -17,21 +17,21 @@
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"
             MaxWidth="640"
-            Background="#FF0B0F14"
-            BorderBrush="#3300E0FF"
+            Background="#FFF4F5F7"
+            BorderBrush="#FFD4AC63"
             BorderThickness="1"
             CornerRadius="18">
             <StackPanel Spacing="10">
                 <TextBlock
                     Text="Auxora"
-                    Foreground="#FFF5F8FA"
+                    Foreground="#FF2B4D7D"
                     FontSize="28"
                     FontWeight="SemiBold" />
                 <TextBlock
                     x:Name="StatusText"
                     AutomationProperties.LiveSetting="Polite"
                     Text="Starting bridge..."
-                    Foreground="#FFDCE6EC"
+                    Foreground="#FF2B4D7D"
                     FontSize="16"
                     Opacity="0.9"
                     TextWrapping="WrapWholeWords" />
@@ -40,7 +40,7 @@
 
         <Grid
             x:Name="DisplayPickerPanel"
-            Background="#FF070B10"
+            Background="#FFF4F5F7"
             Visibility="Collapsed">
             <Border
                 Margin="32"
@@ -48,8 +48,8 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Stretch"
                 MaxWidth="980"
-                Background="#FF101820"
-                BorderBrush="#6600D9FF"
+                Background="#FFFFFFFF"
+                BorderBrush="#FFD4AC63"
                 BorderThickness="1"
                 CornerRadius="24">
                 <Grid>
@@ -63,13 +63,13 @@
                     <StackPanel Grid.Row="0" Spacing="8">
                         <TextBlock
                             Text="Choose an Auxora companion display"
-                            Foreground="#FFF5F8FA"
+                            Foreground="#FF2B4D7D"
                             FontSize="30"
                             FontWeight="SemiBold"
                             TextWrapping="WrapWholeWords" />
                         <TextBlock
                             Text="Auxora never uses your Windows primary display. Choose an available companion display and Auxora will remember it."
-                            Foreground="#FFB8C7D1"
+                            Foreground="#FF2B4D7D"
                             FontSize="16"
                             TextWrapping="WrapWholeWords" />
                     </StackPanel>
@@ -89,7 +89,7 @@
                         Grid.Row="2"
                         Margin="0,18,0,0"
                         Text="You can change this later in Settings → Diagnostics."
-                        Foreground="#FF91A8B7"
+                        Foreground="#FF2B4D7D"
                         FontSize="14"
                         TextWrapping="WrapWholeWords" />
 
@@ -100,9 +100,9 @@
                         <Button
                             Padding="18,10"
                             Click="HandleRefreshDisplays"
-                            Foreground="#FFF5F8FA"
-                            Background="#FF1B2A34"
-                            BorderBrush="#44566A78"
+                            Foreground="#FF2B4D7D"
+                            Background="#FFF4F5F7"
+                            BorderBrush="#FF2B4D7D"
                             BorderThickness="1"
                             CornerRadius="10"
                             HorizontalAlignment="Stretch"
@@ -112,9 +112,9 @@
                         <Button
                             Padding="18,10"
                             Click="HandleOpenWindowsDisplaySettings"
-                            Foreground="#FFF5F8FA"
-                            Background="#FF1B2A34"
-                            BorderBrush="#44566A78"
+                            Foreground="#FF2B4D7D"
+                            Background="#FFF4F5F7"
+                            BorderBrush="#FF2B4D7D"
                             BorderThickness="1"
                             CornerRadius="10"
                             HorizontalAlignment="Stretch"

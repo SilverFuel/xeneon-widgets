@@ -2,7 +2,7 @@
   min-height: 320px;
   overflow: hidden;
   border-radius: 18px;
-  background: rgba(7, 14, 22, calc(0.64 * var(--dashboard-surface-opacity)));
+  background: var(--theme-surface-secondary);
 }
 
 .inline-media__video,

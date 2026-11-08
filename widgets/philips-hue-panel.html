@@ -71,7 +71,7 @@
       padding: 16px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(13, 19, 28, 0.98));
+      background: linear-gradient(180deg, var(--theme-surface-primary), var(--theme-surface-secondary));
       box-shadow: var(--shadow);
       overflow: hidden;
       isolation: isolate;
@@ -81,7 +81,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 34%);
+      background: linear-gradient(120deg, var(--theme-inner-highlight), transparent 34%);
       pointer-events: none;
       z-index: 0;
     }
@@ -186,50 +186,50 @@
 
     .status,
     .badge {
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--theme-surface-muted);
     }
 
     .status[data-tone="good"],
     .badge[data-tone="good"] {
-      color: #c8ffe3;
-      background: rgba(68, 209, 122, 0.16);
-      border-color: rgba(68, 209, 122, 0.24);
+      color: var(--status-success-text);
+      background: var(--status-success-surface);
+      border-color: var(--status-success-border);
     }
 
     .status[data-tone="warn"],
     .badge[data-tone="warn"] {
-      color: #ffe3ba;
-      background: rgba(255, 179, 71, 0.15);
-      border-color: rgba(255, 179, 71, 0.24);
+      color: var(--status-warning-text);
+      background: var(--status-warning-surface);
+      border-color: var(--status-warning-border);
     }
 
     .status[data-tone="danger"],
     .badge[data-tone="danger"] {
-      color: #ffd0d0;
-      background: rgba(255, 107, 107, 0.15);
-      border-color: rgba(255, 107, 107, 0.24);
+      color: var(--status-danger-text);
+      background: var(--status-danger-surface);
+      border-color: var(--status-danger-border);
     }
 
     .action-button {
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--theme-hover-surface);
       color: var(--text);
-      border-color: rgba(255, 255, 255, 0.08);
+      border-color: var(--theme-border);
       transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
     }
 
     .action-button:hover,
     .diagnostics-toggle:hover,
     .toggle-button:hover {
-      border-color: rgba(255, 255, 255, 0.22);
-      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--theme-border-strong);
+      background: var(--theme-hover-surface);
     }
 
     .action-button:focus-visible,
     .diagnostics-toggle:focus-visible,
     .toggle-button:focus-visible {
-      border-color: #7defff;
-      background: rgba(255, 255, 255, 0.12);
-      outline: 3px solid #7defff;
+      border-color: var(--theme-focus-ring);
+      background: var(--theme-hover-surface);
+      outline: 3px solid var(--theme-focus-ring);
       outline-offset: 3px;
     }
 
@@ -248,11 +248,11 @@
 
     .action-button.is-primary,
     .toggle-button[data-active="true"] {
-      background: linear-gradient(90deg, var(--accent), var(--accent-2));
-      border-color: rgba(0, 224, 255, 0.34);
-      color: #031319;
+      background: var(--theme-accent);
+      border-color: var(--theme-accent-border);
+      color: var(--theme-on-accent);
       font-weight: 700;
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 12px 24px rgba(0, 224, 255, 0.18);
+      box-shadow: 0 0 0 1px var(--theme-inner-highlight), 0 12px 24px var(--theme-accent-glow);
     }
 
     .header {
@@ -264,14 +264,14 @@
       overflow: hidden;
       min-height: 126px;
       padding: 18px 20px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--theme-border);
       border-radius: 24px;
       background:
         radial-gradient(circle at 16% 18%, var(--scene-a), transparent 30%),
         radial-gradient(circle at 82% 26%, var(--scene-b), transparent 28%),
         radial-gradient(circle at 62% 80%, var(--scene-c), transparent 30%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)),
-        linear-gradient(180deg, rgba(12, 19, 29, 0.94), rgba(12, 18, 28, 0.88));
+        linear-gradient(180deg, var(--theme-inner-highlight), transparent),
+        linear-gradient(180deg, var(--theme-surface-primary), var(--theme-surface-secondary));
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
@@ -367,8 +367,8 @@
       min-width: 116px;
       padding: 10px 12px;
       border-radius: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(10, 17, 26, 0.44);
+      border: 1px solid var(--theme-border);
+      background: var(--theme-surface-muted);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
       backdrop-filter: blur(10px);
     }
@@ -419,7 +419,7 @@
     .summary-chip {
       border: 1px solid var(--border);
       border-radius: 22px;
-      background: linear-gradient(180deg, rgba(23, 32, 45, 0.9), rgba(13, 19, 28, 0.9));
+      background: linear-gradient(180deg, var(--theme-surface-primary), var(--theme-surface-secondary));
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
@@ -452,8 +452,8 @@
       padding: 14px;
       background:
         radial-gradient(circle at top right, var(--card-accent-aura, rgba(0, 224, 255, 0.16)), transparent 36%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
-        rgba(12, 18, 28, 0.9);
+        linear-gradient(180deg, var(--theme-inner-highlight), transparent),
+        var(--theme-surface-secondary);
       transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
     }
 
@@ -523,9 +523,9 @@
       min-width: 76px;
       min-height: 38px;
       padding: 8px 12px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--theme-border);
       border-radius: 14px;
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--theme-hover-surface);
       color: var(--text);
       transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
     }
@@ -558,22 +558,22 @@
     .device-meta__state {
       padding: 6px 10px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--theme-surface-muted);
     }
 
     .device-meta__state[data-tone="good"] {
-      color: #c8ffe3;
-      background: rgba(68, 209, 122, 0.15);
+      color: var(--status-success-text);
+      background: var(--status-success-surface);
     }
 
     .device-meta__state[data-tone="warn"] {
-      color: #ffe3ba;
-      background: rgba(255, 179, 71, 0.15);
+      color: var(--status-warning-text);
+      background: var(--status-warning-surface);
     }
 
     .device-meta__state[data-tone="danger"] {
-      color: #ffd0d0;
-      background: rgba(255, 107, 107, 0.15);
+      color: var(--status-danger-text);
+      background: var(--status-danger-surface);
     }
 
     .diagnostics-panel {
@@ -630,14 +630,14 @@
       min-height: 42px;
       padding: 12px 14px;
       border-radius: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(7, 12, 20, 0.82);
+      border: 1px solid var(--theme-border);
+      background: var(--theme-surface-secondary);
       color: var(--text);
     }
 
     .bridge-input:focus-visible,
     .brightness-slider:focus-visible {
-      outline: 2px solid rgba(0, 224, 255, 0.42);
+      outline: 3px solid var(--theme-focus-ring);
       outline-offset: 2px;
     }
 
@@ -654,7 +654,7 @@
       gap: 10px;
       min-height: 44px;
       padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--theme-surface-muted);
     }
 
     .summary-chip strong {
@@ -664,11 +664,11 @@
 
     .empty-state {
       padding: 18px 16px;
-      border: 1px dashed rgba(255, 255, 255, 0.14);
+      border: 1px dashed var(--theme-border-strong);
       border-radius: 18px;
       color: var(--muted);
       text-align: center;
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--theme-surface-muted);
     }
 
     .content-scroll::-webkit-scrollbar {
@@ -678,7 +678,7 @@
     .content-scroll::-webkit-scrollbar-thumb {
       border-radius: 999px;
       border: 3px solid transparent;
-      background: rgba(255, 255, 255, 0.18);
+      background: var(--theme-border-strong);
       background-clip: padding-box;
     }
 
@@ -1114,9 +1114,9 @@
 
       function setScenePalette(colors) {
         var fallback = [
-          "rgba(0, 224, 255, 0.32)",
-          "rgba(68, 240, 194, 0.24)",
-          "rgba(255, 196, 120, 0.2)"
+          "var(--theme-accent-soft)",
+          "var(--theme-ambient-secondary)",
+          "var(--theme-ambient-rim)"
         ];
         var values = colors.length ? colors : fallback;
         sceneNode.style.setProperty("--scene-a", values[0] || fallback[0]);
