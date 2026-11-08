@@ -1392,8 +1392,13 @@ async function validateProductSurfaceSemantics(cdp) {
   const modes = await navigateAndEvaluate("scenes", "productModesTest", `(async () => {
     const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
     const deadline = Date.now() + 15000;
-    while (Date.now() < deadline && document.querySelectorAll('[data-scene-activate]').length === 0) await wait(50);
-    const buttons = Array.from(document.querySelectorAll('[data-scene-activate], [data-scene-duplicate]'));
+    while (Date.now() < deadline && document.querySelectorAll('[data-scene-duplicate]').length === 0) await wait(50);
+    const initialSnapshot = await fetch('/api/scenes', { cache: 'no-store' }).then(response => response.json());
+    const expectedIds = (initialSnapshot.profiles || []).filter(profile => profile.id !== 'scene-night' && profile.themeVariant !== 'night').map(profile => profile.id);
+    const buttons = Array.from(document.querySelectorAll('[data-scene-duplicate]'));
+    const headerOptions = Array.from(document.querySelector('#dashboard-mode-select')?.options || []).map(option => option.value);
+    const duplicateIds = buttons.map(button => button.getAttribute('data-scene-duplicate'));
+    const retiredActivationCount = document.querySelectorAll('[data-scene-activate]').length;
     document.querySelector('[data-scene-duplicate="scene-work"]')?.click();
     const duplicateDeadline = Date.now() + 10000;
     let editForm = null;
@@ -1420,7 +1425,14 @@ async function validateProductSurfaceSemantics(cdp) {
         if (current?.name === 'Work Touch' && current.themeId === 'warm' && current.density === 'compact' && current.animationIntensity === 47 && current.performanceBudget === 'game') { renamed = true; break; }
         await wait(50);
       }
-      document.querySelector('[data-scene-delete]')?.click();
+      // The native save can be observed before the UI receives its receipt.
+      // Wait for the real form to settle before testing the delete confirmation.
+      const saveUiDeadline = Date.now() + 10000;
+      while (Date.now() < saveUiDeadline && (document.querySelector('[data-scene-delete]')?.disabled
+        || !/Custom Mode saved/.test(document.querySelector('#dashboard-inline-widget')?.textContent || ''))) await wait(25);
+      const deleteControl = document.querySelector('[data-scene-delete]');
+      if (!deleteControl || deleteControl.disabled) throw new Error('Mode save did not restore the delete control');
+      deleteControl.click();
       const armDeadline = Date.now() + 3000;
       while (Date.now() < armDeadline) {
         const confirmation = document.querySelector('[data-scene-delete]');
@@ -1438,6 +1450,7 @@ async function validateProductSurfaceSemantics(cdp) {
     return {
       labels: buttons.map(button => button.getAttribute('aria-label') || ''),
       buttonCount: buttons.length,
+      expectedIds, duplicateIds, headerOptions, retiredActivationCount,
       duplicateCreatedCustom: (duplicateSnapshot.profiles || []).some(scene => scene && scene.isBuiltIn === false),
       customEditorVisible: Boolean(editForm),
       renamed,
@@ -1447,7 +1460,10 @@ async function validateProductSurfaceSemantics(cdp) {
       finalActiveSceneId: finalSnapshot.activeSceneId || ''
     };
   })()`);
-  assert(modes.buttonCount >= 8, `Mode controls did not render: ${JSON.stringify(modes)}`);
+  assert(modes.expectedIds.length > 0 && modes.buttonCount === modes.expectedIds.length
+    && [...modes.duplicateIds].sort().join("|") === [...modes.expectedIds].sort().join("|")
+    && modes.headerOptions.includes("automatic") && modes.expectedIds.every(id => modes.headerOptions.includes(id))
+    && modes.retiredActivationCount === 0, `Mode controls did not render: ${JSON.stringify(modes)}`);
   assert(modes.labels.every(Boolean), `Modes exposed unnamed actions: ${JSON.stringify(modes.labels)}`);
   assert(new Set(modes.labels).size === modes.labels.length, `Mode action names are ambiguous: ${JSON.stringify(modes.labels)}`);
   assert(modes.duplicateCreatedCustom && modes.customEditorVisible && modes.renamed, `Duplicated Mode could not be edited through the UI: ${JSON.stringify(modes)}`);
