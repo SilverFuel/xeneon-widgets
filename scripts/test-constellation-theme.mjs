@@ -328,27 +328,32 @@ test("live game colors override personal colors and are removed when the session
 });
 
 
-test("forced-colors fixture isolates full Audio reads and keeps Quick controls read-only", async () => {
-  const source = read("./test-theme-rendered.mjs");
-  const start = source.indexOf("function installQuickControlsForcedColorsFixture() {");
-  const end = source.indexOf("async function probeForcedColorsQuickControls()", start);
+for (const fixtureCase of [
+  { label: "forced-colors", file: "./test-theme-rendered.mjs", name: "installQuickControlsForcedColorsFixture", next: "async function probeForcedColorsQuickControls()", query: "?quickControlsForcedColors=1", key: "__quickControlsForcedColorsFixture" },
+  { label: "interactive", file: "./test-rendered-dashboard.mjs", name: "installQuickControlsFixture", next: "async function checkQuickControlsInPage(", query: "?quickControlsTest=800", key: "__quickControlsFixture" }
+]) {
+test(fixtureCase.label + " fixture isolates full Audio reads and blocks unexpected Quick requests", async () => {
+  const source = read(fixtureCase.file);
+  const start = source.indexOf("function " + fixtureCase.name + "() {");
+  const end = source.indexOf(fixtureCase.next, start);
   assert.ok(start >= 0 && end > start, "appearance fixture must be extracted from the browser suite");
   const body = { dataset: { activeWidgetId: "audio" } };
   let drawerClosed = true;
   let liveFetches = 0;
   const window = { fetch() { liveFetches += 1; throw new Error("Appearance requests must not reach Windows"); } };
   const context = {
-    window, URL, Response, Date,
-    location: { search: "?quickControlsForcedColors=1", href: "http://127.0.0.1:18799/dashboard.html", origin: "http://127.0.0.1:18799" },
+    window, URL, Response, Date, setTimeout,
+    location: { search: fixtureCase.query, href: "http://127.0.0.1:18799/dashboard.html", origin: "http://127.0.0.1:18799" },
     document: { body, getElementById: id => id === "dashboard-quick-drawer" ? { classList: { contains: name => name === "is-hidden" && drawerClosed } } : null }
   };
-  runInNewContext(source.slice(start, end) + "\ninstallQuickControlsForcedColorsFixture();", context);
-  const fixture = window.__quickControlsForcedColorsFixture;
+  runInNewContext(source.slice(start, end) + "\n" + fixtureCase.name + "();", context);
+  const fixture = window[fixtureCase.key];
+  const blocked = fixture.blocked || fixture.unexpected;
   const panelResponse = await window.fetch("/api/audio/equalizer");
   assert.equal(panelResponse.status, 200);
   assert.equal((await panelResponse.json()).supported, false);
   assert.equal(fixture.panelReads.equalizer, 1);
-  assert.equal(fixture.blocked.length, 0);
+  assert.equal(blocked.length, 0);
 
   drawerClosed = false;
   assert.equal((await window.fetch("/api/audio/equalizer")).status, 400, "Quick controls cannot read equalizer state");
@@ -363,6 +368,7 @@ test("forced-colors fixture isolates full Audio reads and keeps Quick controls r
     assert.equal(fixture.reads[kind], 1);
   }
   assert.equal(fixture.panelReads.equalizer, 1);
-  assert.equal(fixture.blocked.length, 5);
+  assert.equal(blocked.length, 5);
   assert.equal(liveFetches, 0);
 });
+}

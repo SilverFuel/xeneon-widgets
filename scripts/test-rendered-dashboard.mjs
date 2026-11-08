@@ -2077,6 +2077,7 @@ function installQuickControlsFixture() {
     audio: { supported: true, configured: true, status: "live", stale: false, masterVolume: 42, muted: false, defaultDeviceId: "fixture-speakers", devices: [], sessions: [] },
     media: { supported: true, configured: true, status: "live", stale: false, playbackStatus: "playing", canPlay: true, canPause: true, title: "Local fixture track", appId: "fixture-player" },
     reads: { audio: 0, media: 0 },
+    panelReads: { equalizer: 0 },
     writes: [],
     held: [],
     holdNext: {},
@@ -2100,6 +2101,14 @@ function installQuickControlsFixture() {
     }
     const match = /^\/api\/(audio|media)(?:\/|$)/.exec(url.pathname);
     if (!match) return originalFetch.apply(this, arguments);
+    // The final navigation check mounts the full Audio panel with Quick closed.
+    // Keep that panel's read isolated without permitting it inside Quick controls.
+    const drawer = document.getElementById("dashboard-quick-drawer");
+    if (url.origin === location.origin && method === "GET" && url.pathname === "/api/audio/equalizer"
+      && document.body?.dataset.activeWidgetId === "audio" && drawer?.classList.contains("is-hidden")) {
+      fixture.panelReads.equalizer += 1;
+      return Promise.resolve(response({ supported: false, configured: false, status: "unavailable", message: "Isolated Audio panel fixture", bands: [], presets: [] }));
+    }
     const kind = match[1];
     if (method === "GET" && url.pathname === "/api/" + kind) {
       fixture.reads[kind] += 1;
