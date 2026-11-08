@@ -707,9 +707,10 @@ async function validateFocusedInlineWidgetReconciliation(cdp) {
       const connected = input.isConnected;
       const focused = document.activeElement === input;
       const valuePreserved = input.value === 'ws://example.test:4455';
-      const openMedia = document.querySelector('[data-action="open-media"]');
-      openMedia?.focus();
-      openMedia?.click();
+      const audioTab = document.querySelector('.auxora-panel-link[data-widget-id="audio"]');
+      if (!audioTab) throw new Error("Streaming teardown requires the Audio & Media tab");
+      audioTab.focus();
+      audioTab.click();
       await wait(150);
       return {
         ready: true,
