@@ -996,8 +996,8 @@ async function validateHomeRefreshStability(cdp) {
       const shell = mount?.querySelector('.product-shell');
       const cards = Array.from(mount?.querySelectorAll('.metric-card') || []);
       const buttons = Array.from(mount?.querySelectorAll('button') || []);
-      const editHome = mount?.querySelector('[data-home-open="layout-editor"]');
-      editHome?.focus();
+      const performanceCard = mount?.querySelector('[data-home-open="system"]');
+      performanceCard?.focus();
       const beforeText = cards.map(card => card.textContent.trim());
 
       await controller.refresh();
@@ -1008,12 +1008,13 @@ async function validateHomeRefreshStability(cdp) {
       const nextCards = Array.from(nextMount?.querySelectorAll('.metric-card') || []);
       const nextButtons = Array.from(nextMount?.querySelectorAll('button') || []);
       const result = {
-        ready: !!mount && !!shell && cards.length === 4 && !!editHome && buttons.length >= 1,
+        ready: !!mount && !!shell && cards.length === 3 && !!performanceCard && buttons.length >= 3,
+        destinations: cards.map(card => card.getAttribute("data-home-open")),
         mountPreserved: mount === nextMount,
         shellPreserved: shell === nextShell,
         cardsPreserved: cards.length === nextCards.length && cards.every((card, index) => card === nextCards[index]),
         buttonsPreserved: buttons.length === nextButtons.length && buttons.every((button, index) => button === nextButtons[index]),
-        focusPreserved: document.activeElement === editHome,
+        focusPreserved: document.activeElement === performanceCard,
         beforeText,
         afterText: nextCards.map(card => card.textContent.trim()),
         fatal: /Dashboard failed|Dashboard runtime error/i.test(document.body?.innerText || '')
@@ -1027,6 +1028,7 @@ async function validateHomeRefreshStability(cdp) {
   });
   const result = evaluation.result?.value || {};
   assert(result.ready, `Home refresh stability fixture did not initialize: ${JSON.stringify(result)}`);
+  assert(result.destinations.join("|") === "system|network|calendar", "Home cards must retain their Performance, Network, and Calendar destinations");
   assert(result.mountPreserved && result.shellPreserved && result.cardsPreserved && result.buttonsPreserved, `Home polling replaced stable UI nodes: ${JSON.stringify(result)}`);
   assert(result.focusPreserved, `Home polling stole keyboard focus: ${JSON.stringify(result)}`);
   assert(!result.fatal, `Home polling created a fatal dashboard state: ${JSON.stringify(result)}`);
