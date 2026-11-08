@@ -4429,6 +4429,8 @@ input[type="range"]:focus-visible {
     background: ButtonFace;
     color: ButtonText;
     box-shadow: none;
+    /* Contrast-mode boundaries must not interpolate from a borderless theme. */
+    transition: none;
   }
 
   body.dashboard-native-page :where(
