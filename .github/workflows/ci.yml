@@ -27,6 +27,11 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Validate GitHub Actions runtimes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-action-runtimes.mjs
+
       - name: Validate Electron dependency compatibility
         run: |
           npm --prefix desktop/electron ci --ignore-scripts
@@ -43,7 +48,7 @@ jobs:
 
       - name: Preserve rendered theme previews
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: rendered-theme-previews
           path: ${{ runner.temp }}/auxora-theme-rendered/*.png

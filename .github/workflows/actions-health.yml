@@ -1,0 +1,30 @@
+name: GitHub Actions Health
+
+on:
+  schedule:
+    - cron: "17 14 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+
+      - name: Validate action runtime regression tests
+        run: node --test scripts/test-action-runtimes.mjs
+
+      - name: Validate GitHub Actions runtimes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-action-runtimes.mjs

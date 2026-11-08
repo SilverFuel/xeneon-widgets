@@ -80,7 +80,7 @@ jobs:
           if (-not (Test-Path publish/XenonEdgeHost.exe -PathType Leaf)) { throw "Published application executable is missing." }
 
       - name: Upload unsigned app payload
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: auxora-unsigned-app
           if-no-files-found: error
@@ -94,7 +94,7 @@ jobs:
 
     steps:
       - name: Download unsigned app payload
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: auxora-unsigned-app
           path: publish
@@ -152,7 +152,7 @@ jobs:
           }
 
       - name: Upload signed app payload
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: auxora-signed-app
           if-no-files-found: error
@@ -171,7 +171,7 @@ jobs:
           persist-credentials: false
 
       - name: Download signed app payload
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: auxora-signed-app
           path: publish
@@ -190,7 +190,7 @@ jobs:
           Copy-Item -LiteralPath app/dist/README-install.txt -Destination unsigned-candidate
 
       - name: Upload unsigned installer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: auxora-unsigned-installer
           if-no-files-found: error
@@ -204,7 +204,7 @@ jobs:
 
     steps:
       - name: Download unsigned installer
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: auxora-unsigned-installer
           path: candidate
@@ -266,7 +266,7 @@ jobs:
           Set-Content -LiteralPath "$target.sha256" -Value "$hash  $([IO.Path]::GetFileName($target))" -Encoding ASCII
 
       - name: Upload signed installer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: auxora-signed-installer
           if-no-files-found: error
@@ -304,13 +304,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "npm ci (desktop/electron) failed with exit code $LASTEXITCODE." }
 
       - name: Download signed app payload
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: auxora-signed-app
           path: publish
 
       - name: Download signed installer
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: auxora-signed-installer
           path: app/dist
@@ -338,7 +338,7 @@ jobs:
           Copy-Item -LiteralPath verified-commercial-evidence.json -Destination release-candidate
 
       - name: Upload verified signed candidate
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: auxora-signed-windows-candidate
           if-no-files-found: error
