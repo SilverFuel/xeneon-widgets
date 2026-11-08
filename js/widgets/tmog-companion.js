@@ -117,7 +117,7 @@
     var status = state.paused ? "Paused" : snapshot.available ? "Live" : "Waiting for telemetry";
     var tmog = state.tmog || {};
     return '<div class="tmog-companion">' +
-      '<header class="tmog-toolbar"><div><p class="tmog-eyebrow">Performance at a glance</p><h2>TMOG Companion</h2>' +
+      '<header class="tmog-toolbar"><div><p class="tmog-eyebrow">Performance at a glance</p><h2>Performance history</h2>' +
       '<p class="tmog-source">Live readings from Auxora. Open TMOG for processes and advanced tools.</p></div>' +
       '<div class="tmog-controls"><span class="tmog-status" data-live="' + (!state.paused && snapshot.available > 0) + '">' + status + '</span>' +
       '<button type="button" class="inline-button" data-tmog-action="pause" aria-pressed="' + state.paused + '">' + (state.paused ? "Resume" : "Pause") + '</button>' +

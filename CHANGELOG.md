@@ -63,7 +63,7 @@
 - Removed Diagnostics' contradictory disabled `Auto ready` button while the product still needed a companion display; setup completion now appears only when it is actionable, and the nested readiness panel no longer repeats the Diagnostics page name.
 - Kept the setup and repair surface consistently named Diagnostics before and after onboarding instead of changing from Auto Setup after selection.
 - Replaced internal inline-migration and not-implemented fallback messages with a truthful unavailable-panel recovery state, and added a release gate proving every shipped surface—including Camera Detection—has a registered renderer.
-- Updated the Electron packaging lockfile to patched `brace-expansion` releases after a new high-severity denial-of-service advisory; root npm, Electron npm, and NuGet audits now report zero known vulnerabilities.
+- Updated the Electron packaging lockfile to patched `brace-expansion` releases after a high-severity denial-of-service advisory. The npm audit gate rejects moderate-or-higher findings; a passing gate does not establish that every dependency is free of advisories.
 - Removed the last live settings-panel `innerHTML` rewrite and added re-entrant focus/blur protection so changing or leaving a focused option cannot collapse the dashboard.
 - Stopped mouse and programmatic scrolling from swallowing the next click; touch-drag suppression now applies only while a real touch gesture is active.
 - Removed the redundant opaque Diagnostics rail card, made the top status report `Needs Setup` truthfully, and shortened the selected-panel label so it remains readable on the companion display.

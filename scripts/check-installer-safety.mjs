@@ -83,6 +83,18 @@ assert(
 );
 
 assert(
+  /Is64BitOperatingSystem -and -not \[Environment\]::Is64BitProcess/.test(installHost)
+    && /Sysnative\\WindowsPowerShell\\v1\.0\\powershell\.exe/.test(installHost)
+    && /"-SourceRoot", \$SourceRoot, "-InstallRoot", \$InstallRoot/.test(installHost)
+    && /"SkipLaunch", "NoAutoStart", "NoDesktopShortcut", "Quiet"/.test(installHost)
+    && /UseShellExecute = \$false/.test(installHost)
+    && /CreateNoWindow = \$true/.test(installHost)
+    && /exit \$nativeExitCode/.test(installHost)
+    && installHost.indexOf("if ([Environment]::Is64BitOperatingSystem") < installHost.indexOf("$logRoot ="),
+  "32-bit setup must hand off to native PowerShell before installer side effects, preserving parameters and exit status without elevation"
+);
+
+assert(
   /\$installationCompleted = \$false/.test(installHost)
     && /Stop-RunningHost/.test(installHost)
     && /Get-Process -Id \$processId/.test(installHost)

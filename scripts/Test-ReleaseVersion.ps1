@@ -40,7 +40,8 @@ if ($ExpectedTag -and $ExpectedTag -cne "v$version") {
 
 $revisionFiles = @(
   "dashboard.html", "hosted-dashboard.html", "index.html", "bridge\install-bridge.ps1",
-  "widgets\weather-widget.html", "widgets\network-widget.html", "widgets\media-widget.html", "widgets\setup-guide.html"
+  "widgets\weather-widget.html", "widgets\network-widget.html", "widgets\media-widget.html", "widgets\setup-guide.html",
+  "widgets\calendar-widget.html", "widgets\system-monitor.html"
 )
 foreach ($relativePath in $revisionFiles) {
   $text = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw

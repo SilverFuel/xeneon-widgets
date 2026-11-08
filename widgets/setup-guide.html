@@ -977,7 +977,8 @@
           setGuideStatus(connection.connected ? "Camera connected" : connection.state, connection.state);
           notifyParent("frigate");
         } catch (error) {
-          setGuideStatus(saved ? "Saved; test failed" : "Needs Setup", "Needs Setup");
+          var reason = error && error.message ? ": " + error.message : "";
+          setGuideStatus((saved ? "Saved; test failed" : "Save failed") + reason, "Needs Setup");
         }
       }
 

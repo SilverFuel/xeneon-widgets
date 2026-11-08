@@ -9,6 +9,44 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# IExpress may start a 32-bit command shell even for an x64 payload. The staged
+# WebView2Loader must be probed in a 64-bit process before setup changes files.
+if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) {
+  $nativePowerShell = Join-Path $env:SystemRoot "Sysnative\WindowsPowerShell\v1.0\powershell.exe"
+  if (-not (Test-Path -LiteralPath $nativePowerShell -PathType Leaf)) {
+    throw "Auxora setup requires 64-bit Windows PowerShell, but the native host was not found."
+  }
+  $forwardedArguments = @(
+    "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath,
+    "-SourceRoot", $SourceRoot, "-InstallRoot", $InstallRoot
+  )
+  foreach ($switchName in @("SkipLaunch", "NoAutoStart", "NoDesktopShortcut", "Quiet")) {
+    if ((Get-Variable -Name $switchName -ValueOnly).IsPresent) {
+      $forwardedArguments += "-$switchName"
+    }
+  }
+  # Windows PowerShell's legacy native argument binding can corrupt a quoted
+  # path ending in a backslash. Quote the actual process command line instead.
+  $quotedArguments = foreach ($argument in $forwardedArguments) {
+    $escapedArgument = [regex]::Replace([string]$argument, '(\\*)"', '$1$1\"')
+    $escapedArgument = [regex]::Replace($escapedArgument, '(\\+)$', '$1$1')
+    '"' + $escapedArgument + '"'
+  }
+  $nativeStartInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $nativeStartInfo.FileName = $nativePowerShell
+  $nativeStartInfo.Arguments = $quotedArguments -join ' '
+  $nativeStartInfo.UseShellExecute = $false
+  $nativeStartInfo.CreateNoWindow = $true
+  $nativeProcess = [Diagnostics.Process]::Start($nativeStartInfo)
+  try {
+    $nativeProcess.WaitForExit()
+    $nativeExitCode = $nativeProcess.ExitCode
+  } finally {
+    $nativeProcess.Dispose()
+  }
+  exit $nativeExitCode
+}
+
 $logRoot = Join-Path $env:LOCALAPPDATA "Auxora\InstallerLogs"
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 $logPath = Join-Path $logRoot "install.log"

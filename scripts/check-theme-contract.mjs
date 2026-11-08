@@ -382,6 +382,12 @@ for (const token of REQUIRED_THEME_TOKENS) {
 for (const path of cssFiles) {
   const source = readWorkspaceFile(path);
   for (const block of extractCssBlocks(source)) {
+    // Unknown vendor pseudo-elements invalidate a whole ordinary selector list.
+    // Keep Chromium and Firefox range rules separate so theme/motion declarations survive parsing.
+    check(
+      !(block.selector.includes("::-webkit-") && block.selector.includes("::-moz-")),
+      `${path} mixes Chromium and Firefox pseudo-elements in one selector list: ${block.selector.replace(/\s+/g, " ")}`
+    );
     const declarations = parseCustomProperties(block.body);
     for (const token of REQUIRED_THEME_TOKENS) {
       if (declarations.has(token) && path !== "css/theme.css") {

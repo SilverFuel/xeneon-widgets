@@ -51,4 +51,20 @@ The native rendered host failed to bind with Windows error 6, `The handle is inv
 
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-local.ps1` in a normal Windows development session with working loopback and browser startup. Then validate journal persistence, game restart and dismissal behavior, TMOG sampling, companion-display placement, touch, and upgrade behavior against the resulting installed build.
 
-This session did not replace the installed app, publish an installer, commit, push, or deploy. Its filesystem permissions do not include the normal per-user installation directory. Public release still requires the repository's exact-candidate qualification workflow.
+The initial local review did not replace the installed app or publish an installer. Its filesystem permissions do not include the normal per-user installation directory. Public release still requires the repository's exact-candidate qualification workflow.
+
+## Release preparation follow-up
+
+The source repairs were pushed to release PR #9 as commit `62694848c0d1e60bc9ff9e41d1ad436909a431c7`. Hosted Windows CI passed dependency compatibility, dependency auditing, the native Release build, and the initial rendered layout matrix. It then found undersized TMOG controls on the short companion display. The follow-up patch raises the controls to the 44px minimum, raises small labels to 12px, and removes the duplicate panel title. That patch requires its own complete hosted CI result before merge.
+
+The follow-up review also corrected these outstanding findings:
+
+- A 32-bit setup launcher now hands off to native 64-bit PowerShell before probing the x64 WebView2 loader or changing installation files. Eight real architecture handoff cases passed across Windows PowerShell and PowerShell 7.
+- Successful Weather and Frigate configuration saves clear the submitted secret field while retaining a replacement typed during the request. Nine behavioral regressions passed.
+- Standalone Camera Detection can refresh after setup without restarting the page. Five behavioral regressions passed, including paused polling and duplicate requests.
+- Chromium and Firefox slider pseudo-element selectors are separate, preserving browser-specific theme and reduced-motion rules.
+- Older PowerShell Core preserves JSON timestamp text and token types without requiring the unavailable .NET Framework serializer. Default and fallback parser checks passed.
+- Solo-owner publication approval requires the owner to be the sole reviewer. Environment fixtures cover extra users and teams.
+- Calendar and system-monitor cache references match the asset revision and are included in version checks. Setup failures retain the server's reason; privacy and dependency documentation match the implementation.
+
+The normal check pipeline includes these new regression tests. Hosted CI, installed application validation, and public installer qualification remain distinct checks.

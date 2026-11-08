@@ -5,7 +5,7 @@ Auxora is designed as a local-first dashboard.
 ## What Stays Local
 
 - Dashboard settings are stored on the local machine.
-- Weather, calendar, Hue, and UniFi secrets are not written into the normal dashboard config file.
+- Weather, calendar, Hue, UniFi, and Frigate secrets are not written into the normal dashboard config file.
 - On Windows, those integration secrets are protected with Windows per-user data protection.
 - On macOS, the Electron beta host uses Electron safe storage for protected secrets when available.
 - System, network, audio, media, launcher, clipboard, and local integration state are served from `127.0.0.1`.
@@ -17,6 +17,7 @@ The app may contact:
 - OpenWeather, only when the user adds an OpenWeather key.
 - A local Philips Hue Bridge, only when the user links Hue.
 - Local UniFi devices or consoles, only for local discovery and status.
+- A user-configured local Frigate server, only when Camera Detection is configured, for authentication, detection events, and requested snapshots. The Windows host protects the saved Frigate password with per-user data protection.
 - GitHub release endpoints, only for release/update checks shown in the dashboard.
 - The public HTTPS calendar feed configured by the user. Calendar requests reject local/private destinations and re-check DNS at the connection boundary.
 
