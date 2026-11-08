@@ -173,11 +173,20 @@ function checkReadable(tokens, label, highContrast = false) {
     }
   }
   assert.ok(contrast(tokens["--theme-on-accent"], tokens["--theme-accent"]) >= 4.5, `${label}: filled accent text must meet 4.5:1`);
+  assert.equal(tokens["--theme-section-selected"], "#d4ac63", `${label}: selected sections retain Constellation Gold`);
+  assert.equal(tokens["--theme-on-section-selected"], "#132238", `${label}: selected sections retain the navy foreground`);
+  assert.ok(contrast(tokens["--theme-on-section-selected"], tokens["--theme-section-selected"]) >= 7, `${label}: selected section text must meet 7:1`);
   for (const status of ["success", "warning", "danger"]) {
     const ratio = contrast(tokens[`--status-${status}-text`], tokens[`--status-${status}-surface`], tokens["--theme-surface-primary"]);
     assert.ok(ratio >= 4.5, `${label}: blended ${status} status text is ${ratio.toFixed(3)}:1`);
   }
 }
+
+test("section selection honors the user's forced system colors", () => {
+  const forced = themeCss.slice(themeCss.indexOf("@media (forced-colors: active)"));
+  assert.match(forced, /--theme-section-selected:\s*Highlight;/);
+  assert.match(forced, /--theme-on-section-selected:\s*HighlightText;/);
+});
 
 test("Constellation palette and light/dark surface contracts agree across both runtimes", () => {
   for (const value of palette) assert.ok(themeCss.includes(value), `canonical palette must include ${value}`);

@@ -140,7 +140,10 @@ try {
   Write-Host "OK: stale commercial evidence rejected"
 
   $missingPathsResult = Invoke-Gate $completePath (Join-Path $resolvedFixture "missing-installer.exe") (Join-Path $resolvedFixture "missing-support.html")
-  if ($missingPathsResult.ExitCode -eq 0 -or $missingPathsResult.Output -notmatch "Support page does not exist" -or $missingPathsResult.Output -notmatch "Installer does not exist") {
+  # PowerShell wraps error records around long fixture paths; compare diagnostic
+  # words independently of the additional whitespace introduced by formatting.
+  $missingPathsDiagnostic = $missingPathsResult.Output -replace '\s+', ' '
+  if ($missingPathsResult.ExitCode -eq 0 -or $missingPathsDiagnostic -notmatch "Support page does not exist" -or $missingPathsDiagnostic -notmatch "Installer does not exist" -or $missingPathsDiagnostic -notmatch 'Commercial launch evidence failed with 3 blocker\(s\)\.') {
     throw "Missing commercial inputs were not reported cleanly. Output: $($missingPathsResult.Output)"
   }
   Write-Host "OK: missing commercial inputs reported cleanly"

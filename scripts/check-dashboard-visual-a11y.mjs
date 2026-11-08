@@ -52,47 +52,55 @@ function readCssBlock(source, openingBraceIndex) {
   return "";
 }
 
-function getScaledDesktopNavigationMedia(source) {
-  const mediaPattern = /@media\s*\(\s*min-width:\s*961px\s*\)\s*\{/g;
-  const match = mediaPattern.exec(source);
+function getCompactSectionNavigationMedia(source) {
+  const mediaPattern = /@media\s*([^{}]+)\{/g;
+  const match = [...source.matchAll(mediaPattern)].find(entry => entry[1].split(",").some(query => /^\s*\(\s*max-width:\s*1100px\s*\)\s*$/.test(query)));
   return match ? readCssBlock(source, match.index + match[0].lastIndexOf("{")) : "";
 }
 
-function hasScaledDesktopNavigationRule(source) {
-  const mediaBlock = getScaledDesktopNavigationMedia(source);
-  return /\.dashboard-native-page--adaptive\s+\.auxora-primary-nav\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/.test(mediaBlock);
+function hasCompactSectionNavigationRule(source) {
+  const mediaBlock = getCompactSectionNavigationMedia(source);
+  return /\.auxora-section-nav\s*\{[^{}]*display:\s*flex;[^{}]*overflow-x:\s*auto;[^{}]*touch-action:\s*pan-x;/.test(mediaBlock);
 }
 
-const scaledDesktopNavigationFixture = `
-@media (min-width: 961px) {
-  .dashboard-native-page--adaptive .auxora-primary-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+const compactSectionNavigationFixture = `
+@media (max-width: 1100px), (max-height: 480px) {
+  .auxora-section-nav {
+    display: flex;
+    overflow-x: auto;
+    touch-action: pan-x;
   }
 }
 @media (min-width: 1200px) and (min-height: 600px) {
   .other-rule { display: grid; }
 }`;
 const minHeightOnlyNavigationFixture = `
-@media (min-width: 961px) and (min-height: 600px) {
-  .dashboard-native-page--adaptive .auxora-primary-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 1100px) and (min-height: 600px) {
+  .auxora-section-nav {
+    display: flex;
+    overflow-x: auto;
+    touch-action: pan-x;
   }
 }`;
 const closedBlockNavigationFixture = `
-@media (min-width: 961px) {
+@media (max-width: 1100px) {
   .other-rule { display: grid; }
 }
-.dashboard-native-page--adaptive .auxora-primary-nav {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.auxora-section-nav {
+  display: flex;
+  overflow-x: auto;
+  touch-action: pan-x;
 }`;
 
-assert(hasScaledDesktopNavigationRule(scaledDesktopNavigationFixture), "scaled navigation fixture must accept a scoped width-only rule");
-assert(!hasScaledDesktopNavigationRule(minHeightOnlyNavigationFixture), "scaled navigation fixture must reject a height-gated rule");
-assert(!hasScaledDesktopNavigationRule(closedBlockNavigationFixture), "scaled navigation fixture must not cross a closed media block");
+assert(hasCompactSectionNavigationRule(compactSectionNavigationFixture), "compact navigation fixture must accept a scoped width-only rule, including an independent height alternative");
+assert(!hasCompactSectionNavigationRule(minHeightOnlyNavigationFixture), "compact navigation fixture must reject a height-gated rule");
+assert(!hasCompactSectionNavigationRule(closedBlockNavigationFixture), "compact navigation fixture must not cross a closed media block");
 
 const assetRevision = String(readWorkspaceJson("assets/revision.json").assetRevision || "").trim();
 const dashboardHtml = readWorkspaceFile("dashboard.html");
 const sharedCss = readWorkspaceFile("css/widgets.css");
+const shellCss = readWorkspaceFile("css/dashboard-shell.css");
+const navigationJs = readWorkspaceFile("js/dashboard-navigation.js");
 const gameModeCss = readWorkspaceFile("css/widgets/game-mode.css");
 const networkWidget = readWorkspaceFile("js/widgets/network.js");
 const homelabWidget = readWorkspaceFile("js/widgets/homelab.js");
@@ -129,7 +137,8 @@ const expectedCssAssets = [
   "css/widgets/integrations.css",
   "css/widgets/game-mode.css",
   "css/widgets/wow-forever.css",
-  "css/widgets/tmog-companion.css"
+  "css/widgets/tmog-companion.css",
+  "css/dashboard-shell.css"
 ];
 const expectedJsAssets = [
   "js/widget-core.js",
@@ -147,6 +156,7 @@ const expectedJsAssets = [
   "js/widgets/wow-forever.js",
   "js/widgets/tmog-companion.js",
   "js/quick-controls.js",
+  "js/dashboard-navigation.js",
   "js/dashboard.js"
 ];
 
@@ -180,8 +190,10 @@ assert(
 );
 
 assert(
-  hasScaledDesktopNavigationRule(sharedCss),
-  "desktop navigation must keep two readable columns at scaled display heights"
+  hasCompactSectionNavigationRule(shellCss)
+    && /\.auxora-section-nav \.auxora-section-link\s*\{[^{}]*flex:\s*0 0 auto;[^{}]*min-height:\s*44px;/.test(shellCss)
+    && /\.auxora-rail-actions\s*\{[^{}]*flex:\s*0 0 auto;/.test(shellCss),
+  "compact and scaled navigation must scroll readable section buttons while keeping Settings and Touch Lock in reserved space"
 );
 
 assert(
@@ -196,27 +208,33 @@ assert(
 assert(
   /@media\s*\(min-width:\s*1800px\)\s*and\s*\(min-height:\s*600px\)/.test(sharedCss)
     && /dashboard-native-page--layout-ultrawide[\s\S]*?min-inline-size:\s*54px;[\s\S]*?min-block-size:\s*54px;[\s\S]*?font-size:\s*max\(15px,\s*0\.9375rem\)/.test(sharedCss)
-    && /dashboard-native-page--layout-ultrawide[\s\S]*?\.auxora-primary-nav button[\s\S]*?min-block-size:\s*60px;/.test(sharedCss)
+    && /@media\s*\(min-width:\s*1800px\)\s*and\s*\(min-height:\s*600px\)[\s\S]*?:is\(\.auxora-section-link, \.auxora-panel-link, \.auxora-mode-select, \.auxora-shell-status\)\s*\{[^{}]*min-width:\s*54px;[^{}]*min-height:\s*54px;[^{}]*font-size:\s*15px;/.test(shellCss)
     && /distanceUndersizedControls/.test(dashboardJs)
     && /distanceSmallControlText/.test(dashboardJs),
   "wide companion layouts must retain the 54-pixel control and 15-pixel label distance-readability contract"
 );
 
 assert(
-  ["home", "scenes", "library", "settings"].every(destination => dashboardHtml.includes(`data-destination="${destination}"`))
-    && /data-destination="scenes"[^>]*>Modes<\/button>/.test(dashboardHtml)
-    && /data-destination="library"[^>]*>Apps &amp; Controls<\/button>/.test(dashboardHtml)
-    && !/>Scenes<\/button>|>Library<\/button>/.test(dashboardHtml)
+  ["home", "gaming", "media", "pc", "smart-home", "settings"].every(section => navigationJs.includes(`{ id: "${section}", label:`))
+    && /id="dashboard-section-nav"/.test(dashboardHtml)
+    && /id="dashboard-section-tabs"/.test(dashboardHtml)
+    && /id="dashboard-settings-categories"/.test(dashboardHtml)
+    && /id="dashboard-settings-toggle"[^>]*data-section-id="settings"/.test(dashboardHtml)
+    && !/data-destination=|dashboard-favorites|dashboard-panels-toggle|dashboard-panels-drawer/.test(dashboardHtml)
     && /dashboard-native-page--layout-compact/.test(dashboardJs)
     && /dashboard-native-page--layout-portrait/.test(dashboardJs)
     && /dashboard-native-page--layout-ultrawide/.test(dashboardJs)
     && /dashboard-native-page--adaptive[\s\S]*dashboard-router-stage/.test(sharedCss),
-  "Auxora must keep exactly four primary destinations and adaptive compact, portrait, standard, and ultrawide layout behavior"
+  "Auxora must expose six sections and within-section panels while preserving compact, portrait, standard, and ultrawide layout behavior"
 );
 
 assert(
-  /\.router-settings\.is-collapsed\s*\{[\s\S]*?padding:\s*0;[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;[\s\S]*?overflow:\s*visible;[\s\S]*?\}/.test(sharedCss),
-  "the collapsed Settings and Touch Lock tray must not draw an opaque container"
+  /class="[^"]*\bauxora-rail-actions\b[^"]*"/.test(dashboardHtml)
+    && /id="dashboard-settings-toggle"/.test(dashboardHtml)
+    && /id="dashboard-touch-lock-toggle"/.test(dashboardHtml)
+    && !/id="dashboard-settings-panel"|Open panel options/.test(dashboardHtml)
+    && /id="dashboard-widget-settings"[^>]*class="auxora-weather-preferences"/.test(dashboardHtml),
+  "Settings and Touch Lock must remain fixed rail actions without the obsolete Panel options container"
 );
 
 assert(
@@ -266,18 +284,16 @@ assert(
     && /border:\s*2px solid ButtonText/.test(sharedCss)
     && /background:\s*Highlight/.test(sharedCss)
     && /color:\s*HighlightText/.test(sharedCss)
-    && /outline:\s*3px solid Highlight/.test(sharedCss),
+    && /outline:\s*3px solid Highlight/.test(sharedCss)
+    && /@media\s*\(forced-colors:\s*active\)[\s\S]*?\.auxora-section-link[\s\S]*?border:\s*2px solid ButtonText;[\s\S]*?\.is-active\s*\{[^{}]*background:\s*Highlight;[^{}]*color:\s*HighlightText;[\s\S]*?:focus-visible\s*\{[^{}]*outline-color:\s*Highlight;/.test(shellCss),
   "Windows forced colors must remove decorative layers and preserve control boundaries, selection, and keyboard focus"
 );
 
 assert(
-  /currentWidgetId === "audio"/.test(dashboardJs)
-    && /nowStripMode === "hidden"/.test(dashboardJs)
-    && /nowStripMode !== "pinned"/.test(dashboardJs)
-    && /data-now-strip-action="dismiss"/.test(dashboardHtml)
-    && /data-now-strip-action="pin"/.test(dashboardHtml)
-    && /router-viewer__header-actions\s+\.dashboard-now-strip[\s\S]*?position:\s*static/.test(sharedCss),
-  "the media strip must stay off Audio, respect Auto/Keep/Hidden, and use stable header chrome"
+  !/id="dashboard-now-strip"|data-now-strip-action/.test(dashboardHtml)
+    && /id="dashboard-quick-media"/.test(dashboardHtml)
+    && /id="dashboard-quick-toggle"/.test(dashboardHtml),
+  "compact media controls must remain reachable in Quick controls without a duplicate media strip"
 );
 
 assert(
@@ -365,8 +381,9 @@ assert(
 );
 
 assert(
-  /\.auxora-primary-nav button,\s*\.auxora-quick-drawer button,\s*\.auxora-quick-toggle\s*\{[\s\S]*?min-height:\s*44px;/.test(sharedCss),
-  "global navigation and Quick controls must keep 44px touch targets"
+  /\.auxora-section-link,\s*\.auxora-panel-link,\s*\.auxora-mode-select,\s*\.auxora-shell-status\s*\{[^{}]*min-width:\s*44px;[^{}]*min-height:\s*48px;/.test(shellCss)
+    && /\.auxora-quick-drawer button,\s*\.auxora-quick-toggle\s*\{[^{}]*min-height:\s*44px;/.test(sharedCss),
+  "section navigation, panel tabs, Mode controls, status, and Quick controls must retain at least 44px touch targets"
 );
 
 assert(

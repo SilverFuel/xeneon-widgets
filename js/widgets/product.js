@@ -58,13 +58,13 @@
       var activePreset = findById(themes, activeTheme);
       var accentMode = settingValue(env, "accentMode", "preset") === "custom" ? "custom" : "preset";
       var customAccent = settingValue(env, "customAccentColor", activePreset.accent || "#2b4d7d");
-      var themeVariant = settingValue(env, "themeVariant", "auto");
       var intensity = settingValue(env, "animationIntensity", "100");
       var opacity = settingValue(env, "dashboardOpacity", "100");
       var dashboard = env.bridgeConfig && env.bridgeConfig.dashboard ? env.bridgeConfig.dashboard : {};
       var readability = settingValue(env, "themeReadability", text(dashboard.themeReadability, "normal"));
       var performanceBudget = settingValue(env, "performanceBudget", text(dashboard.performanceBudget, "balanced"));
       var gameModeAutoTune = settingValue(env, "gameModeAutoTune", dashboard.gameModeAutoTune === false ? "0" : "1");
+      var gameModeAutoFace = settingValue(env, "gameModeAutoFace", "1");
 
       patchStableDom(container, productShell(
         "Visual style",
@@ -87,8 +87,7 @@
             '<label class="inline-field"><span>Accent</span><select class="inline-select" name="accentMode"><option value="preset"' + (accentMode === "preset" ? " selected" : "") + '>Theme preset</option><option value="custom"' + (accentMode === "custom" ? " selected" : "") + '>Custom accent</option></select></label>' +
             '<label class="inline-field"><span>Custom accent</span><input class="inline-input product-color-input" type="color" name="customAccentColor" value="' + escapeHtml(customAccent) + '"' + (accentMode === "custom" ? "" : " disabled") + '></label>' +
           '</div>' +
-          '<div class="inline-form-grid inline-form-grid--3">' +
-            '<label class="inline-field"><span>Night</span><select class="inline-select" name="themeVariant"><option value="auto"' + (themeVariant === "auto" ? " selected" : "") + '>Automatic</option><option value="standard"' + (themeVariant === "standard" ? " selected" : "") + '>Off</option><option value="night"' + (themeVariant === "night" ? " selected" : "") + '>On</option></select></label>' +
+          '<div class="inline-form-grid inline-form-grid--2">' +
             '<label class="inline-field"><span>Readability</span><select class="inline-select" name="themeReadability">' +
               '<option value="normal"' + (readability === "normal" ? " selected" : "") + '>Normal</option>' +
               '<option value="clean"' + (readability === "clean" ? " selected" : "") + '>Clean</option>' +
@@ -102,16 +101,18 @@
               '<option value="max"' + (performanceBudget === "max" ? " selected" : "") + '>Max</option>' +
             '</select></label>' +
           '</div>' +
-          '<div class="inline-form-grid inline-form-grid--1">' +
+          '<div class="inline-form-grid inline-form-grid--2">' +
             '<label class="inline-field"><span>Game tune</span><select class="inline-select" name="gameModeAutoTune">' +
               '<option value="1"' + (gameModeAutoTune !== "0" ? " selected" : "") + '>On</option>' +
               '<option value="0"' + (gameModeAutoTune === "0" ? " selected" : "") + '>Off</option>' +
             '</select></label>' +
           '</div>' +
+          '<label class="inline-field"><span>Open active game automatically</span><select class="inline-select" name="gameModeAutoFace"><option value="1"' + (gameModeAutoFace !== "0" ? " selected" : "") + '>On</option><option value="0"' + (gameModeAutoFace === "0" ? " selected" : "") + '>Off</option></select></label>' +
           '<div class="product-range-grid">' +
             '<label class="inline-field product-range-field"><span>Motion ' + escapeHtml(intensity) + '%</span><input class="inline-range" type="range" name="animationIntensity" min="0" max="140" aria-label="Animation intensity" value="' + escapeHtml(intensity) + '"></label>' +
             '<label class="inline-field product-range-field"><span>Opacity ' + escapeHtml(opacity) + '%</span><input class="inline-range" type="range" name="dashboardOpacity" min="35" max="100" aria-label="Dashboard opacity" value="' + escapeHtml(opacity) + '"></label>' +
           '</div>' +
+          '<button class="inline-button" type="button" data-opacity-reset>Reset opacity</button>' +
           '</form>'
       ));
       initXnSlider(container);
@@ -128,9 +129,15 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
-      var target = event.target && event.target.closest ? event.target.closest("[data-theme]") : null;
+      var reset = event.target && event.target.closest ? event.target.closest("[data-opacity-reset]") : null;
+      if (reset && container.contains(reset)) {
+        saveSettings(env, { dashboardOpacity: "100" });
+        requestRedraw();
+        return;
+      }
+      var target = event.target && event.target.closest ? event.target.closest(".product-swatch[data-theme]") : null;
       var theme;
-      if (!target) {
+      if (!target || !container.contains(target)) {
         return;
       }
 
@@ -168,7 +175,7 @@
         } else {
           saveSettings(env, { accentMode: "preset", customAccentColor: "", accentColor: "" });
         }
-      } else if (name === "themeVariant" || name === "themeReadability" || name === "performanceBudget" || name === "gameModeAutoTune") {
+      } else if (name === "themeReadability" || name === "performanceBudget" || name === "gameModeAutoTune" || name === "gameModeAutoFace") {
         var choiceValues = {};
         choiceValues[name] = String(event.target.value || "");
         saveSettings(env, choiceValues);
@@ -209,6 +216,18 @@
       return typeof env.getVisibleWidgets === "function" ? env.getVisibleWidgets() : [];
     }
 
+    function sectionLayout() {
+      return window.AuxoraNavigation.normalizeSectionLayout(settingValue(env, "sectionOrder", "[]"), settingValue(env, "hiddenSections", "[]"));
+    }
+
+    function renderSections() {
+      var layout = sectionLayout();
+      return '<section class="product-section-layout" aria-labelledby="section-layout-title"><h2 id="section-layout-title">Sections on EDGE</h2><p>Choose the sections shown in navigation and their order. Settings is always available.</p><ol data-section-order>' + layout.order.map(function (id, index) {
+        var section = window.AuxoraNavigation.sections.filter(function (entry) { return entry.id === id; })[0];
+        return '<li data-section-item="' + id + '" data-ui-key="section-layout-' + id + '"><label class="product-section-visible"><input type="checkbox" data-section-visible="' + id + '"' + (layout.hidden.indexOf(id) === -1 ? ' checked' : '') + '><span>' + escapeHtml(section.label) + '</span></label><div class="inline-actions"><button class="inline-button" type="button" data-section-action="earlier" data-id="' + id + '" aria-label="Move ' + escapeHtml(section.label) + ' earlier"' + (index === 0 ? ' disabled' : '') + '>Earlier</button><button class="inline-button" type="button" data-section-action="later" data-id="' + id + '" aria-label="Move ' + escapeHtml(section.label) + ' later"' + (index === layout.order.length - 1 ? ' disabled' : '') + '>Later</button></div></li>';
+      }).join('') + '</ol><button class="inline-button" type="button" data-section-action="reset">Restore default sections</button></section>';
+    }
+
     function activeMode() {
       var scenes = env.bridgeConfig && env.bridgeConfig.scenes ? env.bridgeConfig.scenes : {};
       var profiles = Array.isArray(scenes.profiles) ? scenes.profiles : [];
@@ -242,38 +261,35 @@
       var pinned = settingValue(env, "pinnedWidgets", "").split(",").filter(Boolean);
       var hidden = settingValue(env, "hiddenWidgets", "").split(",").filter(Boolean);
       var columnRows = Math.max(1, Math.ceil(rows.length / 2));
-      var sizes = {};
-      try { sizes = JSON.parse(settingValue(env, "cardSizes", "{}")); } catch (error) { sizes = {}; }
       patchStableDom(container, productShell(
         "Auto-saved layout",
         "Layout Editor",
         "Arrange panels for this Mode. Use the plain controls below or drag a row.",
         rows.length + " panels",
         "good",
+        renderSections() +
         '<div class="product-layout-guide" aria-label="How the layout controls work">' +
           '<div><strong>Editing</strong><span>' + escapeHtml(mode.label) + '<br>Changes save automatically.</span></div>' +
           '<div><strong>Order</strong><span>Drag a row, or use Earlier and Later.</span></div>' +
-          '<div><strong>Appears</strong><span>Choose Home, Library only when available, or Hidden in this Mode.</span></div>' +
-          '<div><strong>Width</strong><span>Sets how wide the panel opens.</span></div>' +
+          '<div><strong>Appears</strong><span>Choose Home, Section only, or hidden on Home in this Mode.</span></div>' +
         '</div>' +
         '<ol class="product-layout-list" aria-label="Panel order" style="--layout-column-rows:' + columnRows + '">' +
           rows.map(function (row, index) {
             var rowTitle = escapeHtml(row.title);
-            var rowSize = ["compact", "standard", "wide"].indexOf(sizes[row.id]) !== -1 ? sizes[row.id] : "standard";
             var isHidden = hidden.indexOf(row.id) !== -1;
             var isModePanel = mode.widgets.indexOf(row.id) !== -1;
             var isPinned = pinned.indexOf(row.id) !== -1;
             var needsSetupForHome = ["weather", "calendar", "hue"].indexOf(row.id) !== -1 && row.configured === false;
             var placementValue = isHidden ? "hidden" : (isModePanel || isPinned) ? "home" : "library";
             var placement = isHidden
-              ? "Hidden in " + mode.label
+              ? "Hidden on Home in " + mode.label
               : (isModePanel || isPinned) && needsSetupForHome
               ? "Needs setup before it can appear on Home"
               : isModePanel
               ? "Included on Home by " + mode.label
               : isPinned
               ? "Home shortcut"
-              : "Library only";
+              : "Section only";
             return '' +
               '<li class="product-layout-row' + (isHidden ? " is-hidden" : "") + '" data-ui-key="layout-row-' + escapeHtml(row.id) + '" data-layout-item="' + escapeHtml(row.id) + '">' +
                 '<span class="product-layout-row__handle" draggable="true" title="Drag to reorder" aria-label="Position ' + (index + 1) + '; drag to reorder"><strong>' + (index + 1) + '</strong><span aria-hidden="true">⠿</span></span>' +
@@ -285,13 +301,8 @@
                   '</div>' +
                   '<label class="product-layout-row__placement"><span>Appears</span><select class="inline-select" data-ui-key="layout-placement-' + escapeHtml(row.id) + '" data-layout-placement data-id="' + escapeHtml(row.id) + '" aria-label="Where ' + rowTitle + ' appears">' +
                     '<option value="home"' + (placementValue === "home" ? " selected" : "") + '>' + (needsSetupForHome ? "Home after setup" : "On Home") + '</option>' +
-                    (isModePanel ? "" : '<option value="library"' + (placementValue === "library" ? " selected" : "") + '>Library only</option>') +
-                    '<option value="hidden"' + (placementValue === "hidden" ? " selected" : "") + '>Hidden in this Mode</option>' +
-                  '</select></label>' +
-                  '<label class="product-layout-row__width"><span>Width</span><select class="inline-select" data-ui-key="layout-width-' + escapeHtml(row.id) + '" data-layout-size data-id="' + escapeHtml(row.id) + '" aria-label="Width for ' + rowTitle + '">' +
-                    '<option value="compact"' + (rowSize === "compact" ? " selected" : "") + '>Narrow</option>' +
-                    '<option value="standard"' + (rowSize === "standard" ? " selected" : "") + '>Regular</option>' +
-                    '<option value="wide"' + (rowSize === "wide" ? " selected" : "") + '>Full</option>' +
+                    (isModePanel ? "" : '<option value="library"' + (placementValue === "library" ? " selected" : "") + '>Section only</option>') +
+                    '<option value="hidden"' + (placementValue === "hidden" ? " selected" : "") + '>Hidden on Home</option>' +
                   '</select></label>' +
                 '</div>' +
               '</li>';
@@ -303,6 +314,40 @@
         '</div>'
       ));
     }
+
+    addListener(cleanups, container, "click", function (event) {
+      var button = event.target && event.target.closest ? event.target.closest("[data-section-action]") : null;
+      if (!button || !container.contains(button)) { return; }
+      var action = button.getAttribute("data-section-action");
+      var layout = sectionLayout();
+      if (action === "reset") {
+        saveSettings(env, { sectionOrder: "[]", hiddenSections: "[]" });
+        statusMessage = "Default sections restored.";
+      } else {
+        var id = button.getAttribute("data-id");
+        var index = layout.order.indexOf(id);
+        var swap = action === "earlier" ? index - 1 : action === "later" ? index + 1 : -1;
+        if (index < 0 || swap < 0 || swap >= layout.order.length) { return; }
+        layout.order.splice(index, 1);
+        layout.order.splice(swap, 0, id);
+        saveSettings(env, { sectionOrder: JSON.stringify(layout.order) });
+        statusMessage = "Section order saved.";
+      }
+      redraw();
+    });
+
+    addListener(cleanups, container, "change", function (event) {
+      var checkbox = event.target && event.target.closest ? event.target.closest("[data-section-visible]") : null;
+      if (!checkbox || !container.contains(checkbox)) { return; }
+      var layout = sectionLayout();
+      var id = checkbox.getAttribute("data-section-visible");
+      if (layout.order.indexOf(id) === -1) { return; }
+      layout.hidden = layout.hidden.filter(function (entry) { return entry !== id; });
+      if (!checkbox.checked) { layout.hidden.push(id); }
+      saveSettings(env, { hiddenSections: JSON.stringify(layout.hidden) });
+      statusMessage = "Section visibility saved.";
+      redraw();
+    });
 
     addListener(cleanups, container, "click", function (event) {
       var button = event.target && event.target.closest ? event.target.closest("[data-layout-action]") : null;
@@ -349,12 +394,11 @@
     });
 
     addListener(cleanups, container, "change", function (event) {
-      var select = event.target && event.target.closest ? event.target.closest("[data-layout-size], [data-layout-placement]") : null;
+      var select = event.target && event.target.closest ? event.target.closest("[data-layout-placement]") : null;
       var id;
       var value;
       var rows;
       var row;
-      var cardSizes = {};
       if (!select) {
         return;
       }
@@ -386,21 +430,12 @@
         statusMessage = (row ? row.title : "Panel") + (value === "home"
           ? (["weather", "calendar", "hue"].indexOf(id) !== -1 && row && row.configured === false ? " will appear on Home after setup." : " will appear on Home.")
           : value === "library"
-          ? " will appear only in the Library."
-          : " is hidden in " + activeMode().label + ".");
+          ? " will appear only in its section."
+          : " is hidden on Home in " + activeMode().label + ".");
         redraw();
         return;
       }
 
-      if (["compact", "standard", "wide"].indexOf(value) === -1) {
-        return;
-      }
-
-      try { cardSizes = JSON.parse(settingValue(env, "cardSizes", "{}")); } catch (error) { cardSizes = {}; }
-      cardSizes[id] = value;
-      saveSettings(env, { cardSizes: JSON.stringify(cardSizes) });
-      statusMessage = (row ? row.title : "Panel") + " width set to " + ({ compact: "Narrow", standard: "Regular", wide: "Full" }[value]) + ".";
-      redraw();
     });
 
     addListener(cleanups, container, "dragstart", function (event) {
@@ -754,7 +789,7 @@
   var portableDashboardSettingKeys = [
     "profileId", "themeSchemaVersion", "themeId", "accentMode", "customAccentColor", "themeVariant",
     "animationIntensity", "dashboardOpacity", "performanceBudget", "gameModeAutoTune", "gameModeAutoFace",
-    "themeReadability", "releaseChannel", "layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes",
+    "themeReadability", "releaseChannel", "sectionOrder", "hiddenSections", "layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes",
     "modeLayouts", "modeLayoutSchemaVersion", "marketplacePack"
   ];
 
@@ -845,13 +880,23 @@
       network: null,
       calendar: null,
       chains: null,
+      executingChainId: "",
       loading: true,
       message: "Loading your quick look"
     };
 
     function value(value, suffix) {
+      if (value == null || value === "") { return "--"; }
       var parsed = Number(value);
       return Number.isFinite(parsed) ? Math.round(parsed) + (suffix || "") : "--";
+    }
+
+    function homeCard(label, reading, detail, destination, action) {
+      return '<button type="button" class="metric-card inline-card auxora-home-link" data-home-open="' + destination + '">' +
+        '<span class="metric-label">' + escapeHtml(label) + '</span>' +
+        '<span class="metric-value">' + escapeHtml(reading) + '</span>' +
+        '<span class="router-inline-copy">' + escapeHtml(detail) + '</span>' +
+        '<span class="auxora-home-link__action">' + escapeHtml(action) + '</span></button>';
     }
 
     function activeScene() {
@@ -890,8 +935,8 @@
       var parts = [];
       var entries = state.calendar && Array.isArray(state.calendar.entries) ? state.calendar.entries : [];
       var chains = state.chains && Array.isArray(state.chains.chains) ? state.chains.chains : [];
-      var cpu = Number(state.system && state.system.cpu);
-      var ping = Number(state.network && state.network.ping);
+      var cpu = state.system && state.system.cpu != null ? Number(state.system.cpu) : NaN;
+      var ping = state.network && state.network.ping != null ? Number(state.network.ping) : NaN;
       var networkProbe = networkProbeKind();
       if (entries.length) {
         parts.push(entries.length + (entries.length === 1 ? " upcoming event" : " upcoming events"));
@@ -902,7 +947,7 @@
       if (Number.isFinite(cpu)) {
         parts.push(cpu > 90 ? "PC is working very hard" : "PC is running normally");
       }
-      return parts.length ? parts.join(" · ") : "Everything is ready for " + text(activeScene().name, "Work") + ".";
+      return parts.length ? parts.join(" · ") : state.loading ? "Loading your overview" : "Live readings are unavailable. Open a card to check its connection.";
     }
 
     function redraw() {
@@ -910,6 +955,8 @@
       var entries = state.calendar && Array.isArray(state.calendar.entries) ? state.calendar.entries : [];
       var chains = state.chains && Array.isArray(state.chains.chains) ? state.chains.chains : [];
       var networkProbe = networkProbeKind();
+      var calendarReading = entries.length ? text(entries[0].title, "Event") : !state.calendar ? "Waiting for data" : state.calendar.configured === false ? "Not connected" : !state.calendar.sampledAt ? "Waiting for data" : "Nothing planned";
+      var calendarDetail = entries.length ? text(entries[0].time, text(entries[0].detail, "Upcoming")) : state.calendar && state.calendar.configured === false ? "Add a calendar to see events" : "Your upcoming schedule";
       patchStableDom(container, productShell(
         "Quick Look",
         "Good " + (new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"),
@@ -917,21 +964,15 @@
         text(scene.name, state.loading ? "Loading" : "Work"),
         state.loading ? "warn" : "good",
         '<div class="auxora-glance-hero"><div><span>Current Setup</span><strong>' + escapeHtml(text(scene.name, "Work")) + '</strong><small>' + escapeHtml(setupReason()) + '</small></div><div class="auxora-glance-clock">' + escapeHtml(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })) + '</div></div>' +
-        '<div class="inline-grid inline-grid--4">' +
-          metricCard("PC Activity", value(state.system && state.system.cpu, "%"), state.system && state.system.cpuTemp != null ? "PC temperature " + value(state.system.cpuTemp, "°") : "How hard your PC is working") +
-          metricCard("Memory Used", value(state.system && state.system.ram, "%"), "Short-term working space") +
-          metricCard("Network Response", state.network && state.network.ping != null ? value(state.network.ping, " ms") : "--", state.network && state.network.name ? "Lower is better · " + state.network.name : "Lower is better") +
-          metricCard("Next Event", entries.length ? text(entries[0].title, "Event") : "Nothing planned", entries.length ? text(entries[0].time, text(entries[0].detail, "Upcoming")) : "Nothing scheduled") +
+        '<div class="inline-grid inline-grid--3">' +
+          homeCard("PC Activity", value(state.system && state.system.cpu, "%"), "Memory Used " + value(state.system && state.system.ram, "%") + (state.system && state.system.cpuTemp != null ? " · PC temperature " + value(state.system.cpuTemp, "°") : ""), "system", "View performance") +
+          homeCard("Network Response", state.network && state.network.ping != null ? value(state.network.ping, " ms") : "--", state.network && state.network.name ? "Lower is better · " + state.network.name : "Lower is better", "network", "Open Network") +
+          homeCard("Next Event", calendarReading, calendarDetail, "calendar", "Open Calendar") +
         '</div>' +
-        '<div class="inline-actions">' +
-          '<button class="inline-button is-primary" type="button" data-home-open="audio">Audio & media</button>' +
-          '<button class="inline-button" type="button" data-home-open="quick-actions">Shortcuts</button>' +
-          '<button class="inline-button" type="button" data-home-open="system">PC details</button>' +
-          '<button class="inline-button" type="button" data-home-open="layout-editor">Customize Home</button>' +
-        '</div>' +
-        '<article class="list-card inline-card auxora-glance-chains"><div class="inline-card-header"><div><div class="metric-label">One-tap setups</div><div class="router-inline-copy">Change several settings with one tap.</div></div></div><div class="inline-actions">' + chains.map(function (chain) {
-          return '<button class="inline-button" type="button" data-action-chain="' + escapeHtml(chain.id) + '" title="' + escapeHtml(chain.description) + '">' + escapeHtml(chain.name) + '</button>';
-        }).join("") + '</div></article>'
+        (state.message && !state.loading && state.message !== "Loading your quick look" ? '<p class="auxora-home-feedback" role="status">' + escapeHtml(state.message) + '</p>' : '') +
+        (chains.length ? '<details class="list-card inline-card auxora-glance-chains" data-ui-key="home-setups"><summary>One-tap setups</summary><p class="router-inline-copy">Apply a Mode and Windows settings together.</p><div class="inline-actions">' + chains.map(function (chain) {
+          return '<button class="inline-button" type="button" data-action-chain="' + escapeHtml(chain.id) + '"' + (state.executingChainId ? ' disabled' : '') + '><strong>' + escapeHtml(state.executingChainId === chain.id ? "Applying " + chain.name : chain.name) + '</strong><small>' + escapeHtml(chain.description) + '</small></button>';
+        }).join("") + '</div></details>' : '')
       ));
     }
 
@@ -962,17 +1003,23 @@
       var chain = event.target && event.target.closest ? event.target.closest("[data-action-chain]") : null;
       if (target && typeof env.selectWidget === "function") {
         env.selectWidget(target.getAttribute("data-home-open"), true);
-      } else if (chain) {
+      } else if (chain && !state.executingChainId) {
+        state.executingChainId = chain.getAttribute("data-action-chain");
+        state.message = "Applying setup";
+        redraw();
         requestJson(buildBridgeUrl(env, "/api/action-chains/execute"), {
-          method: "POST", body: { chainId: chain.getAttribute("data-action-chain") }
+          method: "POST", body: { chainId: state.executingChainId }
         }, 9000).then(function (payload) {
           state.message = text(payload.message, "Action chain complete");
-          if (payload.scene && payload.scene.activeScene && typeof env.activateScene === "function") {
-            return env.activateScene(payload.scene.activeScene.id, 120);
+          if (payload.scene && payload.scene.activeScene && typeof env.applySceneSnapshot === "function") {
+            env.applySceneSnapshot(payload.scene);
           }
-        }).then(refresh, function (error) {
+        }).catch(function (error) {
           state.message = error.message || "Action chain failed";
+        }).finally(function () {
+          state.executingChainId = "";
           redraw();
+          refresh();
         });
       }
     });
@@ -1149,7 +1196,7 @@
             '<strong>' + escapeHtml(scene.name) + '</strong>' +
             '<span class="product-card__meta">' + escapeHtml(friendlySurfaceNames(scene).join(" · ")) + '</span>' +
             '<div class="auxora-scene-stats"><span>' + escapeHtml(friendlyChoice(scene.density, "density")) + '</span><span>' + escapeHtml(String(scene.animationIntensity == null ? 25 : scene.animationIntensity)) + '% motion</span><span>' + escapeHtml(friendlyChoice(scene.performanceBudget, "performance")) + '</span></div>' +
-            '<div class="inline-actions"><button class="inline-button' + (active ? " is-primary" : "") + '" type="button" data-scene-activate="' + escapeHtml(scene.id) + '" aria-label="' + escapeHtml(active ? scene.name + " Mode active" : "Use " + scene.name + " Mode") + '"' + (state.busy ? " disabled" : "") + '>' + (active ? "Active" : "Use Mode") + '</button><button class="inline-button" type="button" data-scene-duplicate="' + escapeHtml(scene.id) + '" aria-label="' + escapeHtml("Duplicate " + scene.name + " Mode") + '"' + (state.busy ? " disabled" : "") + '>Duplicate</button></div>' +
+            '<div class="inline-actions">' + (active ? '<span class="inline-copy">Active Mode</span>' : '') + '<button class="inline-button" type="button" data-scene-duplicate="' + escapeHtml(scene.id) + '" aria-label="' + escapeHtml("Duplicate " + scene.name + " Mode") + '"' + (state.busy ? " disabled" : "") + '>Duplicate</button></div>' +
             customEditor +
           '</article>';
         }).join("") + '</div>' +
@@ -1159,7 +1206,7 @@
             return '<option value="' + escapeHtml(scene.id) + '"' + (assignment && assignment.sceneId === scene.id ? " selected" : "") + '>' + escapeHtml(scene.name) + '</option>';
           }).join("") + '</select></label>';
         }).join("") + '</div></article>' : '') +
-        '<div class="inline-actions">' + (state.payload && (state.payload.manualOverrideActive || state.payload.automationEnabled === false) ? '<button class="inline-button is-primary" type="button" data-scene-resume' + (state.busy ? " disabled" : "") + '>' + (state.payload.automationEnabled === false ? "Turn on automatic switching" : "Resume automatic switching") + '</button>' : '') + '<span class="inline-copy">' + (state.payload && state.payload.automaticSwitchingActive ? "Automatic switching is on" : "A manual Mode is active") + '</span></div>'
+        '<p class="inline-copy">' + (state.payload && state.payload.automaticSwitchingActive ? "Automatic switching is on" : "Choose Automatic in the Mode selector to resume automatic switching.") + '</p>'
       ));
       initXnSlider(container);
     }
@@ -1182,19 +1229,12 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
-      var activate = event.target && event.target.closest ? event.target.closest("[data-scene-activate]") : null;
       var duplicate = event.target && event.target.closest ? event.target.closest("[data-scene-duplicate]") : null;
       var deleteButton = event.target && event.target.closest ? event.target.closest("[data-scene-delete]") : null;
-      var resume = event.target && event.target.closest ? event.target.closest("[data-scene-resume]") : null;
       var operation;
       var synchronizeScene = false;
-      if (activate && typeof env.activateScene === "function") {
-        state.busy = true;
-        operation = env.activateScene(activate.getAttribute("data-scene-activate"), 120);
-      } else if (resume && typeof env.resumeSceneAutomation === "function") {
-        state.busy = true;
-        operation = env.resumeSceneAutomation();
-      } else if (duplicate) {
+      if (state.busy) { return; }
+      if (duplicate) {
         state.busy = true;
         synchronizeScene = true;
         operation = requestJson(buildBridgeUrl(env, "/api/scenes/duplicate"), {
@@ -1221,11 +1261,10 @@
         }, 7000);
       }
       if (operation) {
+        redraw();
         Promise.resolve(operation).then(function (payload) {
-          if (synchronizeScene && payload && payload.activeSceneId && typeof env.activateScene === "function") {
-            return Promise.resolve(env.activateScene(payload.activeSceneId, 120)).then(function (synchronized) {
-              return synchronized || payload;
-            });
+          if (synchronizeScene && payload && payload.activeSceneId && typeof env.applySceneSnapshot === "function") {
+            env.applySceneSnapshot(payload, true);
           }
           return payload;
         }).then(function (payload) {
@@ -1276,10 +1315,8 @@
       requestJson(buildBridgeUrl(env, "/api/scenes"), {
         method: "POST", body: { scene: updated }
       }, 7000).then(function (payload) {
-        if (payload && payload.activeSceneId === scene.id && typeof env.activateScene === "function") {
-          return Promise.resolve(env.activateScene(scene.id, 120)).then(function (synchronized) {
-            return synchronized || payload;
-          });
+        if (payload && payload.activeSceneId === scene.id && typeof env.applySceneSnapshot === "function") {
+          env.applySceneSnapshot(payload, true);
         }
         return payload;
       }).then(function (payload) {
@@ -1665,10 +1702,6 @@
           metricCard("Scene", scene, "Saved locally", null) +
           metricCard("OBS", state.statusText, "Connection probe", null) +
           metricCard("Layout", "Stream controls", "Quick glance setup", null) +
-        '</div>' +
-        '<div class="inline-actions">' +
-          '<button class="inline-button" type="button" data-action="open-media">Open Audio & Media</button>' +
-          '<button class="inline-button" type="button" data-action="stream-profile">Use streaming layout</button>' +
         '</div>'
       ));
     }
@@ -1751,29 +1784,6 @@
       });
       return endpoint;
     }
-
-    addListener(cleanups, container, "click", function (event) {
-      var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
-      var profile = findById(productProfiles, "streaming");
-      if (!target) {
-        return;
-      }
-
-      if (target.getAttribute("data-action") === "open-media" && typeof env.selectWidget === "function") {
-        env.selectWidget("audio", true);
-      } else if (target.getAttribute("data-action") === "stream-profile") {
-        saveSettings(env, {
-          profileId: profile.id,
-          themeId: profile.themeId,
-          accentMode: "preset",
-          customAccentColor: "",
-          accentColor: "",
-          marketplacePack: profile.pack,
-          layoutOrder: profile.layout.join(",")
-        });
-        redraw();
-      }
-    });
 
     addListener(cleanups, container, "submit", function (event) {
       var form = event.target;

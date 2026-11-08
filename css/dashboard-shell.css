@@ -1,0 +1,230 @@
+/* Section navigation for the companion shell. Standalone widgets keep their layout. */
+body.auxora-section-shell .dashboard-router-stage {
+  display: grid;
+  grid-template-columns: clamp(176px, 9.7vw, 248px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+}
+
+body.auxora-section-shell .router-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+}
+
+.auxora-section-shell .auxora-shell-head { display: contents; }
+.auxora-section-shell .auxora-brand { flex: 0 0 auto; }
+.auxora-section-nav { display: grid; gap: 8px; min-width: 0; }
+.auxora-section-shell .router-rail__lower { margin-top: auto; min-height: 0; }
+.auxora-rail-actions { display: grid; gap: 8px; margin-top: auto; }
+
+.auxora-section-link,
+.auxora-panel-link,
+.auxora-mode-select,
+.auxora-shell-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 48px;
+  padding: 9px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+  color: var(--theme-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.auxora-section-link { justify-content: flex-start; width: 100%; }
+.auxora-section-link.is-active {
+  background: var(--theme-section-selected);
+  color: var(--theme-on-section-selected);
+  border-color: var(--theme-section-selected);
+}
+.auxora-panel-link.is-active,
+.auxora-mode-select.is-active {
+  background: var(--theme-selected-surface);
+  border-color: var(--theme-accent-border);
+  box-shadow: inset 0 -2px 0 var(--theme-accent-text);
+}
+.auxora-section-link:hover:not(.is-active),
+.auxora-panel-link:hover:not(.is-active),
+.auxora-mode-select:hover:not(.is-active) {
+  background: var(--theme-hover-surface);
+  border-color: var(--theme-border-strong);
+}
+.auxora-section-shell :is(.auxora-section-link, .auxora-panel-link, .auxora-mode-select, .auxora-shell-status):focus-visible {
+  outline: 3px solid var(--theme-focus-ring);
+  outline-offset: 2px;
+}
+
+body.auxora-section-shell .router-viewer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-column: 2;
+  grid-row: 1;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+}
+body.auxora-section-shell .auxora-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  min-height: 60px;
+}
+.auxora-section-title { margin: 0; font-size: clamp(20px, 1.2vw, 28px); line-height: 1.15; }
+.auxora-section-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 4px;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+}
+.auxora-section-tabs .auxora-panel-link { flex: 0 0 auto; }
+.auxora-section-shell .router-viewer__header-actions { margin-left: auto; flex-wrap: wrap; min-width: 0; }
+.auxora-mode-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.auxora-mode-copy { display: grid; gap: 3px; font-size: 14px; color: var(--theme-text-muted); }
+.auxora-mode-copy strong { color: var(--theme-text); }
+.auxora-mode-select { flex: 1 1 auto; min-width: 136px; max-width: 220px; padding-inline: 12px 28px; text-overflow: ellipsis; }
+.auxora-mode-select[aria-busy="true"] { cursor: progress; opacity: 0.7; }
+.auxora-shell-status { max-width: 210px; white-space: normal; text-align: center; cursor: default; }
+
+/* Active games retain navigation, so leaving a game never requires a hidden control. */
+body.auxora-section-shell.dashboard-native-page--game-focus-active .router-rail { display: flex; }
+body.auxora-section-shell.dashboard-native-page--game-focus-active .router-viewer__header { display: flex; }
+body.auxora-section-shell.dashboard-native-page--game-focus-active .router-viewer {
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-panel-radius);
+  background: var(--theme-surface-primary);
+}
+
+@media (min-width: 1800px) and (min-height: 600px) {
+  body.auxora-section-shell :is(.auxora-section-link, .auxora-panel-link, .auxora-mode-select, .auxora-shell-status) {
+    min-width: 54px;
+    min-height: 54px;
+    font-size: 15px;
+  }
+  .auxora-section-nav .auxora-section-link { min-height: 58px; font-size: 16px; }
+}
+
+@media (max-width: 1100px), (max-height: 480px) {
+  body.auxora-section-shell .dashboard-router-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 6px; padding: 6px; }
+  body.auxora-section-shell .router-rail { grid-column: 1; grid-row: 1; flex-direction: row; align-items: center; gap: 6px; padding: 6px; overflow: hidden; }
+  .auxora-section-shell .auxora-brand { display: none; }
+  .auxora-section-nav { display: flex; flex: 1 1 auto; gap: 6px; overflow-x: auto; touch-action: pan-x; padding: 3px; }
+  .auxora-section-nav .auxora-section-link { flex: 0 0 auto; width: auto; min-height: 44px; padding-inline: 10px; }
+  .auxora-rail-actions { display: flex; flex: 0 0 auto; gap: 6px; margin: 0; }
+  .auxora-rail-actions button { width: auto; min-height: 44px; }
+  body.auxora-section-shell .router-viewer { grid-column: 1; grid-row: 2; gap: 6px; padding: 7px; }
+  body.auxora-section-shell .auxora-section-header { min-height: 44px; gap: 6px; }
+  .auxora-section-tabs { flex: 1 1 70%; }
+  .auxora-mode-copy { display: flex; gap: 6px; }
+  .auxora-mode-copy span { display: none; }
+  .auxora-section-shell .router-viewer__header-actions { flex: 1 1 100%; justify-content: flex-end; }
+  .auxora-section-shell :is(.auxora-panel-link, .auxora-mode-select, .auxora-shell-status) { min-height: 44px; padding: 8px 10px; }
+}
+
+@media (max-width: 600px) {
+  .auxora-section-shell .router-viewer__header-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
+  .auxora-mode-control { grid-column: 1 / -1; }
+  .auxora-mode-select { flex: 1; max-width: none; }
+  .auxora-rail-actions .auxora-section-link { padding-inline: 8px; }
+}
+
+@media (forced-colors: active) {
+  body.auxora-section-shell :is(.auxora-section-link, .auxora-panel-link, .auxora-mode-select, .auxora-shell-status) {
+    forced-color-adjust: auto;
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+    box-shadow: none;
+    transition: none;
+  }
+  body.auxora-section-shell :is(.auxora-section-link, .auxora-panel-link, .auxora-mode-select).is-active {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+  body.auxora-section-shell :is(.auxora-section-link, .auxora-panel-link, .auxora-mode-select, .auxora-shell-status):focus-visible { outline-color: Highlight; }
+}
+
+/* Settings stays in the content plane, with a vertically scrollable category list. */
+body.auxora-section-shell .router-viewer__frame-shell { min-width: 0; min-height: 0; overflow: hidden; }
+.auxora-panel-content { position: relative; min-width: 0; min-height: 0; height: 100%; overflow: auto; touch-action: pan-y; overscroll-behavior: contain; }
+body.auxora-section-shell[data-section="settings"] .router-viewer__frame-shell { display: grid; grid-template-columns: clamp(150px, 12vw, 232px) minmax(0, 1fr); gap: 12px; }
+.auxora-settings-categories { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; padding: 3px; overflow-y: auto; touch-action: pan-y; overscroll-behavior-y: contain; }
+.auxora-settings-categories .auxora-panel-link { flex: 0 0 auto; justify-content: flex-start; white-space: normal; text-align: left; }
+.auxora-section-shell [hidden] { display: none !important; }
+.auxora-weather-preferences { margin: 12px; padding: 16px; border: 1px solid var(--theme-border); border-radius: var(--theme-panel-radius); background: var(--theme-surface-primary); }
+.product-section-layout { display: grid; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--theme-border); border-radius: var(--theme-panel-radius); background: var(--theme-surface-muted); }
+.product-section-layout h2, .product-section-layout p { margin: 0; }
+.product-section-layout p { color: var(--theme-text-muted); }
+.product-section-layout [data-section-order] { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.product-section-layout [data-section-item] { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.product-section-visible { display: inline-flex; align-items: center; gap: 10px; min-width: 44px; min-height: 44px; padding: 8px; cursor: pointer; }
+.product-section-visible input { width: 22px; height: 22px; accent-color: var(--theme-accent); }
+@media (max-width: 600px) {
+  body.auxora-section-shell[data-section="settings"] .router-viewer__frame-shell { grid-template-columns: 128px minmax(0, 1fr); gap: 6px; }
+  .auxora-settings-categories .auxora-panel-link { padding: 9px; font-size: 14px; }
+  .product-section-layout { padding: 10px; }
+}
+
+/* The shell owns its heading and status. Keep toolbar actions and custom journal art. */
+body.auxora-section-shell .router-inline-widget .inline-toolbar > div:first-child:not(.inline-actions),
+body.auxora-section-shell .router-inline-widget .inline-toolbar > .widget-status,
+body.auxora-section-shell .router-inline-widget .inline-toolbar > .status-pill,
+body.auxora-section-shell .router-inline-widget .tmog-toolbar > div:first-child,
+body.auxora-section-shell .router-inline-widget .tmog-status { display: none; }
+body.auxora-section-shell .router-inline-widget .inline-toolbar:not(:has(button, input, select, a[href])) { display: none; }
+body.auxora-section-shell .router-inline-widget .inline-toolbar,
+body.auxora-section-shell .router-inline-widget .tmog-toolbar { justify-content: flex-end; }
+body.auxora-section-shell .router-inline-widget[data-card-size] > .inline-widget-shell,
+body.auxora-section-shell .router-inline-widget[data-card-size] > .inline-widget-mount > .inline-widget-shell { width: 100%; max-width: none; margin-inline: 0; }
+body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-shell { display: flex; flex-direction: column; height: auto; min-height: 100%; overflow: visible; }
+body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-layout-list { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-flow: row; overflow: visible; }
+body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-layout-row__actions { grid-template-columns: auto minmax(120px, 1fr); }
+body.auxora-section-shell[data-active-widget-id="home"] .product-shell > .inline-actions { display: flex; justify-content: flex-end; }
+body.auxora-section-shell[data-active-widget-id="home"] .product-shell > .inline-actions .inline-button { width: auto; }
+body.auxora-section-shell[data-active-widget-id="weather"] .router-inline-widget { position: relative; inset: auto; height: auto; min-height: 65%; overflow: visible; }
+@media (min-width: 1800px) and (min-height: 600px) { .product-section-visible { min-width: 54px; min-height: 54px; font-size: 15px; } }
+
+/* Retire the former settings-drawer grid without changing the lock overlay. */
+body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; grid-template-columns: none; grid-template-rows: none; overflow: visible; }
+
+/* Home opens the details behind each reading without another row of shortcuts. */
+.auxora-home-link { display: flex; flex-direction: column; gap: 8px; min-width: 44px; min-height: 132px; width: 100%; color: var(--theme-text); font: inherit; text-align: left; cursor: pointer; touch-action: manipulation; }
+.auxora-home-link .metric-value { margin: 0; max-width: 100%; overflow-wrap: anywhere; }
+.auxora-home-link .router-inline-copy { flex: 1; }
+.auxora-home-link__action { color: var(--theme-accent-text); font-size: 14px; font-weight: 650; }
+.auxora-home-link:hover { background: var(--theme-hover-surface); border-color: var(--theme-accent-border); }
+.auxora-home-link:focus-visible, .auxora-glance-chains summary:focus-visible { outline: 3px solid var(--theme-focus-ring); outline-offset: 2px; }
+.auxora-glance-chains summary { min-height: 44px; padding: 10px 0; cursor: pointer; font-weight: 650; touch-action: manipulation; }
+.auxora-glance-chains > .inline-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.auxora-glance-chains .inline-button { display: grid; gap: 5px; min-height: 64px; padding: 12px; white-space: normal; text-align: left; }
+.auxora-glance-chains .inline-button small { font-size: 14px; font-weight: 400; line-height: 1.4; }
+.auxora-home-feedback { margin: 0; color: var(--theme-text); }
+@media (max-width: 600px) { .auxora-glance-chains > .inline-actions { grid-template-columns: minmax(0, 1fr); } }
+@media (forced-colors: active) { .auxora-home-link, .auxora-home-link__action { color: ButtonText; } .auxora-home-link:hover { background: ButtonFace; border-color: Highlight; } }

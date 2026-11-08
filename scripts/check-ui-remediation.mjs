@@ -10,8 +10,10 @@ function assert(condition, message) {
 }
 
 const dashboard = read("js/dashboard.js");
+const navigationSource = read("js/dashboard-navigation.js");
 const html = read("dashboard.html");
 const css = read("css/widgets.css");
+const shellCss = read("css/dashboard-shell.css");
 const themeCss = read("css/theme.css");
 const widgetCore = read("js/widget-core.js");
 const productCss = read("css/widgets/product.css");
@@ -67,9 +69,24 @@ const canonicalIds = [
 for (const id of canonicalIds) {
   assert(new RegExp(`(?:^|\\n)\\s*(?:"${id}"|${id.replaceAll("-", "\\-")}): \\{ destination:`).test(dashboard), `surface contract missing for ${id}`);
 }
+const navigationContext = {};
+runInNewContext(navigationSource, navigationContext);
+const navigation = navigationContext.AuxoraNavigation;
+assert(navigation.sections.map(section => section.id).join(",") === "home,gaming,media,pc,smart-home,settings", "all six sections must remain available in the canonical navigation model");
+assert(navigation.validateCatalog(canonicalIds), "every shipped panel must belong to exactly one section");
+const destinationWidgetsSource = dashboard.slice(dashboard.indexOf("function getDestinationWidgets("), dashboard.indexOf("function getWidgetById("));
+const destinationWidgets = runInNewContext(`(${destinationWidgetsSource})`, {
+  navigation,
+  primaryDestination: "home",
+  getWidgetById: id => canonicalIds.includes(id) ? { id } : null,
+  sortWidgetsByLayout: widgets => widgets,
+  shouldShowWidget: () => false
+});
+const reachableIds = navigation.sections.flatMap(section => destinationWidgets(section.id).map(widget => widget.id));
+assert(reachableIds.length === canonicalIds.length && new Set(reachableIds).size === canonicalIds.length && canonicalIds.every(id => reachableIds.includes(id)), "section tabs must expose every canonical panel independently of Mode visibility or integration setup");
 assert(/return widgets\.filter[\s\S]*?\[0\] \|\| null;/.test(dashboard), "unknown panel IDs must return null");
-assert(/return sortWidgetsByLayout\(ids\.map\(getWidgetById\)\.filter\([\s\S]*?shouldShowWidget\(widget\)/.test(dashboard), "all destinations must use canonical visibility and ordering");
-assert(/modeLayouts/.test(dashboard) && /getCardSize\(widget\.id\)/.test(dashboard), "Mode layout order and card sizes must affect production navigation");
+assert(/function getVisibleWidgets\(\)\s*\{\s*return sortWidgetsByLayout\(widgets\.filter\([\s\S]*?shouldShowWidget\(widget\)/.test(dashboard), "Mode-visible panels must retain canonical visibility filtering and saved layout ordering");
+assert(/modeLayouts/.test(dashboard) && /getCardSize\(widget\.id\)/.test(dashboard), "Mode layout preferences and card sizes must remain available to panel presentation");
 assert(!/layout:\s*\[[^\]]*"(?:nas|plex|unifi-camera|automation)"/.test(product), "shipped packs must not reference unregistered planned panels");
 
 const rendererSources = [system, network, audio, actions, homelab, integrations, setup, product, gameMode, wowForever, read("js/widgets/tmog-companion.js")].join("\n");
@@ -78,7 +95,9 @@ for (const id of canonicalIds) {
 }
 assert(/if \(widget\.id === "clipboard"\) \{[\s\S]*?return isWidgetSupported\(widget\.id\);/.test(dashboard), "Clipboard History must remain discoverable without reading clipboard contents during health checks");
 assert(/widget\.id === "weather" \|\| widget\.id === "hue" \|\| widget\.id === "calendar" \|\| widget\.id === "frigate"[\s\S]*?return true;/.test(dashboard), "optional integrations must remain discoverable before configuration");
-assert(/getLayoutEditorWidgets\(\)[\s\S]*?widget\.destination === "library";/.test(dashboard) && !/widget\.destination === "library" && widget\.id !== "clipboard"/.test(dashboard), "Layout Editor must include the discoverable Clipboard History surface");
+const layoutWidgetsSource = dashboard.slice(dashboard.indexOf("function getLayoutEditorWidgets("), dashboard.indexOf("function sceneWidgetIds("));
+const layoutWidgets = runInNewContext(`(${layoutWidgetsSource})`, { navigation, widgets: canonicalIds.map(id => ({ id })), sortWidgetsByLayout: widgets => widgets });
+assert(layoutWidgets().some(widget => widget.id === "clipboard") && layoutWidgets().every(widget => widget.id !== "home" && navigation.sectionForWidget(widget.id) !== "settings"), "Layout Editor must include Clipboard History and other content panels while excluding Settings tools");
 assert(/optionalIntegration[\s\S]*?!optionalIntegration \|\| isWidgetConfigured\(id\)/.test(dashboard), "unconfigured optional integrations must stay out of ordinary Mode layouts while remaining discoverable in Apps & Controls");
 assert(!/Optional integrations stay tucked away|Optional panels appear only after they are set up/.test(dashboard), "navigation copy must not claim discoverable optional surfaces are hidden");
 assert(/Set up Weather[\s\S]*?data-action="setup"[\s\S]*?openSetupSection\("weather"\)/.test(integrations), "unconfigured Weather must provide a direct Diagnostics handoff");
@@ -86,22 +105,23 @@ assert(/data-action="setup">Open Calendar setup[\s\S]*?openSetupSection\("calend
 assert(!/Inline migration|still being converted|Panel still moving off iframe|remaining widget conversions/.test(inline), "renderer fallback must show a user-facing unavailable state instead of internal migration copy");
 assert(/Panel unavailable/.test(inline) && /Panel renderer unavailable/.test(inline), "renderer fallback must provide a truthful recovery state");
 
-assert(!/layout-(?:portrait|compact)[\s\S]{0,180}\.router-rail__lower[\s\S]{0,40}display:\s*none/.test(css), "compact navigation must not hide secondary panels");
-assert(/layout-compact \.router-favorites\s*\{[^}]*overflow-x:\s*auto;[^}]*touch-action:\s*pan-x;/.test(css), "compact favorites must remain horizontally scrollable with touch");
-assert(/dashboard-favorites-bar\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/.test(css), "All panels must keep a reserved position outside the scrolling favorites");
-assert(/id="dashboard-favorites"/.test(html) && /id="dashboard-panels-toggle"[^>]*aria-controls="dashboard-panels-drawer"/.test(html), "favorites must retain an accessible All panels entry point");
-assert(/id="dashboard-panels-drawer"[^>]*role="dialog"[^>]*aria-modal="true"/.test(html) && /id="dashboard-widget-picker"/.test(html), "all panels must remain accessible from their own modal catalog");
-assert(/\.auxora-panels-drawer \.router-picker\s*\{[^}]*overflow-y:\s*auto;[^}]*touch-action:\s*pan-y;/.test(css), "the full catalog must scroll vertically with touch");
+assert(/id="dashboard-section-nav"[^>]*aria-label="Sections"/.test(html) && /id="dashboard-section-tabs"[^>]*aria-label="Section panels"/.test(html), "section navigation and panel tabs must expose accessible navigation landmarks");
+assert(/id="dashboard-settings-categories"/.test(html) && /id="dashboard-settings-toggle"[^>]*data-section-id="settings"/.test(html), "Settings categories must remain directly reachable from the fixed rail control");
+assert(!/id="dashboard-(?:favorites|panels-toggle|panels-drawer|widget-picker)"/.test(html), "section tabs must replace the duplicate Favorites and All panels catalog");
+assert(/\.auxora-section-tabs\s*\{[^}]*overflow-x:\s*auto;[^}]*touch-action:\s*pan-x;/.test(shellCss), "section tabs must remain horizontally scrollable with touch");
+assert(/\.auxora-section-nav\s*\{[^}]*overflow-x:\s*auto;[^}]*touch-action:\s*pan-x;/.test(shellCss) && /\.auxora-rail-actions\s*\{[^}]*flex:\s*0 0 auto;/.test(shellCss), "compact section navigation must scroll while Settings and Touch Lock retain reserved space");
+assert(/\.auxora-settings-categories\s*\{[^}]*overflow-y:\s*auto;[^}]*touch-action:\s*pan-y;/.test(shellCss), "Settings categories must remain vertically scrollable with touch");
 assert(/router-viewer__header-actions[\s\S]*?dashboard-quick-toggle/.test(html), "Quick controls must occupy reserved viewer chrome");
 assert(/role="dialog"[\s\S]*?aria-modal="true"/.test(html) && /event\.key === "Escape"/.test(dashboard), "Quick controls must implement dialog keyboard behavior");
-assert(/outline:\s*3px solid var\(--theme-focus-ring\)/.test(css) && /auxora-primary-nav/.test(css), "primary navigation must use themed focus rings");
+assert(/:is\(\.auxora-section-link, \.auxora-panel-link, \.auxora-mode-select, \.auxora-shell-status\):focus-visible\s*\{[^}]*outline:\s*3px solid var\(--theme-focus-ring\)/.test(shellCss), "section, panel, Mode, and status controls must use themed focus rings");
 assert(/--theme-accent-text:\s*var\(--theme-accent\)/.test(themeCss), "themes must expose a semantic accent foreground token");
 assert(/contrastSafeAccentTextColor\(accent, getThemeSurfaceColors\(theme\)\)/.test(dashboard), "custom accents must derive a contrast-safe foreground without replacing the chosen accent");
 assert(/return blackContrast >= whiteContrast \? "#000000" : "#ffffff";/.test(dashboard), "on-accent text must compare and return the same black and white candidates");
 assert(!/(?:^|\n)\s*color:\s*var\(--(?:color|theme)-accent\);/.test(css), "accent-colored foregrounds must use the contrast-safe accent text token");
 assert(/dashboard-native-page--readability-high-contrast\s*\{[\s\S]*?--theme-text:\s*#ffffff;[\s\S]*?--theme-text-muted:\s*#e6edf3;[\s\S]*?--theme-border:\s*rgba\(255, 255, 255, 0\.4\);[\s\S]*?--theme-focus-ring:\s*#ffffff;[\s\S]*?--theme-panel-shadow:\s*none;/.test(themeCss), "High contrast must strengthen semantic text, boundaries, focus, and effects rather than only dim decoration");
 assert(/reducedMotionQuery\.addEventListener\("change", handleReducedMotionChange\)/.test(dashboard) && /canvas\.dataset\.ambientMotion = "paused"/.test(dashboard), "ambient graphics must stop when reduced motion changes at runtime");
-assert(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.router-picker__button::before\s*\{[\s\S]*?transition:\s*none/.test(css), "picker pseudo-element motion must stop for reduced motion");
+const shellMotionValues = [...shellCss.matchAll(/(?:^|[;{])\s*(?:animation|transition)(?:-[a-z-]+)?:\s*([^;}]+)/gm)].map(match => match[1].trim());
+assert(shellMotionValues.every(value => value === "none" || /^(?:0|0s|0ms)$/.test(value)), "section navigation must remain motion-free for reduced-motion users");
 assert(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.product-card--button::after,[\s\S]*?\.product-swatch::after,[\s\S]*?transition:\s*none/.test(productCss), "product pseudo-element motion must stop for reduced motion");
 assert(/\.audio-album-carousel:focus-visible\s*\{[\s\S]*?outline:\s*3px solid var\(--theme-focus-ring\)/.test(audioCss), "keyboard audio carousel must expose the semantic 3px focus ring");
 assert(/body\.dashboard-native-page :where\([^{}]*\.router-settings__field input,[^{}]*\.router-settings__field select\s*\):focus-visible\s*\{[^{}]*outline:\s*3px solid var\(--theme-focus-ring\)/.test(css), "router settings controls must receive the shared visible focus ring");
@@ -110,15 +130,14 @@ assert(/\.inline-button\s*\{[\s\S]*?min-width:\s*44px/.test(css), "compact inlin
 assert(/\.system-health-card span,[\s\S]*?font-size:\s*max\(12px, 0\.75rem\)/.test(systemCss), "System Monitor supporting text must remain at least 12px");
 assert(/\.audio-route-button strong\s*\{[\s\S]*?font-size:\s*max\(12px, 0\.75rem\)/.test(audioCss), "Audio route labels must remain at least 12px");
 assert(/\.network-quality-score span,[\s\S]*?font-size:\s*max\(12px, 0\.75rem\)/.test(networkCss), "Network readiness labels must remain at least 12px");
-assert(/@media \(max-width: 1800px\)[\s\S]*?\.auxora-primary-nav\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/.test(css), "supported narrow layouts must not clip the four primary navigation labels");
-assert(/aria-label="Open panel options"/.test(html) && /aria-controls="dashboard-widget-settings"/.test(html), "panel options must not duplicate the primary Settings control name");
-assert(/"Close panel options" : "Open panel options"/.test(dashboard), "panel options must publish distinct expanded and collapsed accessible names");
+assert(/\.auxora-section-nav \.auxora-section-link\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*44px;/.test(shellCss), "compact section labels must retain full-size touch targets instead of shrinking to fit");
+assert(!/Open panel options|Close panel options|id="dashboard-settings-panel"/.test(html) && /data-section-id="settings"/.test(html) && /id="dashboard-widget-settings"[^>]*class="auxora-weather-preferences"[^>]*aria-label="Weather display settings"/.test(html), "the Settings section must replace the redundant sidebar expander while Weather preferences remain in panel content");
 assert(/id="dashboard-touch-lock-scrim"/.test(html) && /toggleAttribute\("inert", locked\)/.test(dashboard) && /function blockLockedInteraction\(event\)/.test(dashboard) && /focusTarget\.focus\(\{ preventScroll: true \}\)/.test(dashboard), "Touch Lock must block pointer and keyboard interaction while keeping one focusable unlock control");
 assert(/\.dashboard-touch-lock-scrim[\s\S]{0,220}touch-action:\s*none/.test(css) && /dashboard-native-page--browser \.dashboard-touch-lock-scrim/.test(css), "Touch Lock must cover native and browser viewports without an opaque blocker");
 assert(!/dashboard-diagnostics-rail/.test(html + dashboard), "Diagnostics must not consume a redundant opaque rail card");
-assert(/grid-template-columns:\s*max-content minmax\(0, 1fr\)/.test(css), "rail status chips must reserve truthful setup status without clipping the panel name");
-assert(/setText\("dashboard-selection-status", getWidgetTitle\(widget\)\)/.test(dashboard), "selected-panel status must use the concise panel name");
-assert(/id: "setup",\s*title: "Diagnostics",\s*kicker: "Setup & diagnostics"/.test(dashboard) && !/"Auto Setup"/.test(dashboard), "setup and repair must keep the stable customer-facing Diagnostics name before and after onboarding");
+assert((html.match(/id="dashboard-status"/g) || []).length === 1 && /<span\b[^>]*id="dashboard-status"[^>]*role="status"/.test(html), "the shell must expose one passive accessible status indicator instead of another navigation button");
+assert(/setText\("dashboard-section-title", section \? section\.label : "Home"\)/.test(dashboard) && /data-widget-id=/.test(dashboard) && /aria-pressed=/.test(dashboard), "the section heading and selected panel controls must identify the current location");
+assert(/id: "setup",\s*title: "Setup & status",\s*kicker: "Setup & diagnostics"/.test(dashboard) && !/"Auto Setup"/.test(dashboard), "setup must use the same plain destination name before and after onboarding");
 assert(
   /kicker: "Quick Look"/.test(dashboard)
     && /Current Setup/.test(homeSource)
@@ -126,11 +145,11 @@ assert(
     && /Memory Used/.test(homeSource)
     && /Network Response/.test(homeSource)
     && /Next Event/.test(homeSource)
-    && /Shortcuts/.test(homeSource)
-    && /PC details/.test(homeSource)
-    && /Customize Home/.test(homeSource)
+    && !/data-home-open="layout-editor"/.test(homeSource)
+    && /homeCard\("PC Activity"/.test(homeSource)
     && /One-tap setups/.test(homeSource)
-    && /Change several settings with one tap\./.test(homeSource)
+    && /Apply a Mode and Windows settings together\./.test(homeSource)
+    && /<details[^>]*auxora-glance-chains/.test(homeSource)
     && !/Smart Glance|Active Mode|One-tap chains|Memory pressure|System detail|Edit Home/.test(homeSource),
   "Home must use direct, everyday labels instead of technical dashboard terminology"
 );
@@ -220,15 +239,15 @@ assert(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.toggle-button,[\s\S]*
 for (const [name, source] of [["Calendar", standaloneCalendar], ["System Monitor", standaloneSystem], ["Weather", standaloneWeather]]) {
   assert(!/fonts\.googleapis|fonts\.gstatic/.test(source), `${name} standalone fallback must not depend on CSP-blocked remote fonts`);
 }
-assert(/button\.onclick = function \(\)/.test(dashboard), "stable picker buttons must replace click handlers instead of accumulating listeners");
+assert(/data-ui-key="panel-/.test(dashboard) && /data-ui-key="section-/.test(dashboard) && /function renderPicker\(\)[\s\S]*?patchDashboardDom\(/.test(dashboard) && /closest\("\[data-widget-id\]"\)/.test(dashboard), "section and panel controls must retain stable identities and delegated click handlers instead of accumulating listeners");
 assert(/function publishSurfaceStatus\(widgetId, status, tone, detail\)/.test(dashboard)
   && /updatePickerSurfaceStatus\(widgetId\)/.test(dashboard)
   && !/surfaceStatuses\.updates\s*=/.test(dashboard), "background surface status must update only its picker label instead of reconciling the whole selector");
 assert(/function buildInlineWidgetEnv\(widget, generation\)/.test(dashboard)
   && /widgetErrorGeneration !== generation \|\| currentWidgetId !== widgetId/.test(dashboard)
   && /reportWidgetError\(widget, error, phase \|\| "updating", generation\)/.test(dashboard), "inline status and error callbacks must remain owned by the widget generation that created them");
-assert(/nowStripMode === "hidden"/.test(dashboard) && /playbackStatus/.test(dashboard) && /data-now-strip-action="dismiss"/.test(html), "media strip must support active-only Auto and persistent dismissal");
-assert(/nowStripRenderSignature/.test(dashboard) && /nowStripRenderSignature === nextSignature/.test(dashboard), "unchanged media-strip samples must not rewrite visible text every polling interval");
+assert(!/id="dashboard-now-strip"|data-now-strip-action/.test(html) && /id="dashboard-quick-media"/.test(html), "Quick controls must own compact media controls without a duplicate Now strip");
+assert((html.match(/id="dashboard-quick-toggle"/g) || []).length === 1 && (html.match(/id="dashboard-quick-drawer"/g) || []).length === 1, "the shell must have one Quick controls opener and drawer");
 assert(/hydrated:\s*false/.test(dashboard) && /getWidgetState[\s\S]*?"Checking"/.test(dashboard), "cold boot must remain neutral until health hydration");
 
 assert(/statusText:\s*"Not checked"/.test(product) && /env\.publishStatus/.test(product), "Updates must publish a truthful unchecked status");
@@ -255,7 +274,10 @@ assert(/var statusGeneration = 0/.test(product) && /setStatusIfCurrent\(generati
 assert(/reloadLocalSettings: kind === "local-settings",\s*skipFrameReload: kind === "local-settings"/.test(dashboard), "Privacy restore must refresh native and local state without remounting away its completion status");
 assert(/data-media-metadata/.test(product) && /data-audio-session-labels/.test(product) && /off by default/.test(product), "Privacy must expose explicit opt-in controls for media details and audio application labels");
 assert(/field = "mediaMetadataVisible"/.test(product) && /field = "audioSessionLabelsVisible"/.test(product) && /body: payload/.test(product), "Media privacy toggles must persist through the native dashboard configuration API");
-assert(/scene\.id !== "scene-night"/.test(product) && /scene\.id !== "scene-night"/.test(dashboard), "Night must not render as a Mode");
+const headerModesSource = dashboard.slice(dashboard.indexOf("function renderHeaderModes("), dashboard.indexOf("function renderQuickDrawer("));
+assert(/<select\b[^>]*id="dashboard-mode-select"/.test(html) && /for="dashboard-mode-select"/.test(html) && !/data-mode-id=/.test(dashboard) && /profiles\.map/.test(headerModesSource) && /value="automatic"/.test(headerModesSource), "one labeled Mode selector must expose native and custom profiles plus automatic switching; Night stays in Quick controls");
+assert(/function renderQuickDrawer\(\)[\s\S]*?\["auto", "standard", "night"\]\.map/.test(dashboard) && /data-quick-night=/.test(dashboard), "Quick controls must preserve the separate Automatic, Off, and On Night display preference");
+assert(/\.Where\(scene => !string\.Equals\(scene\.ThemeVariant, "night", StringComparison\.OrdinalIgnoreCase\)\)/.test(sceneService), "Night display variants must remain separate from the native base Mode profile inventory");
 assert(/ThemeVariant = config\.Scenes\.ThemeVariant/.test(sceneService) || !/config\.Scenes\.ThemeVariant = "standard";[\s\S]{0,120}Automatic switching resumed/.test(sceneService), "resuming Mode automation must preserve Night");
 assert(/SetDisplayAssignment[\s\S]*?string\.IsNullOrWhiteSpace\(normalizedSceneId\)[\s\S]*?RemoveAll/.test(sceneService), "empty sceneId must support display unassignment");
 assert(/manualOverrideActive/.test(sceneService) && /automaticSwitchingActive/.test(sceneService), "Mode snapshot must expose truthful automation state");
@@ -269,16 +291,16 @@ assert(/function mountAuxoraHomeWidget[\s\S]*?function refresh\(\) \{\s*return P
 assert(!/Customer recovery|customer actions|look customers see first/.test(product + dashboard), "installed UI copy must speak to the user instead of describing customers or internal product work");
 assert(/CLIENT_CONFIRMATION_WINDOW_MS = 8000/.test(actions) && (actions.match(/function armConfirmation\(actionId\)/g) || []).length === 2 && /Tap again within 8 seconds to run/.test(actions) && /requiresConfirmation \? "Two-step"/.test(actions), "Quick Actions and System Shortcuts must use truthful, expiring two-step confirmation states");
 assert(/RESET_CONFIRMATION_WINDOW_MS = 8000/.test(setup) && /function armResetConfirmation\(\)/.test(setup) && /Tap again within 8 seconds/.test(setup) && /action !== "reset-local-data" && state\.confirmReset[\s\S]*?Reset cancelled[\s\S]*?redraw\(\)/.test(setup) && /clearTimeout\(resetConfirmationTimerId\)/.test(setup), "Diagnostics local-data reset must use an expiring teardown-safe two-step confirmation and immediately clear its visible armed state when another control is used");
-assert(/Move " \+ row\.title \+ " earlier/.test(product) && /aria-label="Width for /.test(product) && /aria-label="Where /.test(product), "Layout Editor order, placement, and width controls must name the panel they affect");
+assert(/Move " \+ row\.title \+ " earlier/.test(product) && /aria-label="Where /.test(product), "Layout Editor order and placement controls must name the panel they affect");
 assert(/function activeMode\(\)/.test(product) && /Changes save automatically/.test(product) && /data-layout-live/.test(product), "Layout Editor must name the active Mode and announce automatically saved changes");
-assert(/data-ui-key="layout-row-/.test(product) && /data-ui-key="layout-earlier-/.test(product) && /data-ui-key="layout-width-/.test(product), "Layout Editor rows and controls must keep stable identities while reordering");
-assert(/configured:\s*isWidgetConfigured\(widget\.id\)/.test(dashboard) && /Home after setup/.test(product) && /Hidden in this Mode/.test(product), "Layout Editor placement must describe actual Home availability and the current-Mode visibility scope");
-assert(/data-layout-placement/.test(product) && /Library only/.test(product) && /pinnedWidgets:\s*pinnedWidgets\.join/.test(product) && /hiddenWidgets:\s*hiddenWidgets\.join/.test(product), "Layout Editor placement must directly choose Home, Library-only, or Hidden and save pin and visibility together");
+assert(/data-ui-key="layout-row-/.test(product) && /data-ui-key="layout-earlier-/.test(product) && /data-ui-key="layout-placement-/.test(product), "Layout Editor rows and controls must keep stable identities while reordering");
+assert(/configured:\s*isWidgetConfigured\(widget\.id\)/.test(dashboard) && /Home after setup/.test(product) && /Hidden on Home/.test(product) && /in this Mode/.test(product), "Layout Editor placement must describe actual Home availability and the current-Mode visibility scope");
+assert(/data-layout-placement/.test(product) && /Section only/.test(product) && /pinnedWidgets:\s*pinnedWidgets\.join/.test(product) && /hiddenWidgets:\s*hiddenWidgets\.join/.test(product), "Layout Editor placement must directly choose Home, Section-only, or Hidden on Home and save pin and visibility together");
 assert(/modeLayoutSchemaVersion:\s*"2"/.test(dashboard) && /function migrateLegacyModeLayouts\(activeModeId\)/.test(dashboard) && /Object\.assign\(\{\}, legacyLayout, modeLayout\)/.test(dashboard) && /String\(storedSettings\.modeLayoutSchemaVersion \|\| ""\) === "2"/.test(dashboard), "Mode layouts must preserve every missing legacy field during one-time migration, then keep each Mode isolated");
 assert(/layoutChanged && !importsLayoutSnapshot[\s\S]{0,160}migrateLegacyModeLayouts\(activeModeId\)[\s\S]{0,360}importsLayoutSnapshot && \(layoutChanged \|\| modeLayoutsChanged\)[\s\S]{0,160}migrateLegacyModeLayouts\(activeModeId\)/.test(dashboard), "Normal pre-hydration edits must migrate old layout values before saving, while imported backups migrate from their imported snapshot");
 assert(/"modeLayouts", "modeLayoutSchemaVersion", "marketplacePack"/.test(product) && /settings\.modeLayoutSchemaVersion = "1"/.test(product), "Layout backup and restore must preserve the Mode-layout migration version and safely recognize older backups");
-assert(/data-layout-size/.test(product) && /value="compact"/.test(product) && />Narrow</.test(product) && />Regular</.test(product) && />Full</.test(product), "Layout Editor width must use direct plain-language choices instead of a cycling size button");
-assert(/scene\.name \+ " Mode active"/.test(product) && /"Duplicate " \+ scene\.name \+ " Mode"/.test(product), "Mode controls must expose unique scene-specific accessible names");
+assert(!/data-layout-size/.test(product) && /"hiddenWidgets", "cardSizes"/.test(product) && /data-card-size=/.test(dashboard) && /\.router-inline-widget\[data-card-size\][^{}]*\.inline-widget-shell\s*\{[^{}]*width:\s*100%;[^{}]*max-width:\s*none;/.test(shellCss), "full-width panels must remove the ineffective Width control while preserving legacy size data and metadata");
+assert(/escapeHtml\(profile\.name \|\| profile\.id\)/.test(headerModesSource) && /node\.value = selected/.test(headerModesSource) && /"Duplicate " \+ scene\.name \+ " Mode"/.test(product), "the native Mode selector must expose profile names and confirmed selection while editing actions retain scene-specific accessible names");
 assert(/data-scene-edit/.test(product) && /data-scene-delete/.test(product) && /Custom Mode saved/.test(product), "duplicated Modes must be editable, saveable, and removable from the production UI");
 assert(/confirmDeleteId/.test(product) && /Confirm delete/.test(product) && /8000/.test(product), "custom Mode deletion must use a bounded two-step confirmation");
 assert(/data-recovery-confirm/.test(product) && /data-recovery-cancel/.test(product) && /confirmations/.test(product), "disruptive Recovery actions must require explicit confirmation");

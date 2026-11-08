@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
+import { createRequire } from "node:module";
 
 const dashboard = readFileSync(new URL("../js/dashboard.js", import.meta.url), "utf8");
+const navigation = createRequire(import.meta.url)("../js/dashboard-navigation.js");
 function functionsBetween(start, end) {
   const first = dashboard.indexOf(`  function ${start}(`);
   const last = dashboard.indexOf(`  function ${end}(`);
@@ -20,6 +22,8 @@ function harness(panel = "home", enabled = true) {
   let nextTimer = 0;
   const context = {
     currentWidgetId: panel,
+    primaryDestination: navigation.sectionForWidget(panel) || "home",
+    navigation,
     gameActivity: null,
     gameFacePreviousWidgetId: "",
     gameFaceLastActiveId: "",
@@ -30,9 +34,8 @@ function harness(panel = "home", enabled = true) {
     pendingGameFaceAutoOpenId: "",
     pendingGameFaceTimerId: 0,
     dashboardInteractionActive: false,
+    modeActivationPending: false,
     dashboardInteractionTimerId: 0,
-    settingsDrawerOpen: false,
-    panelsDrawerNode: { open: false },
     quickDrawerNode: { open: false },
     locked: false,
     window: {
@@ -46,6 +49,7 @@ function harness(panel = "home", enabled = true) {
     selectWidget(id, persist) {
       selections.push({ id, persist });
       context.currentWidgetId = id;
+      context.primaryDestination = navigation.sectionForWidget(id);
     },
     showTouchFeedback() {},
     applyDashboardPresentation() {},
@@ -242,25 +246,64 @@ test("failed, unsupported, and stale native snapshots do not end the current ses
   }
 });
 
-test("drawer, touch lock, and active interaction defer opening until navigation is safe", () => {
-  for (const reason of ["settings", "panels", "quick", "locked", "interaction"]) {
+test("Settings, Quick controls, pending Modes, touch lock, and active interaction defer opening until navigation is safe", () => {
+  for (const reason of ["settings", "quick", "mode", "locked", "interaction"]) {
     const { context, selections } = harness();
-    if (reason === "settings") context.settingsDrawerOpen = true;
-    if (reason === "panels") context.panelsDrawerNode.open = true;
+    if (reason === "settings") context.primaryDestination = "settings";
     if (reason === "quick") context.quickDrawerNode.open = true;
+    if (reason === "mode") context.modeActivationPending = true;
     if (reason === "locked") context.locked = true;
     if (reason === "interaction") context.dashboardInteractionActive = true;
     context.handleGameActivity(activity());
     assert.equal(selections.length, 0, reason);
     context.maybeOpenPendingGameFace();
     assert.equal(selections.length, 0, reason);
-    context.settingsDrawerOpen = false;
-    context.panelsDrawerNode.open = false;
+    context.primaryDestination = "home";
     context.quickDrawerNode.open = false;
+    context.modeActivationPending = false;
     context.locked = false;
     context.dashboardInteractionActive = false;
     context.maybeOpenPendingGameFace();
     assert.deepEqual(selections, [{ id: "wow-forever", persist: false }], reason);
+  }
+});
+
+test("every editable Settings category keeps game navigation pending until real section navigation and idle", () => {
+  const categories = navigation.tabsForSection("settings").map(tab => tab.id).filter(id => id !== "setup");
+  for (const panel of categories) {
+    const { context, selections, timers } = harness(panel);
+    context.handleGameActivity(activity());
+    context.maybeOpenPendingGameFace();
+    assert.equal(selections.length, 0, `${panel}: an idle Settings page must not be replaced`);
+    assert.equal(context.pendingGameFaceAutoOpenId, "forever-client", panel);
+
+    const rendered = [];
+    context.getWidgetById = id => navigation.sectionForWidget(id) ? { id } : null;
+    context.primaryDestinationStorageKey = "auxora-dashboard-destination";
+    context.window.localStorage = { setItem() {} };
+    context.renderPrimaryNavigation = () => {};
+    context.persistDestinationPanel = () => {};
+    context.renderCurrentSelection = () => rendered.push(context.currentWidgetId);
+    context.persistWidgetChoice = () => {};
+    context.setQueryParam = () => {};
+    runInNewContext(functionsBetween("selectWidget", "showLocalhostWarning"), context);
+
+    context.selectWidget(panel === "theme-studio" ? "layout-editor" : "theme-studio", true);
+    assert.equal(context.primaryDestination, "settings", panel);
+    context.maybeOpenPendingGameFace();
+    assert.notEqual(context.currentWidgetId, "wow-forever", `${panel}: changing Settings categories stays deferred`);
+
+    context.dashboardInteractionActive = true;
+    context.selectWidget("home", true);
+    assert.equal(context.currentWidgetId, "home", `${panel}: leaving must preserve the existing idle interval`);
+    assert.ok(context.dashboardInteractionTimerId, `${panel}: real section navigation must schedule pending release`);
+    const release = timers.get(context.dashboardInteractionTimerId);
+    assert.equal(typeof release, "function", panel);
+    release();
+    assert.equal(context.currentWidgetId, "wow-forever", `${panel}: pending navigation resumes without a new game snapshot`);
+    assert.equal(context.primaryDestination, "gaming", panel);
+    assert.deepEqual(rendered.slice(-2), ["home", "wow-forever"], panel);
+    assert.equal(context.pendingGameFaceAutoOpenId, "", panel);
   }
 });
 
@@ -278,10 +321,10 @@ test("stopping Forever while opening is deferred cancels the pending navigation"
 
 test("switching games while deferred uses the current game instead of the old request", () => {
   const { context, selections } = harness();
-  context.settingsDrawerOpen = true;
+  context.primaryDestination = "settings";
   context.handleGameActivity(activity());
   context.handleGameActivity(activity({ id: "other-game", gameKey: "", name: "Another game" }));
-  context.settingsDrawerOpen = false;
+  context.primaryDestination = "home";
   context.maybeOpenPendingGameFace();
   assert.deepEqual(selections, [{ id: "game-mode", persist: false }]);
 });
