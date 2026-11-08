@@ -21,6 +21,7 @@ public sealed class SystemActionsService
     };
 
     private readonly HostLogger _logger;
+    private readonly TmogCompanionService _tmog = new();
     private readonly ConcurrentDictionary<string, PendingActionConfirmation> _pendingConfirmations = new(StringComparer.Ordinal);
     private bool _brightnessUnavailableLogged;
 
@@ -101,6 +102,8 @@ public sealed class SystemActionsService
             }
         };
     }
+
+    public TmogCompanionSnapshot GetTmogSnapshot() => _tmog.GetSnapshot();
 
     public SystemShortcutsSnapshot GetShortcutsSnapshot()
     {
@@ -210,6 +213,9 @@ public sealed class SystemActionsService
                 break;
             case "open-task-manager":
                 LaunchShellTarget("taskmgr.exe");
+                break;
+            case "open-tmog":
+                _tmog.Open();
                 break;
             case "open-settings":
                 LaunchShellTarget("ms-settings:");

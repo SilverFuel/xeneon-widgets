@@ -188,6 +188,9 @@ test("editing while import confirmation is pending cancels import and keeps remo
       notice: "",
       storageProblem: "",
       storageWritable: true,
+      originalUnreadable: null,
+      importRequestId: 0,
+      readingImport: false,
       query(selector) { return selector === ".wow-notice" ? noticeNode : statusNode; },
       escapeHtml: value => String(value),
       window: {
@@ -218,5 +221,144 @@ test("editing while import confirmation is pending cancels import and keeps remo
     }
     fixture.undo();
     assert.equal(journal.quests[0], removed);
+  }
+});
+
+function journalHarness({ saved = null, failWrites = false } = {}) {
+  const nodes = new Map();
+  const handlers = new Map();
+  const downloads = [];
+  let renderer;
+  let writesFail = failWrites;
+  let stored = saved;
+  const container = {
+    innerHTML: "",
+    querySelector(selector) {
+      if (selector === ".wow-recovery" && !container.innerHTML.includes('class="wow-recovery wow-card"')) return null;
+      if (!nodes.has(selector)) nodes.set(selector, {
+        innerHTML: "", textContent: "", hidden: true, dataset: {}, value: "",
+        setAttribute() {}, focus() {}, click() {},
+        remove() { container.innerHTML = container.innerHTML.replace('class="wow-recovery wow-card"', 'class="removed-recovery"'); }
+      });
+      return nodes.get(selector);
+    },
+    querySelectorAll() { return []; },
+    contains() { return true; },
+    appendChild() {}
+  };
+  const runtime = {
+    escapeHtml: value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;"),
+    registerRenderer(id, mount) { renderer = mount; },
+    addListener(cleanups, target, type, handler) { handlers.set(type, handler); },
+    createTimerLoop() { return { start() {}, refresh() {}, destroy() {} }; },
+    runCleanups() { handlers.clear(); }
+  };
+  runInNewContext(readFileSync(new URL("../js/widgets/wow-forever.js", import.meta.url), "utf8"), {
+    window: {
+      InlineWidgets: { runtime },
+      localStorage: {
+        getItem() { return stored; },
+        setItem(key, value) { if (writesFail) throw new Error("Storage full"); stored = value; }
+      }
+    },
+    document: { createElement() { return { click() {}, remove() {} }; } },
+    Blob,
+    URL: { createObjectURL(blob) { downloads.push(blob); return "blob:test"; }, revokeObjectURL() {} }
+  });
+  const instance = renderer({}, container);
+  function click(action, extra = {}) {
+    const target = { dataset: { wowAction: action, ...extra }, closest() { return this; }, hasAttribute() { return false; } };
+    handlers.get("click")({ target });
+  }
+  return {
+    instance, container, downloads, click,
+    get stored() { return stored; },
+    set failWrites(value) { writesFail = value; },
+    get notice() { return container.querySelector(".wow-notice").innerHTML; },
+    get status() { return container.querySelector(".wow-save-status").textContent; },
+    chooseFile(file) {
+      handlers.get("change")({ target: { files: [file], value: "", hasAttribute() { return false; }, matches: selector => selector === ".wow-backup-file" } });
+    },
+    editNotes(value) { handlers.get("input")({ target: { id: "wow-field-notes", value } }); }
+  };
+}
+
+function backupFile(name) {
+  const journal = freshJournal();
+  journal.profile.name = name;
+  return { size: 1000, text: async () => JSON.stringify(journal) };
+}
+
+async function flushImport() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+test("selecting an oversized or unreadable backup clears the earlier import confirmation", async () => {
+  for (const replacement of [
+    { size: 256 * 1024 + 1 },
+    { size: 100, text: async () => { throw new Error("File missing"); } }
+  ]) {
+    const fixture = journalHarness();
+    fixture.chooseFile(backupFile("Earlier backup"));
+    await flushImport();
+    assert.match(fixture.notice, /confirm-import/);
+    fixture.chooseFile(replacement);
+    await flushImport();
+    assert.doesNotMatch(fixture.notice, /confirm-import/);
+    fixture.click("confirm-import");
+    assert.equal(fixture.stored, null);
+    fixture.instance.destroy();
+  }
+});
+
+test("the latest backup selection wins when file reads finish out of order", async () => {
+  for (const failFirst of [false, true]) {
+    const fixture = journalHarness();
+    let finishFirst;
+    fixture.chooseFile({ size: 100, text: () => new Promise((resolve, reject) => { finishFirst = failFirst ? reject : resolve; }) });
+    fixture.chooseFile(backupFile("Latest backup"));
+    await flushImport();
+    finishFirst(failFirst ? new Error("Old read failed") : await backupFile("Old backup").text());
+    await flushImport();
+    assert.match(fixture.notice, /Latest backup/);
+    fixture.click("confirm-import");
+    assert.equal(JSON.parse(fixture.stored).profile.name, "Latest backup");
+    fixture.instance.destroy();
+  }
+});
+
+test("editing the journal cancels a backup that is still being read", async () => {
+  const fixture = journalHarness();
+  let finishRead;
+  fixture.chooseFile({ size: 100, text: () => new Promise(resolve => { finishRead = resolve; }) });
+  fixture.editNotes("Keep these new notes");
+  finishRead(await backupFile("Old backup").text());
+  await flushImport();
+  assert.doesNotMatch(fixture.notice, /confirm-import/);
+  fixture.click("confirm-import");
+  assert.equal(JSON.parse(fixture.stored).notes, "Keep these new notes");
+  fixture.instance.destroy();
+});
+
+test("failed recovery replacement preserves the original export until saving succeeds", async () => {
+  for (const action of ["confirm-import", "new-journal"]) {
+    const original = "unreadable original journal";
+    const fixture = journalHarness({ saved: original, failWrites: true });
+    if (action === "confirm-import") {
+      fixture.chooseFile(backupFile("Recovered character"));
+      await flushImport();
+    }
+    fixture.click(action, { confirm: "true" });
+    assert.equal(fixture.stored, original);
+    assert.match(fixture.status, /Changes are not saved/);
+    assert.match(fixture.container.innerHTML, /class="wow-recovery wow-card"/);
+    fixture.click("export-recovery");
+    assert.equal(await fixture.downloads[0].text(), original);
+    fixture.failWrites = false;
+    fixture.editNotes("Recovery saved");
+    assert.equal(JSON.parse(fixture.stored).notes, "Recovery saved");
+    assert.doesNotMatch(fixture.container.innerHTML, /class="wow-recovery wow-card"/);
+    fixture.instance.destroy();
   }
 });

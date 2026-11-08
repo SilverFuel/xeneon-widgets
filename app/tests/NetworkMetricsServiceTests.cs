@@ -4,6 +4,54 @@ namespace XenonEdgeHost.Tests;
 
 public sealed class NetworkMetricsServiceTests
 {
+    private static readonly DateTimeOffset SampleTime = new(2026, 11, 8, 0, 0, 0, TimeSpan.Zero);
+
+    [Test]
+    public void ThroughputRequiresTwoReadableSamplesAndPreservesMeasuredZero()
+    {
+        var counter = new NetworkThroughputCounter();
+        Assert.That(counter.Sample("ethernet", 100, 200, SampleTime), Is.EqualTo(((double?)null, (double?)null)));
+        Assert.That(counter.Sample("ethernet", 250100, 200, SampleTime.AddSeconds(2)), Is.EqualTo(((double?)1, (double?)0)));
+    }
+
+    [Test]
+    public void UnreadableCountersRequireFreshBaselineAfterRecovery()
+    {
+        var counter = new NetworkThroughputCounter();
+        counter.Sample("ethernet", 100, 200, SampleTime);
+        Assert.That(counter.Sample("ethernet", null, null, SampleTime.AddSeconds(2)), Is.EqualTo(((double?)null, (double?)null)));
+        Assert.That(counter.Sample("ethernet", 1000000, 2000000, SampleTime.AddSeconds(4)), Is.EqualTo(((double?)null, (double?)null)));
+        Assert.That(counter.Sample("ethernet", 1250000, 2500000, SampleTime.AddSeconds(6)), Is.EqualTo(((double?)1, (double?)2)));
+    }
+
+    [Test]
+    public void InterfaceSwitchAndCounterResetLeaveGapsInsteadOfArtificialZero()
+    {
+        var counter = new NetworkThroughputCounter();
+        counter.Sample("ethernet", 1000000, 2000000, SampleTime);
+        Assert.That(counter.Sample("wifi", 500, 700, SampleTime.AddSeconds(2)), Is.EqualTo(((double?)null, (double?)null)));
+        Assert.That(counter.Sample("wifi", 100, 200, SampleTime.AddSeconds(4)), Is.EqualTo(((double?)null, (double?)null)));
+        Assert.That(counter.Sample("wifi", 250100, 500200, SampleTime.AddSeconds(6)), Is.EqualTo(((double?)1, (double?)2)));
+    }
+
+    [TestCase(0)]
+    [TestCase(-2)]
+    public void NonIncreasingSampleTimeCannotProduceThroughputSpike(int seconds)
+    {
+        var counter = new NetworkThroughputCounter();
+        counter.Sample("ethernet", 100, 200, SampleTime);
+        Assert.That(counter.Sample("ethernet", 250100, 500200, SampleTime.AddSeconds(seconds)), Is.EqualTo(((double?)null, (double?)null)));
+    }
+
+    [Test]
+    public void SnapshotKeepsThroughputTimestampIndependentFromPingUpdates()
+    {
+        var snapshot = new NetworkSnapshot { SampledAt = SampleTime.AddSeconds(20), ThroughputSampledAt = SampleTime };
+        var copy = snapshot.Clone();
+        Assert.That(copy.ThroughputSampledAt, Is.EqualTo(SampleTime));
+        Assert.That(copy.SampledAt, Is.EqualTo(SampleTime.AddSeconds(20)));
+    }
+
     [Test]
     public void SelectPrimaryInterfaceId_PrefersWindowsRouteOverFasterVirtualAdapter()
     {

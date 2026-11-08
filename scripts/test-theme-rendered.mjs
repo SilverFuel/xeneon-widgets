@@ -861,7 +861,7 @@ async function assertForcedColorsPalette(cdp, label, palette) {
   assert(probe.forcedColorOptOuts.length === 0, `${label}: elements opted out of Windows forced colors: ${JSON.stringify(probe.forcedColorOptOuts)}`);
   assert(!probe.overflow && !probe.fatal, `${label}: forced colors created overflow or a fatal state: ${JSON.stringify(probe)}`);
   // Each panel has an open button and a favorite button, plus the dialog close button.
-  assert(catalogProbe.panelCount === 24 && catalogProbe.buttonCount === catalogProbe.panelCount * 2 + 1 && catalogProbe.borderless.length === 0 && catalogProbe.selectionDistinct && catalogProbe.focusContained && catalogProbe.focusOutlined && catalogProbe.focusReturned, `${label}: All panels lost inventory, control boundaries, kept state, or keyboard focus in forced colors: ${JSON.stringify(catalogProbe)}`);
+  assert(catalogProbe.panelCount === 25 && catalogProbe.buttonCount === catalogProbe.panelCount * 2 + 1 && catalogProbe.borderless.length === 0 && catalogProbe.selectionDistinct && catalogProbe.focusContained && catalogProbe.focusOutlined && catalogProbe.focusReturned, `${label}: All panels lost inventory, control boundaries, kept state, or keyboard focus in forced colors: ${JSON.stringify(catalogProbe)}`);
   console.log(`${label}: four Quick-control viewports and catalog accessibility passed`);
 }
 

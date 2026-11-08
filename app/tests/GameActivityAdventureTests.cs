@@ -5,6 +5,77 @@ namespace XenonEdgeHost.Tests;
 
 public sealed class GameActivityAdventureTests
 {
+    [Test]
+    public void RapidRelaunchOfSameGameStartsNewSessionWithoutAnIdlePoll()
+    {
+        var session = new GameActivitySession();
+        var firstStart = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var nextStart = firstStart.AddMinutes(5);
+        session.Update("wow", 100, firstStart, firstStart.AddSeconds(10));
+        session.Update("wow", 101, nextStart, nextStart.AddSeconds(2));
+        Assert.That(session.StartedAt, Is.EqualTo(nextStart));
+    }
+
+    [Test]
+    public void ReusedProcessIdWithNewStartTimeStartsNewSession()
+    {
+        var session = new GameActivitySession();
+        var firstStart = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var nextStart = firstStart.AddMinutes(5);
+        session.Update("wow", 100, firstStart, firstStart.AddSeconds(10));
+        session.Update("wow", 100, nextStart, nextStart.AddSeconds(2));
+        Assert.That(session.StartedAt, Is.EqualTo(nextStart));
+    }
+
+    [Test]
+    public void TimestampPrecisionDifferencesDoNotRestartTheSameProcess()
+    {
+        var session = new GameActivitySession();
+        var firstStart = DateTimeOffset.UtcNow.AddMinutes(-5);
+        session.Update("wow", 100, firstStart, firstStart.AddSeconds(10));
+        session.Update("wow", 100, firstStart.AddTicks(5), firstStart.AddSeconds(20));
+        Assert.That(session.StartedAt, Is.EqualTo(firstStart));
+    }
+
+    [Test]
+    public void MissingRuntimeDetailsPreserveSessionAndKnownIdentity()
+    {
+        var session = new GameActivitySession();
+        var firstStart = DateTimeOffset.UtcNow.AddMinutes(-5);
+        session.Update("wow", 100, firstStart, firstStart.AddSeconds(10));
+        session.Update("wow", null, null, firstStart.AddSeconds(20));
+        session.Update("wow", 100, firstStart, firstStart.AddSeconds(30));
+        Assert.That(session.StartedAt, Is.EqualTo(firstStart));
+
+        session.Update("wow", null, null, firstStart.AddSeconds(40));
+        var nextSample = firstStart.AddMinutes(5);
+        session.Update("wow", 101, null, nextSample);
+        Assert.That(session.StartedAt, Is.EqualTo(nextSample));
+    }
+
+    [Test]
+    public void LateRuntimeIdentityDoesNotRestartSession()
+    {
+        var session = new GameActivitySession();
+        var firstSample = DateTimeOffset.UtcNow;
+        session.Update("wow", null, null, firstSample);
+        session.Update("wow", 100, firstSample.AddSeconds(-10), firstSample.AddSeconds(5));
+        Assert.That(session.StartedAt, Is.EqualTo(firstSample));
+    }
+
+    [Test]
+    public void EndedSessionDoesNotCarryIdentityIntoNextLaunch()
+    {
+        var session = new GameActivitySession();
+        var firstStart = DateTimeOffset.UtcNow.AddMinutes(-5);
+        session.Update("wow", 100, firstStart, firstStart);
+        session.End();
+        Assert.That(session.StartedAt, Is.Null);
+        var nextStart = firstStart.AddMinutes(5);
+        session.Update("wow", null, null, nextStart);
+        Assert.That(session.StartedAt, Is.EqualTo(nextStart));
+    }
+
     [TestCase(@"C:\Program Files (x86)\World of Warcraft\_forever_\Wow.exe")]
     [TestCase(@"D:\Games\World of Warcraft\_FOREVER_\WOW.EXE")]
     [TestCase("D:/Games/World of Warcraft/_forever_/Wow.exe")]

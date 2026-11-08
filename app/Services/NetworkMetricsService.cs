@@ -12,12 +12,10 @@ public sealed class NetworkMetricsService : IDisposable
     private System.Threading.Timer? _throughputTimer;
     private System.Threading.Timer? _pingTimer;
     private NetworkSnapshot _snapshot = new();
-    private long _lastBytesReceived;
-    private long _lastBytesSent;
-    private string _lastInterfaceId = "";
-    private DateTimeOffset _lastSampleTime = DateTimeOffset.MinValue;
+    private readonly NetworkThroughputCounter _throughputCounter = new();
     private DateTimeOffset _nextPingAt = DateTimeOffset.MinValue;
     private int _pingSampling;
+    private int _throughputSampling;
     private int _pingFailureCount;
     private bool _started;
 
@@ -48,6 +46,12 @@ public sealed class NetworkMetricsService : IDisposable
         lock (_sync)
         {
             var snapshot = _snapshot.Clone();
+            if (!snapshot.ThroughputSampledAt.HasValue
+                || DateTimeOffset.UtcNow - snapshot.ThroughputSampledAt.Value > TimeSpan.FromSeconds(12))
+            {
+                snapshot.Download = null;
+                snapshot.Upload = null;
+            }
             var sampledAt = snapshot.SampledAt;
             snapshot.Stale = !sampledAt.HasValue || DateTimeOffset.UtcNow - sampledAt.Value > TimeSpan.FromSeconds(12);
             if (!snapshot.Supported)
@@ -74,6 +78,11 @@ public sealed class NetworkMetricsService : IDisposable
 
     private void SampleThroughput()
     {
+        if (Interlocked.Exchange(ref _throughputSampling, 1) == 1)
+        {
+            return;
+        }
+
         try
         {
             var interfaces = NetworkInterface
@@ -86,6 +95,7 @@ public sealed class NetworkMetricsService : IDisposable
             var primaryInterface = SelectPrimaryInterface(interfaces);
             var totalBytesReceived = 0L;
             var totalBytesSent = 0L;
+            var countersRead = false;
             if (primaryInterface is not null)
             {
                 try
@@ -93,6 +103,7 @@ public sealed class NetworkMetricsService : IDisposable
                     var statistics = primaryInterface.GetIPv4Statistics();
                     totalBytesReceived = statistics.BytesReceived;
                     totalBytesSent = statistics.BytesSent;
+                    countersRead = true;
                 }
                 catch
                 {
@@ -100,21 +111,9 @@ public sealed class NetworkMetricsService : IDisposable
             }
 
             var now = DateTimeOffset.UtcNow;
-            var elapsedSeconds = _lastSampleTime == DateTimeOffset.MinValue
-                ? 0
-                : Math.Max(0.001, (now - _lastSampleTime).TotalSeconds);
-            var interfaceChanged = !string.Equals(_lastInterfaceId, primaryInterface?.Id, StringComparison.Ordinal);
-            var deltaReceived = _lastSampleTime == DateTimeOffset.MinValue || interfaceChanged
-                ? 0
-                : Math.Max(0, totalBytesReceived - _lastBytesReceived);
-            var deltaSent = _lastSampleTime == DateTimeOffset.MinValue || interfaceChanged
-                ? 0
-                : Math.Max(0, totalBytesSent - _lastBytesSent);
-
-            _lastBytesReceived = totalBytesReceived;
-            _lastBytesSent = totalBytesSent;
-            _lastInterfaceId = primaryInterface?.Id ?? "";
-            _lastSampleTime = now;
+            var throughput = _throughputCounter.Sample(primaryInterface?.Id,
+                countersRead ? totalBytesReceived : null,
+                countersRead ? totalBytesSent : null, now);
 
             var type = MapNetworkType(primaryInterface);
             var details = ReadInterfaceDetails(primaryInterface);
@@ -123,8 +122,9 @@ public sealed class NetworkMetricsService : IDisposable
             lock (_sync)
             {
                 var sampledAt = DateTimeOffset.UtcNow;
-                _snapshot.Download = RoundMbps(deltaReceived, elapsedSeconds);
-                _snapshot.Upload = RoundMbps(deltaSent, elapsedSeconds);
+                _snapshot.Download = throughput.Download;
+                _snapshot.Upload = throughput.Upload;
+                _snapshot.ThroughputSampledAt = countersRead ? now : null;
                 _snapshot.Type = type;
                 _snapshot.Name = details.Name;
                 _snapshot.Description = details.Description;
@@ -144,7 +144,12 @@ public sealed class NetworkMetricsService : IDisposable
         }
         catch (Exception error)
         {
+            _throughputCounter.Reset();
             _logger.Error("Failed to sample native network throughput.", error);
+        }
+        finally
+        {
+            Volatile.Write(ref _throughputSampling, 0);
         }
     }
 
@@ -370,7 +375,7 @@ public sealed class NetworkMetricsService : IDisposable
         return details;
     }
 
-    private static double RoundMbps(long deltaBytes, double elapsedSeconds)
+    internal static double RoundMbps(long deltaBytes, double elapsedSeconds)
     {
         if (elapsedSeconds <= 0)
         {
@@ -378,7 +383,7 @@ public sealed class NetworkMetricsService : IDisposable
         }
 
         var bitsPerSecond = (deltaBytes * 8d) / elapsedSeconds;
-        return Math.Round(bitsPerSecond / 1024d / 1024d, 2);
+        return Math.Round(bitsPerSecond / 1_000_000d, 2);
     }
 }
 
@@ -389,6 +394,9 @@ public sealed class NetworkSnapshot
     public string Status { get; set; } = "starting";
 
     public DateTimeOffset? SampledAt { get; set; }
+
+    // Ping updates SampledAt independently and must not freshen old byte counters.
+    public DateTimeOffset? ThroughputSampledAt { get; set; }
 
     public bool Stale { get; set; }
 
@@ -427,6 +435,7 @@ public sealed class NetworkSnapshot
             Supported = Supported,
             Status = Status,
             SampledAt = SampledAt,
+            ThroughputSampledAt = ThroughputSampledAt,
             Stale = Stale,
             Message = Message,
             Download = Download,
@@ -443,6 +452,44 @@ public sealed class NetworkSnapshot
             HealthTarget = HealthTarget,
             HealthTargetSource = HealthTargetSource
         };
+    }
+}
+
+internal sealed class NetworkThroughputCounter
+{
+    private string? _interfaceId;
+    private long _received;
+    private long _sent;
+    private DateTimeOffset? _sampledAt;
+
+    public (double? Download, double? Upload) Sample(string? interfaceId, long? received, long? sent, DateTimeOffset sampledAt)
+    {
+        if (string.IsNullOrWhiteSpace(interfaceId) || received is null or < 0 || sent is null or < 0)
+        {
+            Reset();
+            return (null, null);
+        }
+
+        var elapsed = _sampledAt.HasValue ? (sampledAt - _sampledAt.Value).TotalSeconds : 0;
+        var continuous = elapsed > 0
+            && string.Equals(_interfaceId, interfaceId, StringComparison.Ordinal)
+            && received.Value >= _received && sent.Value >= _sent;
+        var rates = continuous
+            ? (Download: (double?)NetworkMetricsService.RoundMbps(received.Value - _received, elapsed),
+               Upload: (double?)NetworkMetricsService.RoundMbps(sent.Value - _sent, elapsed))
+            : (Download: (double?)null, Upload: (double?)null);
+
+        _interfaceId = interfaceId;
+        _received = received.Value;
+        _sent = sent.Value;
+        _sampledAt = sampledAt;
+        return rates;
+    }
+
+    public void Reset()
+    {
+        _sampledAt = null;
+        _interfaceId = null;
     }
 }
 

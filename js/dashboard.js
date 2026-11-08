@@ -60,6 +60,8 @@
   var currentWidgetId = "";
   var gameActivity = null;
   var gameFacePreviousWidgetId = "";
+  var gameFaceLastProcessId = 0;
+  var gameFaceLastStartedAt = 0;
   var gameFaceLastActiveId = "";
   var gameFaceAutoOpenedGameId = "";
   var gameFaceSuppressedGameId = "";
@@ -257,7 +259,7 @@
       copy: "Muted amber and rose for media, evening, and comfortable long sessions."
     }
   ];
-  var localProductWidgetIds = ["game-mode", "wow-forever"];
+  var localProductWidgetIds = ["game-mode", "wow-forever", "tmog"];
   var surfaceContracts = {
     home: { destination: "home", category: "Home", defaultStatus: "Available" },
     scenes: { destination: "scenes", category: "Modes", defaultStatus: "Available" },
@@ -273,6 +275,7 @@
     "game-mode": { destination: "library", category: "Gaming", defaultStatus: "Available" },
     "wow-forever": { destination: "library", category: "Gaming", defaultStatus: "Local journal" },
     system: { destination: "library", category: "System", defaultStatus: "Checking" },
+    tmog: { destination: "library", category: "System", defaultStatus: "Available" },
     network: { destination: "library", category: "System", defaultStatus: "Checking" },
     audio: { destination: "library", category: "Media", defaultStatus: "Checking" },
     "quick-actions": { destination: "library", category: "Productivity", defaultStatus: "Checking" },
@@ -863,8 +866,9 @@
   }
 
   function isLiveGameThemeActive() {
+    // Keep presentation stable until a reliable poll confirms the session ended.
     return String(getSetting("gameModeAutoTune") || "1") !== "0"
-      && Boolean(gameActivity && gameActivity.active && gameActivity.activeGame);
+      && Boolean(gameFaceLastActiveId);
   }
 
   function refreshAmbientCanvasPalette() {
@@ -1519,6 +1523,10 @@
   }
 
   function gameForAutoOpen(payload) {
+    if (!payload || payload.supported === false || payload.stale
+      || payload.status === "error" || payload.status === "unavailable") {
+      return null;
+    }
     var game = payload && payload.active && payload.activeGame;
     if (!game || isWowForeverGame(game)) {
       return game || null;
@@ -1652,18 +1660,23 @@
   function handleGameActivity(payload) {
     var activeGame;
     var activeId;
+    var processId;
+    var startedAt;
+    var newProcess;
 
     gameActivity = payload || null;
-    activeGame = gameActivity && gameActivity.active && gameActivity.activeGame ? gameActivity.activeGame : null;
+    activeGame = gameForAutoOpen(gameActivity);
     activeId = activeGameIdFromPayload(gameActivity);
 
     if (!activeGame || !activeId) {
-      restorePreGamePerformanceBudget();
-      clearTransientGameTheme();
       // Transport failures and native detection errors do not end a play session.
       if (payload && payload.active === false && payload.supported !== false && !payload.stale
         && (payload.status === "idle" || payload.status === "ended")) {
+        restorePreGamePerformanceBudget();
+        clearTransientGameTheme();
         gameFaceLastActiveId = "";
+        gameFaceLastProcessId = 0;
+        gameFaceLastStartedAt = 0;
         gameFaceAutoOpenedGameId = "";
         gameFaceSuppressedGameId = "";
       }
@@ -1672,12 +1685,22 @@
       return;
     }
 
-    if (activeId !== gameFaceLastActiveId) {
+    processId = Number.isSafeInteger(activeGame.processId) && activeGame.processId > 0 ? activeGame.processId : 0;
+    startedAt = typeof activeGame.startedAt === "string" ? Date.parse(activeGame.startedAt) : 0;
+    startedAt = Number.isFinite(startedAt) && startedAt > 0 ? startedAt : 0;
+    newProcess = (processId && gameFaceLastProcessId && processId !== gameFaceLastProcessId)
+      || (startedAt && gameFaceLastStartedAt && startedAt !== gameFaceLastStartedAt);
+    if (activeId !== gameFaceLastActiveId || newProcess) {
       gameFaceLastActiveId = activeId;
+      gameFaceLastProcessId = 0;
+      gameFaceLastStartedAt = 0;
       gameFaceAutoOpenedGameId = "";
       gameFaceSuppressedGameId = "";
       clearPendingGameFaceAutoOpen();
     }
+    // Missing process metadata during a poll does not erase the known launch.
+    gameFaceLastProcessId = processId || gameFaceLastProcessId;
+    gameFaceLastStartedAt = startedAt || gameFaceLastStartedAt;
 
     applyDashboardPresentation();
 
@@ -1722,6 +1745,10 @@
   }
 
   function evaluateSceneContext(activityPayload) {
+    if (!activityPayload || activityPayload.supported === false || activityPayload.stale
+      || activityPayload.status === "error" || activityPayload.status === "unavailable") {
+      return;
+    }
     var now = Date.now();
     var activeGame = activityPayload && activityPayload.active && activityPayload.activeGame ? activityPayload.activeGame : null;
     if (now - lastSceneEvaluationAt < 20000) {
@@ -2872,6 +2899,15 @@
             gpuPowerEndpoint: buildUrl(bridgeOrigin, "/api/gpu-power")
           });
         }
+      },
+      {
+        id: "tmog",
+        title: "TMOG Companion",
+        requiresBridge: true,
+        tier: "product",
+        kicker: "System performance",
+        copy: "Live CPU, GPU, memory, disk, network, and thermal graphs, with quick access to your installed TMOG app.",
+        viewerLabel: "Auxora telemetry"
       },
         {
           id: "network",

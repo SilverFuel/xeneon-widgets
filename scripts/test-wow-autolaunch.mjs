@@ -11,7 +11,8 @@ function functionsBetween(start, end) {
   return dashboard.slice(first, last);
 }
 const source = functionsBetween("activeGameIdFromPayload", "restorePreGamePerformanceBudget")
-  + functionsBetween("handleGameActivity", "refreshGameActivity");
+  + functionsBetween("handleGameActivity", "refreshGameActivity")
+  + functionsBetween("isLiveGameThemeActive", "refreshAmbientCanvasPalette");
 
 function harness(panel = "home", enabled = true) {
   const selections = [];
@@ -22,6 +23,8 @@ function harness(panel = "home", enabled = true) {
     gameActivity: null,
     gameFacePreviousWidgetId: "",
     gameFaceLastActiveId: "",
+    gameFaceLastProcessId: 0,
+    gameFaceLastStartedAt: 0,
     gameFaceAutoOpenedGameId: "",
     gameFaceSuppressedGameId: "",
     pendingGameFaceAutoOpenId: "",
@@ -47,8 +50,10 @@ function harness(panel = "home", enabled = true) {
     showTouchFeedback() {},
     applyDashboardPresentation() {},
     renderDashboardChromeState() {},
-    restorePreGamePerformanceBudget() {},
-    clearTransientGameTheme() {}
+    restoredBudget: 0,
+    clearedTheme: 0,
+    restorePreGamePerformanceBudget() { context.restoredBudget++; },
+    clearTransientGameTheme() { context.clearedTheme++; }
   };
   runInNewContext(source, context);
   return { context, selections, timers };
@@ -130,6 +135,94 @@ test("an already open journal counts as handled for the current session", () => 
   context.handleGameActivity(activity());
   assert.equal(selections.length, 0);
   assert.equal(context.currentWidgetId, "network");
+});
+
+test("restarting the same game between polls opens the journal for the new launch", () => {
+  for (const changed of [
+    { processId: 203 },
+    { startedAt: "2026-11-07T20:01:00Z" }
+  ]) {
+    const { context, selections } = harness();
+    const initial = { processId: 101, startedAt: "2026-11-07T20:00:00Z" };
+    context.handleGameActivity(activity(initial));
+    context.currentWidgetId = "audio";
+    context.gameFaceSuppressedGameId = "forever-client";
+    context.handleGameActivity(activity({ ...initial, ...changed }));
+    assert.equal(selections.length, 2);
+    assert.equal(context.currentWidgetId, "wow-forever");
+    assert.equal(context.gameFaceSuppressedGameId, "");
+  }
+});
+
+test("missing or newly available process metadata does not reopen the same session", () => {
+  const { context, selections } = harness();
+  context.handleGameActivity(activity());
+  context.currentWidgetId = "audio";
+  const identity = { processId: 101, startedAt: "2026-11-07T20:00:00Z" };
+  context.handleGameActivity(activity(identity));
+  context.handleGameActivity(activity({ processId: null, startedAt: "invalid" }));
+  context.handleGameActivity(activity({ ...identity, startedAt: "2026-11-07T20:00:00.000+00:00" }));
+  assert.equal(selections.length, 1);
+  assert.equal(context.currentWidgetId, "audio");
+});
+
+test("untrusted active snapshots cannot open a panel or consume a launch", () => {
+  for (const flags of [{ stale: true }, { supported: false }, { status: "error" }, { status: "unavailable" }]) {
+    const { context, selections, timers } = harness();
+    context.handleGameActivity({ ...activity(), ...flags });
+    assert.equal(selections.length, 0);
+    assert.equal(timers.size, 0);
+    assert.equal(context.gameFaceAutoOpenedGameId, "");
+    assert.equal(context.isLiveGameThemeActive(), false);
+    context.handleGameActivity(activity());
+    assert.equal(selections.length, 1);
+  }
+});
+
+test("transient failures preserve game presentation until an observed session end", () => {
+  const { context } = harness();
+  context.handleGameActivity(activity());
+  for (const payload of [null, { active: false, status: "error" }, { active: false, status: "idle", stale: true }]) {
+    context.handleGameActivity(payload);
+    assert.equal(context.restoredBudget, 0);
+    assert.equal(context.clearedTheme, 0);
+    assert.equal(context.isLiveGameThemeActive(), true);
+  }
+  context.handleGameActivity({ active: false, status: "ended" });
+  assert.equal(context.restoredBudget, 1);
+  assert.equal(context.clearedTheme, 1);
+  assert.equal(context.isLiveGameThemeActive(), false);
+});
+
+test("untrusted game snapshots cannot switch automatic Modes or delay the next valid evaluation", async () => {
+  const requests = [];
+  const context = {
+    lastSceneEvaluationAt: 0,
+    bridgeOrigin: "http://fixture.invalid",
+    bridgeConfig: {},
+    buildUrl: (origin, path) => origin + path,
+    fetchJson: async () => ({}),
+    postJson: async (url, body) => { requests.push({ url, body }); return {}; },
+    applyScenePresentation() {}, renderQuickDrawer() {}, showTouchFeedback() {},
+    console: { warn: error => { throw error; } }
+  };
+  runInNewContext(functionsBetween("evaluateSceneContext", "scheduleGameActivityLoop"), context);
+  for (const invalid of [null, { ...activity(), stale: true }, { ...activity(), supported: false },
+    { active: false, status: "error" }, { active: false, status: "unavailable" }, { active: false, status: "ended", stale: true }]) {
+    context.evaluateSceneContext(invalid);
+    assert.equal(context.lastSceneEvaluationAt, 0);
+  }
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.length, 0);
+  context.evaluateSceneContext(activity());
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].body.activeGame, "World of Warcraft");
+  context.lastSceneEvaluationAt = 0;
+  context.evaluateSceneContext({ active: false, status: "ended" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].body.activeGame, "");
 });
 
 test("failed, unsupported, and stale native snapshots do not end the current session", () => {
