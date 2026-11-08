@@ -595,7 +595,7 @@ async function assertHighContrastReadability(cdp, theme) {
 function installQuickControlsForcedColorsFixture() {
   if (!location.search.includes("quickControlsForcedColors=1")) return;
   const originalFetch = window.fetch;
-  const fixture = window.__quickControlsForcedColorsFixture = { reads: { audio: 0, media: 0 }, blocked: [], scenes: null, sceneEvaluations: 0 };
+  const fixture = window.__quickControlsForcedColorsFixture = { reads: { audio: 0, media: 0 }, panelReads: { equalizer: 0 }, blocked: [], scenes: null, sceneEvaluations: 0 };
   const response = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
   window.fetch = function (input, options) {
     const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
@@ -622,6 +622,15 @@ function installQuickControlsForcedColorsFixture() {
     }
     const match = /^\/api\/(audio|media)(?:\/|$)/.exec(url.pathname);
     if (!match) return originalFetch.apply(this, arguments);
+    // The navigation probe visits the full Audio panel before opening Quick
+    // controls. Mock its extra read only while that panel owns the closed drawer.
+    // Quick controls must still be blocked from reading this endpoint.
+    const drawer = document.getElementById("dashboard-quick-drawer");
+    if (url.origin === location.origin && method === "GET" && url.pathname === "/api/audio/equalizer"
+      && document.body?.dataset.activeWidgetId === "audio" && drawer?.classList.contains("is-hidden")) {
+      fixture.panelReads.equalizer += 1;
+      return Promise.resolve(response({ supported: false, configured: false, status: "unavailable", message: "Read-only appearance fixture", bands: [], presets: [] }));
+    }
     const kind = match[1];
     if (method === "GET" && url.pathname === "/api/" + kind) {
       fixture.reads[kind] += 1;
