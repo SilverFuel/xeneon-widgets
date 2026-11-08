@@ -38,6 +38,10 @@ The 64-character result must exactly match the manifest's SHA-256 value and the 
 ## What Is Included
 
 - Native Windows host for landscape, ultrawide, and portrait touch displays.
+- Constellation colors with readable light, Night, high-contrast, and Windows forced-color views.
+- Home, Gaming, Media, PC, and Smart Home sections, plus one Settings destination for setup and configuration.
+- One header Mode selector and Quick controls for volume, mute, playback, and Night.
+- Home cards open Performance, Network, and Calendar. One-tap setups and recent apps expand when needed.
 - Horde-themed WoW Forever adventure journal with manual character and quest tracking. It opens when Forever starts if Auxora is running and Game Mode auto-open is enabled.
 - A simpler Layout Editor with numbered order, direct behavior and width choices, and a Home preview.
 - Larger responsive now-playing artwork plus plain-language equalizer presets and guidance.

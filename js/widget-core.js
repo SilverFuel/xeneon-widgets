@@ -87,6 +87,10 @@
 
   function closestTouchInteractive(target) {
     var element = closestElement(target, touchInteractiveSelector);
+    // The theme runtime puts [data-theme] on <html> and <body>; those are page roots, not controls.
+    if (element && (element === document.documentElement || element === document.body)) {
+      return null;
+    }
     return isDisabledControl(element) ? null : element;
   }
 

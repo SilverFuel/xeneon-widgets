@@ -214,12 +214,22 @@ assert(
     && renderedDashboardTest.includes("for (const density of ['compact', 'comfortable', 'spacious'])")
     && /networkLayoutAudits\.length === 9/.test(renderedDashboardTest)
     && /expectedGridColumnCount = innerWidth <= 2047 \|\| cardSize === 'compact' \? 1 : 4/.test(renderedDashboardTest)
-    && /shellCap = cardSize === 'compact' \? 1040 : cardSize === 'standard' \? 1680/.test(renderedDashboardTest)
+    // The section shell intentionally fills its available width for every saved
+    // card size. Retain the measured geometry gate under that replacement rule.
+    && /expectedShellWidth = rootContentWidth/.test(renderedDashboardTest)
+    && /shellWidthMatches = Boolean\(shellRect && Math\.abs\(shellRect\.width - expectedShellWidth\) <= 1\.5\)/.test(renderedDashboardTest)
+    && /passed:[\s\S]*&& shellWidthMatches/.test(renderedDashboardTest)
     && /expectedPadding = density === 'compact' \? 10 : density === 'spacious' \? 18 : 16/.test(renderedDashboardTest)
     && /enabledControlCount:[\s\S]*focusableControlCount:[\s\S]*focusAuditedCount:/.test(renderedDashboardTest)
     && /networkStateAudits\.length === 2[\s\S]*"linked,review"/.test(renderedDashboardTest)
-    && /async function validateNetworkLayoutEditorPersistence\(cdp\)/.test(renderedDashboardTest)
-    && /await validateNetworkLayoutEditorPersistence\(cdp\)/.test(renderedDashboardTest),
+    // Width controls were retired; saved legacy layout metadata must survive
+    // navigation, Mode changes, and reload while the shell stays full width.
+    && /async function validateLegacyLayoutPreservation\(cdp\)/.test(renderedDashboardTest)
+    && /await validateLegacyLayoutPreservation\(cdp\)/.test(renderedDashboardTest)
+    && /before\.cardSize === 'compact' && Math\.abs\(before\.width - before\.available\) <= 1\.5/.test(renderedDashboardTest)
+    && /after\.cardSize === 'wide' && Math\.abs\(after\.width - after\.available\) <= 1\.5/.test(renderedDashboardTest)
+    && /assert\(result\.modeLayouts === expected\.modeLayouts && result\.cardSizes === expected\.cardSizes/.test(renderedDashboardTest)
+    && /assert\(!reload\.exceptionDetails && reload\.result\?\.value\?\.modeLayouts === expected\.modeLayouts && reload\.result\?\.value\?\.cardSizes === expected\.cardSizes && reload\.result\?\.value\?\.active === 'network'/.test(renderedDashboardTest),
   "rendered product-surface checks must cover all 25 surfaces at every representative viewport with early runtime, focus, scroll, wide-only distance gates, and the full Network boundary/state/persistence matrix"
 );
 assert(

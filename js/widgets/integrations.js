@@ -604,7 +604,11 @@
       connectionCopy || (data.configured ? "Frigate has not reported an object detection in the last hour." : "Add a local Frigate address in Diagnostics.")
     );
     var settingsLabel = "Camera settings";
-    var body = '' +
+    var connectionNotice = state.connectionError || data.stale
+      ? '<article class="list-card inline-card" data-ui-key="frigate-connection-state" data-frigate-connection-state role="status" aria-live="polite"><strong>' +
+          escapeHtml(state.connectionError ? state.statusText : "Cached camera data") + '</strong><div class="router-inline-copy">' + escapeHtml(connectionCopy) + '</div></article>'
+      : "";
+    var body = connectionNotice +
       '<div class="inline-grid inline-grid--3">' +
         metricCard("Last hour", String(data.lastHour), data.activeCameras + " camera" + (data.activeCameras === 1 ? "" : "s")) +
         metricCard("Latest object", text(latest && latest.label, "None"), latest ? formatAge(latest.time) : "Standby") +

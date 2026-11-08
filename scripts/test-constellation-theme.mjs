@@ -173,11 +173,20 @@ function checkReadable(tokens, label, highContrast = false) {
     }
   }
   assert.ok(contrast(tokens["--theme-on-accent"], tokens["--theme-accent"]) >= 4.5, `${label}: filled accent text must meet 4.5:1`);
+  assert.equal(tokens["--theme-section-selected"], "#d4ac63", `${label}: selected sections retain Constellation Gold`);
+  assert.equal(tokens["--theme-on-section-selected"], "#132238", `${label}: selected sections retain the navy foreground`);
+  assert.ok(contrast(tokens["--theme-on-section-selected"], tokens["--theme-section-selected"]) >= 7, `${label}: selected section text must meet 7:1`);
   for (const status of ["success", "warning", "danger"]) {
     const ratio = contrast(tokens[`--status-${status}-text`], tokens[`--status-${status}-surface`], tokens["--theme-surface-primary"]);
     assert.ok(ratio >= 4.5, `${label}: blended ${status} status text is ${ratio.toFixed(3)}:1`);
   }
 }
+
+test("section selection honors the user's forced system colors", () => {
+  const forced = themeCss.slice(themeCss.indexOf("@media (forced-colors: active)"));
+  assert.match(forced, /--theme-section-selected:\s*Highlight;/);
+  assert.match(forced, /--theme-on-section-selected:\s*HighlightText;/);
+});
 
 test("Constellation palette and light/dark surface contracts agree across both runtimes", () => {
   for (const value of palette) assert.ok(themeCss.includes(value), `canonical palette must include ${value}`);
@@ -316,4 +325,96 @@ test("live game colors override personal colors and are removed when the session
   assert.equal(fixture.tokens()["--theme-accent"], palette[1]);
   assert.equal(fixture.root.style.getPropertyValue("--theme-accent-secondary"), "");
   checkReadable(fixture.tokens(), "personal colors restored");
+});
+
+
+for (const fixtureCase of [
+  { label: "forced-colors", file: "./test-theme-rendered.mjs", name: "installQuickControlsForcedColorsFixture", next: "async function probeForcedColorsQuickControls()", query: "?quickControlsForcedColors=1", key: "__quickControlsForcedColorsFixture" },
+  { label: "interactive", file: "./test-rendered-dashboard.mjs", name: "installQuickControlsFixture", next: "async function checkQuickControlsInPage(", query: "?quickControlsTest=800", key: "__quickControlsFixture" }
+]) {
+test(fixtureCase.label + " fixture isolates full Audio reads and blocks unexpected Quick requests", async () => {
+  const source = read(fixtureCase.file);
+  const start = source.indexOf("function " + fixtureCase.name + "() {");
+  const end = source.indexOf(fixtureCase.next, start);
+  assert.ok(start >= 0 && end > start, "appearance fixture must be extracted from the browser suite");
+  const body = { dataset: { activeWidgetId: "audio" } };
+  let drawerClosed = true;
+  let liveFetches = 0;
+  const window = { fetch() { liveFetches += 1; throw new Error("Appearance requests must not reach Windows"); } };
+  const context = {
+    window, URL, Response, Date, setTimeout,
+    location: { search: fixtureCase.query, href: "http://127.0.0.1:18799/dashboard.html", origin: "http://127.0.0.1:18799" },
+    document: { body, getElementById: id => id === "dashboard-quick-drawer" ? { classList: { contains: name => name === "is-hidden" && drawerClosed } } : null }
+  };
+  runInNewContext(source.slice(start, end) + "\n" + fixtureCase.name + "();", context);
+  const fixture = window[fixtureCase.key];
+  const blocked = fixture.blocked || fixture.unexpected;
+  const panelResponse = await window.fetch("/api/audio/equalizer");
+  assert.equal(panelResponse.status, 200);
+  assert.equal((await panelResponse.json()).supported, false);
+  assert.equal(fixture.panelReads.equalizer, 1);
+  assert.equal(blocked.length, 0);
+
+  drawerClosed = false;
+  assert.equal((await window.fetch("/api/audio/equalizer")).status, 400, "Quick controls cannot read equalizer state");
+  assert.equal((await window.fetch("/api/audio/equalizer", { method: "POST" })).status, 400);
+  drawerClosed = true;
+  assert.equal((await window.fetch("/api/audio/equalizer", { method: "POST" })).status, 400, "the full panel cannot mutate audio either");
+  body.dataset.activeWidgetId = "system";
+  assert.equal((await window.fetch("/api/audio/equalizer")).status, 400, "other panels cannot use the Audio read fixture");
+  assert.equal((await window.fetch("/api/audio/devices")).status, 400, "unrelated endpoints remain blocked");
+  for (const kind of ["audio", "media"]) {
+    assert.equal((await window.fetch("/api/" + kind)).status, 200);
+    assert.equal(fixture.reads[kind], 1);
+  }
+  assert.equal(fixture.panelReads.equalizer, 1);
+  assert.equal(blocked.length, 5);
+  assert.equal(liveFetches, 0);
+});
+}
+
+test("synthetic Mode activation stays authoritative during evaluation and late config reads", async () => {
+  const source = read("./test-rendered-dashboard.mjs");
+  const start = source.indexOf("function installLegacyModeAuthorityFixture() {");
+  const end = source.indexOf("async function validateLegacyLayoutPreservation(", start);
+  assert.ok(start >= 0 && end > start);
+  const helper = source.slice(start, end) + "\ninstallLegacyModeAuthorityFixture();";
+  const nativeScene = { activeSceneId: "scene-work", activeScene: { id: "scene-work" }, profiles: [{ id: "scene-work" }, { id: "scene-gaming" }] };
+  const nativeRequests = [];
+  let holdConfig = false, releaseConfig;
+  const window = { fetch: async (input, options) => {
+    const path = new URL(String(input), "http://127.0.0.1:18799").pathname;
+    const method = options?.method || "GET";
+    nativeRequests.push({ path, method });
+    if (path === "/api/config" && method === "GET") {
+      if (holdConfig) await new Promise(resolve => { releaseConfig = resolve; });
+      return new Response(JSON.stringify({ scenes: nativeScene, dashboard: { onboardingCompleted: true } }));
+    }
+    throw new Error("Unexpected native request: " + method + " " + path);
+  } };
+  const context = { window, URL, Response, location: { href: "http://127.0.0.1:18799/dashboard.html?legacyLayout=mode", origin: "http://127.0.0.1:18799" } };
+  runInNewContext(helper, context);
+  assert.equal((await window.fetch("/api/scenes/evaluate", { method: "POST" })).status, 503);
+  assert.equal(nativeRequests.length, 0, "Initializing the fixture must not evaluate a real Mode");
+  await window.fetch("/api/config");
+  const fixture = window.__legacyModeAuthorityFixture;
+  const gaming = { ...nativeScene, activeSceneId: "scene-gaming", activeScene: { id: "scene-gaming" }, manualOverrideActive: true };
+  fixture.scenes = gaming;
+  assert.equal((await (await window.fetch("/api/scenes")).json()).activeSceneId, "scene-gaming");
+  assert.equal((await (await window.fetch("/api/scenes/evaluate", { method: "POST" })).json()).activeSceneId, "scene-gaming");
+  holdConfig = true;
+  const lateConfig = window.fetch("/api/config");
+  fixture.scenes = { ...gaming, manualOverrideMinutesRemaining: 120 };
+  releaseConfig();
+  const config = await (await lateConfig).json();
+  assert.equal(config.scenes.activeSceneId, "scene-gaming", "A late native read must not replace the synthetic activation");
+  assert.equal(config.scenes.manualOverrideMinutesRemaining, 120);
+  assert.equal(config.dashboard.onboardingCompleted, true, "Unrelated native configuration remains real");
+  assert.equal(nativeScene.activeSceneId, "scene-work", "The test must not mutate the native host");
+  assert.equal(fixture.evaluations, 2);
+  assert.deepEqual(nativeRequests, [{ path: "/api/config", method: "GET" }, { path: "/api/config", method: "GET" }]);
+  const untouchedFetch = () => {};
+  const otherPage = { window: { fetch: untouchedFetch }, URL, location: { href: "http://127.0.0.1:18799/dashboard.html?legacyLayout=reload" } };
+  runInNewContext(helper, otherPage);
+  assert.equal(otherPage.window.fetch, untouchedFetch, "Other acceptance pages retain their real authority");
 });

@@ -22,6 +22,8 @@
   --theme-accent-border: rgba(43, 77, 125, 0.48);
   --theme-accent-glow: rgba(43, 77, 125, 0.08);
   --theme-selected-surface: rgba(43, 77, 125, 0.12);
+  --theme-section-selected: var(--constellation-gold);
+  --theme-on-section-selected: #132238;
   --theme-hover-surface: rgba(43, 77, 125, 0.065);
   --theme-pressed-surface: rgba(43, 77, 125, 0.16);
   --theme-focus-ring: #2b4d7d;
@@ -337,6 +339,8 @@ html[data-standalone-ui][data-readability="high-contrast"] {
     --theme-accent-text: LinkText;
     --theme-on-accent: Canvas;
     --theme-focus-ring: Highlight;
+    --theme-section-selected: Highlight;
+    --theme-on-section-selected: HighlightText;
     --theme-panel-shadow: none;
     --theme-glow-intensity: 0;
   }

@@ -13,7 +13,7 @@ Automated responsive checks protect layout classification and navigation structu
 | 2560 x 720 | Ultrawide | Ultrawide | 100%, 125%, 150%, 175%, 200% | Required | Pending external hardware |
 | 800 x 1280 | Portrait | Portrait | 100%, 125%, 150%, 175%, 200% | Required | Pending external hardware |
 
-For each available physical resolution, verify Home, Modes, Apps & Controls, Settings, long-press edit mode, quick controls, scrolling, Mode switching, dialogs, keyboard focus, screen-reader names, and reduced motion. On the target companion display, exercise Windows scaling at 100%, 125%, 150%, 175%, and 200%.
+For each available physical resolution, verify Home, Gaming, Media, PC, Smart Home, Settings categories, Home long-press editing, Quick controls, scrolling, header Mode switching and Night display, dialogs, keyboard focus, screen-reader names, and reduced motion. Confirm that section order and visibility survive a restart, hidden sections remain reachable by deep link and game auto-open, and Settings edits defer game auto-open until the user leaves Settings. On the target companion display, exercise Windows scaling at 100%, 125%, 150%, 175%, and 200%.
 
 Also verify all of these exact-candidate behaviors:
 

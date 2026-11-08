@@ -1,3 +1,12 @@
+// Navigation migration coverage map:
+// Favorites/catalog -> five-section order/visibility, Settings categories, all-25 two-click reach.
+// Reachability includes scrolling before clicks; this is not physical touch/DPI acceptance.
+// Catalog modal focus -> Quick modal inertness/Escape/focus return plus stable section/tab focus.
+// Panel options -> Appearance form persistence, focused edits, and opacity reset.
+// Now strip -> dedicated Audio/Quick controls; compact shell must keep content unobscured.
+// Outer widget title/status pills -> body active-widget ID, section heading, and status attributes.
+// Width editor -> preserved legacy cardSizes across modes/reloads and full-width section panels.
+// All surface, privacy, retry, action, 44px, contrast, forced-color, and 100-boot gates remain.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
@@ -46,6 +55,20 @@ function assert(condition, message) {
 
 function delay(milliseconds) {
   return new Promise(resolveDelay => setTimeout(resolveDelay, milliseconds));
+}
+
+function installNavigationProbeHelpers() {
+  window.__auxoraTestOpenWidget = function (id) {
+    const section = window.AuxoraNavigation?.sectionForWidget(id);
+    const sectionButton = document.querySelector('[data-section-id="' + section + '"]');
+    if (!sectionButton) throw new Error('Missing section control for ' + id);
+    sectionButton.click();
+    const canonical = id === 'media' ? 'audio' : id;
+    const panel = document.querySelector('.auxora-panel-link[data-widget-id="' + canonical + '"]');
+    if (!panel) throw new Error('Missing panel control for ' + id);
+    panel.click();
+    return panel;
+  };
 }
 
 async function waitForCommittedUrl(cdp, marker, timeoutMs = 20000) {
@@ -456,73 +479,47 @@ async function validateColdBoots(cdp, attempts) {
 
 async function validateSettingsInteractionSafety(cdp) {
   await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
-  await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=setup&settingsRaceTest=1` });
+  await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=theme-studio&settingsRaceTest=1` });
   await waitForCommittedUrl(cdp, "settingsRaceTest=1");
   const evaluation = await cdp.send("Runtime.evaluate", {
     expression: `(async () => {
-      const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
       const deadline = Date.now() + 10000;
-      while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') {
-        await wait(50);
+      while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || !document.querySelector('[name="dashboardOpacity"]'))) await wait(50);
+      const form = document.querySelector('[data-form="theme-studio"]');
+      const errors = []; window.addEventListener('error', event => errors.push(String(event.error?.message || event.message)));
+      const read = name => form?.elements?.namedItem(name);
+      const readability = read('themeReadability'); const budget = read('performanceBudget');
+      const autoTune = read('gameModeAutoTune'); const opacity = read('dashboardOpacity');
+      if (!readability || !budget || !autoTune || !opacity) return { ready: false };
+      const previousAutoTune = autoTune.type === 'checkbox' ? autoTune.checked : autoTune.value;
+      for (const [control, value] of [[readability, 'clean'], [budget, 'game']]) {
+        control.focus(); control.value = value; control.dispatchEvent(new Event('change', { bubbles: true }));
       }
-      const errors = [];
-      window.addEventListener('error', event => errors.push(String(event.error?.message || event.message || 'runtime error')));
-      const settingsToggle = document.getElementById('dashboard-settings-toggle');
-      const closedToggleText = settingsToggle?.textContent?.trim() || '';
-      const closedToggleName = settingsToggle?.getAttribute('aria-label') || '';
-      const controlsSettingsBody = settingsToggle?.getAttribute('aria-controls') || '';
-      settingsToggle.click();
-      const readability = document.getElementById('dashboard-readability-select');
-      const budget = document.getElementById('dashboard-budget-select');
-      const autoTune = document.getElementById('dashboard-autotune-toggle');
-      const opacity = document.getElementById('dashboard-opacity-slider');
-      const autoTuneBefore = autoTune.checked;
-
-      readability.focus();
-      readability.value = 'clean';
-      readability.dispatchEvent(new Event('change', { bubbles: true }));
-      budget.focus();
-      budget.value = 'game';
-      budget.dispatchEvent(new Event('change', { bubbles: true }));
       autoTune.focus();
-      autoTune.click();
-      opacity.focus();
-      opacity.value = '57';
-      opacity.dispatchEvent(new Event('input', { bubbles: true }));
-      opacity.dispatchEvent(new Event('change', { bubbles: true }));
-      settingsToggle.focus();
-      await wait(150);
-
+      if (autoTune.type === 'checkbox') autoTune.click();
+      else { autoTune.value = previousAutoTune === '1' ? '0' : '1'; autoTune.dispatchEvent(new Event('change', { bubbles: true })); }
+      opacity.focus(); opacity.value = '57'; opacity.dispatchEvent(new Event('input', { bubbles: true })); opacity.dispatchEvent(new Event('change', { bubbles: true }));
+      document.getElementById('dashboard-quick-toggle').focus(); await wait(150);
+      const stored = JSON.parse(localStorage.getItem('xeneon-dashboard-settings') || '{}');
+      const reset = document.querySelector('[data-opacity-reset]');
+      const beforeReset = stored.dashboardOpacity; reset?.click(); await wait(50);
       return {
-        errors,
-        fatalVisible: /Dashboard failed|Dashboard runtime error/.test(document.body.innerText || ''),
-        closedToggleText,
-        closedToggleName,
-        controlsSettingsBody,
-        openToggleText: settingsToggle?.textContent?.trim() || '',
-        openToggleName: settingsToggle?.getAttribute('aria-label') || '',
-        settingsOpen: document.getElementById('dashboard-settings-panel')?.classList.contains('is-open'),
-        readability: document.getElementById('dashboard-readability-select')?.value,
-        budget: document.getElementById('dashboard-budget-select')?.value,
-        autoTuneBefore,
-        autoTune: document.getElementById('dashboard-autotune-toggle')?.checked,
-        opacity: document.getElementById('dashboard-opacity-slider')?.value
+        ready: true, errors, beforeReset, readability: stored.themeReadability, budget: stored.performanceBudget,
+        autoTuneChanged: stored.gameModeAutoTune === String(previousAutoTune === true || previousAutoTune === '1' ? '0' : '1'),
+        opacityReset: JSON.parse(localStorage.getItem('xeneon-dashboard-settings') || '{}').dashboardOpacity,
+        selected: document.body.dataset.activeWidgetId, section: document.body.dataset.section,
+        appearanceSelected: document.querySelector('.auxora-panel-link[data-widget-id="theme-studio"]')?.getAttribute('aria-pressed'),
+        obsoleteOptions: !!document.querySelector('#dashboard-settings-panel, #dashboard-opacity-slider'),
+        fatal: /Dashboard failed|Dashboard runtime error/.test(document.body.innerText || '')
       };
-    })()`,
-    awaitPromise: true,
-    returnByValue: true
+    })()`, awaitPromise: true, returnByValue: true
   });
   const result = evaluation.result?.value || {};
-  assert(result.errors?.length === 0, `settings interaction emitted runtime errors: ${JSON.stringify(result.errors || [])}`);
-  assert(!result.fatalVisible, "settings interaction collapsed the dashboard into a fatal error surface");
-  assert(result.closedToggleText === "Panel options" && result.closedToggleName === "Open panel options" && result.controlsSettingsBody === "dashboard-widget-settings", `collapsed panel options were ambiguous or disconnected: ${JSON.stringify(result)}`);
-  assert(result.openToggleText === "Hide options" && result.openToggleName === "Close panel options", `expanded panel options did not publish a distinct accessible name: ${JSON.stringify(result)}`);
-  assert(result.settingsOpen, "settings drawer closed during focused-control reconciliation");
-  assert(result.readability === "clean", `readability change was lost: ${JSON.stringify(result)}`);
-  assert(result.budget === "game", `performance change was lost: ${JSON.stringify(result)}`);
-  assert(result.autoTune === !result.autoTuneBefore, `auto-tune change was lost: ${JSON.stringify(result)}`);
-  assert(result.opacity === "57", `opacity change was lost: ${JSON.stringify(result)}`);
-  console.log("focused Settings change/blur reconciliation: passed");
+  assert(!evaluation.exceptionDetails && result.ready && result.errors.length === 0 && !result.fatal, `Appearance interaction failed: ${JSON.stringify(result)} ${evaluation.exceptionDetails?.exception?.description || ''}`);
+  assert(result.readability === 'clean' && result.budget === 'game' && result.autoTuneChanged && result.beforeReset === '57' && result.opacityReset === '100', `Appearance persistence/reset lost a setting: ${JSON.stringify(result)}`);
+  assert(result.selected === 'theme-studio' && result.section === 'settings' && result.appearanceSelected === 'true' && !result.obsoleteOptions, `Appearance controls lost their sole Settings location: ${JSON.stringify(result)}`);
+  console.log('Appearance focused settings changes and opacity reset: passed');
 }
 
 async function validateTouchLockIsolation(cdp) {
@@ -534,14 +531,14 @@ async function validateTouchLockIsolation(cdp) {
       const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
       const deadline = Date.now() + 10000;
       while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await wait(50);
-      const settingsNav = document.querySelector('#dashboard-primary-nav [data-destination="settings"]');
+      const settingsNav = document.getElementById('dashboard-settings-toggle');
       settingsNav?.click();
       const diagnosticsDeadline = Date.now() + 5000;
       let resetButton = null;
       while (Date.now() < diagnosticsDeadline) {
         const setupButton = document.querySelector('[data-widget-id="setup"]');
         if (setupButton && !setupButton.classList.contains('is-active')) {
-          document.getElementById('dashboard-panels-toggle')?.click();
+          document.getElementById('dashboard-settings-toggle')?.click();
           setupButton.click();
         }
         resetButton = document.querySelector('#dashboard-inline-widget [data-action="reset-local-data"]');
@@ -550,20 +547,20 @@ async function validateTouchLockIsolation(cdp) {
       }
       const errors = [];
       window.addEventListener('error', event => errors.push(String(event.error?.message || event.message || 'runtime error')), true);
-      const headingBefore = document.getElementById('dashboard-widget-title')?.textContent || '';
-      const destinationBefore = document.querySelector('#dashboard-primary-nav [aria-pressed="true"]')?.getAttribute('data-destination') || '';
+      const headingBefore = document.body?.dataset.activeWidgetId || '';
+      const destinationBefore = document.body?.dataset.section || '';
       const lockButton = document.getElementById('dashboard-touch-lock-toggle');
       lockButton?.click();
       await wait(100);
       const unlockButton = document.getElementById('dashboard-touch-unlock');
-      const modesButton = document.querySelector('#dashboard-primary-nav [data-destination="scenes"]');
+      const modesButton = document.querySelector('#dashboard-section-nav [data-section-id="gaming"]');
       const quickButton = document.getElementById('dashboard-quick-toggle');
       modesButton?.click();
       resetButton?.click();
       quickButton?.click();
       await wait(100);
       return {
-        ready: !!(lockButton && unlockButton && resetButton),
+        ready: !!(lockButton && unlockButton && resetButton && modesButton && quickButton),
         lockedClass: document.body.classList.contains('dashboard-native-page--touch-locked'),
         railInert: document.querySelector('.router-rail')?.hasAttribute('inert'),
         viewerInert: document.querySelector('.router-viewer')?.hasAttribute('inert'),
@@ -572,9 +569,9 @@ async function validateTouchLockIsolation(cdp) {
         unlockVisible: !unlockButton?.classList.contains('is-hidden'),
         focusedId: document.activeElement?.id || '',
         headingBefore,
-        headingAfter: document.getElementById('dashboard-widget-title')?.textContent || '',
+        headingAfter: document.body?.dataset.activeWidgetId || '',
         destinationBefore,
-        destinationAfter: document.querySelector('#dashboard-primary-nav [aria-pressed="true"]')?.getAttribute('data-destination') || '',
+        destinationAfter: document.body?.dataset.section || '',
         resetText: resetButton?.textContent?.trim() || '',
         quickOpen: document.body.classList.contains('dashboard-native-page--quick-open'),
         fatalVisible: /Dashboard failed|Dashboard runtime error/.test(document.body?.innerText || ''),
@@ -651,15 +648,15 @@ async function validateFocusedInlineWidgetReconciliation(cdp) {
       const errors = [];
       window.addEventListener('error', event => errors.push(String(event.error?.message || event.message || 'runtime error')), true);
       const form = document.querySelector('[data-form="theme-studio"]');
-      const variant = form?.elements?.themeVariant;
+      const variant = form?.elements?.themeReadability;
       const accent = form?.elements?.accentMode;
-      const blurTarget = document.getElementById('dashboard-panels-toggle');
+      const blurTarget = document.getElementById('dashboard-quick-toggle');
       if (!variant || !accent || !blurTarget) return { ready: false, errors };
       variant.focus();
-      variant.value = 'standard';
+      variant.value = 'clean';
       variant.dispatchEvent(new Event('change', { bubbles: true }));
       await wait(50);
-      const focusedChangePreserved = variant.isConnected && document.activeElement === variant && variant.value === 'standard';
+      const focusedChangePreserved = variant.isConnected && document.activeElement === variant && variant.value === 'clean';
       accent.focus();
       accent.value = 'custom';
       accent.dispatchEvent(new Event('change', { bubbles: true }));
@@ -675,7 +672,7 @@ async function validateFocusedInlineWidgetReconciliation(cdp) {
         connected: variant.isConnected && accent.isConnected,
         focused: document.activeElement === blurTarget,
         valuePreserved: focusedChangePreserved && customChangePreserved
-          && document.querySelector('[data-form="theme-studio"]')?.elements?.themeVariant?.value === 'standard'
+          && document.querySelector('[data-form="theme-studio"]')?.elements?.themeReadability?.value === 'clean'
           && document.querySelector('[data-form="theme-studio"]')?.elements?.accentMode?.value === 'custom',
         customEnabled: document.querySelector('[data-form="theme-studio"]')?.elements?.customAccentColor?.disabled === false,
         customEnabledBeforeBlur,
@@ -697,14 +694,10 @@ async function validateFocusedInlineWidgetReconciliation(cdp) {
       await wait(750);
       const errors = [];
       window.addEventListener('error', event => errors.push(String(event.error?.message || event.message || 'runtime error')), true);
-      const catalogToggle = document.getElementById('dashboard-panels-toggle');
-      catalogToggle?.focus(); catalogToggle?.click(); await wait(50);
-      const pickerButton = document.querySelector('#dashboard-widget-picker [data-widget-id="streaming"]');
-      pickerButton?.focus();
-      pickerButton?.click();
-      await wait(150);
-      const chromePreserved = !!pickerButton && pickerButton.isConnected && document.activeElement === catalogToggle
-        && document.getElementById('dashboard-panels-drawer')?.classList.contains('is-hidden');
+      const pickerButton = document.querySelector('.auxora-panel-link[data-widget-id="streaming"]');
+      pickerButton?.focus(); pickerButton?.click(); await wait(150);
+      const chromePreserved = !!pickerButton && pickerButton.isConnected && document.activeElement === pickerButton
+        && document.body.dataset.activeWidgetId === 'streaming';
       const input = document.querySelector('[data-form="streaming"] input[name="obsEndpoint"]');
       if (!input) return { ready: false, errors };
       input.focus();
@@ -714,9 +707,10 @@ async function validateFocusedInlineWidgetReconciliation(cdp) {
       const connected = input.isConnected;
       const focused = document.activeElement === input;
       const valuePreserved = input.value === 'ws://example.test:4455';
-      const openMedia = document.querySelector('[data-action="open-media"]');
-      openMedia?.focus();
-      openMedia?.click();
+      const audioTab = document.querySelector('.auxora-panel-link[data-widget-id="audio"]');
+      if (!audioTab) throw new Error("Streaming teardown requires the Audio & Media tab");
+      audioTab.focus();
+      audioTab.click();
       await wait(150);
       return {
         ready: true,
@@ -724,7 +718,7 @@ async function validateFocusedInlineWidgetReconciliation(cdp) {
         focused,
         valuePreserved,
         chromePreserved,
-        teardownSafe: document.getElementById('dashboard-widget-title')?.textContent === 'Audio & Media',
+        teardownSafe: document.body?.dataset.activeWidgetId === 'audio',
         errors,
         fatalVisible: /Dashboard failed|Dashboard runtime error/.test(document.body.innerText || '')
       };
@@ -1002,8 +996,8 @@ async function validateHomeRefreshStability(cdp) {
       const shell = mount?.querySelector('.product-shell');
       const cards = Array.from(mount?.querySelectorAll('.metric-card') || []);
       const buttons = Array.from(mount?.querySelectorAll('button') || []);
-      const editHome = mount?.querySelector('[data-home-open="layout-editor"]');
-      editHome?.focus();
+      const performanceCard = mount?.querySelector('[data-home-open="system"]');
+      performanceCard?.focus();
       const beforeText = cards.map(card => card.textContent.trim());
 
       await controller.refresh();
@@ -1014,12 +1008,13 @@ async function validateHomeRefreshStability(cdp) {
       const nextCards = Array.from(nextMount?.querySelectorAll('.metric-card') || []);
       const nextButtons = Array.from(nextMount?.querySelectorAll('button') || []);
       const result = {
-        ready: !!mount && !!shell && cards.length === 4 && buttons.length >= 4,
+        ready: !!mount && !!shell && cards.length === 3 && !!performanceCard && buttons.length >= 3,
+        destinations: cards.map(card => card.getAttribute("data-home-open")),
         mountPreserved: mount === nextMount,
         shellPreserved: shell === nextShell,
         cardsPreserved: cards.length === nextCards.length && cards.every((card, index) => card === nextCards[index]),
         buttonsPreserved: buttons.length === nextButtons.length && buttons.every((button, index) => button === nextButtons[index]),
-        focusPreserved: document.activeElement === editHome,
+        focusPreserved: document.activeElement === performanceCard,
         beforeText,
         afterText: nextCards.map(card => card.textContent.trim()),
         fatal: /Dashboard failed|Dashboard runtime error/i.test(document.body?.innerText || '')
@@ -1033,6 +1028,7 @@ async function validateHomeRefreshStability(cdp) {
   });
   const result = evaluation.result?.value || {};
   assert(result.ready, `Home refresh stability fixture did not initialize: ${JSON.stringify(result)}`);
+  assert(result.destinations.join("|") === "system|network|calendar", "Home cards must retain their Performance, Network, and Calendar destinations");
   assert(result.mountPreserved && result.shellPreserved && result.cardsPreserved && result.buttonsPreserved, `Home polling replaced stable UI nodes: ${JSON.stringify(result)}`);
   assert(result.focusPreserved, `Home polling stole keyboard focus: ${JSON.stringify(result)}`);
   assert(!result.fatal, `Home polling created a fatal dashboard state: ${JSON.stringify(result)}`);
@@ -1059,36 +1055,35 @@ async function validateSurfaceStatusOwnership(cdp) {
         };
       });
 
-      document.getElementById('dashboard-panels-toggle')?.click();
-      document.querySelector('#dashboard-widget-picker [data-widget-id="display-controls"]')?.click();
+      window.__auxoraTestOpenWidget('display-controls');
       await wait(50);
       if (!capturedEnv) return { ready: false, errors };
-      const buttonsBefore = Array.from(document.querySelectorAll('#dashboard-widget-picker [data-widget-id]'));
+      const buttonsBefore = Array.from(document.querySelectorAll('.auxora-panel-link[data-widget-id]'));
       capturedEnv.publishStatus('Ready', 'good', 'Owned display status');
       await wait(0);
-      const buttonsAfter = Array.from(document.querySelectorAll('#dashboard-widget-picker [data-widget-id]'));
+      const buttonsAfter = Array.from(document.querySelectorAll('.auxora-panel-link[data-widget-id]'));
       const activeStatus = {
-        heading: document.getElementById('dashboard-widget-title')?.textContent || '',
-        source: document.getElementById('dashboard-widget-source')?.textContent || '',
-        picker: document.querySelector('[data-widget-id="display-controls"] .router-picker__meta')?.textContent || '',
+        heading: document.body?.dataset.activeWidgetId || '',
+        source: document.getElementById('dashboard-status')?.dataset.surfaceStatus || '',
+        picker: document.querySelector('[data-widget-id="display-controls"]')?.dataset.status || '',
         nodesPreserved: buttonsBefore.length === buttonsAfter.length && buttonsBefore.every((button, index) => button === buttonsAfter[index])
       };
 
       document.querySelector('[data-widget-id="network"]')?.click();
       await wait(100);
       const networkBeforeLateWork = {
-        heading: document.getElementById('dashboard-widget-title')?.textContent || '',
-        source: document.getElementById('dashboard-widget-source')?.textContent || '',
-        picker: document.querySelector('[data-widget-id="network"] .router-picker__meta')?.textContent || ''
+        heading: document.body?.dataset.activeWidgetId || '',
+        source: document.getElementById('dashboard-status')?.dataset.surfaceStatus || '',
+        picker: document.querySelector('[data-widget-id="network"]')?.dataset.status || ''
       };
       capturedEnv.publishStatus('Bogus stale status', 'danger', 'Must be ignored');
       capturedEnv.reportWidgetError(new Error('late stale widget failure'), 'refreshing');
       await wait(100);
       const afterLateWork = {
-        heading: document.getElementById('dashboard-widget-title')?.textContent || '',
-        source: document.getElementById('dashboard-widget-source')?.textContent || '',
-        picker: document.querySelector('[data-widget-id="network"] .router-picker__meta')?.textContent || '',
-        staleDisplayStatus: document.querySelector('[data-widget-id="display-controls"] .router-picker__meta')?.textContent || '',
+        heading: document.body?.dataset.activeWidgetId || '',
+        source: document.getElementById('dashboard-status')?.dataset.surfaceStatus || '',
+        picker: document.querySelector('[data-widget-id="network"]')?.dataset.status || '',
+        staleDisplayStatus: document.querySelector('[data-widget-id="display-controls"]')?.dataset.status || '',
         fatalVisible: /Dashboard failed|Dashboard runtime error|late stale widget failure/.test(document.body.innerText || '')
       };
       return { ready: true, activeStatus, networkBeforeLateWork, afterLateWork, errors };
@@ -1098,9 +1093,9 @@ async function validateSurfaceStatusOwnership(cdp) {
   });
   const result = evaluation.result?.value || {};
   assert(result.ready, `surface status ownership probe did not initialize: ${JSON.stringify(result)}`);
-  assert(result.activeStatus?.heading === "Display Controls" && result.activeStatus?.source === "Ready" && result.activeStatus?.picker === "Ready" && result.activeStatus?.nodesPreserved, `active surface status replaced selector controls or missed its owner: ${JSON.stringify(result)}`);
-  assert(JSON.stringify(result.networkBeforeLateWork) === JSON.stringify({ heading: "Network", source: "Ready", picker: "Ready" }), `selector activation failed after an active status update: ${JSON.stringify(result)}`);
-  assert(JSON.stringify(result.afterLateWork) === JSON.stringify({ heading: "Network", source: "Ready", picker: "Ready", staleDisplayStatus: "Ready", fatalVisible: false }), `late widget status or error work escaped into the next panel: ${JSON.stringify(result)}`);
+  assert(result.activeStatus?.heading === "display-controls" && result.activeStatus?.source === "Ready" && result.activeStatus?.picker === "Ready" && result.activeStatus?.nodesPreserved, `active surface status replaced selector controls or missed its owner: ${JSON.stringify(result)}`);
+  assert(JSON.stringify(result.networkBeforeLateWork) === JSON.stringify({ heading: "network", source: "Ready", picker: "Ready" }), `selector activation failed after an active status update: ${JSON.stringify(result)}`);
+  assert(JSON.stringify(result.afterLateWork) === JSON.stringify({ heading: "network", source: "Ready", picker: "Ready", staleDisplayStatus: "Ready", fatalVisible: false }), `late widget status or error work escaped into the next panel: ${JSON.stringify(result)}`);
   assert((result.errors || []).length === 0, `surface status ownership emitted runtime errors: ${JSON.stringify(result.errors || [])}`);
   console.log("widget-generation status ownership and selector click stability: passed");
 }
@@ -1115,11 +1110,11 @@ async function validateNonTouchScrollClickAndRailStatus(cdp) {
       while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || !document.querySelector('[data-widget-id="setup"]'))) await wait(50);
       const errors = [];
       window.addEventListener('error', event => errors.push(String(event.error?.message || event.message || 'runtime error')), true);
-      const picker = document.getElementById('dashboard-widget-picker');
-      document.getElementById('dashboard-panels-toggle')?.click();
+      const picker = document.getElementById('dashboard-settings-categories');
+      document.getElementById('dashboard-settings-toggle')?.click();
       await wait(50);
       const setupButton = document.querySelector('[data-widget-id="setup"]');
-      const setupStatus = setupButton?.querySelector('.router-picker__meta')?.textContent || '';
+      const setupStatus = setupButton?.dataset.status || '';
       setupButton?.scrollIntoView({ block: 'nearest' });
       picker?.dispatchEvent(new Event('scroll'));
       await wait(50);
@@ -1129,9 +1124,9 @@ async function validateNonTouchScrollClickAndRailStatus(cdp) {
         ready: !!setupButton,
         setupStatus,
         scrollDispatched: true,
-        heading: document.getElementById('dashboard-widget-title')?.textContent || '',
-        origin: document.getElementById('dashboard-origin-status')?.textContent || '',
-        selection: document.getElementById('dashboard-selection-status')?.textContent || '',
+        heading: document.body?.dataset.activeWidgetId || '',
+        origin: document.getElementById('dashboard-status')?.dataset.status || '',
+        selection: document.body?.dataset.activeWidgetId || '',
         diagnosticsRailPresent: !!document.getElementById('dashboard-diagnostics-rail'),
         readinessHeading: document.querySelector('[data-inline-widget-mount] .inline-title')?.textContent || '',
         inertCompletionPresent: [...document.querySelectorAll('[data-action="finish-setup"]')].some(button => button.disabled || /Auto ready|Finish manually/.test(button.textContent || '')),
@@ -1145,9 +1140,9 @@ async function validateNonTouchScrollClickAndRailStatus(cdp) {
   const result = evaluation.result?.value || {};
   assert(result.ready, `non-touch scroll-click probe did not find Diagnostics: ${JSON.stringify(result)}`);
   assert(result.scrollDispatched, `probe did not exercise a programmatic picker scroll before clicking: ${JSON.stringify(result)}`);
-  assert(result.heading === "Diagnostics", `a non-touch scroll swallowed the first Diagnostics click: ${JSON.stringify(result)}`);
-  assert(["Ready", "Needs Setup"].includes(result.origin) && result.origin === result.setupStatus, `dashboard chrome disagreed with the live Diagnostics status: ${JSON.stringify(result)}`);
-  assert(result.selection === "Diagnostics", `selected panel status was clipped or redundant: ${JSON.stringify(result)}`);
+  assert(result.heading === "setup", `a non-touch scroll swallowed the first Diagnostics click: ${JSON.stringify(result)}`);
+  assert(["Ready", "Needs Setup"].includes(result.origin) && result.setupStatus === result.origin, `dashboard chrome disagreed with the live Diagnostics status: ${JSON.stringify(result)}`);
+  assert(result.selection === "setup", `selected panel status was clipped or redundant: ${JSON.stringify(result)}`);
   assert(!result.diagnosticsRailPresent, "the redundant opaque Diagnostics rail card returned");
   assert(result.readinessHeading === "System readiness" && !result.inertCompletionPresent, `Diagnostics rendered a repeated heading or inert setup-completion control: ${JSON.stringify(result)}`);
   assert(!result.fatalVisible && (result.errors || []).length === 0, `scroll-click/status validation emitted a dashboard runtime failure: ${JSON.stringify(result)}`);
@@ -1155,7 +1150,7 @@ async function validateNonTouchScrollClickAndRailStatus(cdp) {
 }
 
 async function validateResetConfirmationExpiry(cdp) {
-  await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?resetExpiryTest=1` });
+  await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=setup&resetExpiryTest=1` });
   await waitForCommittedUrl(cdp, "resetExpiryTest=1");
   const evaluation = await cdp.send("Runtime.evaluate", {
     expression: `(async () => {
@@ -1165,7 +1160,7 @@ async function validateResetConfirmationExpiry(cdp) {
       while (Date.now() < deadline) {
         const setupButton = document.querySelector('[data-widget-id="setup"]');
         if (document.body?.dataset.bridgeHydrated === 'true' && setupButton && !setupButton.classList.contains('is-active')) {
-          document.getElementById('dashboard-panels-toggle')?.click();
+          document.getElementById('dashboard-settings-toggle')?.click();
           setupButton.click();
         }
         resetButton = document.querySelector('#dashboard-inline-widget [data-action="reset-local-data"]');
@@ -1235,24 +1230,24 @@ async function validateBackgroundTerminalStatuses(cdp) {
       let displayActive = false;
       while (Date.now() < deadline) {
         const displayButton = document.querySelector('[data-widget-id="display-controls"]');
-        displayStatus = displayButton?.querySelector('.router-picker__meta')?.textContent?.trim() || '';
+        displayStatus = displayButton?.dataset.status || '';
         displayActive = displayButton?.getAttribute('aria-pressed') === 'true';
         if (document.body?.dataset.bridgeHydrated === 'true'
             && displayStatus === 'Available') break;
         await wait(50);
       }
-      document.querySelector('[data-destination="settings"]')?.click();
+      document.querySelector('[data-section-id="settings"]')?.click();
       await wait(50);
       const setupButton = document.querySelector('[data-widget-id="setup"]');
       if (setupButton?.getAttribute('aria-pressed') !== 'true') {
-        document.getElementById('dashboard-panels-toggle')?.click();
+        document.getElementById('dashboard-settings-toggle')?.click();
         setupButton?.click();
       }
       let recoveryStatus = '';
       let recoveryActive = false;
       while (Date.now() < deadline) {
         const recoveryButton = document.querySelector('[data-widget-id="installer"]');
-        recoveryStatus = recoveryButton?.querySelector('.router-picker__meta')?.textContent?.trim() || '';
+        recoveryStatus = recoveryButton?.dataset.status || '';
         recoveryActive = recoveryButton?.getAttribute('aria-pressed') === 'true';
         if (['Ready', 'Waiting for display', 'Unavailable'].includes(recoveryStatus)) break;
         await wait(50);
@@ -1363,7 +1358,7 @@ async function validateProductSurfaceSemantics(cdp) {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline && document.querySelectorAll('[data-layout-item]').length === 0) await wait(50);
     const rows = Array.from(document.querySelectorAll('[data-layout-item]'));
-    const controls = Array.from(document.querySelectorAll('[data-layout-action="earlier"], [data-layout-action="later"], [data-layout-placement], [data-layout-size]'));
+    const controls = Array.from(document.querySelectorAll('[data-layout-action="earlier"], [data-layout-action="later"], [data-layout-placement]'));
     const placements = Array.from(document.querySelectorAll('[data-layout-placement]'));
     const widths = Array.from(document.querySelectorAll('[data-layout-size]'));
     return {
@@ -1377,28 +1372,33 @@ async function validateProductSurfaceSemantics(cdp) {
       rowCount: rows.length,
       placementOptions: placements.map(select => Array.from(select.options).map(option => option.value)),
       placementLabels: placements.map(select => Array.from(select.options).map(option => option.textContent.trim())),
-      widthOptions: widths.map(select => Array.from(select.options).map(option => option.value)),
+      retiredWidthControlCount: widths.length,
       hasLiveStatus: Boolean(document.querySelector('[data-layout-live][aria-live="polite"]')),
       hasOldControls: Boolean(document.querySelector('[data-layout-action="pin"], [data-layout-action="hide"], [data-layout-action="size"]'))
     };
   })()`);
-  assert(layout.rowCount > 0 && layout.controlCount === layout.rowCount * 4, `Layout Editor controls did not render coherently: ${JSON.stringify(layout)}`);
+  assert(layout.rowCount > 0 && layout.controlCount === layout.rowCount * 3, `Layout Editor controls did not render coherently: ${JSON.stringify(layout)}`);
   assert(layout.labels.every(Boolean), `Layout Editor exposed unnamed row actions: ${JSON.stringify(layout.labels)}`);
   assert(new Set(layout.labels).size === layout.labels.length, `Layout Editor row action names are ambiguous: ${JSON.stringify(layout.labels)}`);
   assert(layout.listTag === "OL" && layout.positions.every((position, index) => position === String(index + 1)), `Layout Editor did not expose one numbered order: ${JSON.stringify(layout)}`);
   assert(layout.rowKeys.every(Boolean) && new Set(layout.rowKeys).size === layout.rowKeys.length, `Layout Editor rows did not have stable identities: ${JSON.stringify(layout.rowKeys)}`);
   assert(/Editing/i.test(layout.guide) && /Mode/i.test(layout.guide) && /Changes save automatically/i.test(layout.guide), `Layout Editor did not identify the Mode or autosave behavior: ${JSON.stringify(layout.guide)}`);
   assert(layout.placementOptions.every(options => options.includes("home") && options.includes("hidden")) && layout.placementOptions.some(options => options.includes("library")), `Layout Editor placement choices were incomplete: ${JSON.stringify(layout.placementOptions)}`);
-  assert(layout.placementLabels.every(labels => labels.includes("Hidden in this Mode") && ["On Home", "Home after setup"].includes(labels[0])), `Layout Editor placement labels did not match their real scope or setup state: ${JSON.stringify(layout.placementLabels)}`);
-  assert(layout.widthOptions.every(options => options.join(",") === "compact,standard,wide"), `Layout Editor width was not directly selectable: ${JSON.stringify(layout.widthOptions)}`);
+  assert(layout.placementLabels.every(labels => labels.includes("Hidden on Home") && ["On Home", "Home after setup"].includes(labels[0])), `Layout Editor placement labels did not match their real scope or setup state: ${JSON.stringify(layout.placementLabels)}`);
+  assert(layout.retiredWidthControlCount === 0, `Layout Editor exposed a width setting that no longer controls section width: ${JSON.stringify(layout)}`);
   assert(layout.hasLiveStatus && !layout.hasOldControls, `Layout Editor retained ambiguous controls or omitted saved-change feedback: ${JSON.stringify(layout)}`);
   assert(!/sold or used/i.test(layout.copy || ""), "Layout Editor exposed internal sales-oriented copy");
 
   const modes = await navigateAndEvaluate("scenes", "productModesTest", `(async () => {
     const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
     const deadline = Date.now() + 15000;
-    while (Date.now() < deadline && document.querySelectorAll('[data-scene-activate]').length === 0) await wait(50);
-    const buttons = Array.from(document.querySelectorAll('[data-scene-activate], [data-scene-duplicate]'));
+    while (Date.now() < deadline && document.querySelectorAll('[data-scene-duplicate]').length === 0) await wait(50);
+    const initialSnapshot = await fetch('/api/scenes', { cache: 'no-store' }).then(response => response.json());
+    const expectedIds = (initialSnapshot.profiles || []).filter(profile => profile.id !== 'scene-night' && profile.themeVariant !== 'night').map(profile => profile.id);
+    const buttons = Array.from(document.querySelectorAll('[data-scene-duplicate]'));
+    const headerOptions = Array.from(document.querySelector('#dashboard-mode-select')?.options || []).map(option => option.value);
+    const duplicateIds = buttons.map(button => button.getAttribute('data-scene-duplicate'));
+    const retiredActivationCount = document.querySelectorAll('[data-scene-activate]').length;
     document.querySelector('[data-scene-duplicate="scene-work"]')?.click();
     const duplicateDeadline = Date.now() + 10000;
     let editForm = null;
@@ -1425,7 +1425,14 @@ async function validateProductSurfaceSemantics(cdp) {
         if (current?.name === 'Work Touch' && current.themeId === 'warm' && current.density === 'compact' && current.animationIntensity === 47 && current.performanceBudget === 'game') { renamed = true; break; }
         await wait(50);
       }
-      document.querySelector('[data-scene-delete]')?.click();
+      // The native save can be observed before the UI receives its receipt.
+      // Wait for the real form to settle before testing the delete confirmation.
+      const saveUiDeadline = Date.now() + 10000;
+      while (Date.now() < saveUiDeadline && (document.querySelector('[data-scene-delete]')?.disabled
+        || !/Custom Mode saved/.test(document.querySelector('#dashboard-inline-widget')?.textContent || ''))) await wait(25);
+      const deleteControl = document.querySelector('[data-scene-delete]');
+      if (!deleteControl || deleteControl.disabled) throw new Error('Mode save did not restore the delete control');
+      deleteControl.click();
       const armDeadline = Date.now() + 3000;
       while (Date.now() < armDeadline) {
         const confirmation = document.querySelector('[data-scene-delete]');
@@ -1443,6 +1450,7 @@ async function validateProductSurfaceSemantics(cdp) {
     return {
       labels: buttons.map(button => button.getAttribute('aria-label') || ''),
       buttonCount: buttons.length,
+      expectedIds, duplicateIds, headerOptions, retiredActivationCount,
       duplicateCreatedCustom: (duplicateSnapshot.profiles || []).some(scene => scene && scene.isBuiltIn === false),
       customEditorVisible: Boolean(editForm),
       renamed,
@@ -1452,7 +1460,10 @@ async function validateProductSurfaceSemantics(cdp) {
       finalActiveSceneId: finalSnapshot.activeSceneId || ''
     };
   })()`);
-  assert(modes.buttonCount >= 8, `Mode controls did not render: ${JSON.stringify(modes)}`);
+  assert(modes.expectedIds.length > 0 && modes.buttonCount === modes.expectedIds.length
+    && [...modes.duplicateIds].sort().join("|") === [...modes.expectedIds].sort().join("|")
+    && modes.headerOptions.includes("automatic") && modes.expectedIds.every(id => modes.headerOptions.includes(id))
+    && modes.retiredActivationCount === 0, `Mode controls did not render: ${JSON.stringify(modes)}`);
   assert(modes.labels.every(Boolean), `Modes exposed unnamed actions: ${JSON.stringify(modes.labels)}`);
   assert(new Set(modes.labels).size === modes.labels.length, `Mode action names are ambiguous: ${JSON.stringify(modes.labels)}`);
   assert(modes.duplicateCreatedCustom && modes.customEditorVisible && modes.renamed, `Duplicated Mode could not be edited through the UI: ${JSON.stringify(modes)}`);
@@ -1464,14 +1475,14 @@ async function validateProductSurfaceSemantics(cdp) {
     let status = '';
     let actionCount = 0;
     while (Date.now() < deadline) {
-      status = document.querySelector('#dashboard-widget-source')?.textContent?.trim() || '';
+      status = document.getElementById('dashboard-status')?.dataset.surfaceStatus || '';
       actionCount = document.querySelectorAll('[data-recovery-action]').length;
       if (document.body?.dataset.bridgeHydrated === 'true' && actionCount >= 5 && (status === 'Ready' || status === 'Waiting for display')) break;
       await wait(50);
     }
     return {
       status,
-      pickerStatus: document.querySelector('[data-widget-id="installer"] .router-picker__meta')?.textContent?.trim() || '',
+      pickerStatus: document.querySelector('[data-widget-id="installer"]')?.dataset.status || '',
       detail: document.querySelector('#dashboard-inline-widget [role="status"]')?.textContent?.trim() || '',
       actionCount
     };
@@ -1488,12 +1499,12 @@ async function validateProductSurfaceSemantics(cdp) {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline && !document.querySelector('[data-form="updates"]')) await wait(50);
     return {
-      headerCopy: document.querySelector('#dashboard-widget-copy')?.textContent?.trim() || '',
+      headerCopy: document.querySelector('#dashboard-inline-widget')?.innerText || '',
       frameCopy: document.querySelector('#dashboard-inline-widget')?.innerText || '',
       stableOption: Boolean(document.querySelector('[data-form="updates"] option[value="stable"]'))
     };
   })()`);
-  assert(/channels supported by this build/i.test(updates.headerCopy || ""), `Updates header copy is stale: ${JSON.stringify(updates)}`);
+  assert(/beta|channel/i.test(updates.frameCopy || ""), `Updates must explain its available release channel: ${JSON.stringify(updates)}`);
   assert(/does not install updates automatically/i.test(updates.frameCopy || ""), "Updates still implies automatic installation");
   assert(updates.stableOption === false, "beta Updates surface exposed Stable after semantic audit");
 
@@ -1525,10 +1536,10 @@ async function validateProductSurfaceSemantics(cdp) {
       await wait(100);
     }
     return {
-      headerCopy: document.querySelector('#dashboard-widget-copy')?.textContent?.trim() || '',
+      headerCopy: document.querySelector('#dashboard-inline-widget')?.innerText || '',
       frameCopy: document.querySelector('#dashboard-inline-widget')?.innerText || '',
-      pickerStatus: document.querySelector('[data-widget-id="streaming"] .router-picker__meta')?.textContent?.trim() || '',
-      outerStatus: document.querySelector('#dashboard-widget-source')?.textContent?.trim() || '',
+      pickerStatus: document.querySelector('[data-widget-id="streaming"]')?.dataset.status || '',
+      outerStatus: document.getElementById('dashboard-status')?.dataset.surfaceStatus || '',
       initialEndpoint
     };
   })()`);
@@ -1562,6 +1573,12 @@ async function validateProductSurfaceSemantics(cdp) {
     const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline && !document.querySelector('[data-action="export-backup"]')) await wait(50);
+
+    const backupSection = document.querySelector('[data-ui-key="privacy-reset"]');
+    const backupSummary = backupSection?.querySelector(':scope > summary');
+    if (!backupSummary) throw new Error('Privacy backup section is missing');
+    if (!backupSection.open) backupSummary.click();
+    if (!backupSection.open) throw new Error('Privacy backup section did not open through its summary');
 
     window.__auxoraCopiedBackup = '';
     const clipboard = { writeText: async value => { window.__auxoraCopiedBackup = String(value || ''); } };
@@ -1697,13 +1714,14 @@ async function validateCameraDetection(cdp, mockFrigate) {
       const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
       const deadline = Date.now() + 10000;
       while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await wait(50);
-      const button = document.querySelector('.router-picker__button[data-widget-id="frigate"]');
+      const button = document.querySelector('.auxora-panel-link[data-widget-id="frigate"]');
       const setupAction = document.querySelector('#dashboard-inline-widget [data-action="setup"]');
       const before = {
-        activeWidget: document.querySelector('.router-picker__button.is-active')?.getAttribute('data-widget-id') || '',
-        activeDestination: document.querySelector('#dashboard-primary-nav button[aria-pressed="true"]')?.getAttribute('data-destination') || '',
+        activeWidget: document.body?.dataset.activeWidgetId || '',
+        activeDestination: document.body?.dataset.section || '',
         buttonExists: !!button,
         buttonText: button?.innerText || '',
+        buttonStatus: button?.dataset.status || '',
         setupActionText: setupAction?.innerText || '',
         frameText: document.querySelector('#dashboard-inline-widget')?.innerText || '',
         focusedSetupState: !!document.querySelector('#dashboard-inline-widget [data-frigate-setup-state]'),
@@ -1744,8 +1762,8 @@ async function validateCameraDetection(cdp, mockFrigate) {
       }
       return {
         ...before,
-        handoffWidget: document.querySelector('.router-picker__button.is-active')?.getAttribute('data-widget-id') || '',
-        handoffDestination: document.querySelector('#dashboard-primary-nav button[aria-pressed="true"]')?.getAttribute('data-destination') || '',
+        handoffWidget: document.body?.dataset.activeWidgetId || '',
+        handoffDestination: document.body?.dataset.section || '',
         cameraFormVisible: !!(cameraForm && cameraForm.getClientRects().length),
         focusedName: document.activeElement?.getAttribute('name') || '',
         optionalAction: document.querySelector('#dashboard-inline-widget [data-action="toggle-optional-setup"]')?.innerText || '',
@@ -1761,8 +1779,8 @@ async function validateCameraDetection(cdp, mockFrigate) {
   });
   assert(!discoverable.exceptionDetails, `Camera Detection setup evaluation failed: ${discoverable.exceptionDetails?.exception?.description || discoverable.exceptionDetails?.text || "unknown browser error"}`);
   const discoveryResult = discoverable.result?.value || {};
-  assert(discoveryResult.buttonExists && discoveryResult.activeWidget === "frigate" && discoveryResult.activeDestination === "library", `Unconfigured Camera Detection was not discoverable in Apps & Controls: ${JSON.stringify(discoveryResult)}`);
-  assert(/Setup/i.test(discoveryResult.buttonText || "") && /Set up Camera Detection/i.test(discoveryResult.setupActionText || ""), `Camera Detection did not present an actionable setup state: ${JSON.stringify(discoveryResult)}`);
+  assert(discoveryResult.buttonExists && discoveryResult.activeWidget === "frigate" && discoveryResult.activeDestination === "smart-home", `Unconfigured Camera Detection was not discoverable in Smart Home: ${JSON.stringify(discoveryResult)}`);
+  assert(discoveryResult.buttonText.trim() === "Cameras" && discoveryResult.buttonStatus === "Setup" && /Set up Camera Detection/i.test(discoveryResult.setupActionText || ""), `Camera Detection did not present an actionable setup state: ${JSON.stringify(discoveryResult)}`);
   assert(/Camera Detection needs setup/i.test(discoveryResult.frameText || ""), `Camera Detection did not explain its unconfigured state: ${JSON.stringify(discoveryResult)}`);
   assert(/Not updated/i.test(discoveryResult.frameText || "") && /Waiting for setup/i.test(discoveryResult.frameText || "") && !/Fresh Frigate sample/i.test(discoveryResult.frameText || ""), `Unconfigured Camera Detection reported a nonexistent fresh sample: ${JSON.stringify(discoveryResult)}`);
   assert(discoveryResult.focusedSetupState && !discoveryResult.renderedDataLayout && !/Last hour|Latest snapshot|No event snapshot/i.test(discoveryResult.frameText || ""), `Unconfigured Camera Detection rendered fake zero metrics or an empty data dashboard: ${JSON.stringify(discoveryResult)}`);
@@ -1839,9 +1857,9 @@ async function validateCameraDetection(cdp, mockFrigate) {
           hydrated: document.body?.dataset.bridgeHydrated === 'true',
           fatalVisible: /Dashboard failed|Dashboard runtime error/.test(document.body?.innerText || ''),
           location: location.href,
-          activeWidget: document.querySelector('.router-picker__button.is-active')?.getAttribute('data-widget-id') || '',
-          frigateButtonExists: !!document.querySelector('.router-picker__button[data-widget-id="frigate"]'),
-          activeDestination: document.querySelector('#dashboard-primary-nav button[aria-pressed="true"]')?.getAttribute('data-destination') || '',
+          activeWidget: document.body?.dataset.activeWidgetId || '',
+          frigateButtonExists: !!document.querySelector('.auxora-panel-link[data-widget-id="frigate"]'),
+          activeDestination: document.body?.dataset.section || '',
           rendererMounted: !!viewer?.querySelector('.inline-camera-layout'),
           frameText: viewer?.innerText || '',
           imageComplete: !!snapshot?.complete,
@@ -1936,7 +1954,7 @@ function validateProbe(probe, viewport) {
   assert(probe.keyboardFocus, `${viewport.name}: primary navigation could not receive keyboard focus`);
   assert(probe.keyboardActivation, `${viewport.name}: focused Settings navigation did not activate`);
   assert(probe.visibleControlCount > 0, `${viewport.name}: no visible interactive controls were rendered`);
-  assert(probe.quickOptionalHidden, `${viewport.name}: unavailable optional Lights control remained visible in Quick controls`);
+  assert(probe.quickNavigationRemoved, `${viewport.name}: removed panel/Mode navigation returned to direct Quick controls`);
   assert(probe.undersizedText.length === 0, `${viewport.name}: visible text below 12px: ${probe.undersizedText.join(", ")}`);
   assert(probe.clippedPrimaryNavLabels.length === 0, `${viewport.name}: primary navigation labels are clipped: ${probe.clippedPrimaryNavLabels.join(", ")}`);
   assert(probe.undersizedControls.length === 0, `${viewport.name}: controls below 44px: ${probe.undersizedControls.join(", ")}`);
@@ -1947,256 +1965,143 @@ function validateProbe(probe, viewport) {
   assert(probe.unnamedControls.length === 0, `${viewport.name}: unnamed controls: ${probe.unnamedControls.join(", ")}`);
 }
 
-async function validateFavoritesNavigation(cdp) {
-  const expectedIds = [
-    "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
-    "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
-  ];
-  const defaults = ["system", "audio", "network", "quick-actions"];
-  const storageKey = "auxora-dashboard-favorites-v1";
-  for (const { width, height } of [{ width: 800, height: 480 }, { width: 720, height: 480 }, { width: 390, height: 844 }, { width: 2560, height: 720 }]) {
-    await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
-    await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
-    const marker = `favoritesNavigationTest=${width}`;
-    await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=system&${marker}` });
+async function validateSectionNavigation(cdp) {
+  const defaults = ['home', 'gaming', 'media', 'pc', 'smart-home'];
+  for (const { width, height } of [{ width: 2560, height: 720 }, { width: 1280, height: 720 }, { width: 800, height: 480 }, { width: 390, height: 844 }]) {
+    await cdp.send('Storage.clearDataForOrigin', { origin: baseUrl, storageTypes: 'all' });
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+    const marker = `sectionNavigationTest=${width}`;
+    await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=home&${marker}` });
     await waitForCommittedUrl(cdp, marker);
-    if (width === 800) {
-      await cdp.send("Runtime.evaluate", {
-        expression: `(async () => { const deadline = Date.now() + 12000; while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || document.querySelectorAll('#dashboard-favorites [data-widget-id]').length !== 4)) await new Promise(resolve => setTimeout(resolve, 50)); })()`,
-        awaitPromise: true
-      });
-      const artifactDirectory = mkdtempSync(join(tmpdir(), "auxora-favorites-defaults-"));
-      const screenshotPath = join(artifactDirectory, "favorites-defaults-800x480.png");
-      const screenshot = await cdp.send("Page.captureScreenshot", { format: "png" });
-      writeFileSync(screenshotPath, Buffer.from(screenshot.data, "base64"));
-      console.log(`default favorites screenshot: ${screenshotPath}`);
-      await cdp.send("Runtime.evaluate", {
-        expression: `(async () => {
-          const toggle = document.getElementById('dashboard-panels-toggle'); toggle.focus(); toggle.click();
-          document.getElementById('dashboard-widget-picker').scrollTop = 0;
-          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        })()`, awaitPromise: true
-      });
-      const catalogScreenshotPath = join(artifactDirectory, "all-panels-800x480.png");
-      const catalogScreenshot = await cdp.send("Page.captureScreenshot", { format: "png" });
-      writeFileSync(catalogScreenshotPath, Buffer.from(catalogScreenshot.data, "base64"));
-      console.log(`All panels screenshot: ${catalogScreenshotPath}`);
-      await cdp.send("Runtime.evaluate", {
-        expression: `document.querySelector('#dashboard-panels-drawer [data-panels-close]').click()`
-      });
-    }
-    const evaluation = await cdp.send("Runtime.evaluate", {
+    const evaluation = await cdp.send('Runtime.evaluate', {
       expression: `(async () => {
         const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
         const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const check = (value, message) => { if (!value) throw new Error(message); };
-        const favoriteIds = () => [...document.querySelectorAll('#dashboard-favorites [data-widget-id]')].map(node => node.dataset.widgetId);
-        const storedIds = () => JSON.parse(localStorage.getItem('${storageKey}') || 'null');
-        const visible = node => !!node && !node.closest('[hidden], [aria-hidden="true"], .is-hidden') && node.getClientRects().length > 0;
+        const deadline = Date.now() + 12000;
+        while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await wait(50);
         const target = async node => {
-          check(visible(node), 'Missing visible control: ' + node?.outerHTML);
-          node.scrollIntoView({ block: 'nearest', inline: 'nearest' }); await frames();
-          const rect = node.getBoundingClientRect();
-          const minSize = ${width} >= 1800 ? 54 : 44;
-          check(rect.width >= minSize && rect.height >= minSize, 'Small target: ' + node.outerHTML + ' ' + JSON.stringify(rect));
-          check(rect.left >= -1 && rect.top >= -1 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1, 'Clipped target: ' + node.outerHTML);
-          for (let parent = node.parentElement; parent; parent = parent.parentElement) {
-            const style = getComputedStyle(parent); const box = parent.getBoundingClientRect();
-            if (['auto', 'hidden', 'scroll', 'clip'].includes(style.overflowX)) check(rect.left >= box.left - 1 && rect.right <= box.right + 1, 'Control clipped by horizontal scrollport: ' + node.outerHTML);
-            if (['auto', 'hidden', 'scroll', 'clip'].includes(style.overflowY)) check(rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1, 'Control clipped by vertical scrollport: ' + node.outerHTML);
-          }
-          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-          check(hit && (node === hit || node.contains(hit)), 'Covered target: ' + node.outerHTML + '; hit ' + hit?.outerHTML);
-          const label = node.querySelector('.router-picker__title') || node;
-          const range = document.createRange(); range.selectNodeContents(label);
-          const text = range.getBoundingClientRect();
-          check(text.left >= rect.left - 1 && text.right <= rect.right + 1 && text.top >= rect.top - 1 && text.bottom <= rect.bottom + 1 && label.scrollWidth <= label.clientWidth + 1, 'Clipped control label: ' + node.outerHTML);
-          check(parseFloat(getComputedStyle(label).fontSize) >= (${width} >= 1800 ? 15 : 12), 'Unreadable control label: ' + node.outerHTML);
-          check(Boolean(node.getAttribute('aria-label') || node.textContent.trim()), 'Unnamed control');
-          node.focus(); check(document.activeElement === node, 'Control cannot receive focus: ' + node.outerHTML);
+          check(node, 'Missing navigation target'); node.scrollIntoView({ block: 'nearest', inline: 'nearest' }); node.focus(); await frames();
+          const hitTarget = node.type === 'checkbox' && node.labels?.[0] ? node.labels[0] : node;
+          const rect = hitTarget.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          check(rect.width >= 44 && rect.height >= 44 && rect.left >= -1 && rect.top >= -1 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1, 'Navigation target is undersized or clipped: ' + node.textContent);
+          check(hit && (hit === hitTarget || hitTarget.contains(hit)) && document.activeElement === node, 'Navigation target is obscured or unfocusable: ' + node.textContent);
+          const name = node.getAttribute('aria-label') || [...(node.labels || [])].map(label => label.textContent.trim()).join(' ') || node.textContent.trim(); check(name, 'Navigation target unnamed');
         };
-        const deadline = Date.now() + 12000;
-        while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || favoriteIds().length !== 4)) await wait(50);
-        check(document.body?.dataset.bridgeHydrated === 'true', 'Dashboard did not hydrate');
-        const drawer = document.getElementById('dashboard-panels-drawer');
-        const toggle = document.getElementById('dashboard-panels-toggle');
-        const picker = document.getElementById('dashboard-widget-picker');
-        check(JSON.stringify(favoriteIds()) === '${JSON.stringify(defaults)}', 'Incorrect default favorites: ' + JSON.stringify(favoriteIds()));
-        check(drawer?.classList.contains('is-hidden') && toggle?.getAttribute('aria-expanded') === 'false', 'Catalog must start closed: ' + JSON.stringify({ drawerClass: drawer?.className, toggleExpanded: toggle?.getAttribute('aria-expanded') }));
-        if (${width} === 800 || ${width} === 720) {
-          const favorites = document.getElementById('dashboard-favorites'); const viewport = favorites.getBoundingClientRect();
-          check(favorites.scrollWidth <= favorites.clientWidth + 1, 'Default favorites require scrolling at companion width: ' + JSON.stringify({ scroll: favorites.scrollWidth, client: favorites.clientWidth }));
-          for (const button of favorites.querySelectorAll('[data-widget-id]')) {
-            const box = button.getBoundingClientRect();
-            check(box.left >= viewport.left - 1 && box.right <= viewport.right + 1, 'Default favorite not immediately visible: ' + button.dataset.widgetId);
+        const ids = [];
+        check([...document.querySelectorAll('#dashboard-section-nav [data-section-id]')].map(node => node.dataset.sectionId).join('|') === '${defaults.join('|')}', 'Default section order differs');
+        for (const section of window.AuxoraNavigation.sections) {
+          const sectionButton = document.querySelector('[data-section-id="' + section.id + '"]');
+          await target(sectionButton); sectionButton.click(); await frames();
+          check(document.body.dataset.section === section.id && document.getElementById('dashboard-section-title').textContent.trim() === section.label, 'Section header/selection mismatch');
+          const panels = [...document.querySelectorAll('.auxora-panel-link')].filter(node => node.getClientRects().length);
+          check(panels.map(node => node.dataset.widgetId).sort().join('|') === section.tabs.map(tab => tab.id).sort().join('|'), 'Wrong section panel order: ' + section.id);
+          for (const tab of section.tabs) {
+            // Two selection clicks, with scrolling allowed to expose each target.
+            sectionButton.click(); await frames();
+            const button = document.querySelector('.auxora-panel-link[data-widget-id="' + tab.id + '"]');
+            await target(button); button.click(); await frames();
+            check(document.body.dataset.activeWidgetId === tab.id && button.getAttribute('aria-pressed') === 'true', 'Two-click panel selection failed: ' + tab.id);
+            check(button.isConnected && document.activeElement === button, 'Panel activation replaced its focused navigation control');
+            ids.push(tab.id);
           }
         }
-        for (const button of document.querySelectorAll('#dashboard-favorites [data-widget-id]')) await target(button);
-        await target(toggle);
-        const viewer = document.querySelector('.router-viewer__frame-shell').getBoundingClientRect();
-        check(viewer.height >= 140 && viewer.bottom <= innerHeight + 1, 'Favorites consumed usable panel space: ' + JSON.stringify(viewer));
-        toggle.click(); await frames();
-        check(visible(drawer) && drawer.getAttribute('role') === 'dialog' && drawer.getAttribute('aria-modal') === 'true' && drawer.contains(document.activeElement), 'All panels did not open as a focused modal');
-        check(document.querySelector('.router-rail').inert && document.querySelector('.router-viewer').inert, 'Catalog did not isolate background controls');
-        const ids = [...picker.querySelectorAll('[data-widget-id]')].filter(visible).map(node => node.dataset.widgetId).sort();
-        check(JSON.stringify(ids) === '${JSON.stringify(expectedIds)}', 'Catalog lost a panel: ' + JSON.stringify(ids));
-        for (const button of drawer.querySelectorAll('button:not([disabled])')) await target(button);
-        const focusable = [...drawer.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter(visible);
-        const first = focusable[0]; const last = focusable[focusable.length - 1];
-        first.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
-        check(document.activeElement === last, 'Shift+Tab escaped the All panels dialog');
-        last.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-        check(document.activeElement === first, 'Tab escaped the All panels dialog');
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await frames();
-        check(!visible(drawer) && document.activeElement === toggle && !document.querySelector('.router-rail').inert && !document.querySelector('.router-viewer').inert, 'Escape did not close catalog and return focus');
-        toggle.click(); await frames();
-        document.getElementById('dashboard-panels-scrim').click(); await frames();
-        check(!visible(drawer) && document.activeElement === toggle, 'Catalog scrim did not close and return focus');
-        toggle.click(); await frames();
-        const extra = picker.querySelector('[data-favorite-widget="weather"]');
-        extra.click(); await frames();
-        check(JSON.stringify(favoriteIds()) === '${JSON.stringify(defaults)}' && extra.getAttribute('aria-pressed') === 'false', 'More than four favorites were allowed');
-        const remove = picker.querySelector('[data-favorite-widget="network"]');
-        await target(remove); remove.click(); await frames();
-        check(!favoriteIds().includes('network') && favoriteIds().length === 3 && drawer.contains(document.activeElement), 'Removing a favorite lost dialog focus or failed');
-        const add = picker.querySelector('[data-favorite-widget="weather"]');
-        await target(add); add.click(); await frames();
-        check(favoriteIds().join('|') === 'system|audio|quick-actions|weather' && JSON.stringify(storedIds()) === JSON.stringify(favoriteIds()), 'Edited favorites were not persisted');
-        const open = picker.querySelector('[data-widget-id="calendar"]');
-        await target(open); open.click(); await frames();
-        check(!visible(drawer) && document.activeElement === toggle && open.getAttribute('aria-pressed') === 'true', 'Opening a nonfavorite did not close catalog, restore focus, and select the panel');
-        const quick = document.getElementById('dashboard-quick-toggle');
-        quick.focus(); quick.click(); await frames();
-        check(visible(document.getElementById('dashboard-quick-drawer')), 'Quick controls failed after catalog use');
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await frames();
-        check(document.activeElement === quick, 'Quick controls failed focus recovery after catalog use');
-        toggle.focus(); toggle.click(); await frames();
-        // Exercise the lock state transition while a modal is open; physical background input remains inert.
-        document.getElementById('dashboard-touch-lock-toggle').click(); await frames();
-        check(document.body.classList.contains('dashboard-native-page--touch-locked') && !visible(drawer) && drawer.inert && document.activeElement?.id === 'dashboard-touch-unlock', 'Touch Lock left catalog open or focus behind the lock');
-        document.getElementById('dashboard-touch-unlock').click(); await frames();
-        check(!document.querySelector('.router-rail').inert && !document.querySelector('.router-viewer').inert && !document.body.classList.contains('dashboard-native-page--touch-locked'), 'Unlock did not recover navigation');
-        check(document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1, 'Favorites caused page overflow');
-        check((window.__auxoraRenderedRuntimeErrors || []).length === 0, 'Favorites navigation emitted runtime errors');
-        return { ids, favorites: favoriteIds(), stored: storedIds(), viewerHeight: viewer.height };
-      })()`,
-      awaitPromise: true,
-      returnByValue: true
+        check(new Set(ids).size === 25, 'Navigation did not expose every panel');
+        window.__auxoraTestOpenWidget('layout-editor'); await wait(150);
+        const visibility = document.querySelector('[data-section-visible="gaming"]'); await target(visibility); visibility.click(); await wait(150);
+        check(!document.querySelector('#dashboard-section-nav [data-section-id="gaming"]') && document.getElementById('dashboard-settings-toggle'), 'Hidden section or permanent Settings contract failed');
+        const earlier = document.querySelector('[data-section-action="earlier"][data-id="pc"]'); await target(earlier); earlier.click(); await wait(150);
+        const settings = JSON.parse(localStorage.getItem('xeneon-dashboard-settings') || '{}');
+        const layout = window.AuxoraNavigation.normalizeSectionLayout(settings.sectionOrder, settings.hiddenSections);
+        check(layout.order.join('|') === 'home|gaming|pc|media|smart-home' && layout.hidden.join('|') === 'gaming', 'Section order/visibility was not persisted: ' + JSON.stringify(layout));
+        check(!document.querySelector('[data-section-visible="settings"]'), 'Settings was made hideable');
+        return { ids, layout, errors: window.__auxoraRenderedRuntimeErrors || [] };
+      })()`, awaitPromise: true, returnByValue: true
     });
-    if (width === 800 || evaluation.exceptionDetails) {
-      const artifactDirectory = mkdtempSync(join(tmpdir(), "auxora-favorites-layout-"));
-      const screenshotPath = join(artifactDirectory, `favorites-${width}x${height}${evaluation.exceptionDetails ? "-failure" : ""}.png`);
-      const screenshot = await cdp.send("Page.captureScreenshot", { format: "png" });
-      writeFileSync(screenshotPath, Buffer.from(screenshot.data, "base64"));
-      console.log(`favorites layout screenshot: ${screenshotPath}`);
-    }
-    assert(!evaluation.exceptionDetails, `favorites ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(evaluation.exceptionDetails)}`);
     const result = evaluation.result?.value;
-    assert(result?.ids.length === expectedIds.length && result.favorites.join("|") === "system|audio|quick-actions|weather", `favorites test produced no navigation evidence: ${JSON.stringify(result)}`);
-    await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=system&favoritesReloadTest=${width}` });
-    await waitForCommittedUrl(cdp, `favoritesReloadTest=${width}`);
-    const reload = await cdp.send("Runtime.evaluate", {
-      expression: `(async () => {
-        const deadline = Date.now() + 12000;
-        while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await new Promise(resolve => setTimeout(resolve, 50));
-        return [...document.querySelectorAll('#dashboard-favorites [data-widget-id]')].map(node => node.dataset.widgetId);
-      })()`, awaitPromise: true, returnByValue: true
-    });
-    assert(JSON.stringify(reload.result?.value) === JSON.stringify(result.favorites), `favorites ${width}x${height}: edits did not survive reload: ${JSON.stringify(reload.result?.value)}`);
-    console.log(`rendered favorites and All panels ${width}x${height}: passed; ${expectedIds.length} panels, editable four favorites, persistence, keyboard trap, focus return, lock, and target geometry`);
-  }
-  for (const invalid of ["{broken", JSON.stringify({ ids: ["system"] }), JSON.stringify(["unknown", "system", "system", 7, "audio", "network", "quick-actions", "weather"])]) {
-    await cdp.send("Runtime.evaluate", { expression: `localStorage.setItem('${storageKey}', ${JSON.stringify(invalid)})` });
-    const marker = `favoritesInvalidStorageTest=${encodeURIComponent(invalid)}`;
-    await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=system&${marker}` });
-    await waitForCommittedUrl(cdp, "favoritesInvalidStorageTest=");
-    const probe = await cdp.send("Runtime.evaluate", {
-      expression: `(async () => {
-        const deadline = Date.now() + 12000;
-        while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await new Promise(resolve => setTimeout(resolve, 50));
-        const ids = [...document.querySelectorAll('#dashboard-favorites [data-widget-id]')].map(node => node.dataset.widgetId);
-        return { ids, errors: window.__auxoraRenderedRuntimeErrors || [], fatal: /Dashboard failed|Dashboard runtime error/.test(document.body.innerText || '') };
-      })()`, awaitPromise: true, returnByValue: true
-    });
-    const result = probe.result?.value;
-    assert(result && !result.fatal && result.errors.length === 0 && JSON.stringify(result.ids) === JSON.stringify(defaults), `invalid favorites did not safely normalize/fall back: ${JSON.stringify(result)}`);
-  }
-  await cdp.send("Runtime.evaluate", { expression: `(async () => {
-    const settings = JSON.parse(localStorage.getItem('xeneon-dashboard-settings') || '{}');
-    const config = await fetch('/api/config').then(response => response.json());
-    const layouts = {};
-    for (const scene of config.scenes?.profiles || []) layouts[scene.id] = { hiddenWidgets: 'weather' };
-    layouts[config.scenes?.activeSceneId || 'scene-work'] = { hiddenWidgets: 'weather' };
-    settings.modeLayouts = JSON.stringify(layouts);
-    settings.modeLayoutSchemaVersion = '2';
-    settings.hiddenWidgets = 'weather';
-    localStorage.setItem('xeneon-dashboard-settings', JSON.stringify(settings));
-    localStorage.setItem('${storageKey}', JSON.stringify(['system', 'audio', 'quick-actions', 'weather']));
-  })()`, awaitPromise: true });
-  await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=privacy&favoritesRemovalResetTest=1` });
-  await waitForCommittedUrl(cdp, "favoritesRemovalResetTest=1");
-  const removalReset = await cdp.send("Runtime.evaluate", {
-    expression: `(async () => {
-      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-      const check = (value, message) => { if (!value) throw new Error(message); };
+    assert(!evaluation.exceptionDetails && result?.ids.length === 25 && result.errors.length === 0, `section navigation ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
+    await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=wow-forever&sectionHiddenReload=${width}` });
+    await waitForCommittedUrl(cdp, `sectionHiddenReload=${width}`);
+    const reload = await cdp.send('Runtime.evaluate', { expression: `(async () => {
       const deadline = Date.now() + 12000;
-      while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || !document.querySelector('[data-action="reset-all-local-data"]'))) await wait(50);
-      const toggle = document.getElementById('dashboard-panels-toggle');
-      const drawer = document.getElementById('dashboard-panels-drawer');
-      toggle.focus(); toggle.click(); await wait(50);
-      const hiddenPanel = drawer.querySelector('[data-widget-id="weather"]');
-      const remove = drawer.querySelector('[data-favorite-widget="weather"]');
-      check(hiddenPanel?.disabled && remove?.getAttribute('aria-pressed') === 'true' && !document.querySelector('#dashboard-favorites [data-widget-id="weather"]'), 'Hidden favorite must remain removable without becoming an active shortcut: ' + JSON.stringify({ disabled: hiddenPanel?.disabled, kept: remove?.getAttribute('aria-pressed'), shortcut: !!document.querySelector('#dashboard-favorites [data-widget-id="weather"]') }));
-      remove.scrollIntoView({ block: 'nearest' }); remove.focus(); remove.click(); await wait(50);
-      check(!remove.isConnected && !drawer.querySelector('[data-favorite-widget="weather"]') && drawer.contains(document.activeElement), 'Removing an unavailable favorite lost keyboard focus');
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await wait(50);
-      check(document.activeElement === toggle, 'Hidden favorite removal broke Escape focus return');
-      const resetDisclosure = document.querySelector('[data-ui-key="privacy-reset"] > summary');
-      resetDisclosure?.click();
-      const originalFetch = window.fetch;
-      let resetRequests = 0;
-      window.fetch = function (input, options) {
-        const url = new URL(typeof input === 'string' ? input : input.url || input, location.href);
-        if (url.origin === location.origin && url.pathname === '/api/config/reset' && String(options?.method || 'GET').toUpperCase() === 'POST') {
-          resetRequests += 1;
-          return Promise.resolve(new Response(JSON.stringify({ ok: true, message: 'Isolated rendered reset fixture' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-        }
-        return originalFetch.apply(this, arguments);
+      while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await new Promise(resolve => setTimeout(resolve, 50));
+      const beforeReset = { widget: document.body.dataset.activeWidgetId, section: document.body.dataset.section, hidden: !document.querySelector('#dashboard-section-nav [data-section-id="gaming"]'), order: [...document.querySelectorAll('#dashboard-section-nav [data-section-id]')].map(node => node.dataset.sectionId) };
+      window.__auxoraTestOpenWidget('layout-editor'); await new Promise(resolve => setTimeout(resolve, 150));
+      const reset = document.querySelector('[data-section-action="reset"]'); reset.focus(); reset.click();
+      await new Promise(resolve => setTimeout(resolve, 150));
+      return { beforeReset, order: [...document.querySelectorAll('#dashboard-section-nav [data-section-id]')].map(node => node.dataset.sectionId), settingsReachable: !!document.getElementById('dashboard-settings-toggle') };
+    })()`, awaitPromise: true, returnByValue: true });
+    const replay = reload.result?.value;
+    assert(!reload.exceptionDetails && replay?.beforeReset.widget === 'wow-forever' && replay.beforeReset.section === 'gaming' && replay.beforeReset.hidden && replay.beforeReset.order.join('|') === 'home|pc|media|smart-home', `hidden-section deep link or persisted order failed: ${JSON.stringify(replay)}`);
+    assert(replay.order.join('|') === defaults.join('|') && replay.settingsReachable, `section reset did not restore permanent navigation: ${JSON.stringify(replay)}`);
+  }
+  // Legacy section destinations must migrate while their old storage remains readable.
+  for (const [destination, lastWidget, expectedSection, expectedWidget, completed = true] of [['scenes', 'scenes', 'home', 'home'], ['library', 'audio', 'media', 'audio'], ['library', 'wow-forever', 'gaming', 'wow-forever'], ['settings', 'updates', 'settings', 'updates'], ['home', 'system', 'settings', 'setup', false]]) {
+    await cdp.send('Runtime.evaluate', { expression: `(() => {
+      localStorage.setItem('auxora-dashboard-destination', ${JSON.stringify(destination)});
+      localStorage.setItem('xeneon-dashboard-last-widget', ${JSON.stringify(lastWidget)});
+      localStorage.setItem('xeneon-dashboard-widget', ${JSON.stringify(lastWidget)});
+      localStorage.setItem('auxora-dashboard-panels-v1', JSON.stringify({}));
+      localStorage.setItem('xeneon-dashboard-settings', JSON.stringify({ sectionOrder: 'broken', hiddenSections: '["settings","unknown","pc","pc"]' }));
+    })()` });
+    const fixture = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+      const original = window.fetch;
+      window.fetch = function(input, options) {
+        return original.apply(this, arguments).then(async response => {
+          const url = new URL(typeof input === 'string' ? input : input.url || input, location.href);
+          if (!['/api/config', '/api/health'].includes(url.pathname)) return response;
+          const data = await response.json();
+          if (url.pathname === '/api/config') data.dashboard = { ...data.dashboard, onboardingCompleted: ${completed} };
+          else data.setup = { ...data.setup, onboardingCompleted: ${completed} };
+          return new Response(JSON.stringify(data), { status: response.status, headers: { 'Content-Type': 'application/json' } });
+        });
       };
-      try {
-        let reset = document.querySelector('[data-action="reset-all-local-data"]');
-        check(reset?.textContent.trim() === 'Reset all app data', 'Privacy reset control unavailable');
-        reset.scrollIntoView({ block: 'nearest' }); reset.focus(); reset.click(); await wait(50);
-        reset = document.querySelector('[data-action="reset-all-local-data"]');
-        check(reset?.textContent.trim() === 'Confirm reset' && resetRequests === 0, 'Privacy reset skipped confirmation');
-        reset.click();
-        const resetDeadline = Date.now() + 12000;
-        while (Date.now() < resetDeadline && document.getElementById('dashboard-widget-title')?.textContent !== 'Diagnostics') await wait(50);
-        const favorites = [...document.querySelectorAll('#dashboard-favorites [data-widget-id]')].map(node => node.dataset.widgetId);
-        check(resetRequests === 1 && JSON.stringify(favorites) === '${JSON.stringify(defaults)}' && localStorage.getItem('${storageKey}') === null, 'Privacy reset did not clear in-memory and stored favorites: ' + JSON.stringify({ resetRequests, favorites, stored: localStorage.getItem('${storageKey}') }));
-        return { favorites, resetRequests, errors: window.__auxoraRenderedRuntimeErrors || [] };
-      } finally { window.fetch = originalFetch; }
-    })()`, awaitPromise: true, returnByValue: true
-  });
-  assert(!removalReset.exceptionDetails && removalReset.result?.value?.resetRequests === 1 && removalReset.result.value.errors.length === 0, `hidden favorite removal/privacy reset regression: ${removalReset.exceptionDetails?.exception?.description || JSON.stringify(removalReset.result?.value)}`);
-  console.log("hidden favorite removal retains dialog focus; confirmed Privacy reset clears in-memory and stored favorites without a native reset request: passed");
-  await cdp.send("Page.navigate", { url: "about:blank" });
-  await waitForCommittedUrl(cdp, "about:blank");
-  await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
-  console.log("corrupt, wrong-shaped, duplicate, unknown, and over-limit favorite storage: passed");
+    })()` });
+    try {
+      await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?sectionMigration=${destination}` });
+      await waitForCommittedUrl(cdp, `sectionMigration=${destination}`);
+      const migrated = await cdp.send('Runtime.evaluate', { expression: `(async () => { const deadline = Date.now() + 12000; while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await new Promise(resolve => setTimeout(resolve, 50)); return { section: document.body.dataset.section, widget: document.body.dataset.activeWidgetId, settings: !!document.getElementById('dashboard-settings-toggle'), order: [...document.querySelectorAll('#dashboard-section-nav [data-section-id]')].map(node => node.dataset.sectionId), errors: window.__auxoraRenderedRuntimeErrors || [] }; })()`, awaitPromise: true, returnByValue: true });
+      const value = migrated.result?.value;
+      assert(!migrated.exceptionDetails && value?.section === expectedSection && value.widget === expectedWidget && value.settings && value.order.join('|') === 'home|gaming|media|smart-home' && value.errors.length === 0, `legacy destination/invalid layout normalization failed: ${JSON.stringify(value)}`);
+    } finally { await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: fixture.identifier }); }
+  }
+  await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=privacy&sectionPrivacyReset=1` });
+  await waitForCommittedUrl(cdp, 'sectionPrivacyReset=1');
+  const resetProbe = await cdp.send('Runtime.evaluate', { expression: `(async () => {
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const deadline = Date.now() + 12000; while (Date.now() < deadline && !document.querySelector('[data-action="reset-all-local-data"]')) await wait(50);
+    document.querySelector('[data-ui-key="privacy-reset"] > summary')?.click();
+    const original = window.fetch; let requests = 0;
+    window.fetch = function(input, options) {
+      const url = new URL(typeof input === 'string' ? input : input.url || input, location.href);
+      if (url.origin === location.origin && url.pathname === '/api/config/reset' && String(options?.method || 'GET').toUpperCase() === 'POST') { requests++; return Promise.resolve(new Response(JSON.stringify({ ok: true, message: 'Isolated reset fixture' }), { status: 200, headers: { 'Content-Type': 'application/json' } })); }
+      return original.apply(this, arguments);
+    };
+    try {
+      document.querySelector('[data-action="reset-all-local-data"]').click(); await wait(50);
+      const armed = document.querySelector('[data-action="reset-all-local-data"]');
+      if (armed.textContent.trim() !== 'Confirm reset' || requests !== 0) throw new Error('Privacy reset skipped confirmation');
+      armed.click(); const end = Date.now() + 12000; while (Date.now() < end && document.body.dataset.activeWidgetId !== 'setup') await wait(50);
+      const settings = JSON.parse(localStorage.getItem('xeneon-dashboard-settings') || '{}');
+      return { requests, widget: document.body.dataset.activeWidgetId, section: document.body.dataset.section, normalized: window.AuxoraNavigation.normalizeSectionLayout(settings.sectionOrder, settings.hiddenSections), errors: window.__auxoraRenderedRuntimeErrors || [] };
+    } finally { window.fetch = original; }
+  })()`, awaitPromise: true, returnByValue: true });
+  const reset = resetProbe.result?.value;
+  assert(!resetProbe.exceptionDetails && reset?.requests === 1 && reset.widget === 'setup' && reset.section === 'settings' && reset.normalized.order.join('|') === defaults.join('|') && reset.normalized.hidden.length === 0 && reset.errors.length === 0, `Privacy reset did not clear navigation preferences: ${JSON.stringify(reset)}`);
+  await cdp.send('Storage.clearDataForOrigin', { origin: baseUrl, storageTypes: 'all' });
+  console.log('section order/visibility, all25 two-click selection with scrolling, hidden deep links, migration, corrupt settings, reset, and keyboard targets: passed');
 }
 
 // This fixture is installed before dashboard scripts. Every audio/media request,
 // including unexpected mutation paths, terminates here instead of reaching Windows.
 function installQuickControlsFixture() {
   if (!location.search.includes("quickControlsTest=")) return;
-  localStorage.setItem("auxora-now-strip-mode", "hidden");
   const originalFetch = window.fetch;
   const fixture = window.__quickControlsFixture = {
     audio: { supported: true, configured: true, status: "live", stale: false, masterVolume: 42, muted: false, defaultDeviceId: "fixture-speakers", devices: [], sessions: [] },
     media: { supported: true, configured: true, status: "live", stale: false, playbackStatus: "playing", canPlay: true, canPause: true, title: "Local fixture track", appId: "fixture-player" },
     reads: { audio: 0, media: 0 },
+    panelReads: { equalizer: 0 },
     writes: [],
     held: [],
     holdNext: {},
@@ -2220,6 +2125,14 @@ function installQuickControlsFixture() {
     }
     const match = /^\/api\/(audio|media)(?:\/|$)/.exec(url.pathname);
     if (!match) return originalFetch.apply(this, arguments);
+    // The final navigation check mounts the full Audio panel with Quick closed.
+    // Keep that panel's read isolated without permitting it inside Quick controls.
+    const drawer = document.getElementById("dashboard-quick-drawer");
+    if (url.origin === location.origin && method === "GET" && url.pathname === "/api/audio/equalizer"
+      && document.body?.dataset.activeWidgetId === "audio" && drawer?.classList.contains("is-hidden")) {
+      fixture.panelReads.equalizer += 1;
+      return Promise.resolve(response({ supported: false, configured: false, status: "unavailable", message: "Isolated Audio panel fixture", bands: [], presets: [] }));
+    }
     const kind = match[1];
     if (method === "GET" && url.pathname === "/api/" + kind) {
       fixture.reads[kind] += 1;
@@ -2285,7 +2198,7 @@ async function checkQuickControlsInPage(deep) {
   check(volume.type === "range" && volume.min === "0" && volume.max === "100" && volume.step === "1", "Volume range must use whole percentages from 0 to 100");
   check(audioStatus.getAttribute("aria-live") === "polite" && mediaStatus.getAttribute("aria-live") === "polite", "Quick state feedback must announce updates politely");
   check(volume.disabled && mute.disabled && playback.disabled, "Hidden Quick controls were enabled without a fresh drawer read");
-  const selectedBefore = query("#dashboard-widget-title")?.textContent;
+  const selectedBefore = document.body?.dataset.activeWidgetId;
   const openDrawer = async () => { opener.focus(); opener.click(); await frames(); check(!drawer.classList.contains("is-hidden"), "Quick controls did not open"); };
   const closeDrawer = async () => { close.click(); await frames(); check(drawer.classList.contains("is-hidden") && document.activeElement === opener, "Quick close did not return keyboard focus"); };
   const refresh = async () => { await closeDrawer(); await openDrawer(); await wait(80); };
@@ -2439,12 +2352,12 @@ async function checkQuickControlsInPage(deep) {
     await openDrawer();
     await until(() => !volume.disabled && !playback.disabled, "Quick controls did not recover after Touch Lock");
   }
-  check(query("#dashboard-widget-title")?.textContent === selectedBefore, "Direct controls navigated away from the selected panel");
+  check(document.body?.dataset.activeWidgetId === selectedBefore, "Direct controls navigated away from the selected panel");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames();
   check(drawer.classList.contains("is-hidden") && document.activeElement === opener, "Escape did not close Quick and restore its opener");
-  query("#dashboard-panels-toggle").click(); await frames();
-  check(!query("#dashboard-panels-drawer").classList.contains("is-hidden") && document.querySelectorAll("#dashboard-widget-picker [data-widget-id]").length >= 25, "Quick controls broke access to All panels");
-  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames();
+  const mediaSection = query('[data-section-id="media"]'); mediaSection.click(); await frames();
+  const audioTab = query('.auxora-panel-link[data-widget-id="audio"]'); audioTab.click(); await frames();
+  check(document.body.dataset.activeWidgetId === 'audio' && document.body.dataset.section === 'media', "Quick controls broke two-click Audio access");
   check(fixture.unexpected.length === 0, "Unexpected audio/media endpoint was safely blocked: " + JSON.stringify(fixture.unexpected));
   check((window.__auxoraRenderedRuntimeErrors || []).length === 0, "Quick controls emitted runtime errors: " + JSON.stringify(window.__auxoraRenderedRuntimeErrors));
   return { controls: controls.length, writes: fixture.writes.length, aborted: fixture.aborted, deep };
@@ -2486,162 +2399,46 @@ async function validateQuickControls(cdp) {
 }
 
 async function validateCompactChrome(cdp) {
-  const fixture = await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
-    source: `(() => {
-      if (!location.search.includes('compactChromeTest=')) return;
-      localStorage.setItem('auxora-now-strip-mode', 'pinned');
-      const nativeFetch = window.fetch;
-      window.fetch = function (input, options) {
-        const url = new URL(typeof input === 'string' ? input : input.url || input, location.href);
-        const method = String(options?.method || input?.method || 'GET').toUpperCase();
-        if (url.origin === location.origin && url.pathname === '/api/media' && method === 'GET') {
-          return Promise.resolve(new Response(JSON.stringify({
-            title: 'Compact layout test track', artist: 'Local test fixture', playbackStatus: 'playing'
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-        }
-        return nativeFetch.apply(this, arguments);
+  for (const { width, height } of [{ width: 800, height: 480 }, { width: 720, height: 480 }, { width: 390, height: 844 }]) {
+    await cdp.send('Storage.clearDataForOrigin', { origin: baseUrl, storageTypes: 'all' });
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+    await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=theme-studio&compactChromeTest=${width}` });
+    await waitForCommittedUrl(cdp, `compactChromeTest=${width}`);
+    const evaluation = await cdp.send('Runtime.evaluate', { expression: `(async () => {
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const check = (value, message) => { if (!value) throw new Error(message); };
+      const deadline = Date.now() + 12000; while (Date.now() < deadline && !document.querySelector('[name="dashboardOpacity"]')) await wait(50);
+      const target = async node => {
+        check(node, 'Missing compact control'); node.scrollIntoView({ block: 'nearest', inline: 'nearest' }); node.focus(); await frames();
+        const rect = node.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        check(rect.width >= 44 && rect.height >= 44 && rect.left >= -1 && rect.top >= -1 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1 && hit && (hit === node || node.contains(hit)), 'Clipped/obscured compact control: ' + (node.name || node.textContent));
+        check(document.activeElement === node, 'Compact focus unavailable');
       };
-    })()`
-  });
-  try {
-    for (const { width, height } of [{ width: 800, height: 480 }, { width: 720, height: 480 }, { width: 390, height: 844 }]) {
-      const portrait = height > width;
-      await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
-      await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
-      const marker = `compactChromeTest=${width}`;
-      await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=privacy&${marker}` });
-      await waitForCommittedUrl(cdp, marker);
-      const evaluation = await cdp.send("Runtime.evaluate", {
-        expression: `(async () => {
-          const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-          const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          const check = (value, message) => { if (!value) throw new Error(message); };
-          const query = selector => document.querySelector(selector);
-          const rect = node => node.getBoundingClientRect();
-          const describe = node => {
-            if (!node) return null;
-            const r = rect(node); const style = getComputedStyle(node);
-            return { tag: node.tagName, id: node.id, className: node.className, rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-              position: style.position, zIndex: style.zIndex, overflow: style.overflow, transform: style.transform,
-              backdropFilter: style.backdropFilter, gridRows: style.gridTemplateRows, scrollTop: node.scrollTop, scrollHeight: node.scrollHeight };
-          };
-          const diagnose = node => {
-            if (!node) return { missing: true };
-            const r = rect(node); const ancestors = [];
-            for (let parent = node.parentElement; parent; parent = parent.parentElement) ancestors.push(describe(parent));
-            return { control: describe(node), hit: describe(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)), ancestors };
-          };
-          const inside = node => { const r = rect(node); return r.width > 0 && r.height > 0 && r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1; };
-          const reachable = node => { const r = rect(node); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return inside(node) && !!hit && (node === hit || node.contains(hit)); };
-          const target = node => { check(node && reachable(node), 'Unreachable control: ' + JSON.stringify(diagnose(node))); check(rect(node).width >= 44 && rect(node).height >= 44, 'Undersized control: ' + JSON.stringify(diagnose(node))); };
-          const deadline = Date.now() + 12000;
-          while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || query('#dashboard-now-strip strong')?.textContent !== 'Compact layout test track')) await wait(50);
-          check(document.body?.dataset.bridgeHydrated === 'true', 'Dashboard bridge did not hydrate');
-          check(document.body?.dataset.layoutClass === '${portrait ? "portrait" : "compact"}', 'Expected responsive layout was not activated');
-          const nav = [...document.querySelectorAll('#dashboard-primary-nav button')];
-          const viewer = query('.router-viewer__frame-shell');
-          const availableHeight = rect(viewer).height;
-          let previousHeight = null; let recoveredHeight = null;
-          if (!${portrait}) {
-          check(nav.length === 4, 'All four navigation destinations must remain available');
-          check(nav.map(node => node.textContent.trim()).join('|') === 'Home|Modes|Apps & Controls|Settings', 'Navigation labels changed');
-          check(nav.every(node => Math.abs(rect(node).top - rect(nav[0]).top) <= 1), 'Navigation must occupy one row');
-          nav.forEach(node => {
-            target(node);
-            const range = document.createRange(); range.selectNodeContents(node);
-            const text = range.getBoundingClientRect(); const box = rect(node);
-            check(text.left >= box.left && text.right <= box.right && text.top >= box.top && text.bottom <= box.bottom && node.scrollWidth <= node.clientWidth + 1, 'Clipped navigation label: ' + node.textContent);
-            node.focus(); check(document.activeElement === node, 'Navigation cannot receive focus');
-          });
-          check(inside(viewer) && availableHeight >= 140, 'Insufficient usable viewer height: ' + availableHeight);
-          const previousLayout = document.createElement('style');
-          previousLayout.textContent = '.dashboard-native-page--adaptive.dashboard-native-page--layout-compact .auxora-primary-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-native-page--adaptive.dashboard-native-page--layout-compact .router-rail { grid-template-rows: auto auto auto; } .dashboard-native-page--adaptive.dashboard-native-page--layout-compact .router-rail__lower { grid-row: 3; }';
-          document.head.append(previousLayout); await frames();
-          previousHeight = rect(viewer).height;
-          previousLayout.remove(); await frames();
-          recoveredHeight = rect(viewer).height - previousHeight;
-          check(recoveredHeight >= 44, 'Compact layout did not recover one touch row: ' + recoveredHeight);
-          }
-          const options = query('#dashboard-settings-toggle'); target(options); options.focus(); options.click(); await frames();
-          const panel = query('#dashboard-settings-panel');
-          check(options.getAttribute('aria-expanded') === 'true' && getComputedStyle(panel).position === 'fixed' && inside(panel), 'Panel options overlay escaped viewport');
-          for (const selector of ['#dashboard-opacity-slider', '#dashboard-readability-select', '#dashboard-budget-select']) {
-            const control = query(selector); check(control, 'Missing option: ' + selector);
-            control.scrollIntoView({ block: 'center' }); await frames(); target(control);
-            control.focus(); check(document.activeElement === control, 'Option cannot receive focus: ' + selector);
-          }
-          // Options is nonmodal: keyboard users can still open the modal Quick drawer.
-          const nestedQuick = query('#dashboard-quick-toggle'); const nestedDrawer = query('#dashboard-quick-drawer');
-          nestedQuick.focus(); check(document.activeElement === nestedQuick, 'Quick toggle lost keyboard reachability with options open');
-          nestedQuick.click(); await frames();
-          check(inside(nestedDrawer) && nestedDrawer.contains(document.activeElement), 'Quick drawer failed over open options');
-          target(nestedDrawer.querySelector('[data-quick-close]'));
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await frames();
-          check(nestedDrawer.classList.contains('is-hidden') && document.activeElement === nestedQuick, 'Quick drawer did not close and restore focus over options');
-          check(options.getAttribute('aria-expanded') === 'true' && panel.classList.contains('is-open'), 'Closing Quick unexpectedly closed options');
-          const resumedOption = query('#dashboard-opacity-slider'); resumedOption.scrollIntoView({ block: 'center' }); await frames(); target(resumedOption);
-          target(options); options.click(); await frames();
-          check(options.getAttribute('aria-expanded') === 'false' && panel.classList.contains('is-collapsed'), 'Panel options did not close');
-          const quick = query('#dashboard-quick-toggle'); const drawer = query('#dashboard-quick-drawer');
-          for (const closeWithEscape of [false, true]) {
-            target(quick); quick.focus(); quick.click(); await frames();
-            check(inside(drawer) && drawer.contains(document.activeElement), 'Quick drawer geometry or initial focus failed');
-            const close = drawer.querySelector('[data-quick-close]'); target(close);
-            if (closeWithEscape) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); else close.click();
-            await frames();
-            check(drawer.classList.contains('is-hidden') && quick.getAttribute('aria-expanded') === 'false' && document.activeElement === quick, 'Quick drawer did not close and restore focus');
-          }
-          if (${portrait}) {
-            check(inside(viewer) && availableHeight >= 140, 'Portrait media header left insufficient usable content: ' + JSON.stringify(diagnose(viewer)));
-            for (const selector of ['.router-viewer__header', '#dashboard-widget-title', '.router-viewer__header-actions']) check(inside(query(selector)), 'Portrait media header escaped viewport: ' + JSON.stringify(diagnose(query(selector))));
-          }
-          const strip = query('#dashboard-now-strip'); const pin = strip.querySelector('[data-now-strip-action="pin"]');
-          check(inside(strip) && !strip.classList.contains('is-hidden') && pin.textContent === 'Auto', 'Pinned media strip is missing');
-          [...strip.querySelectorAll('button')].forEach(target);
-          const actionTextFits = () => [...strip.querySelectorAll('button:not(.dashboard-now-strip__open)')].forEach(node => {
-            const range = document.createRange(); range.selectNodeContents(node);
-            const text = range.getBoundingClientRect(); const box = rect(node);
-            check(text.left >= box.left && text.right <= box.right && text.top >= box.top && text.bottom <= box.bottom && node.scrollWidth <= node.clientWidth + 1, 'Clipped media action: ' + JSON.stringify(diagnose(node)));
-          });
-          actionTextFits();
-          const mediaBox = rect(strip); const viewerBox = rect(viewer);
-          check(mediaBox.bottom <= viewerBox.top + 1 || mediaBox.top >= viewerBox.bottom - 1, 'Pinned media overlaps widget content');
-          pin.click(); await frames(); check(localStorage.getItem('auxora-now-strip-mode') === 'auto' && pin.textContent === 'Keep', 'Media Auto transition failed'); actionTextFits();
-          pin.click(); await frames(); check(localStorage.getItem('auxora-now-strip-mode') === 'pinned' && pin.textContent === 'Auto', 'Media Keep transition failed');
-          check((window.__auxoraRenderedRuntimeErrors || []).length === 0, 'Compact interactions emitted runtime errors');
-          return { availableHeight, previousHeight, recoveredHeight, navHeight: rect(nav[0]).height, portraitOptions: ${portrait} };
-        })()`,
-        awaitPromise: true,
-        returnByValue: true
-      });
-      if (width === 800 || portrait || evaluation.exceptionDetails) {
-        const artifactDirectory = mkdtempSync(join(tmpdir(), "auxora-compact-layout-"));
-        const screenshotPath = join(artifactDirectory, `compact-${width}x${height}${evaluation.exceptionDetails ? "-failure" : ""}.png`);
-        const screenshot = await cdp.send("Page.captureScreenshot", { format: "png" });
-        writeFileSync(screenshotPath, Buffer.from(screenshot.data, "base64"));
-        console.log(`compact layout screenshot: ${screenshotPath}`);
+      const nav = [...document.querySelectorAll('#dashboard-section-nav [data-section-id]')];
+      check(nav.length === 5, 'Five primary sections missing');
+      for (const node of [...nav, document.getElementById('dashboard-settings-toggle')]) await target(node);
+      for (const selector of ['[name="dashboardOpacity"]', '[name="themeReadability"]', '[name="performanceBudget"]', '[data-opacity-reset]']) await target(document.querySelector(selector));
+      const viewer = document.querySelector('.router-viewer__frame-shell').getBoundingClientRect();
+      check(viewer.height >= 140 && viewer.left >= -1 && viewer.right <= innerWidth + 1, 'Insufficient compact content space');
+      const quick = document.getElementById('dashboard-quick-toggle'); const drawer = document.getElementById('dashboard-quick-drawer');
+      for (const escape of [false, true]) {
+        await target(quick); quick.click(); await frames();
+        check(drawer.contains(document.activeElement) && document.querySelector('.router-rail').inert && document.querySelector('.router-viewer').inert, 'Quick did not isolate background with Appearance open');
+        await target(drawer.querySelector('[data-quick-close]'));
+        if (escape) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); else drawer.querySelector('[data-quick-close]').click();
+        await frames(); check(drawer.classList.contains('is-hidden') && document.activeElement === quick && !document.querySelector('.router-viewer').inert, 'Quick close/Escape did not restore focus and background');
+        check(document.body.dataset.activeWidgetId === 'theme-studio', 'Quick navigation displaced Appearance');
       }
-      assert(!evaluation.exceptionDetails, `responsive chrome ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(evaluation.exceptionDetails)}`);
-      const result = evaluation.result?.value;
-      if (portrait) {
-        assert(result?.portraitOptions === true, `portrait options returned no interaction evidence: ${JSON.stringify(result)}`);
-        console.log(`rendered portrait options and pinned media ${width}x${height}: passed; viewer ${result.availableHeight}px, header/actions, options controls, combined Quick drawer, close and focus return`);
-        continue;
-      }
-      assert(result?.recoveredHeight >= 44, `compact ${width}x480 returned no geometry evidence: ${JSON.stringify(result)}`);
-      const dismissed = await cdp.send("Runtime.evaluate", {
-        expression: `(() => { document.querySelector('[data-now-strip-action="dismiss"]').click(); return localStorage.getItem('auxora-now-strip-mode') === 'hidden' && document.querySelector('#dashboard-now-strip').classList.contains('is-hidden'); })()`,
-        returnByValue: true
-      });
-      assert(dismissed.result?.value === true, `compact ${width}x480: media dismissal failed`);
-      console.log(`rendered compact chrome ${width}x480: passed; viewer ${result.availableHeight}px, recovered ${result.recoveredHeight}px; options, Quick focus, pinned media`);
-    }
-  } finally {
-    await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier });
-    await cdp.send("Page.navigate", { url: "about:blank" });
-    await waitForCommittedUrl(cdp, "about:blank");
-    await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
+      check(!document.querySelector('#dashboard-now-strip, #dashboard-panels-drawer, #dashboard-settings-panel'), 'Removed chrome reappeared');
+      check(document.getElementById('dashboard-launcher-dock')?.classList.contains('is-hidden'), 'Recent apps must stay off Settings');
+      check(document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1, 'Compact shell overflows document');
+      return { viewerHeight: viewer.height, controls: nav.length, errors: window.__auxoraRenderedRuntimeErrors || [] };
+    })()`, awaitPromise: true, returnByValue: true });
+    const result = evaluation.result?.value;
+    assert(!evaluation.exceptionDetails && result?.controls === 5 && result.viewerHeight >= 140 && result.errors.length === 0, `compact section shell ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
   }
+  console.log('compact/portrait section controls, Appearance, Quick inertness/Escape, focus, and unobscured content: passed');
 }
 
 async function validateAllVisibleProductSurfaces(cdp, viewport) {
@@ -2718,14 +2515,10 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
         if (element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') return true;
         return element.tagName === 'INPUT' && Boolean(element.value || element.getAttribute('placeholder'));
       };
-      const currentSurface = () => {
-        const active = document.querySelector('#dashboard-widget-picker [data-widget-id].is-active')
-          || document.querySelector('#dashboard-widget-picker [data-widget-id][aria-current="true"]');
-        const id = active?.getAttribute('data-widget-id')
-          || (document.querySelector('[data-destination="home"]')?.getAttribute('aria-pressed') === 'true' ? 'home' : '')
-          || (document.querySelector('[data-destination="scenes"]')?.getAttribute('aria-pressed') === 'true' ? 'scenes' : '');
-        return { active, id };
-      };
+      const currentSurface = () => ({
+        active: document.querySelector('.auxora-panel-link[aria-pressed="true"]'),
+        id: document.body?.dataset.activeWidgetId || ''
+      });
       const focusSelection = async (control, container) => {
         if (!control || !visible(control)) return { accepted: false, reachable: false, label: '' };
         control.focus();
@@ -2952,12 +2745,12 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
         // deadline before presenting the explicit, manually retryable pause.
         const settleDeadline = Date.now() + ((expectedId || state.id) === 'display-controls' ? 25000 : 5000);
         let root = document.getElementById('dashboard-inline-widget');
-        let status = document.getElementById('dashboard-widget-source')?.textContent?.trim() || '';
+        let status = document.getElementById('dashboard-status')?.dataset.surfaceStatus || '';
         let settled = false;
         while (Date.now() < settleDeadline) {
           state = currentSurface();
           root = document.getElementById('dashboard-inline-widget');
-          status = document.getElementById('dashboard-widget-source')?.textContent?.trim() || '';
+          status = document.getElementById('dashboard-status')?.dataset.surfaceStatus || '';
           const loadingHidden = document.getElementById('dashboard-widget-loading')?.classList.contains('is-hidden');
           if (state.id
               && (!expectedId || state.id === expectedId)
@@ -2976,7 +2769,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
         seen.add(id);
 
         root = document.getElementById('dashboard-inline-widget');
-        status = document.getElementById('dashboard-widget-source')?.textContent?.trim() || '';
+        status = document.getElementById('dashboard-status')?.dataset.surfaceStatus || '';
         const displayPausedDetails = id === 'display-controls' ? displayPausedState(root, status) : null;
         const displayDetectionPaused = Boolean(displayPausedDetails?.passed);
         const disclosureAudit = await openVisibleDisclosures(root);
@@ -3207,8 +3000,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
             const cardsContained = cardBounds.every(card => containsRect(gridRect, card.rect));
             const cardsWithinShell = cardBounds.every(card => containsRect(shellRect, card.rect, { x: true, y: false }));
             const horizontallyOverflowingCards = cardBounds.filter(card => card.horizontallyOverflowing).map(card => card.element);
-            const shellCap = cardSize === 'compact' ? 1040 : cardSize === 'standard' ? 1680 : rootContentWidth;
-            const expectedShellWidth = Math.min(rootContentWidth, shellCap);
+            const expectedShellWidth = rootContentWidth;
             const shellWidthMatches = Boolean(shellRect && Math.abs(shellRect.width - expectedShellWidth) <= 1.5);
             const expectedPadding = density === 'compact' ? 10 : density === 'spacious' ? 18 : 16;
             const paddingFailures = Array.from(queryRoot.querySelectorAll(paddingSelectors)).filter(element => {
@@ -3269,7 +3061,6 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
               gridRect,
               shellRect,
               rootContentWidth,
-              shellCap,
               expectedShellWidth,
               shellWidthMatches,
               cardBounds,
@@ -3450,7 +3241,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
             && Math.abs(root.scrollTop - target) < 0.5;
           root.scrollTop = start;
         }
-        const title = document.getElementById('dashboard-widget-title')?.textContent?.trim() || '';
+        const title = document.getElementById('dashboard-section-title')?.textContent?.trim() || '';
         const duplicateTitleCount = root ? Array.from(root.querySelectorAll('h1, h2, h3')).filter(element => element.textContent.trim() === title).length : 0;
         const widgetErrorVisible = visible(document.getElementById('dashboard-widget-error'));
         const surfaceErrors = errors.slice(consumedErrorCount);
@@ -3480,11 +3271,11 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
           displayControlStateAudits,
           focusTarget: describeControl(focusTarget),
           contentFocusFailures,
-          layoutDiagnostics: contentFocusFailures.length ? ['.router-viewer', '.router-viewer__header', '.router-viewer__header > div:first-child', '.router-viewer__header-actions', '#dashboard-widget-source', '.router-viewer__frame-shell', '#dashboard-inline-widget', '.network-unifi-form'].map(selector => {
+          layoutDiagnostics: contentFocusFailures.length ? ['.router-viewer', '.router-viewer__header', '.router-viewer__header > div:first-child', '.router-viewer__header-actions', '#dashboard-status', '.router-viewer__frame-shell', '#dashboard-inline-widget', '.network-unifi-form'].map(selector => {
             const element = document.querySelector(selector);
             if (!element) return { selector, missing: true };
             const style = getComputedStyle(element);
-            return { selector, rect: snapshotRect(element.getBoundingClientRect()), text: element.matches('.router-viewer__header, #dashboard-widget-source') ? element.textContent.trim().slice(0, 400) : '', scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollLeft: element.scrollLeft, width: style.width, minWidth: style.minWidth, maxWidth: style.maxWidth, display: style.display, gridTemplateColumns: style.gridTemplateColumns, flex: style.flex, flexWrap: style.flexWrap, overflowX: style.overflowX };
+            return { selector, rect: snapshotRect(element.getBoundingClientRect()), text: element.matches('.router-viewer__header, #dashboard-status') ? element.textContent.trim().slice(0, 400) : '', scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollLeft: element.scrollLeft, width: style.width, minWidth: style.minWidth, maxWidth: style.maxWidth, display: style.display, gridTemplateColumns: style.gridTemplateColumns, flex: style.flex, flexWrap: style.flexWrap, overflowX: style.overflowX };
           }) : [],
           runtimeErrors: surfaceErrors,
           fatal: widgetErrorVisible || /Dashboard failed|Dashboard runtime error/i.test(document.body?.innerText || ''),
@@ -3508,30 +3299,21 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
         });
       }
 
-      for (const destination of ['home', 'scenes', 'library', 'settings']) {
-        const destinationButton = document.querySelector('[data-destination="' + destination + '"]');
-        const destinationFocus = await focusSelection(destinationButton, document.getElementById('dashboard-primary-nav'));
-        destinationButton?.click();
-        await wait(350);
-        if (destination === 'home' || destination === 'scenes') {
-          await auditCurrentSurface(destination, destinationFocus);
+      for (const section of window.AuxoraNavigation.sections) {
+        const sectionButton = document.querySelector('[data-section-id="' + section.id + '"]');
+        const sectionFocus = await focusSelection(sectionButton, document.querySelector('.router-rail'));
+        if (!sectionFocus.accepted || !sectionFocus.reachable) throw new Error('Section selector inaccessible: ' + section.id);
+        sectionButton.click(); await nextFrames();
+        const container = document.getElementById(section.id === 'settings' ? 'dashboard-settings-categories' : 'dashboard-section-tabs');
+        const ids = [...container.querySelectorAll('.auxora-panel-link')].filter(visible).map(button => button.dataset.widgetId);
+        if ([...ids].sort().join('|') !== section.tabs.map(tab => tab.id).sort().join('|')) throw new Error('Section inventory mismatch: ' + section.id);
+        for (const id of ids) {
+          const button = container.querySelector('[data-widget-id="' + id + '"]');
+          const selectionFocus = await focusSelection(button, container);
+          button.click(); await wait(350);
+          selectionFocus.controlPreserved = button.isConnected && document.activeElement === button;
+          await auditCurrentSurface(id, selectionFocus);
         }
-      }
-      const catalogToggle = document.getElementById('dashboard-panels-toggle');
-      catalogToggle?.click(); await nextFrames();
-      const picker = document.getElementById('dashboard-widget-picker');
-      const ids = Array.from(picker?.querySelectorAll('[data-widget-id]') || []).filter(visible).map(element => element.getAttribute('data-widget-id'));
-      document.querySelector('#dashboard-panels-drawer [data-panels-close]')?.click();
-      for (const id of ids) {
-        if (seen.has(id)) continue;
-        catalogToggle?.focus(); catalogToggle?.click(); await nextFrames();
-        const button = picker?.querySelector('[data-widget-id="' + id + '"]');
-        const selectionFocus = await focusSelection(button, picker);
-        button?.click();
-        await wait(350);
-        selectionFocus.returnedToOpener = document.activeElement === catalogToggle;
-        selectionFocus.drawerClosed = document.getElementById('dashboard-panels-drawer')?.classList.contains('is-hidden');
-        await auditCurrentSurface(id, selectionFocus);
       }
 
       return {
@@ -3560,8 +3342,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
     await cdp.send("Runtime.evaluate", {
       expression: `(async () => {
         const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        document.getElementById('dashboard-panels-toggle')?.click(); await frames();
-        document.querySelector('#dashboard-widget-picker [data-widget-id=' + ${JSON.stringify(JSON.stringify(focusFailure.id))} + ']')?.click();
+        window.__auxoraTestOpenWidget(${JSON.stringify(focusFailure.id)});
         await new Promise(resolve => setTimeout(resolve, 500));
         for (const details of document.querySelectorAll('#dashboard-inline-widget details:not([open])')) { details.querySelector(':scope > summary')?.click(); await frames(); }
         const input = document.querySelector('#dashboard-inline-widget input:not([type=hidden]):not(:disabled)');
@@ -3588,6 +3369,11 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
     assert(audit.layoutState?.browser === false && audit.layoutState?.compact === false && audit.layoutState?.ultrawide === true, `${viewportLabel}: expected browser=false, compact=false, ultrawide=true: ${JSON.stringify(audit.layoutState || null)}`);
   }
   assert(audit.runtimeCaptureReady, `${viewportLabel}: early runtime error capture was not installed`);
+  const layoutFailures = (audit.results || []).filter(result => result.fatal || result.widgetErrorVisible
+    || result.documentOverflow || result.panelOverflow || !result.contentFocusAccepted || !result.contentFocusReachable
+    || result.undersizedControls.length || result.distanceUndersizedControls.length || result.distanceSmallControlText.length
+    || result.clippedControls.length || result.unnamedControls.length || result.undersizedText.length);
+  if (layoutFailures.length) console.error("Product-surface failure details: " + JSON.stringify({ viewport: viewport.name, results: layoutFailures }));
   for (const result of audit.results || []) {
     const surfaceLabel = `${viewport.name}/${result.id}`;
     const displayPaused = result.id === "display-controls" && result.status === "Still checking"
@@ -3601,7 +3387,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
     }
     assert(result.selectionMatches, `${surfaceLabel}: the requested product surface did not become active: ${JSON.stringify(result)}`);
     assert(result.selectionFocus?.accepted && result.selectionFocus?.reachable, `${surfaceLabel}: surface selector was not keyboard-focusable and reachable: ${JSON.stringify(result.selectionFocus || null)}`);
-    assert(result.selectionFocus?.returnedToOpener !== false && result.selectionFocus?.drawerClosed !== false, `${surfaceLabel}: catalog selection did not close its dialog and recover focus: ${JSON.stringify(result.selectionFocus || null)}`);
+    assert(result.selectionFocus?.controlPreserved === true, `${surfaceLabel}: section panel selection replaced or lost its focused tab: ${JSON.stringify(result.selectionFocus || null)}`);
     assert(!result.disclosureAuditLimitReached && result.disclosureOpenedCount === result.disclosureAuditedCount && result.disclosureFailures.length === 0 && result.remainingVisibleClosedDisclosures.length === 0, `${surfaceLabel}: visible disclosures did not all open through their summary controls: ${JSON.stringify({ auditedCount: result.disclosureAuditedCount, openedCount: result.disclosureOpenedCount, limitReached: result.disclosureAuditLimitReached, failures: result.disclosureFailures, remainingVisibleClosed: result.remainingVisibleClosedDisclosures })}`);
     assert(result.contentFocusAuditedCount === result.contentFocusableCount, `${surfaceLabel}: audited ${result.contentFocusAuditedCount} of ${result.contentFocusableCount} enabled focusable controls`);
     assert(result.contentFocusAccepted && result.contentFocusReachable, `${surfaceLabel}: content focus was lost or inaccessible: ${JSON.stringify({ required: result.contentFocusRequired, focusableCount: result.contentFocusableCount, auditedCount: result.contentFocusAuditedCount, failures: result.contentFocusFailures })}`);
@@ -3616,7 +3402,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
     assert(result.clippedControls.length === 0, `${surfaceLabel}: clipped controls: ${result.clippedControls.join(", ")}`);
     assert(result.unnamedControls.length === 0, `${surfaceLabel}: unnamed controls: ${result.unnamedControls.join(", ")}`);
     assert(result.undersizedText.length === 0, `${surfaceLabel}: text below 12px: ${result.undersizedText.join(", ")}`);
-    assert(result.duplicateTitleCount === 0, `${surfaceLabel}: repeats the outer panel title inside the content`);
+    assert(result.duplicateTitleCount === 0, `${surfaceLabel}: repeats the outer section title inside the content`);
     if (result.id === "weather" || result.id === "calendar") {
       assert(result.hasSetupAction, `${surfaceLabel}: optional unconfigured surface has no direct Diagnostics handoff`);
     }
@@ -3647,164 +3433,160 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
   console.log(`rendered all ${actualIds.length} visible product surfaces at ${viewport.width}x${viewport.height} with terminal status, focus, touch, text, naming, and overflow checks: passed`);
 }
 
-async function validateNetworkLayoutEditorPersistence(cdp) {
-  await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
-  await cdp.send("Emulation.setDeviceMetricsOverride", {
-    width: 2048,
-    height: 720,
-    deviceScaleFactor: 1,
-    mobile: false
-  });
-  await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=layout-editor&networkLayoutPersistence=setup` });
-  await waitForCommittedUrl(cdp, "networkLayoutPersistence=setup");
+function installLegacyModeAuthorityFixture() {
+  if (new URL(location.href).searchParams.get("legacyLayout") !== "mode") return;
+  const originalFetch = window.fetch;
+  const fixture = window.__legacyModeAuthorityFixture = { scenes: null, evaluations: 0 };
+  const response = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
+  window.fetch = function (input, options) {
+    const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
+    const method = String(options?.method || input?.method || "GET").toUpperCase();
+    if (url.origin !== location.origin) return originalFetch.apply(this, arguments);
+    if (url.pathname === "/api/scenes/evaluate" && method === "POST") {
+      // The activation below is synthetic, so background evaluation must observe
+      // the same authority and must never mutate the real isolated host.
+      fixture.evaluations += 1;
+      return Promise.resolve(response(fixture.scenes || { message: "Mode fixture is initializing" }, fixture.scenes ? 200 : 503));
+    }
+    if (url.pathname === "/api/scenes" && method === "GET" && fixture.scenes) {
+      return Promise.resolve(response(fixture.scenes));
+    }
+    if (method === "GET" && (url.pathname === "/api/config" || url.pathname === "/api/scenes")) {
+      return originalFetch.apply(this, arguments).then(async result => {
+        const payload = await result.json();
+        if (url.pathname === "/api/config") {
+          if (!fixture.scenes && payload.scenes) fixture.scenes = payload.scenes;
+          if (fixture.scenes) payload.scenes = fixture.scenes;
+          return response(payload, result.status);
+        }
+        if (!fixture.scenes) fixture.scenes = payload;
+        return response(fixture.scenes, result.status);
+      });
+    }
+    return originalFetch.apply(this, arguments);
+  };
+}
 
-  const captureEvaluation = await cdp.send("Runtime.evaluate", {
-    expression: `(async () => {
-      const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-      const deadline = Date.now() + 10000;
-      let select = null;
-      while (Date.now() < deadline) {
-        select = document.querySelector('[data-layout-size][data-id="network"]');
-        if (document.body?.dataset.bridgeHydrated === 'true' && select) break;
-        await wait(50);
+async function validateLegacyLayoutPreservation(cdp) {
+  await cdp.send('Storage.clearDataForOrigin', { origin: baseUrl, storageTypes: 'all' });
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 2048, height: 720, deviceScaleFactor: 1, mobile: false });
+  await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=network&legacyLayout=seed` });
+  await waitForCommittedUrl(cdp, 'legacyLayout=seed');
+  const seed = await cdp.send('Runtime.evaluate', { expression: `(async () => {
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await new Promise(resolve => setTimeout(resolve, 50));
+    const settings = JSON.parse(localStorage.getItem('xeneon-dashboard-settings') || '{}');
+    settings.modeLayoutSchemaVersion = '2';
+    settings.cardSizes = JSON.stringify({ network: 'compact', system: 'wide' });
+    settings.modeLayouts = JSON.stringify({
+      'scene-work': { layoutOrder: 'network,system,audio', hiddenWidgets: '', pinnedWidgets: '', cardSizes: settings.cardSizes },
+      'scene-gaming': { layoutOrder: 'system,network,audio', hiddenWidgets: 'network', pinnedWidgets: '', cardSizes: JSON.stringify({ network: 'wide', system: 'compact' }) }
+    });
+    localStorage.setItem('xeneon-dashboard-settings', JSON.stringify(settings));
+    return { modeLayouts: settings.modeLayouts, cardSizes: settings.cardSizes };
+  })()`, awaitPromise: true, returnByValue: true });
+  assert(!seed.exceptionDetails && seed.result?.value?.modeLayouts, 'Could not seed legacy layout fixture');
+  const expected = seed.result.value;
+  const authorityFixture = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `(${installLegacyModeAuthorityFixture.toString()})()` });
+  await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=network&legacyLayout=mode` });
+  await waitForCommittedUrl(cdp, 'legacyLayout=mode');
+  const evaluation = await cdp.send('Runtime.evaluate', { expression: `(async () => {
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || !document.querySelector('.network-command-shell'))) await wait(50);
+    const widthSnapshot = () => {
+      const root = document.getElementById('dashboard-inline-widget');
+      const shell = root.querySelector('.network-command-shell');
+      const style = getComputedStyle(root);
+      const available = root.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      return { cardSize: root.dataset.cardSize, available, width: shell.getBoundingClientRect().width };
+    };
+    const before = widthSnapshot();
+    check(before.cardSize === 'compact' && Math.abs(before.width - before.available) <= 1.5, 'Legacy compact panel did not fill available width');
+    const originalFetch = window.fetch;
+    let scenes = await originalFetch('/api/scenes').then(response => response.json());
+    scenes = { ...scenes, themeVariant: 'standard', profiles: scenes.profiles.filter(scene => scene.id !== 'scene-night') };
+    const authority = window.__legacyModeAuthorityFixture;
+    check(authority, 'Legacy Mode authority fixture was not installed before startup');
+    authority.scenes = scenes;
+    let calls = 0; let nightCalls = 0; let release;
+    const responseGate = new Promise(resolve => { release = resolve; });
+    window.fetch = async (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+      if (url.pathname === '/api/scenes/activate') {
+        const payload = JSON.parse(init.body);
+        check(payload.manualOverrideMinutes === 120, 'Header Mode override duration changed');
+        if (payload.sceneId === 'scene-night') {
+          nightCalls += 1;
+          // This endpoint must not be called by the local display toggle.
+          return new Response(JSON.stringify(scenes), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        calls += 1;
+        check(payload.sceneId === 'scene-gaming', 'Header Mode request changed');
+        await responseGate;
+        const activeScene = scenes.profiles.find(scene => scene.id === payload.sceneId);
+        scenes = { ...scenes, activeSceneId: payload.sceneId, activeScene, manualOverrideActive: true, automaticSwitchingActive: false };
+        authority.scenes = scenes;
+        return new Response(JSON.stringify(scenes), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
-      return {
-        ready: Boolean(select),
-        value: select?.value || '',
-        active: document.querySelector('#dashboard-widget-picker [data-widget-id="layout-editor"].is-active')?.getAttribute('data-widget-id') || ''
-      };
-    })()`,
-    awaitPromise: true,
-    returnByValue: true
-  });
-  const capture = captureEvaluation.result?.value || {};
-  assert(!captureEvaluation.exceptionDetails && capture.ready && ["compact", "standard", "wide"].includes(capture.value) && capture.active === "layout-editor", `Layout Editor did not expose the Network width setting: ${JSON.stringify(capture)}`);
-
-  const originalCardSize = capture.value;
-  const changedCardSize = originalCardSize === "wide" ? "compact" : "wide";
-  let changed = {};
-  let persisted = {};
-  let restore = {};
-  let restored = {};
-  try {
-    const changeEvaluation = await cdp.send("Runtime.evaluate", {
-      expression: `(async () => {
-        const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-        const nextFrames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        const select = document.querySelector('[data-layout-size][data-id="network"]');
-        if (!select) return { ready: false };
-        select.value = ${JSON.stringify(changedCardSize)};
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        await nextFrames();
-        const editorValue = document.querySelector('[data-layout-size][data-id="network"]')?.value || '';
-        document.querySelector('[data-destination="library"]')?.click();
-        document.getElementById('dashboard-panels-toggle')?.click();
-        const pickerDeadline = Date.now() + 5000;
-        let networkButton = null;
-        while (Date.now() < pickerDeadline) {
-          networkButton = document.querySelector('#dashboard-widget-picker [data-widget-id="network"]');
-          if (networkButton) break;
-          await wait(50);
-        }
-        networkButton?.click();
-        const widgetDeadline = Date.now() + 10000;
-        let root = null;
-        while (Date.now() < widgetDeadline) {
-          root = document.getElementById('dashboard-inline-widget');
-          if (root?.dataset.cardSize === ${JSON.stringify(changedCardSize)} && root.querySelector('.network-command-shell')) break;
-          await wait(50);
-        }
-        return {
-          ready: Boolean(select && networkButton && root?.querySelector('.network-command-shell')),
-          editorValue,
-          rootCardSize: root?.dataset.cardSize || '',
-          pickerCardSize: networkButton?.getAttribute('data-card-size') || '',
-          gridColumnCount: (getComputedStyle(root?.querySelector('.network-command-grid')).gridTemplateColumns || '').trim().split(/\\s+/).filter(Boolean).length
-        };
-      })()`,
-      awaitPromise: true,
-      returnByValue: true
-    });
-    changed = changeEvaluation.result?.value || {};
-    if (changeEvaluation.exceptionDetails) changed.exception = changeEvaluation.exceptionDetails?.exception?.description || changeEvaluation.exceptionDetails?.text || "unknown";
-
-    await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=network&networkLayoutPersistence=reload` });
-    await waitForCommittedUrl(cdp, "networkLayoutPersistence=reload");
-    const persistedEvaluation = await cdp.send("Runtime.evaluate", {
-      expression: `(async () => {
-        const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-        const deadline = Date.now() + 10000;
-        let root = null;
-        while (Date.now() < deadline) {
-          root = document.getElementById('dashboard-inline-widget');
-          if (document.body?.dataset.bridgeHydrated === 'true' && root?.querySelector('.network-command-shell')) break;
-          await wait(50);
-        }
-        const picker = document.querySelector('#dashboard-widget-picker [data-widget-id="network"]');
-        return {
-          ready: Boolean(root?.querySelector('.network-command-shell')),
-          rootCardSize: root?.dataset.cardSize || '',
-          pickerCardSize: picker?.getAttribute('data-card-size') || ''
-        };
-      })()`,
-      awaitPromise: true,
-      returnByValue: true
-    });
-    persisted = persistedEvaluation.result?.value || {};
-    if (persistedEvaluation.exceptionDetails) persisted.exception = persistedEvaluation.exceptionDetails?.exception?.description || persistedEvaluation.exceptionDetails?.text || "unknown";
-  } finally {
-    await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=layout-editor&networkLayoutPersistence=restore` });
-    await waitForCommittedUrl(cdp, "networkLayoutPersistence=restore");
-    const restoreEvaluation = await cdp.send("Runtime.evaluate", {
-      expression: `(async () => {
-        const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-        const deadline = Date.now() + 10000;
-        let select = null;
-        while (Date.now() < deadline) {
-          select = document.querySelector('[data-layout-size][data-id="network"]');
-          if (document.body?.dataset.bridgeHydrated === 'true' && select) break;
-          await wait(50);
-        }
-        if (!select) return { ready: false };
-        select.value = ${JSON.stringify(originalCardSize)};
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        await wait(100);
-        return {
-          ready: true,
-          editorValue: document.querySelector('[data-layout-size][data-id="network"]')?.value || ''
-        };
-      })()`,
-      awaitPromise: true,
-      returnByValue: true
-    });
-    restore = restoreEvaluation.result?.value || {};
-    if (restoreEvaluation.exceptionDetails) restore.exception = restoreEvaluation.exceptionDetails?.exception?.description || restoreEvaluation.exceptionDetails?.text || "unknown";
-
-    await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=network&networkLayoutPersistence=restored` });
-    await waitForCommittedUrl(cdp, "networkLayoutPersistence=restored");
-    const restoredEvaluation = await cdp.send("Runtime.evaluate", {
-      expression: `(async () => {
-        const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-        const deadline = Date.now() + 10000;
-        let root = null;
-        while (Date.now() < deadline) {
-          root = document.getElementById('dashboard-inline-widget');
-          if (document.body?.dataset.bridgeHydrated === 'true' && root?.querySelector('.network-command-shell')) break;
-          await wait(50);
-        }
-        return { ready: Boolean(root?.querySelector('.network-command-shell')), rootCardSize: root?.dataset.cardSize || '' };
-      })()`,
-      awaitPromise: true,
-      returnByValue: true
-    });
-    restored = restoredEvaluation.result?.value || {};
-    if (restoredEvaluation.exceptionDetails) restored.exception = restoredEvaluation.exceptionDetails?.exception?.description || restoredEvaluation.exceptionDetails?.text || "unknown";
-  }
-
-  assert(changed.ready && changed.editorValue === changedCardSize && changed.rootCardSize === changedCardSize && changed.pickerCardSize === changedCardSize && changed.gridColumnCount === (changedCardSize === "compact" ? 1 : 4), `Layout Editor did not apply the Network card size to the rendered panel: ${JSON.stringify(changed)}`);
-  assert(persisted.ready && persisted.rootCardSize === changedCardSize && persisted.pickerCardSize === changedCardSize, `Network card size did not persist across dashboard reload: ${JSON.stringify(persisted)}`);
-  assert(restore.ready && restore.editorValue === originalCardSize && restored.ready && restored.rootCardSize === originalCardSize, `Network card-size persistence test did not restore its isolated setting: ${JSON.stringify({ restore, restored })}`);
-  console.log("rendered Layout Editor Network card-size apply, reload persistence, and restoration: passed");
+      if (url.pathname === '/api/scenes') return new Response(JSON.stringify(scenes), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return originalFetch(input, init);
+    };
+    try {
+      const gaming = document.getElementById('dashboard-mode-select');
+      check(gaming && !gaming.disabled && scenes.profiles.every(scene => Array.from(gaming.options).some(option => option.value === scene.id)) && !Array.from(gaming.options).some(option => option.value === 'scene-night'), 'Mode selector lost a native profile or exposed Night as a base Mode');
+      gaming.focus(); gaming.value = 'scene-gaming'; gaming.dispatchEvent(new Event('change', { bubbles: true })); await frames();
+      gaming.dispatchEvent(new Event('change', { bubbles: true })); await frames();
+      check(calls === 1 && gaming.getAttribute('aria-disabled') === 'true' && gaming.value === 'scene-gaming', 'Pending Mode action accepted a duplicate or lost the requested Mode');
+      release();
+      const modeDeadline = Date.now() + 5000;
+      while (Date.now() < modeDeadline && gaming.getAttribute('aria-disabled') === 'true') await wait(25);
+      check(gaming.value === 'scene-gaming' && gaming.isConnected && document.activeElement === gaming, 'Mode activation lost selection or focused control');
+      check(document.body.dataset.section === 'pc' && document.body.dataset.activeWidgetId === 'network', 'Mode activation displaced the selected panel');
+      check(/Manual/.test(document.getElementById('dashboard-mode-state').textContent), 'Header Mode did not identify manual activation');
+      const baseModeSnapshot = JSON.stringify(scenes);
+      for (const variant of ['night', 'standard']) {
+        await frames();
+        document.getElementById('dashboard-quick-toggle').click(); await frames();
+        const night = document.querySelector('[data-quick-night="' + variant + '"]');
+        check(!scenes.profiles.some(scene => scene.id === 'scene-night') && night && !night.disabled, 'Quick Night controls incorrectly require a base profile');
+        night.focus(); night.click();
+        const variantDeadline = Date.now() + 5000;
+        while (Date.now() < variantDeadline && (document.documentElement.dataset.themeVariant !== variant || night.getAttribute('aria-pressed') !== 'true')) await wait(25);
+        const preference = JSON.parse(localStorage.getItem('xeneon-dashboard-settings')).themeVariant;
+        check(document.documentElement.dataset.themeVariant === variant && preference === variant && night.getAttribute('aria-pressed') === 'true', 'Night toggle did not apply/reflect the local display preference');
+        check(nightCalls === 0 && JSON.stringify(scenes) === baseModeSnapshot, 'Night display toggle changed native Mode or automation state');
+        check(scenes.activeSceneId === 'scene-gaming' && gaming.value === 'scene-gaming' && document.body.dataset.scene === 'scene-gaming', 'Night toggle replaced the base Mode');
+        check(document.body.dataset.section === 'pc' && document.body.dataset.activeWidgetId === 'network' && night.isConnected && document.activeElement === night, 'Night toggle displaced the current panel or focused control');
+        document.querySelector('#dashboard-quick-drawer [data-quick-close]').click(); await frames();
+      }
+      const after = widthSnapshot();
+      check(after.cardSize === 'wide' && Math.abs(after.width - after.available) <= 1.5, 'Saved Mode layout did not preserve metadata and full panel width');
+      window.__auxoraTestOpenWidget('layout-editor'); await wait(150);
+      check(!document.querySelector('[data-layout-size]') && document.querySelector('[data-layout-item="network"]'), 'Layout Editor still exposes retired width or loses the saved panel');
+      window.__auxoraTestOpenWidget('network'); await frames();
+      check(document.body.dataset.activeWidgetId === 'network', 'Legacy Home visibility blocked explicit panel navigation');
+      const settings = JSON.parse(localStorage.getItem('xeneon-dashboard-settings'));
+      return { before, after, calls, nightCalls, modeLayouts: settings.modeLayouts, cardSizes: settings.cardSizes, errors: window.__auxoraRenderedRuntimeErrors || [] };
+    } finally { release(); window.fetch = originalFetch; }
+  })()`, awaitPromise: true, returnByValue: true });
+  await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: authorityFixture.identifier });
+  const result = evaluation.result?.value;
+  assert(!evaluation.exceptionDetails && result?.calls === 1 && result.nightCalls === 0 && result.errors.length === 0, `Legacy layout/header Mode fixture: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
+  assert(result.modeLayouts === expected.modeLayouts && result.cardSizes === expected.cardSizes, `Mode/navigation changed preserved legacy layout data: ${JSON.stringify(result)}`);
+  await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=network&legacyLayout=reload` });
+  await waitForCommittedUrl(cdp, 'legacyLayout=reload');
+  const reload = await cdp.send('Runtime.evaluate', { expression: `(async () => {
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline && document.body?.dataset.bridgeHydrated !== 'true') await new Promise(resolve => setTimeout(resolve, 50));
+    const settings = JSON.parse(localStorage.getItem('xeneon-dashboard-settings'));
+    return { modeLayouts: settings.modeLayouts, cardSizes: settings.cardSizes, active: document.body.dataset.activeWidgetId };
+  })()`, awaitPromise: true, returnByValue: true });
+  assert(!reload.exceptionDetails && reload.result?.value?.modeLayouts === expected.modeLayouts && reload.result?.value?.cardSizes === expected.cardSizes && reload.result?.value?.active === 'network', `Legacy layout did not survive reload: ${JSON.stringify(reload.result?.value)}`);
+  await cdp.send('Storage.clearDataForOrigin', { origin: baseUrl, storageTypes: 'all' });
+  console.log('legacy layout preservation, full panel width, mocked Mode action pending/deduplication, selection, and reload: passed');
 }
 
 async function validateForcedColorsProductSurfaces(cdp) {
@@ -3836,11 +3618,7 @@ async function validateForcedColorsProductSurfaces(cdp) {
         const results = [];
 
         async function auditCurrentSurface() {
-          const active = document.querySelector('#dashboard-widget-picker [data-widget-id].is-active')
-            || document.querySelector('#dashboard-widget-picker [data-widget-id][aria-current="true"]');
-          const id = active?.getAttribute('data-widget-id')
-            || (document.querySelector('[data-destination="home"]')?.getAttribute('aria-pressed') === 'true' ? 'home' : '')
-            || (document.querySelector('[data-destination="scenes"]')?.getAttribute('aria-pressed') === 'true' ? 'scenes' : '');
+          const id = document.body?.dataset.activeWidgetId || '';
           if (!id || seen.has(id)) return;
           seen.add(id);
           const settleDeadline = Date.now() + 5000;
@@ -3855,7 +3633,7 @@ async function validateForcedColorsProductSurfaces(cdp) {
           const forcedColorOptOuts = root ? Array.from(root.querySelectorAll('*')).filter(element => getComputedStyle(element).forcedColorAdjust === 'none').map(element => element.className || element.tagName).slice(0, 20) : [];
           results.push({
             id,
-            status: document.getElementById('dashboard-widget-source')?.textContent?.trim() || '',
+            status: document.getElementById('dashboard-status')?.dataset.surfaceStatus || '',
             buttonCount: buttons.length,
             borderlessButtons,
             forcedColorOptOuts,
@@ -3864,20 +3642,11 @@ async function validateForcedColorsProductSurfaces(cdp) {
           });
         }
 
-        for (const destination of ['home', 'scenes', 'library', 'settings']) {
-          document.querySelector('[data-destination="' + destination + '"]')?.click();
-          await wait(250);
-          await auditCurrentSurface();
-        }
-        document.getElementById('dashboard-panels-toggle')?.click(); await wait(50);
-        const ids = Array.from(document.querySelectorAll('#dashboard-widget-picker [data-widget-id]')).filter(visible).map(element => element.getAttribute('data-widget-id'));
-        document.querySelector('#dashboard-panels-drawer [data-panels-close]')?.click();
-        for (const id of ids) {
-          if (seen.has(id)) continue;
-          document.getElementById('dashboard-panels-toggle')?.click(); await wait(50);
-          document.querySelector('#dashboard-widget-picker [data-widget-id="' + id + '"]')?.click();
-          await wait(250);
-          await auditCurrentSurface();
+        for (const section of window.AuxoraNavigation.sections) {
+          for (const tab of section.tabs) {
+            window.__auxoraTestOpenWidget(tab.id); await wait(250);
+            await auditCurrentSurface();
+          }
         }
 
         return {
@@ -4051,21 +3820,21 @@ async function validateOptionalSetupHandoffs(cdp) {
       expression: `(async () => {
         const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
         const deadline = Date.now() + 12000;
-        while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || document.getElementById('dashboard-widget-title')?.textContent?.trim() !== ${JSON.stringify(testCase.id === "weather" ? "Weather" : "Calendar")})) await wait(50);
+        while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || document.body?.dataset.activeWidgetId !== ${JSON.stringify(testCase.id)})) await wait(50);
         let setupButton = document.querySelector('#dashboard-inline-widget [data-action="setup"]');
         while (Date.now() < deadline && !setupButton) {
           await wait(50);
           setupButton = document.querySelector('#dashboard-inline-widget [data-action="setup"]');
         }
         setupButton?.click();
-        while (Date.now() < deadline && document.getElementById('dashboard-widget-title')?.textContent?.trim() !== 'Diagnostics') await wait(50);
+        while (Date.now() < deadline && document.body?.dataset.activeWidgetId !== 'setup') await wait(50);
         while (Date.now() < deadline && document.activeElement?.getAttribute('name') !== ${JSON.stringify(testCase.inputName)}) await wait(50);
         const section = document.querySelector('[data-setup-section=${JSON.stringify(testCase.id)}]');
         const rect = section?.getBoundingClientRect();
         return {
           setupButton: !!setupButton,
-          heading: document.getElementById('dashboard-widget-title')?.textContent?.trim() || '',
-          active: document.querySelector('#dashboard-widget-picker [data-widget-id].is-active')?.getAttribute('data-widget-id') || '',
+          heading: document.body?.dataset.activeWidgetId || '',
+          active: document.body?.dataset.activeWidgetId || '',
           form: !!document.querySelector('[data-form=${JSON.stringify(testCase.id)}]'),
           focusedName: document.activeElement?.getAttribute('name') || '',
           sectionVisible: !!rect && rect.width > 0 && rect.height > 0
@@ -4075,7 +3844,7 @@ async function validateOptionalSetupHandoffs(cdp) {
       returnByValue: true
     });
     const result = evaluation.result?.value || {};
-    assert(result.setupButton && result.heading === "Diagnostics" && result.active === "setup", `${testCase.id}: setup handoff did not open Diagnostics: ${JSON.stringify(result)}`);
+    assert(result.setupButton && result.heading === "setup" && result.active === "setup", `${testCase.id}: setup handoff did not open Diagnostics: ${JSON.stringify(result)}`);
     assert(result.form && result.sectionVisible && result.focusedName === testCase.inputName, `${testCase.id}: setup handoff did not reveal and focus the intended form: ${JSON.stringify(result)}`);
   }
   console.log("rendered Weather and Calendar direct Diagnostics handoffs: passed");
@@ -4229,6 +3998,7 @@ try {
   const cdp = await connectCdp(target.webSocketDebuggerUrl);
   try {
     await cdp.send("Page.enable");
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(${installNavigationProbeHelpers.toString()})()` });
     await cdp.send("Runtime.enable");
     await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
       source: `(() => {
@@ -4257,10 +4027,10 @@ try {
       });
       await validateAllVisibleProductSurfaces(cdp, surfaceOnlyViewport);
     } else {
-    if (!process.argv.includes("--quick-controls-only")) await validateFavoritesNavigation(cdp);
-    if (!process.argv.includes("--favorites-only") && !process.argv.includes("--quick-controls-only")) await validateCompactChrome(cdp);
-    if (!process.argv.includes("--favorites-only") && !process.argv.includes("--compact-only")) await validateQuickControls(cdp);
-    if (!process.argv.includes("--compact-only") && !process.argv.includes("--favorites-only") && !process.argv.includes("--quick-controls-only")) {
+    if (!process.argv.includes("--quick-controls-only")) await validateSectionNavigation(cdp);
+    if (!process.argv.includes("--navigation-only") && !process.argv.includes("--quick-controls-only")) await validateCompactChrome(cdp);
+    if (!process.argv.includes("--navigation-only") && !process.argv.includes("--compact-only")) await validateQuickControls(cdp);
+    if (!process.argv.includes("--compact-only") && !process.argv.includes("--navigation-only") && !process.argv.includes("--quick-controls-only")) {
     await validateSettingsInteractionSafety(cdp);
     for (const viewport of viewports) {
       await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
@@ -4277,6 +4047,7 @@ try {
       validateProbe(probe, viewport);
       console.log(`rendered ${viewport.name} ${viewport.width}x${viewport.height}: passed`);
     }
+    const surfaceFailures = [];
     for (const viewport of surfaceAuditViewports) {
       await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
       await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -4285,9 +4056,15 @@ try {
         deviceScaleFactor: 1,
         mobile: false
       });
-      await validateAllVisibleProductSurfaces(cdp, viewport);
+      try {
+        await validateAllVisibleProductSurfaces(cdp, viewport);
+      } catch (error) {
+        console.error(error.stack || error.message);
+        surfaceFailures.push(viewport.name + ": " + error.message);
+      }
     }
-    await validateNetworkLayoutEditorPersistence(cdp);
+    assert(surfaceFailures.length === 0, "Product-surface matrix failed:\n" + surfaceFailures.join("\n"));
+    await validateLegacyLayoutPreservation(cdp);
     await validateDeletableMusicCards(cdp);
     await validateForcedColorsProductSurfaces(cdp);
     await validateOptionalSetupHandoffs(cdp);
@@ -4368,8 +4145,8 @@ try {
     ? `launched isolated hidden native host and checked all 25 product surfaces at ${surfaceOnlyViewport.width}x${surfaceOnlyViewport.height}`
     : process.argv.includes("--quick-controls-only")
     ? "launched isolated hidden native host and checked direct Quick controls with hardware-isolated fixtures at four viewports"
-    : process.argv.includes("--favorites-only")
-    ? "launched isolated native host and checked editable favorites and All panels at four viewports"
+    : process.argv.includes("--navigation-only")
+    ? "launched isolated native host and checked section navigation at four viewports"
     : process.argv.includes("--compact-only")
     ? "launched isolated native host and checked compact chrome at 800x480/720x480 and portrait options at 390x844"
     : `launched isolated native host and checked rendered DOM geometry, focus, activation, touch targets, and names at ${viewports.length} viewports`);

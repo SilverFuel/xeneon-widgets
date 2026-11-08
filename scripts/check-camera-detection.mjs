@@ -58,8 +58,66 @@ assert(/id: "frigate"/.test(dashboard) && /frigate-detection-panel\.html/.test(d
 assert(!/hidden until configured/i.test(dashboard), "Camera Detection copy must not contradict its discoverable setup state");
 assert(/widget\.id === "frigate"/.test(dashboard) && /return isWidgetSupported\(widget\.id\)/.test(dashboard), "supported Camera Detection must remain discoverable before configuration");
 assert(/frigateState === "Optional" \? "Setup" : frigateState/.test(dashboard), "unconfigured Camera Detection must publish an actionable Setup state");
-assert(/primaryDestination = preferredWidget\.destination \|\| "home"/.test(dashboard), "explicit Camera Detection routes must switch to the widget's owning navigation destination");
-assert(/persistWidgetChoice\(currentWidgetId\);\s*renderPrimaryNavigation\(\);/.test(dashboard), "hydrated deep links must repaint the owning navigation destination");
+// Exercise the real initial-route controller and section renderer without a browser.
+// A saved destination or hidden rail section must not override an explicit Frigate link.
+function routeFunction(name, nextMarker) {
+  const start = dashboard.indexOf(`function ${name}(`);
+  const end = dashboard.indexOf(nextMarker, start);
+  assert(start >= 0 && end > start, `Camera Detection route function is missing: ${name}`);
+  return dashboard.slice(start, end);
+}
+const navigationContext = vm.createContext({});
+vm.runInContext(read("js/dashboard-navigation.js"), navigationContext);
+const routeSource = [
+  routeFunction("resolveInitialWidget", "function selectWidget("),
+  routeFunction("renderPrimaryNavigation", "function selectDestination("),
+  routeFunction("refreshBridgeState", "function checkBridgeAndRender("),
+  routeFunction("checkBridgeAndRender", 'window.addEventListener("error"')
+].join("\n");
+for (const fixture of [{ destination: "settings", hidden: false }, { destination: "library", hidden: true }]) {
+  const persisted = [];
+  const paints = [];
+  const headings = new Map();
+  const rail = { html: "" };
+  const context = vm.createContext({
+    navigation: navigationContext.AuxoraNavigation,
+    primaryDestination: fixture.destination,
+    destinationPanels: { settings: "updates", library: "audio", "smart-home": "hue" },
+    currentWidgetId: "updates",
+    bridgeSetup: { onboardingCompleted: false },
+    bridgeReachable: false,
+    lastBridgeSnapshotKey: "",
+    lastPrimaryWidgetStorageKey: "last-widget",
+    perfMode: false,
+    primaryNavNode: rail,
+    settingsToggleNode: { classList: { toggle() {} }, setAttribute() {} },
+    document: { body: { dataset: {} } },
+    getSetting: key => key === "hiddenSections" ? JSON.stringify(fixture.hidden ? ["smart-home"] : []) : "[]",
+    readStoredWidget: () => "audio",
+    getWidgetById: id => ({ id, destination: "library" }),
+    fetchBridgeHealth: async () => ({ setup: { onboardingCompleted: true } }),
+    fetchBridgeConfig: async () => ({}),
+    applyBridgeState: health => { context.bridgeSetup = health.setup; },
+    persistWidgetChoice: id => persisted.push(id),
+    patchDashboardDom: (node, html) => { node.html = html; },
+    setText: (id, value) => headings.set(id, value),
+    escapeHtml: String,
+    renderHeaderModes() {},
+    renderOriginStatus() {},
+    updateWidgetMeta() {},
+    refreshLauncherDock() {},
+    renderCurrentSelection: reload => paints.push({ id: context.currentWidgetId, section: context.primaryDestination, reload }),
+    handleBridgeOffline: () => { throw new Error("Camera Detection route fixture unexpectedly failed hydration"); }
+  });
+  vm.runInContext(routeSource, context);
+  const hydration = context.checkBridgeAndRender("frigate", true);
+  assert(context.currentWidgetId === "frigate" && context.primaryDestination === "smart-home", "explicit Camera Detection routes must override stale destinations and pending onboarding, including a hidden Smart Home section");
+  await hydration;
+  assert(persisted.join(",") === "frigate" && paints.length === 1 && paints[0].id === "frigate" && paints[0].section === "smart-home" && paints[0].reload === true
+    && context.document.body.dataset.section === "smart-home" && headings.get("dashboard-section-title") === "Smart Home"
+    && rail.html.includes('data-section-id="smart-home"') === !fixture.hidden,
+  "hydrated Camera Detection deep links must persist their selection and repaint the owning section while preserving rail visibility preferences");
+}
 assert(/registerRenderer\("frigate", mountFrigateWidget\)/.test(integrations) && /\/api\/frigate/.test(integrations), "Camera Detection must have a native production renderer backed by the Frigate API");
 assert(/inline-camera-preview/.test(integrations) && /Recent detections/.test(integrations), "Camera Detection must render a snapshot and recent event history");
 assert(/Cached after connection loss/.test(integrations) && /last successful local update/.test(integrations), "Camera Detection must label retained events as cached after a failed refresh");

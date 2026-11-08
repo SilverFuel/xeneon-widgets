@@ -1,4 +1,5 @@
 (function () {
+  var navigation = window.AuxoraNavigation;
   var params = new URLSearchParams(window.location.search);
   var sameOriginLocalBridge = window.location.protocol === "http:"
     && /^(127\.0\.0\.1|localhost)$/i.test(window.location.hostname)
@@ -16,23 +17,16 @@
   var lastPrimaryWidgetStorageKey = "xeneon-dashboard-last-widget";
   var primaryDestinationStorageKey = "auxora-dashboard-destination";
   var destinationPanelsStorageKey = "auxora-dashboard-panels-v1";
-  var favoritesStorageKey = "auxora-dashboard-favorites-v1";
-  var defaultFavoriteWidgetIds = ["system", "audio", "network", "quick-actions"];
-  var favoriteWidgetIds = defaultFavoriteWidgetIds.slice();
   var nowStripModeStorageKey = "auxora-now-strip-mode";
   var settingsStorageKey = "xeneon-dashboard-settings";
   var pickerNode = null;
-  var favoritesNode = null;
-  var panelsDrawerNode = null;
-  var panelsToggleNode = null;
-  var panelsDrawerOpener = null;
+  var settingsCategoriesNode = null;
   var inlineViewerNode = null;
   var loadingNode = null;
   var settingsNode = null;
   var emptyNode = null;
   var retryNode = null;
   var diagnosticsInlineNode = null;
-  var settingsPanelNode = null;
   var settingsToggleNode = null;
   var touchLockToggleNode = null;
   var touchUnlockNode = null;
@@ -45,6 +39,7 @@
   var quickToggleNode = null;
   var quickDrawerOpener = null;
   var quickControls = null;
+  var modeActivationPending = false;
   var pendingSettingsWidgetId = "";
   var pendingSettingsRenderTimerId = 0;
   var settingsRenderInProgress = false;
@@ -52,7 +47,7 @@
   var widgetErrorNode = null;
   var widgetErrorGeneration = 0;
   var primaryDestination = "home";
-  var destinationPanels = { home: "home", scenes: "scenes", library: "system", settings: "setup" };
+  var destinationPanels = {};
   var surfaceStatuses = {};
   var inlineWidgetController = null;
   var activeInlineWidgetId = "";
@@ -178,6 +173,8 @@
     animationIntensity: "25",
     accentColor: "",
     touchLockMode: "0",
+    sectionOrder: "[]",
+    hiddenSections: "[]",
     layoutOrder: "",
     pinnedWidgets: "",
     hiddenWidgets: "",
@@ -1045,17 +1042,7 @@
       document.body.classList.toggle("dashboard-native-page--game-focus-active", isGameFocusActive());
     }
 
-    if (settingsPanelNode) {
-      settingsPanelNode.classList.toggle("is-open", settingsDrawerOpen && !locked);
-      settingsPanelNode.classList.toggle("is-collapsed", !settingsDrawerOpen || locked);
-    }
 
-    if (settingsToggleNode) {
-      settingsToggleNode.textContent = settingsDrawerOpen && !locked ? "Hide options" : "Panel options";
-      settingsToggleNode.setAttribute("aria-label", settingsDrawerOpen && !locked ? "Close panel options" : "Open panel options");
-      settingsToggleNode.setAttribute("aria-expanded", settingsDrawerOpen && !locked ? "true" : "false");
-      settingsToggleNode.classList.toggle("is-active", settingsDrawerOpen && !locked);
-    }
 
     if (touchLockToggleNode) {
       touchLockToggleNode.textContent = locked ? "Touch Locked" : "Touch Lock";
@@ -1068,14 +1055,13 @@
       touchUnlockNode.setAttribute("aria-hidden", locked ? "false" : "true");
     }
 
-    var panelsOpen = isDrawerOpen(panelsDrawerNode);
     var quickOpen = isDrawerOpen(quickDrawerNode);
     [railNode, viewerNode].forEach(function (node) {
       if (node) {
-        node.toggleAttribute("inert", locked || panelsOpen || quickOpen);
+        node.toggleAttribute("inert", locked || quickOpen);
       }
     });
-    [quickDrawerNode, quickScrimNode, panelsDrawerNode, document.getElementById("dashboard-panels-scrim")].forEach(function (node) {
+    [quickDrawerNode, quickScrimNode].forEach(function (node) {
       if (node) {
         node.toggleAttribute("inert", locked);
       }
@@ -1103,9 +1089,7 @@
   function setTouchLockEnabled(enabled) {
     if (enabled) {
       quickDrawerOpener = null;
-      panelsDrawerOpener = null;
       setQuickDrawerOpen(false);
-      setPanelsDrawerOpen(false);
     }
     dashboardSettings.touchLockMode = enabled ? "1" : "0";
     storedSettings.touchLockMode = dashboardSettings.touchLockMode;
@@ -1191,12 +1175,7 @@
       loading.classList.add("is-hidden");
     }
 
-    setStatus("dashboard-origin-status", "Error", "danger");
-    setText("dashboard-selection-status", "Dashboard error");
-    setText("dashboard-widget-kicker", "Dashboard error");
-    setText("dashboard-widget-title", "Dashboard failed");
-    setText("dashboard-widget-copy", copy || "The dashboard hit a client-side error while rendering.");
-    setText("dashboard-widget-source", "Unavailable");
+    setStatus("dashboard-status", "Error", "danger");
     setText("dashboard-widget-empty-title", title);
     setText("dashboard-widget-empty-copy", detail);
 
@@ -1564,8 +1543,8 @@
   }
 
   function isDashboardBusyForGameFaceAutoOpen() {
-    return dashboardInteractionActive || settingsDrawerOpen || isTouchLockEnabled()
-      || isDrawerOpen(panelsDrawerNode) || isDrawerOpen(quickDrawerNode);
+    return dashboardInteractionActive || modeActivationPending || primaryDestination === "settings" || isTouchLockEnabled()
+      || isDrawerOpen(quickDrawerNode);
   }
 
   function openGameFaceForActiveId(activeId) {
@@ -1981,9 +1960,7 @@
       && bridgeReachable !== false
       && !isLocalBridgeBlockedByPageOrigin()
       && bridgeCapabilities.launchers === true
-      && currentWidgetId
-      && currentWidgetId !== "setup"
-      && currentWidgetId !== "game-mode"
+      && currentWidgetId === "home"
       && launcherDockEntries.length > 0
     );
   }
@@ -2034,7 +2011,7 @@
     launcherDockNode.classList.toggle("is-expanded", launcherDockExpanded);
     patchDashboardDom(launcherDockNode, '' +
       '<div class="dashboard-launcher-dock__head">' +
-        '<span>Apps</span>' +
+        '<span>Recent apps</span>' +
         '<strong>' + escapeHtml(String(launcherDockEntries.length)) + '</strong>' +
       '</div>' +
       '<div class="dashboard-launcher-dock__apps">' + visibleEntries.map(function (entry) {
@@ -2052,13 +2029,13 @@
           '</button>';
       }).join("") + '</div>' +
       (hasMore
-        ? '<button class="dashboard-launcher-dock__more" type="button" data-launcher-dock-action="toggle-expanded" aria-expanded="' + (launcherDockExpanded ? "true" : "false") + '">' + (launcherDockExpanded ? "Less" : "More") + '</button>'
+        ? '<button class="dashboard-launcher-dock__more" type="button" data-launcher-dock-action="toggle-expanded" aria-expanded="' + (launcherDockExpanded ? "true" : "false") + '">' + (launcherDockExpanded ? "Show fewer" : "Show all") + '</button>'
         : ''));
     setLauncherDockVisible(true);
   }
 
   function refreshLauncherDock() {
-    if (!launcherDockNode || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin()) {
+    if (!launcherDockNode || currentWidgetId !== "home" || bridgeReachable === false || isLocalBridgeBlockedByPageOrigin()) {
       hideLauncherDock();
       return Promise.resolve();
     }
@@ -2156,9 +2133,15 @@
   function readDestinationPanels() {
     try {
       var parsed = JSON.parse(window.localStorage.getItem(destinationPanelsStorageKey) || "{}");
-      return Object.assign({}, destinationPanels, parsed && typeof parsed === "object" ? parsed : {});
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) { return {}; }
+      var panels = Object.assign(Object.create(null), parsed);
+      var legacySection = navigation.sectionForWidget(panels.library);
+      if (legacySection && !Object.prototype.hasOwnProperty.call(panels, legacySection)) {
+        panels[legacySection] = panels.library;
+      }
+      return panels;
     } catch (error) {
-      return Object.assign({}, destinationPanels);
+      return {};
     }
   }
 
@@ -2448,17 +2431,16 @@
   }
 
   function updatePickerSurfaceStatus(widgetId) {
-    if (!widgetId) {
-      return;
-    }
-    [pickerNode, favoritesNode].forEach(function (node) {
+    if (!widgetId) { return; }
+    [pickerNode, settingsCategoriesNode].forEach(function (node) {
       if (!node) { return; }
       Array.prototype.forEach.call(node.querySelectorAll("[data-widget-id]"), function (button) {
-        var meta = button.querySelector(".router-picker__meta");
-        if (button.getAttribute("data-widget-id") !== widgetId || !meta || button.disabled) { return; }
+        if (button.getAttribute("data-widget-id") !== widgetId) { return; }
         var state = getWidgetState(widgetId);
-        meta.textContent = state;
-        meta.setAttribute("data-state", state.toLowerCase().replace(/\s+/g, "-"));
+        var surface = surfaceStatuses[widgetId];
+        button.setAttribute("data-status", state);
+        button.setAttribute("data-tone", surface ? surface.tone : getStateTone(state));
+        button.setAttribute("aria-description", state + (surface && surface.detail ? ". " + surface.detail : ""));
       });
     });
   }
@@ -2480,7 +2462,7 @@
 
     surfaceStatuses[widgetId] = nextStatus;
     if (currentWidgetId === widgetId) {
-      setText("dashboard-widget-source", nextStatus.status);
+      renderOriginStatus();
     }
     updatePickerSurfaceStatus(widgetId);
     return true;
@@ -2666,7 +2648,7 @@
 
   function getLayoutEditorWidgets() {
     return sortWidgetsByLayout(widgets.filter(function (widget) {
-      return widget && widget.destination === "library";
+      return widget && widget.id !== "home" && navigation.sectionForWidget(widget.id) !== "settings";
     }));
   }
 
@@ -2688,23 +2670,11 @@
   }
 
   function getDestinationWidgets(destination) {
-    var target = destination || primaryDestination;
-    var ids;
-    if (target === "home") {
-      ids = ["home"].concat(sceneWidgetIds().filter(function (id) { return id !== "home"; }));
-    } else if (target === "scenes") {
-      ids = ["scenes"];
-    } else {
-      ids = widgets.filter(function (widget) {
-        return widget.destination === target;
-      }).map(function (widget) {
-        return widget.id;
-      });
-    }
-
-    return sortWidgetsByLayout(ids.map(getWidgetById).filter(function (widget, index, list) {
-      return widget && shouldShowWidget(widget) && list.indexOf(widget) === index;
-    }));
+    var section = destination || primaryDestination;
+    var entries = navigation.tabsForSection(section).map(function (tab) {
+      return getWidgetById(tab.id);
+    }).filter(Boolean);
+    return section === "settings" ? entries : sortWidgetsByLayout(entries);
   }
 
   function getWidgetById(widgetId) {
@@ -2760,16 +2730,16 @@
       },
       {
         id: "scenes",
-        title: "Modes",
+        title: "Modes & automation",
         requiresBridge: true,
         tier: "product",
         kicker: "Adaptive experience",
-        copy: "Switch the entire touch surface between Work, Gaming, Media, and Home. Night display settings stay separate.",
+        copy: "Edit Modes and automatic switching rules. Choose the active Mode from the header.",
         viewerLabel: "Manual + automatic"
       },
       {
         id: "setup",
-        title: "Diagnostics",
+        title: "Setup & status",
         kicker: "Setup & diagnostics",
         requiresBridge: true,
         getCopy: function () {
@@ -2880,7 +2850,7 @@
       },
       {
         id: "installer",
-        title: "Recovery",
+        title: "Repair & recovery",
         requiresBridge: true,
         tier: "product",
         kicker: "Install health",
@@ -2951,7 +2921,7 @@
       },
       {
         id: "quick-actions",
-        title: "Quick Actions",
+        title: "Windows tools",
         requiresBridge: true,
         copy: "Dark mode, Night Light, locking, Task Manager, Settings, and Recycle Bin actions.",
         getViewerLabel: function () {
@@ -2960,7 +2930,7 @@
       },
       {
         id: "shortcuts",
-        title: "System Shortcuts",
+        title: "Windows controls",
         requiresBridge: true,
         copy: "Power actions, notifications, and display controls Windows exposes on this PC.",
         getViewerLabel: function () {
@@ -3042,7 +3012,7 @@
         id: "frigate",
         title: "Camera Detection",
         requiresBridge: true,
-        copy: "Recent local Frigate object detections and event snapshots, with setup available directly from Apps & Controls.",
+        copy: "Recent local Frigate object detections and event snapshots, with setup in Settings > Setup & status.",
         getViewerLabel: function () {
           var frigate = bridgeConfig.frigate || {};
           return frigate.configured ? (frigate.camera || "All cameras") : "Setup";
@@ -3063,110 +3033,26 @@
       if (!contract) {
         throw new Error("Surface registry contract missing for " + widget.id);
       }
-      return Object.assign({}, contract, widget);
+      return Object.assign({}, contract, widget, { destination: navigation.sectionForWidget(widget.id) });
     });
-  }
-
-  function readFavoriteWidgets() {
-    try {
-      var raw = window.localStorage.getItem(favoritesStorageKey);
-      if (raw === null) { return defaultFavoriteWidgetIds.slice(); }
-      var parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) { return defaultFavoriteWidgetIds.slice(); }
-      var valid = parsed.map(function (id) { return typeof id === "string" ? getWidgetById(id) : null; })
-        .filter(Boolean).map(function (widget) { return widget.id; })
-        .filter(function (id, index, list) { return list.indexOf(id) === index; }).slice(0, 4);
-      return parsed.length && !valid.length ? defaultFavoriteWidgetIds.slice() : valid;
-    } catch (error) {
-      return defaultFavoriteWidgetIds.slice();
-    }
-  }
-
-  function updateFavoritesFeedback(message) {
-    setText("dashboard-favorites-feedback", message || favoriteWidgetIds.length + " of 4 favorites. Remove one to make room for another.");
-  }
-
-  function toggleFavoriteWidget(widgetId) {
-    var widget = getWidgetById(widgetId);
-    if (!widget || isTouchLockEnabled()) { return; }
-    var index = favoriteWidgetIds.indexOf(widget.id);
-    if (index === -1 && favoriteWidgetIds.length >= 4) {
-      updateFavoritesFeedback("Four favorites already saved. Remove one before keeping another.");
-      return;
-    }
-    if (index !== -1) {
-      favoriteWidgetIds.splice(index, 1);
-    } else if (shouldShowWidget(widget)) {
-      favoriteWidgetIds.push(widget.id);
-    } else {
-      updateFavoritesFeedback("This panel is not available to add yet.");
-      return;
-    }
-    var saved = true;
-    try {
-      window.localStorage.setItem(favoritesStorageKey, JSON.stringify(favoriteWidgetIds));
-    } catch (error) {
-      saved = false;
-    }
-    var activeControl = document.activeElement;
-    renderPicker();
-    if (isDrawerOpen(panelsDrawerNode) && activeControl && !activeControl.isConnected) {
-      (drawerFocusableControls(panelsDrawerNode)[0] || panelsDrawerNode).focus({ preventScroll: true });
-    }
-    updateFavoritesFeedback(getWidgetTitle(widget) + (index === -1 ? " added. " : " removed. ")
-      + favoriteWidgetIds.length + " of 4 favorites."
-      + (saved ? "" : " Storage is unavailable; this change lasts until you reload."));
   }
 
   function renderPicker() {
-    var catalogWidgets = getVisibleWidgets();
-    // Keep unavailable/hidden favorites removable without changing their saved
-    // visibility or losing them during capability discovery and reconnection.
-    favoriteWidgetIds.map(getWidgetById).filter(Boolean).forEach(function (widget) {
-      if (catalogWidgets.indexOf(widget) === -1) { catalogWidgets.push(widget); }
-    });
-    var categories = ["Home", "Modes", "System", "Media", "Productivity", "Gaming", "Smart Home", "Settings", "More"];
-    function categoryFor(widget) {
-      if (widget.destination === "settings") { return "Settings"; }
-      return widget.category || "More";
+    var tabs = navigation.tabsForSection(primaryDestination);
+    var html = getDestinationWidgets(primaryDestination).map(function (widget) {
+      var tab = tabs.filter(function (entry) { return entry.id === widget.id; })[0];
+      var selected = widget.id === currentWidgetId;
+      return '<button type="button" id="dashboard-tab-' + widget.id + '" class="auxora-panel-link' + (selected ? ' is-active' : '') + '" data-ui-key="panel-' + widget.id + '" data-widget-id="' + widget.id + '" data-card-size="' + getCardSize(widget.id) + '" aria-pressed="' + selected + '" aria-controls="dashboard-inline-widget" title="' + escapeHtml(getWidgetCopy(widget)) + '">' + escapeHtml(tab.label) + '</button>';
+    }).join("");
+    var isSettings = primaryDestination === "settings";
+    patchDashboardDom(pickerNode, isSettings ? "" : html);
+    if (pickerNode) { pickerNode.hidden = isSettings; }
+    if (settingsCategoriesNode) {
+      settingsCategoriesNode.hidden = !isSettings;
+      patchDashboardDom(settingsCategoriesNode, isSettings ? html : "");
     }
-    function buttonFor(widget, favorite) {
-      var activeClass = widget.id === currentWidgetId ? " is-active" : "";
-      var available = shouldShowWidget(widget);
-      var hidden = String(getSetting("hiddenWidgets") || "").split(",").indexOf(widget.id) !== -1;
-      var state = available ? getWidgetState(widget.id) : hidden ? "Hidden in layout" : "Unavailable";
-      var cardSize = getCardSize(widget.id);
-      var favoriteLabels = { system: "System", audio: "Audio & Media", network: "Network", "quick-actions": "PC actions" };
-      var title = getWidgetTitle(widget);
-      var label = favorite && favoriteLabels[widget.id] || title;
-      return '' +
-        '<button type="button" class="router-picker__button router-picker__button--' + cardSize + activeClass + '" data-ui-key="widget-' + widget.id + '" data-widget-id="' + widget.id + '" data-card-size="' + cardSize + '" aria-pressed="' + (widget.id === currentWidgetId ? "true" : "false") + '" aria-label="' + escapeHtml(title) + '" title="' + escapeHtml(getWidgetCopy(widget)) + '"' + (available ? '' : ' disabled') + '>' +
-          '<span class="router-picker__title">' + escapeHtml(label) + '</span>' +
-          '<span class="router-picker__meta" data-state="' + escapeHtml(state.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(state) + '</span>' +
-        '</button>';
-    }
-    patchDashboardDom(pickerNode, categories.map(function (category) {
-      var items = catalogWidgets.filter(function (widget) { return categoryFor(widget) === category; });
-      return items.length ? '<div class="router-picker__category" data-ui-key="category-' + category + '"><span>' + escapeHtml(category) + '</span>' + items.map(function (widget) {
-        var favorite = favoriteWidgetIds.indexOf(widget.id) !== -1;
-        return '<div class="router-picker__item" data-ui-key="item-' + widget.id + '">' + buttonFor(widget)
-          + '<button type="button" class="router-picker__pin" data-ui-key="favorite-' + widget.id + '" data-favorite-widget="' + widget.id + '" aria-pressed="' + favorite + '" aria-label="' + escapeHtml((favorite ? "Remove " : "Keep ") + getWidgetTitle(widget) + (favorite ? " from favorites" : " in favorites")) + '">' + (favorite ? "Remove" : "Keep") + '</button></div>';
-      }).join("") + '</div>' : '';
-    }).join(""));
-    patchDashboardDom(favoritesNode, favoriteWidgetIds.map(getWidgetById).filter(shouldShowWidget).map(function (widget) { return buttonFor(widget, true); }).join(""));
-    [pickerNode, favoritesNode].forEach(function (node) {
-      if (!node) { return; }
-      node.querySelectorAll("[data-widget-id]").forEach(function (button) {
-        button.onclick = function () {
-          setPanelsDrawerOpen(false);
-          selectWidget(button.getAttribute("data-widget-id"), true);
-        };
-      });
-    });
-    if (!pickerNode) { return; }
-    pickerNode.querySelectorAll("[data-favorite-widget]").forEach(function (button) {
-      button.onclick = function () { toggleFavoriteWidget(button.getAttribute("data-favorite-widget")); };
-    });
+    getDestinationWidgets(primaryDestination).forEach(function (widget) { updatePickerSurfaceStatus(widget.id); });
+    if (inlineViewerNode) { inlineViewerNode.setAttribute("aria-labelledby", "dashboard-tab-" + currentWidgetId); }
   }
 
   function isDrawerOpen(node) {
@@ -3178,64 +3064,28 @@
       .filter(function (control) { return !control.closest("[hidden], [inert], .is-hidden") && control.getClientRects().length && window.getComputedStyle(control).visibility !== "hidden"; });
   }
 
-  function setPanelsDrawerOpen(open) {
-    if (!panelsDrawerNode || !panelsToggleNode || (open && isTouchLockEnabled())) { return; }
-    var wasOpen = isDrawerOpen(panelsDrawerNode);
-    if (open && !wasOpen) {
-      setQuickDrawerOpen(false);
-      panelsDrawerOpener = document.activeElement || panelsToggleNode;
-      renderPicker();
-      updateFavoritesFeedback();
-    }
-    panelsDrawerNode.classList.toggle("is-hidden", !open);
-    panelsDrawerNode.setAttribute("aria-hidden", open ? "false" : "true");
-    panelsToggleNode.setAttribute("aria-expanded", open ? "true" : "false");
-    var scrim = document.getElementById("dashboard-panels-scrim");
-    if (scrim) { scrim.classList.toggle("is-hidden", !open); }
-    renderDashboardChromeState();
-    if (open && !wasOpen) {
-      window.setTimeout(function () {
-        if (isDrawerOpen(panelsDrawerNode)) { (drawerFocusableControls(panelsDrawerNode)[0] || panelsDrawerNode).focus(); }
-      }, 0);
-    } else if (!open && wasOpen) {
-      var opener = panelsDrawerOpener;
-      panelsDrawerOpener = null;
-      if (opener && opener.isConnected && !opener.closest("[inert]")) { opener.focus({ preventScroll: true }); }
-      markDashboardInteractionIdleSoon();
-    }
-  }
-
   function renderPrimaryNavigation() {
-    if (!primaryNavNode) {
-      return;
+    if (!primaryNavNode) { return; }
+    var layout = navigation.normalizeSectionLayout(getSetting("sectionOrder"), getSetting("hiddenSections"));
+    var ids = layout.order.filter(function (id) { return layout.hidden.indexOf(id) === -1; });
+    patchDashboardDom(primaryNavNode, ids.map(function (id) {
+      var section = navigation.sections.filter(function (item) { return item.id === id; })[0];
+      return '<button type="button" class="auxora-section-link' + (id === primaryDestination ? ' is-active' : '') + '" data-ui-key="section-' + id + '" data-section-id="' + id + '" aria-pressed="' + (id === primaryDestination) + '">' + escapeHtml(section.label) + '</button>';
+    }).join(""));
+    if (settingsToggleNode) {
+      settingsToggleNode.classList.toggle("is-active", primaryDestination === "settings");
+      settingsToggleNode.setAttribute("aria-pressed", primaryDestination === "settings" ? "true" : "false");
     }
-    primaryNavNode.querySelectorAll("[data-destination]").forEach(function (button) {
-      button.setAttribute("aria-pressed", button.getAttribute("data-destination") === primaryDestination ? "true" : "false");
-    });
+    var section = navigation.sections.filter(function (item) { return item.id === primaryDestination; })[0];
+    setText("dashboard-section-title", section ? section.label : "Home");
+    document.body.dataset.section = primaryDestination;
+    renderHeaderModes();
   }
 
   function selectDestination(destination) {
-    var allowed = ["home", "scenes", "library", "settings"];
-    primaryDestination = allowed.indexOf(destination) === -1 ? "home" : destination;
-    try {
-      window.localStorage.setItem(primaryDestinationStorageKey, primaryDestination);
-    } catch (error) {
-      console.warn("Unable to persist primary destination", error);
-    }
-    renderPrimaryNavigation();
-    var available = getDestinationWidgets(primaryDestination);
-    var availableIds = available.map(function (widget) { return widget.id; });
-    var preferred = destinationPanels[primaryDestination];
-    if (availableIds.indexOf(preferred) === -1) {
-      preferred = available[0] && available[0].id;
-      if (preferred) {
-        persistDestinationPanel(primaryDestination, preferred);
-      }
-    }
-    if (preferred) {
-      currentWidgetId = preferred;
-      renderCurrentSelection(true);
-    }
+    if (isTouchLockEnabled()) { return; }
+    var selection = navigation.resolveNavigation({ storedDestination: destination, onboardingCompleted: true, sectionPanels: destinationPanels, lastWidget: currentWidgetId });
+    selectWidget(selection.widgetId, true);
   }
 
   function applyScenePresentation(scene) {
@@ -3258,16 +3108,33 @@
   }
 
   function activateScene(sceneId, manualOverrideMinutes) {
+    if (sceneId === "scene-night") {
+      // Toggle the displayed variant, including a local Appearance override.
+      // Night layers over the base Mode and leaves its native automation intact.
+      var variant = resolveThemeVariant() === "night" ? "standard" : "night";
+      saveDashboardSettings({ themeVariant: variant });
+      renderQuickDrawer();
+      showTouchFeedback("Night display " + (variant === "night" ? "on" : "off"));
+      return Promise.resolve();
+    }
     return postJson(buildUrl(bridgeOrigin, "/api/scenes/activate"), {
       sceneId: sceneId,
       manualOverrideMinutes: manualOverrideMinutes == null ? 120 : manualOverrideMinutes
     }, 7000).then(function (payload) {
-      bridgeConfig.scenes = payload;
-      applyScenePresentation(payload.activeScene);
+      applySceneSnapshot(payload);
       renderQuickDrawer();
       showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Mode") + " active");
       return payload;
     });
+  }
+
+  function applySceneSnapshot(payload, preserveUnchanged) {
+    if (!payload || !payload.activeScene) { return; }
+    var previous = bridgeConfig.scenes && bridgeConfig.scenes.activeScene;
+    var unchanged = previous && JSON.stringify(previous) === JSON.stringify(payload.activeScene);
+    bridgeConfig.scenes = payload;
+    if (!preserveUnchanged || !unchanged) { applyScenePresentation(payload.activeScene); }
+    renderHeaderModes();
   }
 
   function resumeSceneAutomation() {
@@ -3280,39 +3147,62 @@
     });
   }
 
-  function renderQuickDrawer() {
-    var scenesNode = document.getElementById("dashboard-quick-scenes");
+  function renderHeaderModes() {
+    var node = document.getElementById("dashboard-mode-select");
+    if (!node) { return; }
     var sceneConfig = bridgeConfig && bridgeConfig.scenes ? bridgeConfig.scenes : {};
-    var profiles = Array.isArray(sceneConfig.profiles) ? sceneConfig.profiles : [];
-    if (!scenesNode) {
-      return;
-    }
-    profiles = profiles.filter(function (scene) {
-      return scene && scene.themeVariant !== "night" && scene.id !== "scene-night";
+    var profiles = (Array.isArray(sceneConfig.profiles) ? sceneConfig.profiles : []).filter(function (profile) {
+      return profile && typeof profile.id === "string" && profile.id !== "scene-night" && profile.themeVariant !== "night";
     });
-    patchDashboardDom(scenesNode, profiles.map(function (scene) {
-      return '<button type="button" data-quick-scene="' + escapeHtml(scene.id) + '" class="' + (scene.id === sceneConfig.activeSceneId ? "is-active" : "") + '" aria-pressed="' + (scene.id === sceneConfig.activeSceneId ? "true" : "false") + '">' + escapeHtml(scene.name) + '</button>';
-    }).join("") +
-      '<div class="auxora-quick-night" role="group" aria-label="Night display variant">' +
-        '<span>Night</span>' +
-        ["auto", "standard", "night"].map(function (variant) {
-          var label = variant === "auto" ? "Automatic" : variant === "night" ? "On" : "Off";
-          return '<button type="button" data-quick-night="' + variant + '" class="' + (normalizeThemeVariantPreference(getSetting("themeVariant")) === variant ? "is-active" : "") + '" aria-pressed="' + (normalizeThemeVariantPreference(getSetting("themeVariant")) === variant ? "true" : "false") + '">' + label + '</button>';
-        }).join("") +
-      '</div>');
+    var active = profiles.filter(function (scene) { return scene && scene.id === sceneConfig.activeSceneId; })[0];
+    var automatic = sceneConfig.automaticSwitchingActive === true || (sceneConfig.automationEnabled !== false && sceneConfig.manualOverrideActive === false);
+    var available = bridgeReachable === true && profiles.length > 0;
+    var selected = automatic ? "automatic" : active ? active.id : "";
+    if (modeActivationPending) { selected = node.getAttribute("data-pending-mode") || selected; }
+    var html = '<option value="automatic" data-ui-key="mode-automatic">Automatic' + (automatic && active ? ' (' + escapeHtml(active.name) + ')' : '') + '</option>';
+    if (!available || !selected) { html = '<option value="">' + (bridgeReachable === true ? 'Choose a Mode' : 'Modes unavailable') + '</option>' + html; }
+    html += profiles.map(function (profile) {
+      return '<option value="' + escapeHtml(profile.id) + '" data-ui-key="mode-' + escapeHtml(profile.id) + '">' + escapeHtml(profile.name || profile.id) + '</option>';
+    }).join("");
+    patchDashboardDom(node, html);
+    node.value = selected;
+    node.disabled = !available;
+    node.setAttribute("aria-disabled", !available || modeActivationPending ? "true" : "false");
+    node.setAttribute("aria-busy", modeActivationPending ? "true" : "false");
+    setText("dashboard-mode-state", modeActivationPending ? "Applying" : !available ? "Unavailable" : automatic ? "Automatic" : "Manual");
+  }
 
-    Array.prototype.forEach.call(document.querySelectorAll("[data-quick-widget]"), function (button) {
-      var item = getWidgetById(button.getAttribute("data-quick-widget"));
-      var available = !!(item && shouldShowWidget(item));
-      if (item && item.id === "hue") {
-        // The full Hue setup surface is discoverable before configuration, but
-        // a quick Lights shortcut is useful only after a bridge is linked.
-        available = available && !!(bridgeConfig.hue && bridgeConfig.hue.linked);
-      }
-      button.hidden = !available;
-      button.disabled = !available;
-      button.setAttribute("aria-hidden", available ? "false" : "true");
+  function bindHeaderModeControl() {
+    var node = document.getElementById("dashboard-mode-select");
+    if (!node) { return; }
+    node.addEventListener("change", function () {
+      if (node.disabled || isTouchLockEnabled()) { return; }
+      if (modeActivationPending) { renderHeaderModes(); return; }
+      var id = node.value;
+      var sceneConfig = bridgeConfig && bridgeConfig.scenes ? bridgeConfig.scenes : {};
+      var valid = id === "automatic" || (sceneConfig.profiles || []).some(function (profile) {
+        return profile && profile.id === id && profile.id !== "scene-night" && profile.themeVariant !== "night";
+      });
+      if (!valid) { renderHeaderModes(); return; }
+      modeActivationPending = true;
+      node.setAttribute("data-pending-mode", id);
+      renderHeaderModes();
+      var action = id === "automatic" ? resumeSceneAutomation() : activateScene(id);
+      action.catch(function (error) {
+        showTouchFeedback(error.message || "Mode failed");
+      }).finally(function () { modeActivationPending = false; node.removeAttribute("data-pending-mode"); renderHeaderModes(); markDashboardInteractionIdleSoon(); });
     });
+  }
+
+  function renderQuickDrawer() {
+    renderHeaderModes();
+    var displayNode = document.getElementById("dashboard-quick-display");
+    if (!displayNode) { return; }
+    patchDashboardDom(displayNode, '<div class="auxora-quick-night" role="group" aria-label="Night display">' +
+      '<span>Night display</span>' + ["auto", "standard", "night"].map(function (variant) {
+        var label = variant === "auto" ? "Automatic" : variant === "night" ? "On" : "Off";
+        return '<button type="button" data-ui-key="night-' + variant + '" data-quick-night="' + variant + '" class="' + (normalizeThemeVariantPreference(getSetting("themeVariant")) === variant ? "is-active" : "") + '" aria-pressed="' + (normalizeThemeVariantPreference(getSetting("themeVariant")) === variant ? "true" : "false") + '">' + label + '</button>';
+      }).join("") + '</div>');
   }
 
   function setQuickDrawerOpen(open) {
@@ -3322,7 +3212,6 @@
     var scrim = document.getElementById("dashboard-quick-scrim");
     var wasOpen = isDrawerOpen(quickDrawerNode);
     if (open) {
-      setPanelsDrawerOpen(false);
       quickDrawerOpener = document.activeElement || quickToggleNode;
     }
     quickDrawerNode.classList.toggle("is-hidden", !open);
@@ -3517,6 +3406,7 @@
     persistSettings();
     applyDashboardPresentation();
     widgets = createWidgets();
+    renderPrimaryNavigation();
     renderPicker();
     renderDiagnostics();
     renderSettings(getWidgetById(currentWidgetId || "system"));
@@ -3530,7 +3420,6 @@
       console.warn("Unable to clear dashboard browser storage", error);
     }
 
-    favoriteWidgetIds = defaultFavoriteWidgetIds.slice();
     storedSettings = {};
     dashboardSettings = Object.assign({}, defaultSettings);
     currentWidgetId = "setup";
@@ -3575,6 +3464,7 @@
   }
 
   function openSetupSection(sectionId) {
+    if (isTouchLockEnabled()) { return; }
     requestedSetupSection = String(sectionId || "").trim();
     selectWidget("setup", true);
     requestedSetupSection = "";
@@ -3625,6 +3515,7 @@
       resetSettings: resetLocalDashboardSettings,
       resetAllLocalData: resetAllLocalData,
       activateScene: activateScene,
+      applySceneSnapshot: applySceneSnapshot,
       resumeSceneAutomation: resumeSceneAutomation,
       openSetupSection: openSetupSection,
       selectWidget: selectWidget,
@@ -3702,14 +3593,12 @@
   }
 
   function updateWidgetMeta(widget) {
+    if (!widget) { return; }
+    document.body.dataset.activeWidgetId = widget.id;
+    renderPrimaryNavigation();
     if (inlineViewerNode) {
       inlineViewerNode.dataset.cardSize = getCardSize(widget.id);
     }
-    setText("dashboard-widget-kicker", getWidgetKicker(widget));
-    setText("dashboard-widget-title", getWidgetTitle(widget));
-    setText("dashboard-widget-copy", getWidgetCopy(widget));
-    setText("dashboard-widget-source", getWidgetState(widget.id));
-    setText("dashboard-selection-status", getWidgetTitle(widget));
   }
 
   function setRailCopy() {
@@ -3729,42 +3618,34 @@
   }
 
   function renderDiagnostics() {
-    if (perfMode) {
-      diagnosticsInlineNode.classList.add("is-hidden");
-      diagnosticsInlineNode.classList.remove("is-active");
-      setRailCopy();
-      return;
-    }
-
-    if (!bridgeSetup.hydrated && bridgeReachable !== false) {
-      diagnosticsInlineNode.textContent = "Checking";
-      diagnosticsInlineNode.setAttribute("data-tone", "muted");
-      renderOriginStatus();
-      setRailCopy();
-      return;
-    }
-
-    var needsSetup = bridgeReachable === false || !bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention;
-    diagnosticsInlineNode.textContent = needsSetup ? "Diagnostics" : "Open Diagnostics";
-    diagnosticsInlineNode.setAttribute("data-tone", needsSetup ? "warn" : "good");
-    diagnosticsInlineNode.classList.toggle("is-active", currentWidgetId === "setup");
     renderOriginStatus();
-    setRailCopy();
   }
 
   function renderOriginStatus() {
-    var needsSetup = bridgeReachable === false
-      || (bridgeSetup.hydrated && (!bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention));
-    if (!bridgeSetup.hydrated && bridgeReachable !== false) {
-      setStatus("dashboard-origin-status", "Loading", "muted");
-    } else {
-      setStatus("dashboard-origin-status", needsSetup ? "Needs Setup" : "Ready", needsSetup ? "warn" : "good");
-    }
+    var node = diagnosticsInlineNode || document.getElementById("dashboard-status");
+    if (!node) { return; }
+    var surfaceState = currentWidgetId ? getWidgetState(currentWidgetId) : "Checking";
+    var surface = surfaceStatuses[currentWidgetId];
+    var tone = surface ? surface.tone : getStateTone(surfaceState);
+    var globalState = bridgeReachable === false ? "Unavailable"
+      : !bridgeSetup.hydrated ? "Checking"
+      : !bridgeSetup.onboardingCompleted || bridgeSetup.needsAttention ? "Needs Setup" : "Ready";
+    var globalTone = getStateTone(globalState);
+    var severity = { good: 0, muted: 1, warn: 2, danger: 3 };
+    var displayGlobal = severity[globalTone] > severity[tone];
+    var status = displayGlobal ? globalState : surfaceState;
+    node.textContent = status;
+    node.setAttribute("data-status", status);
+    node.setAttribute("data-surface-status", surfaceState);
+    node.setAttribute("data-active-widget", currentWidgetId || "");
+    node.setAttribute("data-tone", displayGlobal ? globalTone : tone);
+    node.setAttribute("aria-label", status);
+    node.setAttribute("title", surface && surface.detail ? surface.detail : status);
   }
 
   function renderNoSettingsCopy(widget) {
     if (widget.id === "setup") {
-      return "Diagnostics covers first-run setup, bridge health, and repairs.";
+      return "Setup & status covers first-run setup, bridge health, and repairs.";
     }
 
     if (widget.id === "system" || widget.id === "network" || widget.id === "audio" || widget.id === "media") {
@@ -3776,11 +3657,11 @@
     }
 
     if (widget.id === "calendar") {
-      return "Use Diagnostics to set or repair the ICS calendar feed.";
+      return "Use Settings > Setup & status to set or repair the ICS calendar feed.";
     }
 
     if (widget.id === "hue") {
-      return "Use Diagnostics to link or repair the Hue bridge.";
+      return "Use Settings > Setup & status to link or repair the Hue bridge.";
     }
 
     if (widget.tier === "product" || isLocalProductWidget(widget.id)) {
@@ -3938,7 +3819,7 @@
   }
 
   function renderSettings(widget) {
-    if (!widget) {
+    if (!widget || !settingsNode) {
       return;
     }
     if (settingsRenderInProgress) {
@@ -3951,6 +3832,8 @@
       return;
     }
     pendingSettingsWidgetId = "";
+    settingsNode.hidden = widget.id !== "weather";
+    if (settingsNode.hidden) { replaceSettingsMarkup(""); return; }
     if (perfMode) {
       replaceSettingsMarkup('<div class="router-settings__note">Display mode keeps the EDGE surface lean.</div>');
       renderDashboardChromeState();
@@ -3966,32 +3849,23 @@
 
     if (!schema) {
       replaceSettingsMarkup('' +
-        renderGlobalSettings() +
-        renderForegroundTrackingControl(widget) +
         '<div class="router-settings__empty">' +
           '<div class="router-settings__note">' + escapeHtml(renderNoSettingsCopy(widget)) + '</div>' +
         '</div>');
-      bindGlobalSettings();
-      bindForegroundTrackingControl();
       renderDashboardChromeState();
       return;
     }
 
     if (!schema.fields.length) {
       replaceSettingsMarkup('' +
-        renderGlobalSettings() +
-        renderForegroundTrackingControl(widget) +
         '<div class="router-settings__empty">' +
           '<div class="router-settings__note">' + escapeHtml(schema.copy) + '</div>' +
         '</div>');
-      bindGlobalSettings();
-      bindForegroundTrackingControl();
       renderDashboardChromeState();
       return;
     }
 
     replaceSettingsMarkup('' +
-      renderGlobalSettings() +
       '<form id="dashboard-settings-form" class="router-settings__form">' +
         '<div class="router-settings__grid">' +
           schema.fields.map(function (field) {
@@ -4019,8 +3893,6 @@
         '</div>' +
         '<div class="router-settings__note">Saved locally in this browser for the real-time dashboard.</div>' +
       '</form>');
-
-    bindGlobalSettings();
     bindSettingsForm(widget, schema);
     renderDashboardChromeState();
   }
@@ -4102,11 +3974,11 @@
 
   function renderCurrentSelection(reloadFrame) {
     var widget = getWidgetById(currentWidgetId || "system");
-    var destinationIds = getDestinationWidgets().map(function (entry) { return entry.id; });
-    if (destinationIds.indexOf(widget.id) === -1 || (perfMode && widget.id === "setup")) {
-      currentWidgetId = destinationIds[0] || getFallbackPrimaryWidget();
-      widget = getWidgetById(currentWidgetId || "system");
+    if (!widget || (perfMode && widget.id === "setup")) {
+      widget = getWidgetById(getFallbackPrimaryWidget());
     }
+    currentWidgetId = widget.id;
+    primaryDestination = navigation.sectionForWidget(widget.id) || "home";
 
     updateWidgetMeta(widget);
     renderPicker();
@@ -4119,7 +3991,7 @@
         "Local bridge unavailable",
         "The widget shell points at " + bridgeOrigin + ", but the localhost bridge is not responding. Start it, then retry."
       );
-      setStatus("dashboard-origin-status", "Needs Setup", "warn");
+      renderOriginStatus();
       return;
     }
 
@@ -4144,58 +4016,37 @@
     var storedLastPrimary = readStoredWidget(lastPrimaryWidgetStorageKey);
     var storedWidget = readStoredWidget(widgetStorageKey);
     var candidates = ["home", storedLastPrimary, storedWidget, "system"];
-    var visibleIds = getDestinationWidgets(primaryDestination).map(function (widget) {
-      return widget.id;
-    });
-
     for (var index = 0; index < candidates.length; index += 1) {
       var candidate = candidates[index];
-      if (candidate && candidate !== "setup" && visibleIds.indexOf(candidate) !== -1) {
+      if (candidate && candidate !== "setup" && candidate !== "game-mode" && hasWidgetId(candidate)) {
         return candidate;
       }
     }
 
-    return visibleIds[0] || "home";
+    return "home";
   }
 
-  function resolveInitialWidget(preferredWidgetId, explicitWidgetParam) {
-    var preferredWidget;
-
-    if (preferredWidgetId && !hasWidgetId(preferredWidgetId)) {
-      return getFallbackPrimaryWidget();
-    }
-
-    preferredWidget = getWidgetById(preferredWidgetId || "home");
-
-    if (explicitWidgetParam) {
-      if (shouldShowWidget(preferredWidget)) {
-        primaryDestination = preferredWidget.destination || "home";
-        return preferredWidget.id;
-      }
-      return getFallbackPrimaryWidget();
-    }
-
-    if (!perfMode && !bridgeSetup.onboardingCompleted) {
-      primaryDestination = "settings";
-      return "setup";
-    }
-
-    if (["home", "scenes", "library", "settings"].indexOf(primaryDestination) === -1) {
-      primaryDestination = "home";
-    }
-    var available = getDestinationWidgets(primaryDestination);
-    var availableIds = available.map(function (widget) { return widget.id; });
-    var remembered = destinationPanels[primaryDestination];
-    return availableIds.indexOf(remembered) !== -1 ? remembered : (available[0] ? available[0].id : "home");
+  function resolveInitialWidget(preferredWidgetId, explicitWidgetParam, storedDestination) {
+    var destination = storedDestination === undefined ? primaryDestination : storedDestination;
+    var selection = navigation.resolveNavigation({
+      requestedWidget: explicitWidgetParam ? preferredWidgetId : "",
+      onboardingCompleted: perfMode || bridgeSetup.onboardingCompleted,
+      storedDestination: destination,
+      lastWidget: preferredWidgetId || (destination === "library" ? destinationPanels.library : "") || readStoredWidget(lastPrimaryWidgetStorageKey),
+      sectionPanels: destinationPanels
+    });
+    primaryDestination = selection.sectionId;
+    return selection.widgetId;
   }
 
   function selectWidget(widgetId, persistSelection) {
+    var leavingSettings = primaryDestination === "settings";
     var widget = getWidgetById(widgetId);
     if (!widget) {
       showTouchFeedback("Panel unavailable");
       return;
     }
-    primaryDestination = widget.destination || "home";
+    primaryDestination = navigation.sectionForWidget(widget.id) || "home";
     try {
       window.localStorage.setItem(primaryDestinationStorageKey, primaryDestination);
     } catch (error) {
@@ -4210,6 +4061,7 @@
       persistWidgetChoice(currentWidgetId);
       setQueryParam("widget", currentWidgetId);
     }
+    if (leavingSettings && primaryDestination !== "settings") { markDashboardInteractionIdleSoon(); }
   }
 
   function showLocalhostWarning(widgetId) {
@@ -4219,12 +4071,7 @@
     renderPicker();
     renderDiagnostics();
     renderSettings(widget);
-    setStatus("dashboard-origin-status", "Needs Setup", "warn");
-    setText("dashboard-selection-status", "Bridge blocked by HTTPS");
-    setText("dashboard-widget-kicker", "Localhost required");
-    setText("dashboard-widget-title", "Localhost required");
-    setText("dashboard-widget-copy", "Open the dashboard from the localhost bridge to load live widgets.");
-    setText("dashboard-widget-source", "Unavailable");
+    renderOriginStatus();
     showFrameEmpty(
       "Localhost required",
       "Live widgets are blocked from an HTTPS page when the bridge is HTTP on localhost. Open the localhost dashboard URL instead."
@@ -4358,12 +4205,10 @@
     renderPicker();
     renderDiagnostics();
     renderSettings(widget);
-    setStatus("dashboard-origin-status", "Needs Setup", "warn");
-    setText("dashboard-selection-status", "Diagnostics available");
-    setText("dashboard-widget-source", "Unavailable");
+    renderOriginStatus();
     showFrameEmpty(
       "Local bridge unavailable",
-      "Start the local bridge and retry. Diagnostics stays available so you can see what is missing."
+      "Start the local bridge and retry. Then open Settings > Setup & status to review setup and diagnostics."
     );
   }
 
@@ -4392,12 +4237,13 @@
       }
 
       if (settings.resolveInitialWidget) {
-        currentWidgetId = resolveInitialWidget(settings.preferredWidgetId, settings.explicitWidgetParam);
+        currentWidgetId = resolveInitialWidget(settings.preferredWidgetId, settings.explicitWidgetParam, settings.storedDestination);
         persistWidgetChoice(currentWidgetId);
         renderPrimaryNavigation();
       } else if (settings.moveOffSetup && currentWidgetId === "setup" && bridgeSetup.onboardingCompleted) {
-        currentWidgetId = getFallbackPrimaryWidget();
-        persistWidgetChoice(currentWidgetId);
+        selectWidget(getFallbackPrimaryWidget(), true);
+        refreshLauncherDock();
+        return;
       }
 
       if (!bridgeStateChanged
@@ -4419,12 +4265,16 @@
   }
 
   function checkBridgeAndRender(preferredWidgetId, explicitWidgetParam) {
-    setStatus("dashboard-origin-status", "Loading", "warn");
+    // Loading setup may temporarily select Settings. Hydration must resolve
+    // against the saved startup destination, rather than that temporary screen.
+    var startupDestination = primaryDestination;
+    renderOriginStatus();
     currentWidgetId = resolveInitialWidget(preferredWidgetId, explicitWidgetParam);
     return refreshBridgeState({
       resolveInitialWidget: true,
       preferredWidgetId: preferredWidgetId,
-      explicitWidgetParam: explicitWidgetParam
+      explicitWidgetParam: explicitWidgetParam,
+      storedDestination: startupDestination
     });
   }
 
@@ -4479,13 +4329,13 @@
         return Boolean(left && right && left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top);
       };
       var shell = rectOf(".dashboard-stage-shell");
-      var navigation = rectOf("#dashboard-primary-nav");
+      var navigation = rectOf("#dashboard-section-nav");
       var viewer = rectOf(".router-viewer");
       var visibleControls = Array.prototype.slice.call(document.querySelectorAll("button, a[href], input, select, textarea"))
         .filter(visible);
       var requestedWidget = getParam("widget");
       var requestedPanelReady = requestedWidget !== "game-mode"
-        || document.getElementById("dashboard-widget-title").textContent.trim() === "Game Mode";
+        || document.body.dataset.activeWidgetId === "game-mode";
       if ((!navigation || !viewer || visibleControls.length < 10 || !requestedPanelReady) && attempts < 20) {
         window.setTimeout(runProbe, 400);
         return;
@@ -4516,8 +4366,7 @@
         return parseFloat(window.getComputedStyle(element).fontSize) < 15;
       }) : [];
       renderQuickDrawer();
-      var quickLights = document.querySelector('[data-quick-widget="hue"]');
-      var quickOptionalHidden = !!quickLights && !visible(quickLights) && quickLights.disabled;
+      var quickNavigationRemoved = !document.querySelector("[data-quick-widget], [data-quick-scene]");
       var undersizedText = Array.prototype.slice.call(document.querySelectorAll(".router-inline-widget *"))
         .filter(function (element) {
           return visible(element)
@@ -4529,13 +4378,13 @@
         .map(function (element) {
           return element.className + ":" + element.textContent.trim().slice(0, 60) + "@" + window.getComputedStyle(element).fontSize;
         });
-      var clippedPrimaryNavLabels = Array.prototype.slice.call(document.querySelectorAll("#dashboard-primary-nav button"))
+      var clippedPrimaryNavLabels = Array.prototype.slice.call(document.querySelectorAll("#dashboard-section-nav button"))
         .filter(visible)
         .filter(function (element) {
           return element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1;
         })
         .map(function (element) { return element.textContent.trim(); });
-      var settingsButton = document.querySelector('[data-destination="settings"]');
+      var settingsButton = document.querySelector('[data-section-id="settings"]');
       var keyboardFocus = false;
       var keyboardActivation = false;
       if (settingsButton && visible(settingsButton)) {
@@ -4564,7 +4413,7 @@
         keyboardFocus: keyboardFocus,
         keyboardActivation: keyboardActivation,
         visibleControlCount: visibleControls.length,
-        quickOptionalHidden: quickOptionalHidden,
+        quickNavigationRemoved: quickNavigationRemoved,
         undersizedText: undersizedText,
         clippedPrimaryNavLabels: clippedPrimaryNavLabels,
         undersizedControls: undersized.map(function (element) { return element.id || element.getAttribute("aria-label") || element.textContent.trim().slice(0, 60); }),
@@ -4589,18 +4438,15 @@
       var explicitWidgetParam = params.has("widget") && params.get("widget") !== "";
       var preferredWidgetId = getParam("widget") || readStoredWidget(widgetStorageKey) || "";
 
-      pickerNode = document.getElementById("dashboard-widget-picker");
-      favoritesNode = document.getElementById("dashboard-favorites");
-      panelsDrawerNode = document.getElementById("dashboard-panels-drawer");
-      panelsToggleNode = document.getElementById("dashboard-panels-toggle");
-      primaryNavNode = document.getElementById("dashboard-primary-nav");
+      pickerNode = document.getElementById("dashboard-section-tabs");
+      settingsCategoriesNode = document.getElementById("dashboard-settings-categories");
+      primaryNavNode = document.getElementById("dashboard-section-nav");
       inlineViewerNode = document.getElementById("dashboard-inline-widget");
       loadingNode = document.getElementById("dashboard-widget-loading");
       settingsNode = document.getElementById("dashboard-widget-settings");
       emptyNode = document.getElementById("dashboard-widget-empty");
       retryNode = document.getElementById("dashboard-widget-retry");
-      diagnosticsInlineNode = document.getElementById("dashboard-diagnostics-inline");
-      settingsPanelNode = document.getElementById("dashboard-settings-panel");
+      diagnosticsInlineNode = document.getElementById("dashboard-status");
       settingsToggleNode = document.getElementById("dashboard-settings-toggle");
       touchLockToggleNode = document.getElementById("dashboard-touch-lock-toggle");
       touchUnlockNode = document.getElementById("dashboard-touch-unlock");
@@ -4641,7 +4487,7 @@
       document.body.classList.toggle("dashboard-native-page--perf", perfMode);
       dashboardSettings = buildInitialSettings();
       widgets = createWidgets();
-      favoriteWidgetIds = readFavoriteWidgets();
+      navigation.validateCatalog(widgets.map(function (widget) { return widget.id; }));
       applyDashboardPresentation();
 
       document.addEventListener("pointerdown", markDashboardInteractionActive, { passive: true });
@@ -4688,64 +4534,39 @@
         });
       }
 
-      diagnosticsInlineNode.addEventListener("click", function () {
-        primaryDestination = "settings";
-        renderPrimaryNavigation();
-        selectWidget("setup", false);
-      });
-
       if (primaryNavNode) {
         primaryNavNode.addEventListener("click", function (event) {
-          var target = event.target && event.target.closest ? event.target.closest("[data-destination]") : null;
+          var target = event.target && event.target.closest ? event.target.closest("[data-section-id]") : null;
           if (target) {
-            selectDestination(target.getAttribute("data-destination"));
+            selectDestination(target.getAttribute("data-section-id"));
           }
         });
       }
+
+      bindHeaderModeControl();
 
       if (quickToggleNode) {
         quickToggleNode.addEventListener("click", function () { setQuickDrawerOpen(true); });
       }
 
-      if (panelsToggleNode) {
-        panelsToggleNode.addEventListener("click", function () { setPanelsDrawerOpen(true); });
-      }
-      document.querySelectorAll("[data-panels-close]").forEach(function (button) {
-        button.addEventListener("click", function (event) {
-          event.preventDefault();
-          event.stopPropagation();
-          setPanelsDrawerOpen(false);
+      [pickerNode, settingsCategoriesNode].forEach(function (node) {
+        if (!node) { return; }
+        node.addEventListener("click", function (event) {
+          var target = event.target && event.target.closest ? event.target.closest("[data-widget-id]") : null;
+          if (target && !isTouchLockEnabled()) { selectWidget(target.getAttribute("data-widget-id"), true); }
         });
       });
 
       if (quickDrawerNode) {
         quickDrawerNode.addEventListener("click", function (event) {
           var close = event.target && event.target.closest ? event.target.closest("[data-quick-close]") : null;
-          var scene = event.target && event.target.closest ? event.target.closest("[data-quick-scene]") : null;
-          var widget = event.target && event.target.closest ? event.target.closest("[data-quick-widget]") : null;
           var night = event.target && event.target.closest ? event.target.closest("[data-quick-night]") : null;
           if (close) {
             setQuickDrawerOpen(false);
-          } else if (scene) {
-            activateScene(scene.getAttribute("data-quick-scene")).then(function () {
-              setQuickDrawerOpen(false);
-              selectDestination("home");
-            }).catch(function (error) { showTouchFeedback(error.message || "Mode failed"); });
-          } else if (widget) {
-            var quickWidget = getWidgetById(widget.getAttribute("data-quick-widget"));
-            if (!quickWidget || !shouldShowWidget(quickWidget)) {
-              renderQuickDrawer();
-              showTouchFeedback("That control is not available yet");
-              return;
-            }
-            setQuickDrawerOpen(false);
-            primaryDestination = "library";
-            renderPrimaryNavigation();
-            selectWidget(quickWidget.id, true);
           } else if (night) {
             saveDashboardSettings({ themeVariant: night.getAttribute("data-quick-night") });
             renderQuickDrawer();
-            showTouchFeedback("Night " + night.textContent.trim());
+            showTouchFeedback("Night display " + night.textContent.trim());
           }
         });
       }
@@ -4760,14 +4581,13 @@
       }
 
       document.addEventListener("keydown", function (event) {
-        var drawer = isDrawerOpen(panelsDrawerNode) ? panelsDrawerNode : isDrawerOpen(quickDrawerNode) ? quickDrawerNode : null;
+        var drawer = isDrawerOpen(quickDrawerNode) ? quickDrawerNode : null;
         if (!drawer) {
           return;
         }
         if (event.key === "Escape") {
           event.preventDefault();
-          if (drawer === panelsDrawerNode) { setPanelsDrawerOpen(false); }
-          else { setQuickDrawerOpen(false); }
+          setQuickDrawerOpen(false);
           return;
         }
         if (event.key !== "Tab") {
@@ -4791,7 +4611,7 @@
       });
 
       if (settingsToggleNode) {
-        settingsToggleNode.addEventListener("click", toggleSettingsDrawer);
+        settingsToggleNode.addEventListener("click", function () { selectDestination("settings"); });
       }
 
       if (touchLockToggleNode) {
@@ -4813,7 +4633,7 @@
         });
       }
 
-      setStatus("dashboard-origin-status", "Loading", "muted");
+      renderOriginStatus();
       setText("dashboard-selection-status", "Preparing dashboard");
       setRailCopy();
       renderPicker();
@@ -4837,7 +4657,6 @@
           "The dashboard could not finish starting."
         );
       });
-      initNowPlayingStrip();
       initLauncherDock();
 
       scheduleBridgeRefreshLoop();

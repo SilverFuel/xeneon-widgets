@@ -16,7 +16,7 @@ The primary product is the native Windows host in `app`. Legacy browser bridge f
 
 ### TMOG Companion
 
-Open **All panels > TMOG Companion** for three minutes of live CPU, GPU, memory, disk throughput, network, and temperature history. Pause freezes the view; Resume starts sampling again. Unavailable readings leave gaps. History exists only while the panel is open.
+Open **PC > Graphs (TMOG)** for three minutes of live CPU, GPU, memory, disk throughput, network, and temperature history. Pause freezes the view; Resume starts sampling again. Unavailable readings leave gaps. History exists only while the panel is open.
 
 The readings come from Auxora's Windows telemetry. **Open TMOG** opens the separately installed Task Manager TMOG application for process inspection and its other tools. Auxora detects standard `Task Manager TMOG` installations under Program Files or the current user's Programs folder, prefers the supplied launcher, and does not launch TMOG automatically. This is an Auxora companion view, not an embedded copy of TMOG or a connection to a TMOG data API. TMOG binaries, licence data, and settings are not bundled or accessed. Sensor availability depends on the hardware and existing providers.
 
@@ -85,10 +85,10 @@ Auxora now includes:
 - automatic first-run provisioning with diagnostics and repair
 - normal setup that hides advanced connector plumbing
 - adaptive Work, Gaming, Media, and Home Modes with manual and automatic switching; Night remains a separate display variant
-- Home, Modes, Apps & Controls, and Settings navigation
-- up to four favorite shortcuts, with the full catalog in All panels
+- Home, Gaming, Media, PC, and Smart Home sections, plus Settings
+- within-section tabs for all 25 panels, with section order and visibility in Settings > Layout
 - responsive compact, standard, ultrawide, and portrait layouts
-- Smart Glance briefing and meaningful local alerts
+- a Home overview with direct Performance, Network, and Calendar links
 - an explicit Phone Remote unavailable state; this beta opens no phone-control listener
 - Companion-only DDC/CI monitor controls when supported; the Windows primary display is excluded from discovery and commands
 - safe one-tap action chains and per-display Mode assignments
@@ -98,7 +98,7 @@ Auxora now includes:
 - Theme Studio with accent, opacity, and animation controls
 - drag-and-drop layout ordering
 - release channel and local-hosted GitHub release checks
-- local-only OBS reachability and streaming-layout preview; this beta sends no OBS commands
+- local-only OBS reachability checks; this beta sends no OBS commands
 - Game Mode profile and launcher handoff
 - built-in widget packs for local dashboard layouts
 - directly discoverable, optional local Frigate object detections and event snapshots with an in-panel setup path
@@ -108,9 +108,9 @@ Auxora now includes:
 
 The update and streaming panels remain beta foundations. Streaming accepts only loopback OBS WebSocket addresses and checks reachability; it does not authenticate to OBS or send commands. Signed manifest inspection is implemented, but third-party code loading and execution are disabled in this beta even if a manifest passes inspection. Phone Remote is also not included. Before charging customers, sign the Windows release, complete authenticated OBS commands, and test the installer on clean hardware.
 
-Favorites start with System, Audio & Media, Network, and PC actions where supported. Open **All panels** to select any available panel or use **Remove** and **Keep** to change the four shortcuts. Favorites stay the same across Modes and are saved on this dashboard, separately from portable backups. Narrow screens allow the favorites row to scroll; **All panels** stays visible. Escape or Close dismisses the catalog and returns keyboard focus to its opener.
+Choose a section, then a panel tab. Settings stays available at the bottom of the section rail. **Settings > Layout** changes section order and visibility; hiding a section does not disable deep links or automatic game navigation. Recent apps appear on Home. The header Mode selector includes custom Modes and Automatic switching. **Settings > Modes & automation** edits profiles and rules. Night display controls are in Quick controls.
 
-**Quick controls** adjusts system volume, mute, and playback without leaving the current panel. The volume slider sends a change when released, not on every movement. Audio and playback controls enable independently when the local service reports fresh, supported state; unavailable controls explain why. The drawer reads state only while open and visible, never retries a command automatically, and keeps track titles and app names out of this compact view. Modes, Night, and full-panel shortcuts remain in the same drawer.
+**Quick controls** adjusts system volume, mute, playback, and Night display without leaving the current panel. The volume slider sends a change when released, not on every movement. Audio and playback controls enable independently when the local service reports fresh, supported state; unavailable controls explain why. The drawer reads state only while open and visible, never retries a command automatically, and keeps track titles and app names out of this compact view. Full audio controls are under **Media > Audio & Media**.
 
 Privacy & Backup exports Modes plus portable presentation settings such as theme, readability, layout order, pinned and hidden panels, card sizes, per-Mode layouts, and built-in pack selection. Credentials, integration and OBS endpoints, weather location, launcher paths, display identifiers, and logs remain excluded. Restore validates the browser-side presentation fields before changing native configuration and keeps the newest user-action result visible when diagnostics refresh in the background.
 
@@ -135,7 +135,7 @@ The native host:
 
 While Auxora is running, launching WoW Forever automatically opens the Horde adventure journal when **Game Mode auto-open** is enabled (the default). The host recognizes Forever's `_forever_\Wow.exe` client separately from Retail, Classic, and the Battle.net launcher. The journal opens once per detected game session; switching panels afterward keeps your choice. Open drawers, touch lock, and Diagnostics retain their existing protections against automatic navigation.
 
-You can also open **All panels > Gaming > WoW Forever**, then choose **Keep** to make it a favorite. The panel is available directly at `dashboard.html?widget=wow-forever`, and other games do not replace an already selected journal with Game Mode. This feature switches tabs inside the running Auxora dashboard; it does not start Auxora if it is closed.
+You can also open **Gaming > WoW Forever**. The panel is available directly at `dashboard.html?widget=wow-forever`, and other games do not replace an already selected journal with Game Mode. This feature switches tabs inside the running Auxora dashboard; it does not start Auxora if it is closed.
 
 The journal uses a permanent Horde theme. Use **Edit character** to set your character, level, current zone, hearthstone destination, and professions. The quest ledger tracks quests, dungeons, gear goals, professions, and exploration. Field notes save as you type; the session timer runs until paused, including time spent outside the tab. Progress is entered manually, with no connection to game data.
 
@@ -145,7 +145,7 @@ Validate the journal state and backup handling with `npm run test:wow-forever`.
 
 ## Camera Detection
 
-Camera Detection is optional but remains visible as Setup in Apps & Controls before configuration. Open the panel and choose **Set up Camera Detection** to reveal its Diagnostics form, scroll it into view, and focus the Frigate address field. Enter the base address of a Frigate server on the local/private network and, optionally, a camera name such as `driveway`. For Frigate's authenticated port `8971`, use an HTTPS address and enter a Frigate username and password; Auxora logs in through `/api/login`, keeps the issued token in memory, retries authentication once after an HTTP 401, and protects the saved password with Windows DPAPI. Authenticated non-loopback HTTP is rejected so credentials cannot cross the LAN in plaintext. Leave both credential fields blank when using a trusted internal unauthenticated endpoint such as port `5000`. HTTPS certificates must already be trusted by Windows—Auxora never disables certificate validation.
+Camera Detection is optional but remains visible under **Smart Home > Cameras** before configuration. Open the panel and choose **Set up Camera Detection** to open **Settings > Setup & status**, scroll the Frigate form into view, and focus its address field. Enter the base address of a Frigate server on the local/private network and, optionally, a camera name such as `driveway`. For Frigate's authenticated port `8971`, use an HTTPS address and enter a Frigate username and password; Auxora logs in through `/api/login`, keeps the issued token in memory, retries authentication once after an HTTP 401, and protects the saved password with Windows DPAPI. Authenticated non-loopback HTTP is rejected so credentials cannot cross the LAN in plaintext. Leave both credential fields blank when using a trusted internal unauthenticated endpoint such as port `5000`. HTTPS certificates must already be trusted by Windows. Auxora never disables certificate validation.
 
 Auxora reads recent object events and displays the latest available event snapshot through its localhost API. It independently enforces the configured camera and one-hour event window even if the upstream server ignores those query filters, and it only proxies snapshots belonging to the current filtered results. Public destinations, redirects, proxy routing, credentials embedded in URLs, invalid or out-of-filter event identifiers, incomplete or empty-token authentication, and untrusted TLS certificates are rejected.
 

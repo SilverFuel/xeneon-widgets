@@ -51,7 +51,14 @@
     var itemId = text(item && item.id, "");
     var isConfirm = confirmId && confirmId === itemId;
     var requiresConfirmation = requiresServerConfirmation(itemId);
-    var itemLabel = text(item && item.label, "Action");
+    var labels = {
+      "dark-mode": "Windows theme",
+      "night-light": "Night Light settings",
+      "lock-workstation": "Lock PC",
+      "open-settings": "Windows Settings",
+      "empty-recycle-bin": "Empty Recycle Bin"
+    };
+    var itemLabel = Object.prototype.hasOwnProperty.call(labels, itemId) ? labels[itemId] : text(item && item.label, "Action");
     var buttonLabel = isConfirm ? "Confirm " + itemLabel : itemLabel;
     var buttonCopy = isConfirm
       ? "Tap again within 8 seconds to run."
@@ -384,7 +391,7 @@
         '<article class="list-card inline-card quick-actions-card">' +
           '<div class="inline-card-header action-panel-header">' +
             '<div>' +
-              '<div class="metric-label">Quick actions</div>' +
+              '<div class="metric-label">Windows tools</div>' +
               '<div class="router-inline-copy">Only actions this PC reports as available are shown.</div>' +
             '</div>' +
             '<div class="action-panel-meta">' +

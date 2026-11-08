@@ -396,11 +396,11 @@ const browserProbeExpression = `(() => {
     return { label: element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent.trim().slice(0, 60) || element.outerHTML.slice(0, 80), width: value.width, height: value.height };
   });
   const shell = rect(document.querySelector('.dashboard-stage-shell'));
-  const navigation = rect(document.querySelector('#dashboard-primary-nav'));
+  const navigation = rect(document.querySelector('#dashboard-section-nav'));
   const viewer = rect(document.querySelector('.router-viewer'));
   const content = document.querySelector('.router-inline-widget');
   const contentRect = rect(content);
-  const overlays = ['.dashboard-now-strip:not(.is-hidden)', '.dashboard-quick-toggle:not(.is-hidden)', '.dashboard-launcher-dock:not(.is-hidden)']
+  const overlays = ['.auxora-quick-toggle:not(.is-hidden)']
     .map(selector => {
       const element = document.querySelector(selector);
       const position = element ? getComputedStyle(element).position : '';
@@ -469,7 +469,7 @@ function validateProbe(probe, theme, variant, viewport) {
 async function waitForRenderedTheme(cdp, theme, variant) {
   await waitForCondition(
     cdp,
-    `document.querySelector('.dashboard-stage-shell') && document.querySelector('#dashboard-primary-nav') && document.documentElement.dataset.theme === ${JSON.stringify(theme)} && document.documentElement.dataset.themeVariant === ${JSON.stringify(variant)}`,
+    `document.querySelector('.dashboard-stage-shell') && document.querySelector('#dashboard-section-nav') && document.documentElement.dataset.theme === ${JSON.stringify(theme)} && document.documentElement.dataset.themeVariant === ${JSON.stringify(variant)}`,
     `${theme} ${variant} dashboard`
   );
   await delay(600);
@@ -490,7 +490,7 @@ async function assertReducedMotion(cdp, label) {
   const reducedProbe = await evaluate(cdp, `(() => {
     const selectors = ['.dashboard-ambient-canvas', '.dashboard-ambient-layer', '.dashboard-stage-shell', '.router-rail', '.router-viewer', '.product-swatch', '.xn-slider'];
     const pseudoSelectors = [
-      ['.router-picker__button', '::before'],
+      ['.auxora-panel-link', '::before'],
       ['.product-card--button', '::after'],
       ['.product-swatch', '::after'],
       ['.product-layout-row', '::after']
@@ -545,8 +545,8 @@ async function assertHighContrastReadability(cdp, theme) {
   const probe = await evaluate(cdp, `(() => {
     const bodyStyle = getComputedStyle(document.body);
     const tokens = Object.fromEntries(${JSON.stringify(requiredTokens)}.map(name => [name, bodyStyle.getPropertyValue(name).trim()]));
-    const active = document.querySelector('.auxora-primary-nav button[aria-pressed="true"]');
-    const inactive = document.querySelector('.auxora-primary-nav button[aria-pressed="false"]');
+    const active = document.querySelector('.auxora-section-link[aria-pressed="true"]');
+    const inactive = document.querySelector('.auxora-section-link[aria-pressed="false"]');
     const focusTarget = document.activeElement;
     const focusStyle = focusTarget && focusTarget !== document.body ? getComputedStyle(focusTarget) : null;
     const activeStyle = active ? getComputedStyle(active) : null;
@@ -595,7 +595,7 @@ async function assertHighContrastReadability(cdp, theme) {
 function installQuickControlsForcedColorsFixture() {
   if (!location.search.includes("quickControlsForcedColors=1")) return;
   const originalFetch = window.fetch;
-  const fixture = window.__quickControlsForcedColorsFixture = { reads: { audio: 0, media: 0 }, blocked: [], scenes: null, sceneEvaluations: 0 };
+  const fixture = window.__quickControlsForcedColorsFixture = { reads: { audio: 0, media: 0 }, panelReads: { equalizer: 0 }, blocked: [], scenes: null, sceneEvaluations: 0 };
   const response = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
   window.fetch = function (input, options) {
     const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
@@ -622,6 +622,15 @@ function installQuickControlsForcedColorsFixture() {
     }
     const match = /^\/api\/(audio|media)(?:\/|$)/.exec(url.pathname);
     if (!match) return originalFetch.apply(this, arguments);
+    // The navigation probe visits the full Audio panel before opening Quick
+    // controls. Mock its extra read only while that panel owns the closed drawer.
+    // Quick controls must still be blocked from reading this endpoint.
+    const drawer = document.getElementById("dashboard-quick-drawer");
+    if (url.origin === location.origin && method === "GET" && url.pathname === "/api/audio/equalizer"
+      && document.body?.dataset.activeWidgetId === "audio" && drawer?.classList.contains("is-hidden")) {
+      fixture.panelReads.equalizer += 1;
+      return Promise.resolve(response({ supported: false, configured: false, status: "unavailable", message: "Read-only appearance fixture", bands: [], presets: [] }));
+    }
     const kind = match[1];
     if (method === "GET" && url.pathname === "/api/" + kind) {
       fixture.reads[kind] += 1;
@@ -765,7 +774,7 @@ async function assertForcedColorsPalette(cdp, label, palette) {
       const style = getComputedStyle(element);
       return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
     };
-    const controls = Array.from(document.querySelectorAll('.auxora-primary-nav button, #dashboard-favorites button, #dashboard-panels-toggle, #dashboard-widget-picker button, #dashboard-inline-widget button')).filter(visible);
+    const controls = Array.from(document.querySelectorAll('.auxora-section-link, .auxora-panel-link, #dashboard-settings-toggle, #dashboard-mode-select, #dashboard-inline-widget button')).filter(visible);
     const controlBorders = controls.map(element => {
       const style = getComputedStyle(element);
       return {
@@ -776,8 +785,8 @@ async function assertForcedColorsPalette(cdp, label, palette) {
         background: style.backgroundColor
       };
     });
-    const active = document.querySelector('.auxora-primary-nav button[aria-pressed="true"]');
-    const inactive = document.querySelector('.auxora-primary-nav button[aria-pressed="false"]');
+    const active = document.querySelector('.auxora-section-link[aria-pressed="true"]');
+    const inactive = document.querySelector('.auxora-section-link[aria-pressed="false"]');
     const activeStyle = active ? getComputedStyle(active) : null;
     const inactiveStyle = inactive ? getComputedStyle(inactive) : null;
     const focusTarget = document.activeElement;
@@ -794,26 +803,28 @@ async function assertForcedColorsPalette(cdp, label, palette) {
       fatal: /Dashboard failed|Dashboard runtime error/i.test(document.body?.innerText || '')
     };
   })()`);
-  const catalogProbe = await evaluate(cdp, `(async () => {
-    const toggle = document.getElementById('dashboard-panels-toggle');
-    toggle.focus(); toggle.click();
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const drawer = document.getElementById('dashboard-panels-drawer');
-    const buttons = [...drawer.querySelectorAll('button')];
-    const kept = drawer.querySelector('[data-favorite-widget][aria-pressed="true"]');
-    const unkept = drawer.querySelector('[data-favorite-widget][aria-pressed="false"]');
-    const selectionDistinct = !!kept && !!unkept && (getComputedStyle(kept).backgroundColor !== getComputedStyle(unkept).backgroundColor || getComputedStyle(kept).color !== getComputedStyle(unkept).color);
-    const result = {
-      panelCount: drawer.querySelectorAll('[data-widget-id]').length,
-      buttonCount: buttons.length,
-      borderless: buttons.filter(button => getComputedStyle(button).borderTopStyle === 'none' || parseFloat(getComputedStyle(button).borderTopWidth) < 1).map(button => button.getAttribute('aria-label') || button.textContent),
-      selectionDistinct,
-      focusContained: drawer.contains(document.activeElement),
-      focusOutlined: getComputedStyle(document.activeElement).outlineStyle !== 'none' && parseFloat(getComputedStyle(document.activeElement).outlineWidth) >= 3
-    };
-    drawer.querySelector('[data-panels-close]').click();
-    result.focusReturned = document.activeElement === toggle;
-    return result;
+  const navigationProbe = await evaluate(cdp, `(async () => {
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const results = [];
+    for (const section of window.AuxoraNavigation.sections) {
+      const sectionButton = document.querySelector('[data-section-id="' + section.id + '"]');
+      sectionButton.focus(); sectionButton.click(); await frames();
+      const panels = [...document.querySelectorAll('.auxora-panel-link')].filter(button => button.getClientRects().length);
+      const active = panels.find(button => button.getAttribute('aria-pressed') === 'true');
+      const inactive = panels.find(button => button.getAttribute('aria-pressed') === 'false');
+      const selectedStyle = active && getComputedStyle(active);
+      const otherStyle = inactive && getComputedStyle(inactive);
+      const focusTarget = panels[0]; focusTarget.focus(); await frames();
+      results.push({
+        section: section.id,
+        ids: panels.map(button => button.dataset.widgetId),
+        borderless: [sectionButton, ...panels].filter(button => getComputedStyle(button).borderTopStyle === 'none' || parseFloat(getComputedStyle(button).borderTopWidth) < 1).map(button => button.getAttribute('aria-label') || button.textContent),
+        selectionDistinct: !!selectedStyle && !!otherStyle && (selectedStyle.backgroundColor !== otherStyle.backgroundColor || selectedStyle.color !== otherStyle.color),
+        focusAccepted: document.activeElement === focusTarget,
+        focusOutlined: getComputedStyle(focusTarget).outlineStyle !== 'none' && parseFloat(getComputedStyle(focusTarget).outlineWidth) >= 3
+      });
+    }
+    return results;
   })()`, true);
   for (const viewport of [
     { width: 800, height: 480, expectedLayout: "compact" },
@@ -860,9 +871,11 @@ async function assertForcedColorsPalette(cdp, label, palette) {
   assert(probe.focusVisible, `${label}: keyboard focus was not visibly outlined in forced colors`);
   assert(probe.forcedColorOptOuts.length === 0, `${label}: elements opted out of Windows forced colors: ${JSON.stringify(probe.forcedColorOptOuts)}`);
   assert(!probe.overflow && !probe.fatal, `${label}: forced colors created overflow or a fatal state: ${JSON.stringify(probe)}`);
-  // Each panel has an open button and a favorite button, plus the dialog close button.
-  assert(catalogProbe.panelCount === 25 && catalogProbe.buttonCount === catalogProbe.panelCount * 2 + 1 && catalogProbe.borderless.length === 0 && catalogProbe.selectionDistinct && catalogProbe.focusContained && catalogProbe.focusOutlined && catalogProbe.focusReturned, `${label}: All panels lost inventory, control boundaries, kept state, or keyboard focus in forced colors: ${JSON.stringify(catalogProbe)}`);
-  console.log(`${label}: four Quick-control viewports and catalog accessibility passed`);
+  assert(navigationProbe.length === 6 && navigationProbe.flatMap(section => section.ids).length === 25, `${label}: section/category inventory incomplete: ${JSON.stringify(navigationProbe)}`);
+  for (const section of navigationProbe) {
+    assert(section.borderless.length === 0 && section.selectionDistinct && section.focusAccepted && section.focusOutlined, `${label}: ${section.section} lost forced-color boundaries, selection, or keyboard focus: ${JSON.stringify(section)}`);
+  }
+  console.log(`${label}: four Quick-control viewports and six-section accessibility passed`);
 }
 
 async function assertForcedColors(cdp, label) {
@@ -959,11 +972,10 @@ async function readPersistedSettings(cdp) {
 }
 
 async function openThemeStudio(cdp) {
-  await waitForCondition(cdp, "document.querySelector('[data-destination=\"settings\"]')", "Settings destination");
-  await evaluate(cdp, "document.querySelector('[data-destination=\"settings\"]').click()");
-  await evaluate(cdp, "document.getElementById('dashboard-panels-toggle').click()");
-  await waitForCondition(cdp, "document.querySelector('[data-widget-id=\"theme-studio\"]')", "Theme Studio picker entry");
-  await evaluate(cdp, "document.querySelector('#dashboard-widget-picker [data-widget-id=\"theme-studio\"]').click()");
+  await waitForCondition(cdp, "document.querySelector('#dashboard-settings-toggle[data-section-id=\"settings\"]')", "Settings section");
+  await evaluate(cdp, "document.getElementById('dashboard-settings-toggle').click()");
+  await waitForCondition(cdp, "document.querySelector('.auxora-panel-link[data-widget-id=\"theme-studio\"]')", "Appearance category");
+  await evaluate(cdp, "document.querySelector('.auxora-panel-link[data-widget-id=\"theme-studio\"]').click()");
   await waitForCondition(
     cdp,
     "document.querySelectorAll('.product-swatch[data-theme]').length === 3 && document.querySelector('[name=\"accentMode\"]')",
