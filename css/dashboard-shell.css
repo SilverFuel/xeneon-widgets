@@ -147,6 +147,13 @@ body.auxora-section-shell.dashboard-native-page--game-focus-active .router-viewe
   .auxora-section-shell :is(.auxora-panel-link, .auxora-mode-select, .auxora-shell-status) { min-height: 44px; padding: 8px 10px; }
 }
 
+/* Short landscape displays have room for one header row and need its height. */
+@media (min-width: 1101px) and (max-height: 480px) {
+  body.auxora-section-shell .auxora-section-header { flex-wrap: nowrap; }
+  .auxora-section-tabs { flex: 1 1 0%; }
+  .auxora-section-shell .router-viewer__header-actions { flex: 0 1 auto; flex-wrap: nowrap; }
+}
+
 @media (max-width: 600px) {
   .auxora-section-shell .router-viewer__header-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
   .auxora-mode-control { grid-column: 1 / -1; }
