@@ -1,5 +1,5 @@
 .tmog-companion {
-  --tmog-first: var(--color-accent);
+  --tmog-first: var(--theme-accent-text);
   --tmog-second: var(--color-text);
   display: flex;
   flex-direction: column;
@@ -20,13 +20,13 @@
 }
 .tmog-toolbar { flex: 0 0 auto; }
 .tmog-toolbar h2 { margin: 3px 0 6px; font-size: clamp(20px, 2vw, 28px); letter-spacing: -.03em; }
-.tmog-eyebrow { margin: 0; color: var(--color-accent); font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.tmog-eyebrow { margin: 0; color: var(--theme-accent-text); font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
 .tmog-source, .tmog-footer, .tmog-card-footer, .tmog-card-head > span { margin: 0; color: var(--color-text-dim); font-size: 12px; line-height: 1.5; }
 .tmog-controls { justify-content: flex-end; gap: 8px; }
 .tmog-controls button { min-width: 44px; min-height: 44px; }
 .tmog-open { border-color: var(--color-accent); }
 .tmog-status { color: var(--color-text-dim); font-size: 12px; padding: 0 6px; }
-.tmog-status[data-live="true"] { color: var(--color-accent); }
+.tmog-status[data-live="true"] { color: var(--theme-accent-text); }
 .tmog-notice { flex: 0 0 auto; font-size: 13px; }
 .tmog-notice:empty { display: none; }
 .tmog-grid {
