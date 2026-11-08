@@ -83,6 +83,11 @@
   --constellation-blue: #2b4d7d;
 }
 
+/* Standalone pages retain legacy :root declarations after this stylesheet. */
+:root[data-theme="focus"] {
+  color-scheme: light;
+}
+
 :root[data-theme="gaming"] {
   color-scheme: dark;
   --theme-page: #132238;

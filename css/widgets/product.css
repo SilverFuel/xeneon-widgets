@@ -77,7 +77,7 @@
     border: 1px solid var(--dashboard-accent-glow);
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.06);
-    color: var(--dashboard-accent);
+    color: var(--theme-accent-text);
     font-size: 2rem;
     font-weight: 900;
   }
@@ -335,7 +335,7 @@
   display: block;
   max-width: 100%;
   overflow: hidden;
-  color: var(--dashboard-accent);
+  color: var(--theme-accent-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -608,7 +608,7 @@
 
 .product-layout-guide strong {
   margin-bottom: 2px;
-  color: var(--dashboard-accent);
+  color: var(--theme-accent-text);
   font-size: 0.75rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;

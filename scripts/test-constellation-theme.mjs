@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
@@ -36,7 +36,7 @@ function tokenRules(source) {
     }
     const selector = clean.slice(start, open).trim();
     if (!selector.startsWith("@")) {
-      const declarations = [...clean.slice(open + 1, end - 1).matchAll(/(--[\w-]+|color-scheme)\s*:\s*([^;]+);/g)]
+      const declarations = [...clean.slice(open + 1, end - 1).matchAll(/(?:^|;)\s*(--[\w-]+|color-scheme|color|background)\s*:\s*([^;]+)(?=;|$)/g)]
         .map(([, name, value]) => ({ name, value: value.replace(/\s*!important\s*$/, "").trim(), important: /!important/.test(value) }));
       for (const part of selector.split(",").map(value => value.trim())) {
         if (declarations.length) rules.push({ selector: part, declarations });
@@ -74,11 +74,11 @@ function matchSelector(selector, node) {
   return [...selector.matchAll(/\.([\w-]+)/g)].every(([, name]) => node.classes.has(name));
 }
 
-function computedTokens(node, root) {
-  const inherited = node === root ? {} : computedTokens(root, root);
+function computedTokens(node, root, appliedRules = rules) {
+  const inherited = node === root ? {} : computedTokens(root, root, appliedRules);
   const values = { ...inherited };
   const priorities = new Map();
-  for (const rule of rules) {
+  for (const rule of appliedRules) {
     if (!matchSelector(rule.selector, node)) continue;
     const specificity = (rule.selector.match(/\[|\.|:root/g) || []).length * 10 + (/^(html|body)/.test(rule.selector) ? 1 : 0);
     for (const declaration of rule.declarations) {
@@ -125,7 +125,8 @@ function contrast(foreground, background, underlay = "#ffffff") {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
-function harness(runtime, initial = {}) {
+function harness(runtime, initial = {}, pageRules = []) {
+  const appliedRules = rules.concat(pageRules);
   let settings = { themeSchemaVersion: "2", themeId: "focus", accentMode: "preset", customAccentColor: "", themeVariant: "standard", themeReadability: "normal", animationIntensity: "25", performanceBudget: "balanced", dashboardOpacity: "100", ...initial };
   const root = element("html");
   const body = element("body");
@@ -133,7 +134,7 @@ function harness(runtime, initial = {}) {
   const context = {
     document: { documentElement: root, body, addEventListener() {} },
     window: {
-      getComputedStyle(node) { return { getPropertyValue(name) { return computedTokens(node, root)[name] || ""; } }; },
+      getComputedStyle(node) { return { getPropertyValue(name) { return computedTokens(node, root, appliedRules)[name] || ""; } }; },
       localStorage: { getItem() { return JSON.stringify(settings); } },
       matchMedia() { return { matches: false, addEventListener() {} }; },
       addEventListener(name, callback) { events.set(name, callback); }
@@ -154,7 +155,7 @@ function harness(runtime, initial = {}) {
   }
   return {
     root, body, context,
-    tokens(node = root) { return computedTokens(node, root); },
+    tokens(node = root) { return computedTokens(node, root, appliedRules); },
     update(next) {
       settings = { ...settings, ...next };
       if (runtime === "standalone") events.get("storage")({ key: "xeneon-dashboard-settings" });
@@ -196,6 +197,30 @@ test("Constellation palette and light/dark surface contracts agree across both r
   }
 });
 
+test("standalone embedded styles cannot revert Focus controls to a dark color scheme", () => {
+  const pages = ["../", "../widgets/"].flatMap(directory => readdirSync(new URL(directory, import.meta.url))
+    .filter(name => name.endsWith(".html"))
+    .map(name => ({ path: directory + name, html: read(directory + name) })))
+    .filter(page => /<script\b[^>]*\bsrc=["'][^"']*theme-bootstrap\.js(?:[?][^"']*)?["']/i.test(page.html));
+  assert.equal(pages.length, 19, "all standalone themed pages must participate in the embedded-style regression");
+  let lateDarkDefaults = 0;
+  for (const page of pages) {
+    const pageRules = [...page.html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)]
+      .flatMap(([, css]) => tokenRules(css));
+    if (pageRules.some(rule => rule.selector === ":root" && rule.declarations.some(({ name, value }) => name === "color-scheme" && value === "dark"))) lateDarkDefaults++;
+    for (const themeId of ["focus", "gaming", "warm"]) {
+      for (const themeVariant of ["standard", "night"]) {
+        for (const themeReadability of ["normal", "high-contrast"]) {
+          const fixture = harness("standalone", { themeId, themeVariant, themeReadability }, pageRules);
+          const expected = themeId === "gaming" || themeVariant === "night" || themeReadability === "high-contrast" ? "dark" : "light";
+          assert.equal(fixture.tokens()["color-scheme"], expected, `${page.path}/${themeId}/${themeVariant}/${themeReadability}: native controls must match the current surface palette`);
+        }
+      }
+    }
+  }
+  assert.ok(lateDarkDefaults > 0, "the regression must exercise real embedded dark defaults after theme.css");
+});
+
 test("324 preset/custom accent states preserve text, filled-control, and status contrast", () => {
   let count = 0;
   for (const runtime of ["dashboard", "standalone"]) {
@@ -214,6 +239,52 @@ test("324 preset/custom accent states preserve text, filled-control, and status 
     }
   }
   assert.equal(count, 324);
+});
+
+test("widget accent text consumers remain readable on light, Night, and high-contrast surfaces", () => {
+  const consumers = {
+    "audio.css": [".audio-route-button strong", ".audio-session-row__level strong", ".audio-media-state", ".audio-album-cover__placeholder-label"],
+    "product.css": [".auxora-remote-share code", ".product-layout-guide strong"],
+    "actions.css": [".inline-launcher-icon"],
+    "network.css": ['.network-form-message[data-tone="good"]'],
+    "system.css": ['.system-stat-card[data-tone="good"] .system-stat-value', '.system-health-card[data-tone="good"] strong'],
+    "game-mode.css": [".game-face-signals strong", ".game-focus-identity span", ".game-focus-metric strong", ".game-focus-audio-row b", ".game-focus-wake span"]
+  };
+  const cases = [];
+  for (const [file, selectors] of Object.entries(consumers)) {
+    const sourceRules = tokenRules(read(`../css/widgets/${file}`));
+    for (const selector of selectors) {
+      const declaration = sourceRules.filter(rule => rule.selector.replace(/\s+/g, " ") === selector)
+        .flatMap(rule => rule.declarations).filter(item => item.name === "color").at(-1);
+      assert.ok(declaration, `${file}: ${selector} must have its actual foreground checked`);
+      cases.push({ label: `${file} ${selector}`, value: declaration.value });
+    }
+  }
+  const cameraHtml = read("../widgets/unifi-camera-viewer.html");
+  const cameraRules = [...cameraHtml.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].flatMap(([, css]) => tokenRules(css));
+  const cameraEyebrow = cameraRules.filter(rule => rule.selector === ".eyebrow")
+    .flatMap(rule => rule.declarations).filter(item => item.name === "color").at(-1);
+  assert.ok(cameraEyebrow, "camera viewer eyebrow foreground must be checked");
+  cases.push({ label: "camera viewer eyebrow", value: cameraEyebrow.value });
+
+  for (const themeId of ["focus", "gaming", "warm"]) {
+    for (const themeVariant of ["standard", "night"]) {
+      for (const themeReadability of ["normal", "high-contrast"]) {
+        const tokens = harness("dashboard", { themeId, themeVariant, themeReadability }).tokens();
+        for (const consumer of cases) {
+          const foreground = consumer.value.replace(/var\((--[\w-]+)\)/g, (_, name) => tokens[name] || "");
+          for (const surface of surfaces) {
+            const ratio = contrast(foreground, tokens[surface]);
+            assert.ok(ratio >= 4.5, `${consumer.label}/${themeId}/${themeVariant}/${themeReadability}: foreground on ${surface} is ${ratio.toFixed(3)}:1`);
+          }
+        }
+      }
+    }
+  }
+  const wakeBackground = tokenRules(read("../css/widgets/game-mode.css"))
+    .filter(rule => rule.selector === ".game-focus-wake")
+    .flatMap(rule => rule.declarations).filter(item => item.name === "background").at(-1);
+  assert.ok(wakeBackground && /var\(--theme-page\)/.test(wakeBackground.value), "wake overlay must follow the active page surface so light-theme text retains contrast");
 });
 
 for (const runtime of ["dashboard", "standalone"]) {

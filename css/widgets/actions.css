@@ -207,7 +207,7 @@
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   font-size: 1.1rem;
   font-weight: 800;
   text-transform: uppercase;
