@@ -213,6 +213,12 @@ body.auxora-section-shell .router-inline-widget[data-card-size] > .inline-widget
 body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-shell { display: flex; flex-direction: column; height: auto; min-height: 100%; overflow: visible; }
 body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-layout-list { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-flow: row; overflow: visible; }
 body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-layout-row__actions { grid-template-columns: auto minmax(120px, 1fr); }
+@media (max-width: 600px) {
+  body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-layout-row__actions { grid-template-columns: minmax(0, 1fr); min-width: 0; width: 100%; }
+  body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-layout-row__placement { grid-column: 1 / -1; }
+  body.auxora-section-shell[data-active-widget-id="layout-editor"] .product-layout-footer { flex-wrap: wrap; }
+}
+
 body.auxora-section-shell[data-active-widget-id="home"] .product-shell > .inline-actions { display: flex; justify-content: flex-end; }
 body.auxora-section-shell[data-active-widget-id="home"] .product-shell > .inline-actions .inline-button { width: auto; }
 body.auxora-section-shell[data-active-widget-id="weather"] .router-inline-widget { position: relative; inset: auto; height: auto; min-height: 65%; overflow: visible; }
