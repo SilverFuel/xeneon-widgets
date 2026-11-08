@@ -1311,12 +1311,16 @@
         performanceBudget: String(formData.get("performanceBudget") || "balanced"),
         widgets: sceneWidgetIds(scene)
       });
+      var presentationChanged = updated.themeId !== scene.themeId || updated.density !== scene.density
+        || updated.animationIntensity !== Number(scene.animationIntensity) || updated.performanceBudget !== scene.performanceBudget;
       state.busy = true;
       requestJson(buildBridgeUrl(env, "/api/scenes"), {
         method: "POST", body: { scene: updated }
       }, 7000).then(function (payload) {
         if (payload && payload.activeSceneId === scene.id && typeof env.applySceneSnapshot === "function") {
-          env.applySceneSnapshot(payload, true);
+          // Evaluation may already hold this receipt. Explicitly apply settings
+          // changed by this save even when its active-profile snapshot is equal.
+          env.applySceneSnapshot(payload, !presentationChanged);
         }
         return payload;
       }).then(function (payload) {

@@ -4208,7 +4208,7 @@
     renderOriginStatus();
     showFrameEmpty(
       "Local bridge unavailable",
-      "Start the local bridge and retry. Diagnostics stays available so you can see what is missing."
+      "Start the local bridge and retry. Then open Settings > Setup & status to review setup and diagnostics."
     );
   }
 
