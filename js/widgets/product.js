@@ -585,6 +585,7 @@
           '</select></label>' +
           '<label class="inline-field inline-field--checkbox"><input type="checkbox" name="updateNotifications"' + (updateNotifications ? " checked" : "") + '> <span>Check for updates when the dashboard starts</span></label>' +
         '</form>' +
+        '<p class="inline-copy">Auxora does not install updates automatically. Open releases to review the download and verification instructions.</p>' +
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="check-release"' + (state.busy ? " disabled" : "") + '>Check releases</button>' +
           (canOfferInstaller ? '<a class="inline-button" href="' + escapeHtml(state.downloadUrl) + '" target="_blank" rel="noreferrer">Download verified update</a>' : '') +
