@@ -1574,6 +1574,12 @@ async function validateProductSurfaceSemantics(cdp) {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline && !document.querySelector('[data-action="export-backup"]')) await wait(50);
 
+    const backupSection = document.querySelector('[data-ui-key="privacy-reset"]');
+    const backupSummary = backupSection?.querySelector(':scope > summary');
+    if (!backupSummary) throw new Error('Privacy backup section is missing');
+    if (!backupSection.open) backupSummary.click();
+    if (!backupSection.open) throw new Error('Privacy backup section did not open through its summary');
+
     window.__auxoraCopiedBackup = '';
     const clipboard = { writeText: async value => { window.__auxoraCopiedBackup = String(value || ''); } };
     try {

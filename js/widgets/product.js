@@ -2114,7 +2114,8 @@
               '<div><div class="metric-label">Current portable settings</div><div class="product-code-preview">' + escapeHtml(JSON.stringify(settings, null, 2).slice(0, 520)) + '</div></div>' +
             '</div>' +
           '</details>' +
-        '</div>'
+        '</div>' +
+        '<p class="inline-copy product-privacy-feedback" data-ui-key="privacy-feedback" role="status" aria-live="polite">' + escapeHtml(state.statusText) + '</p>'
       ));
     }
 
