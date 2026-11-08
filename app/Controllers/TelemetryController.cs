@@ -63,6 +63,8 @@ public sealed class TelemetryController
         return _systemMetrics.GetSnapshot();
     }
 
+    public TmogCompanionSnapshot GetTmogSnapshot() => _systemActionsService.GetTmogSnapshot();
+
     public GpuPowerSnapshot GetGpuPowerSnapshot()
     {
         return _gpuPowerMonitor.GetSnapshot();

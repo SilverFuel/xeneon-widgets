@@ -14,6 +14,18 @@ Auxora is a native Windows companion dashboard for landscape, ultrawide, and por
 
 The primary product is the native Windows host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only. A macOS beta host lives in `desktop/electron` because the Windows app uses WinUI 3 and WebView2, which do not run on macOS.
 
+### TMOG Companion
+
+Open **All panels > TMOG Companion** for three minutes of live CPU, GPU, memory, disk throughput, network, and temperature history. Pause freezes the view; Resume starts sampling again. Unavailable readings leave gaps. History exists only while the panel is open.
+
+The readings come from Auxora's Windows telemetry. **Open TMOG** opens the separately installed Task Manager TMOG application for process inspection and its other tools. Auxora detects standard `Task Manager TMOG` installations under Program Files or the current user's Programs folder, prefers the supplied launcher, and does not launch TMOG automatically. This is an Auxora companion view, not an embedded copy of TMOG or a connection to a TMOG data API. TMOG binaries, licence data, and settings are not bundled or accessed. Sensor availability depends on the hardware and existing providers.
+
+Focused validation: `npm run test:tmog` and the `TmogCompanionServiceTests` Windows unit tests. The full dashboard checks include the new panel.
+
+For this checkout's locally installed .NET SDK, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-local.ps1`. This selects the pinned SDK for the check process without changing machine settings. Use `-Check test:tmog` to select an individual npm check. Installer shutdown regressions can be tested with `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-installer-host-stop.ps1`.
+
+The November 7 source repair and its verification limits are recorded in [docs/REVIEW-REPAIR-20261107.md](docs/REVIEW-REPAIR-20261107.md).
+
 Auxora is independent software. It is not an official product of CORSAIR or any integration provider unless a separate written agreement says otherwise.
 
 The first Auxora upgrade preserves existing XENEON settings and Windows-protected secrets. The legacy internal executable name remains temporarily for rollback compatibility while public shortcuts, storage, UI, and installer assets transition to Auxora.

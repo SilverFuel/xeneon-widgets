@@ -235,6 +235,9 @@ public sealed class ApiRouter
             case "/api/system":
                 await WriteJsonAsync(response, 200, _telemetryController.GetSystemSnapshot(), cancellationToken);
                 return;
+            case "/api/tmog" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _telemetryController.GetTmogSnapshot(), cancellationToken);
+                return;
             case "/api/system/restart-admin" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _actionController.RestartHostAsAdministrator(), cancellationToken);
                 return;

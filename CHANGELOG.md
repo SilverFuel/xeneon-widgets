@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fixed WoW Forever reopening after a quick game restart and kept game appearance and automatic Modes stable during unavailable or stale activity readings.
+- Fixed journal backup import races and preserved the original recovery export when replacement could not be saved.
+- Fixed stale TMOG readings after Pause/Resume, network readings kept falsely fresh by ping updates, and throughput spikes after counter failures.
+- Report unexpected dashboard server shutdowns, restart failed server lifetimes, and show the actual Windows error when startup fails.
+
+- Added TMOG Companion with live CPU, GPU, memory capacity, disk throughput, network, and thermal history, pause/resume, and an explicit button to open an existing TMOG installation.
+- Keep missing and stale readings out of performance graphs, distinguish unavailable CPU/memory counters from measured zero, and expose disk throughput through Windows performance counters.
+- TMOG remains separately installed. Auxora supplies the companion page's readings and does not copy TMOG binaries, licence files, or private settings.
+
 - Added a Horde-themed WoW Forever adventure journal with a character profile, quest and gear goals, field notes, session timer, preparation checklist, and local backup import/export.
 - Automatically open the journal when the Forever client starts, without treating Retail, Classic, or the Battle.net launcher as Forever. Manual panel changes remain in place during that play session.
 

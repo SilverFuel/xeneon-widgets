@@ -82,12 +82,17 @@ public sealed class SystemMetricsService : IDisposable
             var cpu = ReadCpuUsage();
             var memory = ReadMemoryUsage();
             var gpu = TryReadGpuUsage();
+            var disk = TryReadDiskThroughput();
             var primaryDisplay = DisplayManager.ReadPrimaryDisplaySnapshot();
             var sampledAt = DateTimeOffset.UtcNow;
             lock (_sync)
             {
-                _snapshot.Cpu = Round(cpu);
-                _snapshot.Ram = Round(memory);
+                _snapshot.Cpu = cpu.HasValue ? Round(cpu.Value) : null;
+                _snapshot.Ram = memory.Percent;
+                _snapshot.MemoryUsedBytes = memory.Used;
+                _snapshot.MemoryTotalBytes = memory.Total;
+                _snapshot.DiskReadBytesPerSecond = disk.Read;
+                _snapshot.DiskWriteBytesPerSecond = disk.Write;
                 _snapshot.Gpu = gpu;
                 _snapshot.PrimaryDisplay = primaryDisplay;
                 _snapshot.Supported = true;
@@ -108,11 +113,11 @@ public sealed class SystemMetricsService : IDisposable
         }
     }
 
-    private double ReadCpuUsage()
+    private double? ReadCpuUsage()
     {
         if (!GetSystemTimes(out var idleTime, out var kernelTime, out var userTime))
         {
-            return 0;
+            return null;
         }
 
         var idle = idleTime.ToUInt64();
@@ -124,7 +129,7 @@ public sealed class SystemMetricsService : IDisposable
             _lastIdleTime = idle;
             _lastKernelTime = kernel;
             _lastUserTime = user;
-            return 0;
+            return null;
         }
 
         var idleDelta = idle - _lastIdleTime;
@@ -138,21 +143,46 @@ public sealed class SystemMetricsService : IDisposable
 
         if (total == 0)
         {
-            return _snapshot.Cpu ?? 0;
+            return null;
         }
 
-        return ((total - idleDelta) * 100d) / total;
+        return idleDelta > total ? null : ((total - idleDelta) * 100d) / total;
     }
 
-    private static double ReadMemoryUsage()
+    private static (double? Percent, ulong? Used, ulong? Total) ReadMemoryUsage()
     {
         var memoryStatus = new MemoryStatusEx();
-        if (!GlobalMemoryStatusEx(ref memoryStatus) || memoryStatus.TotalPhys == 0)
+        if (!GlobalMemoryStatusEx(ref memoryStatus) || memoryStatus.TotalPhys == 0 || memoryStatus.AvailPhys > memoryStatus.TotalPhys)
         {
-            return 0;
+            return (null, null, null);
         }
 
-        return ((memoryStatus.TotalPhys - memoryStatus.AvailPhys) * 100d) / memoryStatus.TotalPhys;
+        var used = memoryStatus.TotalPhys - memoryStatus.AvailPhys;
+        return (Round(used * 100d / memoryStatus.TotalPhys), used, memoryStatus.TotalPhys);
+    }
+
+    private static (double? Read, double? Write) TryReadDiskThroughput()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(@"root\cimv2",
+                "SELECT DiskReadBytesPersec, DiskWriteBytesPersec FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk WHERE Name = '_Total'");
+            searcher.Options.Timeout = TimeSpan.FromSeconds(2);
+            using var results = searcher.Get();
+            foreach (ManagementObject item in results)
+            {
+                using (item)
+                {
+                    return (item["DiskReadBytesPersec"] is { } read ? Convert.ToDouble(read) : null,
+                            item["DiskWriteBytesPersec"] is { } write ? Convert.ToDouble(write) : null);
+                }
+            }
+        }
+        catch
+        {
+            // Counter availability varies. Absence must not become measured zero.
+        }
+        return (null, null);
     }
 
     private void SampleHardwareTemperatures()
@@ -188,6 +218,7 @@ public sealed class SystemMetricsService : IDisposable
                 _snapshot.CpuTemp = cpuTemp;
                 _snapshot.GpuTemp = gpuTemp;
                 _snapshot.TemperatureSource = source;
+                _snapshot.TemperatureSampledAt = DateTimeOffset.UtcNow;
                 _snapshot.Message = BuildTelemetryMessage(_snapshot);
             }
         }
@@ -385,6 +416,16 @@ public sealed class SystemSnapshot
 
     public double? Ram { get; set; }
 
+    public ulong? MemoryUsedBytes { get; set; }
+
+    public ulong? MemoryTotalBytes { get; set; }
+
+    public double? DiskReadBytesPerSecond { get; set; }
+
+    public double? DiskWriteBytesPerSecond { get; set; }
+
+    public DateTimeOffset? TemperatureSampledAt { get; set; }
+
     public double? CpuTemp { get; set; }
 
     public double? GpuTemp { get; set; }
@@ -407,6 +448,11 @@ public sealed class SystemSnapshot
             Cpu = Cpu,
             Gpu = Gpu,
             Ram = Ram,
+            MemoryUsedBytes = MemoryUsedBytes,
+            MemoryTotalBytes = MemoryTotalBytes,
+            DiskReadBytesPerSecond = DiskReadBytesPerSecond,
+            DiskWriteBytesPerSecond = DiskWriteBytesPerSecond,
+            TemperatureSampledAt = TemperatureSampledAt,
             CpuTemp = CpuTemp,
             GpuTemp = GpuTemp,
             TemperatureSource = TemperatureSource,

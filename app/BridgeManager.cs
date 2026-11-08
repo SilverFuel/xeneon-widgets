@@ -306,6 +306,14 @@ public sealed class BridgeManager : IAsyncDisposable
         await _lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ThrowIfDisposed();
+            if (_listener is not null && (!_listener.IsListening || _serverTask?.IsCompleted != false))
+            {
+                // A listener can still report IsListening after its accept task
+                // has failed. Drain that lifetime before announcing a restart.
+                await StopCoreAsync().ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             StartCore();
         }
         finally
@@ -405,7 +413,7 @@ public sealed class BridgeManager : IAsyncDisposable
     {
         ThrowIfDisposed();
 
-        if (_listener?.IsListening == true)
+        if (_listener?.IsListening == true && _serverTask?.IsCompleted == false)
         {
             RaiseStatus("Connected to native dashboard server.");
             BridgeReady?.Invoke();
@@ -429,7 +437,7 @@ public sealed class BridgeManager : IAsyncDisposable
             listener.Close();
             _logger.Error($"Failed to bind native dashboard server to port {_configStore.Current.Port}.", error);
             throw new InvalidOperationException(
-                $"The native dashboard server could not bind to port {_configStore.Current.Port}. Stop any existing helper using that port and try again.",
+                $"The native dashboard server could not start on port {_configStore.Current.Port}: {error.Message} (Windows error {error.NativeErrorCode}). Check whether the port is in use and whether local service access is permitted.",
                 error);
         }
 
@@ -446,6 +454,18 @@ public sealed class BridgeManager : IAsyncDisposable
                 _logger.Error("Native dashboard server loop failed.", error);
                 BridgeStopped?.Invoke("Native dashboard server stopped unexpectedly.");
             });
+
+        if (_serverTask.IsCompleted)
+        {
+            // Immediate accept failure must not be followed by a ready event.
+            // Release the port now; StartAsync or disposal drains and disposes
+            // the retained lifetime before another listener can be created.
+            _serverCancellation.Cancel();
+            listener.Close();
+            throw new InvalidOperationException(
+                "The native dashboard server stopped during startup. Check the local host log for the underlying error.",
+                _serverTask.Exception);
+        }
 
         _logger.Info($"Native dashboard server listening on {BuildBaseUri(_configStore.Current.Port)}");
         RaiseStatus("Native dashboard server ready.");

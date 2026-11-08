@@ -9,6 +9,41 @@ namespace XenonEdgeHost.Tests;
 public sealed class NativeRequestServerTests
 {
     [Test]
+    public async Task UnexpectedListenerStop_ReportsServerFailure()
+    {
+        using var listener = StartListener(out _);
+        var requestErrors = new ConcurrentQueue<Exception>();
+        var serverErrors = new ConcurrentQueue<Exception>();
+        var server = NativeRequestServer.RunAsync(
+            listener, CancellationToken.None, 1, (_, _) => Task.CompletedTask,
+            requestErrors.Enqueue, serverErrors.Enqueue);
+
+        listener.Stop();
+        await server.WaitAsync(TimeSpan.FromSeconds(3));
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(requestErrors, Is.Empty);
+            Assert.That(serverErrors, Has.Count.EqualTo(1),
+                "An unexpected accept failure must notify the host instead of leaving it marked ready.");
+        }));
+    }
+
+    [Test]
+    public async Task AlreadyStoppedListener_ReportsServerFailure()
+    {
+        using var listener = StartListener(out _);
+        listener.Stop();
+        var serverErrors = new ConcurrentQueue<Exception>();
+
+        await NativeRequestServer.RunAsync(
+            listener, CancellationToken.None, 1, (_, _) => Task.CompletedTask,
+            _ => Assert.Fail("No request should have been dispatched."), serverErrors.Enqueue);
+
+        Assert.That(serverErrors, Has.Count.EqualTo(1));
+    }
+
+    [Test]
     public async Task IdleShutdown_DoesNotRequireTheStartingUiContextToPump()
     {
         using var listener = StartListener(out _);

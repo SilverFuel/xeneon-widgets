@@ -220,7 +220,7 @@ assert(
     && /networkStateAudits\.length === 2[\s\S]*"linked,review"/.test(renderedDashboardTest)
     && /async function validateNetworkLayoutEditorPersistence\(cdp\)/.test(renderedDashboardTest)
     && /await validateNetworkLayoutEditorPersistence\(cdp\)/.test(renderedDashboardTest),
-  "rendered product-surface checks must cover all 24 surfaces at every representative viewport with early runtime, focus, scroll, wide-only distance gates, and the full Network boundary/state/persistence matrix"
+  "rendered product-surface checks must cover all 25 surfaces at every representative viewport with early runtime, focus, scroll, wide-only distance gates, and the full Network boundary/state/persistence matrix"
 );
 assert(
   /GetHealthStatus\(\s*ClipboardPrivacyOptions\.FromDashboard\(config\.Dashboard\)\)/.test(readWorkspaceFile("app/Controllers/TelemetryController.cs"))

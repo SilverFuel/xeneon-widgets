@@ -122,6 +122,8 @@
     var notice = "";
     var undo = null;
     var pendingImport = null;
+    var importRequestId = 0;
+    var readingImport = false;
     var originalUnreadable = null;
     var disposed = false;
     var storageWritable = true;
@@ -159,13 +161,21 @@
 
     function save(message, keepUndo) {
       if (!keepUndo) undo = null;
-      var importCancelled = Boolean(pendingImport);
+      var importCancelled = Boolean(pendingImport) || readingImport;
+      importRequestId += 1;
+      readingImport = false;
       pendingImport = null;
       notice = (importCancelled ? "Import cancelled because the journal changed. " : "") + (message || "");
       if (storageWritable) {
         try {
           window.localStorage.setItem(STORAGE_KEY, JSON.stringify(journal));
           storageProblem = "";
+          // Keep the original recovery export until its replacement is durable.
+          if (originalUnreadable !== null) {
+            originalUnreadable = null;
+            var recovery = query(".wow-recovery");
+            if (recovery) recovery.remove();
+          }
         } catch (error) {
           storageProblem = "Changes are not saved. Local storage is unavailable or full. Export your journal before leaving.";
         }
@@ -319,9 +329,16 @@
         var file = target.files && target.files[0];
         target.value = "";
         if (!file) return;
+        var requestId = ++importRequestId;
+        pendingImport = null;
+        readingImport = false;
         if (file.size > MAX_FILE_BYTES) { notice = "This file is too large. Choose an exported journal smaller than 256 KB."; showNotice(); return; }
+        readingImport = true;
+        notice = "Reading journal backup.";
+        showNotice();
         file.text().then(function (contents) {
-          if (disposed) return;
+          if (disposed || requestId !== importRequestId) return;
+          readingImport = false;
           try {
             pendingImport = validateJournal(JSON.parse(contents));
             notice = "Review your backup before replacing the current journal.";
@@ -333,7 +350,12 @@
             showNotice();
           }
         }).catch(function () {
-          if (!disposed) { notice = "The backup could not be read. Choose the file again."; showNotice(); }
+          if (!disposed && requestId === importRequestId) {
+            readingImport = false;
+            pendingImport = null;
+            notice = "The backup could not be read. Choose the file again.";
+            showNotice();
+          }
         });
       }
     });
@@ -398,7 +420,7 @@
           break;
         case "export": download(JSON.stringify(journal, null, 2), "wow-forever-journal-" + new Date().toISOString().slice(0, 10) + ".json"); break;
         case "import": query(".wow-backup-file").click(); break;
-        case "cancel-import": pendingImport = null; notice = "Import cancelled. Your journal is unchanged."; showNotice(); query('[data-wow-action="import"]').focus(); break;
+        case "cancel-import": importRequestId += 1; readingImport = false; pendingImport = null; notice = "Import cancelled. Your journal is unchanged."; showNotice(); query('[data-wow-action="import"]').focus(); break;
         case "confirm-import":
           if (!pendingImport) break;
           var previous = journal;
@@ -406,7 +428,6 @@
           journal = pendingImport;
           pendingImport = null;
           storageWritable = true;
-          originalUnreadable = null;
           undo = wasRecovery ? null : function () { journal = previous; };
           save("Backup imported.", true);
           render();
@@ -416,7 +437,6 @@
         case "new-journal":
           if (target.dataset.confirm !== "true") { target.dataset.confirm = "true"; target.textContent = "Confirm replacement"; notice = "This replaces unreadable saved data. Export a recovery copy first if you want to keep it."; showNotice(); break; }
           storageWritable = true;
-          originalUnreadable = null;
           journal = freshJournal();
           save("New journal started.");
           render();

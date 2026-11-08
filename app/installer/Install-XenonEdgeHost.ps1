@@ -99,7 +99,14 @@ function Stop-RunningHost {
 
     Write-Info "Stopped running XenonEdgeHost process before replacing files."
   } catch {
-    throw "Could not stop the running XenonEdgeHost process. Close the app and run setup again."
+    # A host can exit between discovery and Stop-Process. Only fail setup if
+    # one of the original processes is still alive, and retain the cause.
+    $stopError = $_.Exception.Message
+    $remainingIds = @($processIds | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+    if ($remainingIds.Count -eq 0) {
+      return
+    }
+    throw "Could not stop the running XenonEdgeHost process (PID: $($remainingIds -join ', ')). Close Auxora from its tray menu or Task Manager and run setup again. Windows reported: $stopError"
   }
 }
 

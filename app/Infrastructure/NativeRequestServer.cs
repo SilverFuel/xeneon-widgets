@@ -24,11 +24,11 @@ internal static class NativeRequestServer
                     // requests nor draining them may depend on that thread's context.
                     context = await listener.GetContextAsync().ConfigureAwait(false);
                 }
-                catch (HttpListenerException)
+                catch (HttpListenerException) when (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
-                catch (ObjectDisposedException)
+                catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
@@ -51,6 +51,11 @@ internal static class NativeRequestServer
                     AbortResponse(context.Response);
                     break;
                 }
+            }
+
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                throw new InvalidOperationException("The native dashboard listener stopped without a shutdown request.");
             }
         }
         catch (Exception error)

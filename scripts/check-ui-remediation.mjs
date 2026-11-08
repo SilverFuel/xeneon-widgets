@@ -62,7 +62,7 @@ const canonicalIds = [
   "home", "scenes", "setup", "theme-studio", "updates", "layout-editor", "streaming",
   "marketplace", "privacy", "remote", "installer", "game-mode", "system", "network",
   "audio", "quick-actions", "shortcuts", "display-controls", "clipboard", "weather",
-  "calendar", "hue", "frigate", "wow-forever"
+  "calendar", "hue", "frigate", "wow-forever", "tmog"
 ];
 for (const id of canonicalIds) {
   assert(new RegExp(`(?:^|\\n)\\s*(?:"${id}"|${id.replaceAll("-", "\\-")}): \\{ destination:`).test(dashboard), `surface contract missing for ${id}`);
@@ -72,7 +72,7 @@ assert(/return sortWidgetsByLayout\(ids\.map\(getWidgetById\)\.filter\([\s\S]*?s
 assert(/modeLayouts/.test(dashboard) && /getCardSize\(widget\.id\)/.test(dashboard), "Mode layout order and card sizes must affect production navigation");
 assert(!/layout:\s*\[[^\]]*"(?:nas|plex|unifi-camera|automation)"/.test(product), "shipped packs must not reference unregistered planned panels");
 
-const rendererSources = [system, network, audio, actions, homelab, integrations, setup, product, gameMode, wowForever].join("\n");
+const rendererSources = [system, network, audio, actions, homelab, integrations, setup, product, gameMode, wowForever, read("js/widgets/tmog-companion.js")].join("\n");
 for (const id of canonicalIds) {
   assert(new RegExp(`registerRenderer\\("${id.replaceAll("-", "\\-")}"`).test(rendererSources), `shipped surface ${id} must have a registered inline renderer`);
 }

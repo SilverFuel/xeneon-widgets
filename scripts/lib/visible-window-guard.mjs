@@ -198,6 +198,7 @@ async function startVisibleWindowGuard() {
   let stderrBuffer = "";
   let ready = false;
   let resultSettled = false;
+  let pendingResult;
   let resolveReady;
   let rejectReady;
   let resolveResult;
@@ -210,60 +211,79 @@ async function startVisibleWindowGuard() {
     resolveResult = resolvePromise;
     rejectResult = rejectPromise;
   });
+  // Startup may fail before the caller receives resultPromise.
+  resultPromise.catch(() => {});
+  const readyTimeout = setTimeout(() => {
+    rejectReady(new Error(`visible-window guard did not initialize within 20 seconds: ${stderrBuffer.trim() || "no diagnostic output"}`));
+    watcher.kill();
+  }, 20000);
 
   watcher.stderr.on("data", chunk => {
     stderrBuffer += String(chunk);
   });
+  watcher.stdin.on("error", error => {
+    rejectReady(error);
+    rejectResult(error);
+  });
+  function consumeLine(line) {
+    line = line.trim();
+    if (line === "AUXORA_VISIBLE_WINDOW_GUARD_READY") {
+      ready = true;
+      resolveReady();
+    } else if (line.startsWith("{")) {
+      try {
+        pendingResult = JSON.parse(line);
+      } catch (error) {
+        resultSettled = true;
+        rejectResult(new Error(`visible-window guard returned invalid JSON: ${error.message}`));
+      }
+    }
+  }
   watcher.stdout.on("data", chunk => {
     stdoutBuffer += String(chunk);
     const lines = stdoutBuffer.split(/\r?\n/);
     stdoutBuffer = lines.pop() || "";
-    for (const line of lines.map(value => value.trim()).filter(Boolean)) {
-      if (line === "AUXORA_VISIBLE_WINDOW_GUARD_READY") {
-        ready = true;
-        resolveReady();
-        continue;
-      }
-      if (line.startsWith("{")) {
-        try {
-          resultSettled = true;
-          resolveResult(JSON.parse(line));
-        } catch (error) {
-          resultSettled = true;
-          rejectResult(new Error(`visible-window guard returned invalid JSON: ${error.message}`));
-        }
-      }
-    }
+    for (const line of lines) consumeLine(line);
   });
   watcher.once("error", error => {
     resultSettled = true;
     rejectReady(error);
     rejectResult(error);
   });
-  watcher.once("exit", code => {
+  // 'exit' can arrive before the final stdout chunk. 'close' follows stream
+  // drainage, so a valid probe result cannot be mistaken for missing output.
+  watcher.once("close", code => {
+    if (stdoutBuffer.trim()) consumeLine(stdoutBuffer);
     if (!ready) {
       rejectReady(new Error(`visible-window guard exited before ready (code ${code}): ${stderrBuffer.trim()}`));
     }
     if (code !== 0) {
       resultSettled = true;
       rejectResult(new Error(`visible-window guard exited with code ${code}: ${stderrBuffer.trim()}`));
+    } else if (!resultSettled && pendingResult) {
+      resultSettled = true;
+      resolveResult(pendingResult);
     } else if (!resultSettled) {
       resultSettled = true;
       rejectResult(new Error(`visible-window guard exited without a result: ${stderrBuffer.trim()}`));
     }
   });
 
-  await readyPromise;
+  try {
+    await readyPromise;
+  } finally {
+    clearTimeout(readyTimeout);
+  }
   return { process: watcher, resultPromise, attached: false, stopped: false };
 }
 
 async function abortVisibleWindowGuard(guard) {
   if (!guard.stopped) {
     guard.stopped = true;
-    guard.process.stdin.end("ABORT\n");
+    if (!guard.process.stdin.destroyed) guard.process.stdin.end("ABORT\n");
   }
   try {
-    await guard.resultPromise;
+    await waitForGuardResult(guard, "aborted launch");
   } catch {
     // Preserve the process-launch error that caused this cleanup path.
   }
@@ -271,8 +291,15 @@ async function abortVisibleWindowGuard(guard) {
 
 export async function spawnWithVisibleWindowGuard(executable, args, options) {
   const guard = await startVisibleWindowGuard();
+  let child;
   try {
-    const child = spawn(executable, args, options);
+    child = spawn(executable, args, options);
+    // Failed spawn is reported asynchronously. Install its error handler before
+    // awaiting guard cleanup, otherwise ENOENT can terminate the test runner.
+    await new Promise((resolveSpawn, rejectSpawn) => {
+      child.once("spawn", resolveSpawn);
+      child.once("error", rejectSpawn);
+    });
     if (!Number.isInteger(child.pid) || child.pid <= 0) {
       await abortVisibleWindowGuard(guard);
       throw new Error("guarded process did not publish a Windows process ID");
@@ -281,9 +308,23 @@ export async function spawnWithVisibleWindowGuard(executable, args, options) {
     guard.process.stdin.write(`${child.pid}\n`);
     return { child, guard };
   } catch (error) {
+    if (child?.pid && child.exitCode === null && !child.killed) child.kill();
     await abortVisibleWindowGuard(guard);
     throw error;
   }
+}
+
+async function waitForGuardResult(guard, label) {
+  let stopTimeout;
+  return await Promise.race([
+    guard.resultPromise,
+    new Promise((_, reject) => {
+      stopTimeout = setTimeout(() => {
+        guard.process.kill();
+        reject(new Error(`${label} visible-window guard did not stop within 10 seconds`));
+      }, 10000);
+    })
+  ]).finally(() => clearTimeout(stopTimeout));
 }
 
 export async function stopVisibleWindowGuard(guard, label) {
@@ -296,7 +337,7 @@ export async function stopVisibleWindowGuard(guard, label) {
       guard.process.stdin.end("STOP\n");
     }
   }
-  const result = await guard.resultPromise;
+  const result = await waitForGuardResult(guard, label);
   if (result.timedOut) {
     throw new Error(`${label} visible-window guard timed out after ${result.sampleCount || 0} samples`);
   }
@@ -316,11 +357,14 @@ if (process.argv.includes("--self-test")) {
     ["-NoProfile", "-NonInteractive", "-Command", "[System.Threading.Thread]::Sleep(1500)"],
     { stdio: "ignore", windowsHide: true }
   );
-  await new Promise(resolveDelay => setTimeout(resolveDelay, 750));
-  await stopVisibleWindowGuard(guard, "guard self-test process");
-  await new Promise((resolveExit, rejectExit) => {
+  const childExit = new Promise((resolveExit, rejectExit) => {
+    if (child.exitCode !== null || child.signalCode !== null) return resolveExit();
     child.once("exit", resolveExit);
     child.once("error", rejectExit);
   });
+  childExit.catch(() => {});
+  await new Promise(resolveDelay => setTimeout(resolveDelay, 750));
+  await stopVisibleWindowGuard(guard, "guard self-test process");
+  await childExit;
   console.log("visible-window guard self-test passed");
 }

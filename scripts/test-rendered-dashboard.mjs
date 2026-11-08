@@ -166,6 +166,10 @@ async function waitForHost(child, readDiagnostics) {
   const deadline = Date.now() + 60000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`native host exited with code ${child.exitCode}`);
+    const startupDiagnostics = typeof readDiagnostics === "function" ? readDiagnostics() : {};
+    if (startupDiagnostics.hostLog?.includes("Host initialization failed")) {
+      throw new Error(`native host initialization failed: ${JSON.stringify(startupDiagnostics)}`);
+    }
     try {
       const response = await fetch(`${baseUrl}/api/config`, { signal: AbortSignal.timeout(5000) });
       if (response.ok) return;
@@ -1947,7 +1951,7 @@ async function validateFavoritesNavigation(cdp) {
   const expectedIds = [
     "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather", "wow-forever"
+    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
   ];
   const defaults = ["system", "audio", "network", "quick-actions"];
   const storageKey = "auxora-dashboard-favorites-v1";
@@ -2439,7 +2443,7 @@ async function checkQuickControlsInPage(deep) {
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames();
   check(drawer.classList.contains("is-hidden") && document.activeElement === opener, "Escape did not close Quick and restore its opener");
   query("#dashboard-panels-toggle").click(); await frames();
-  check(!query("#dashboard-panels-drawer").classList.contains("is-hidden") && document.querySelectorAll("#dashboard-widget-picker [data-widget-id]").length >= 24, "Quick controls broke access to All panels");
+  check(!query("#dashboard-panels-drawer").classList.contains("is-hidden") && document.querySelectorAll("#dashboard-widget-picker [data-widget-id]").length >= 25, "Quick controls broke access to All panels");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames();
   check(fixture.unexpected.length === 0, "Unexpected audio/media endpoint was safely blocked: " + JSON.stringify(fixture.unexpected));
   check((window.__auxoraRenderedRuntimeErrors || []).length === 0, "Quick controls emitted runtime errors: " + JSON.stringify(window.__auxoraRenderedRuntimeErrors));
@@ -3573,7 +3577,7 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
   const expectedIds = [
     "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather", "wow-forever"
+    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
   ];
   const actualIds = (audit.results || []).map(result => result.id).sort();
   const viewportLabel = `${viewport.name} ${viewport.width}x${viewport.height}`;
@@ -3897,7 +3901,7 @@ async function validateForcedColorsProductSurfaces(cdp) {
   const expectedIds = [
     "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
     "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "updates", "weather", "wow-forever"
+    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
   ];
   const actualIds = (audit.results || []).map(result => result.id).sort();
   assert(audit.mediaActive && audit.ambientHidden, `forced-colors dashboard media contract failed: ${JSON.stringify(audit)}`);
@@ -4155,7 +4159,7 @@ async function validateStandaloneFallbacks(cdp) {
 }
 
 assert(process.platform === "win32", "rendered dashboard test requires Windows");
-assert(hostExecutable, "Release native host is missing; build app/XenonEdgeHost.sln first");
+assert(existsSync(hostExecutable), "Release native host is missing; build app/XenonEdgeHost.sln first");
 assert(browserExecutable, "System Edge or Chrome is required for rendered dashboard testing");
 assert(typeof WebSocket === "function", "Node.js with built-in WebSocket support is required");
 
@@ -4173,6 +4177,7 @@ mkdirSync(configDirectory, { recursive: true });
 writeFileSync(join(configDirectory, "config.json"), JSON.stringify({ port: hostPort }));
 const debugPort = await reserveLocalPort();
 const mockFrigate = await startMockFrigate();
+console.log("rendered dashboard: starting isolated host and window guard");
 const guardedHost = await spawnWithVisibleWindowGuard(hostExecutable, ["--safe-mode"], {
   cwd: resolve(repoRoot, "app"),
   env: {
@@ -4197,6 +4202,7 @@ const readHostDiagnostics = captureChildOutput(host, join(local, "Auxora", "logs
 let browser;
 
 try {
+  console.log("rendered dashboard: waiting for native HTTP service");
   await waitForHost(host, readHostDiagnostics);
   assert(existsSync(join(local, "Auxora", "logs", "host.log")), "rendered host did not use the explicit isolated local-data root");
   assert(existsSync(join(roaming, "Auxora", "config.json")), "rendered host did not use the explicit isolated roaming-data root");
@@ -4359,7 +4365,7 @@ try {
     cdp.close();
   }
   console.log(surfaceOnlyViewport
-    ? `launched isolated hidden native host and checked all 24 product surfaces at ${surfaceOnlyViewport.width}x${surfaceOnlyViewport.height}`
+    ? `launched isolated hidden native host and checked all 25 product surfaces at ${surfaceOnlyViewport.width}x${surfaceOnlyViewport.height}`
     : process.argv.includes("--quick-controls-only")
     ? "launched isolated hidden native host and checked direct Quick controls with hardware-isolated fixtures at four viewports"
     : process.argv.includes("--favorites-only")
