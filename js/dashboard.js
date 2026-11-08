@@ -4026,12 +4026,13 @@
     return "home";
   }
 
-  function resolveInitialWidget(preferredWidgetId, explicitWidgetParam) {
+  function resolveInitialWidget(preferredWidgetId, explicitWidgetParam, storedDestination) {
+    var destination = storedDestination === undefined ? primaryDestination : storedDestination;
     var selection = navigation.resolveNavigation({
       requestedWidget: explicitWidgetParam ? preferredWidgetId : "",
       onboardingCompleted: perfMode || bridgeSetup.onboardingCompleted,
-      storedDestination: primaryDestination,
-      lastWidget: preferredWidgetId || (primaryDestination === "library" ? destinationPanels.library : "") || readStoredWidget(lastPrimaryWidgetStorageKey),
+      storedDestination: destination,
+      lastWidget: preferredWidgetId || (destination === "library" ? destinationPanels.library : "") || readStoredWidget(lastPrimaryWidgetStorageKey),
       sectionPanels: destinationPanels
     });
     primaryDestination = selection.sectionId;
@@ -4236,7 +4237,7 @@
       }
 
       if (settings.resolveInitialWidget) {
-        currentWidgetId = resolveInitialWidget(settings.preferredWidgetId, settings.explicitWidgetParam);
+        currentWidgetId = resolveInitialWidget(settings.preferredWidgetId, settings.explicitWidgetParam, settings.storedDestination);
         persistWidgetChoice(currentWidgetId);
         renderPrimaryNavigation();
       } else if (settings.moveOffSetup && currentWidgetId === "setup" && bridgeSetup.onboardingCompleted) {
@@ -4264,12 +4265,16 @@
   }
 
   function checkBridgeAndRender(preferredWidgetId, explicitWidgetParam) {
+    // Loading setup may temporarily select Settings. Hydration must resolve
+    // against the saved startup destination, rather than that temporary screen.
+    var startupDestination = primaryDestination;
     renderOriginStatus();
     currentWidgetId = resolveInitialWidget(preferredWidgetId, explicitWidgetParam);
     return refreshBridgeState({
       resolveInitialWidget: true,
       preferredWidgetId: preferredWidgetId,
-      explicitWidgetParam: explicitWidgetParam
+      explicitWidgetParam: explicitWidgetParam,
+      storedDestination: startupDestination
     });
   }
 

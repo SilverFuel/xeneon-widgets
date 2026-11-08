@@ -201,7 +201,7 @@ test("hiding every configurable section preserves all deep links and automatic g
 function selectionHarness(panel) {
   const context = {
     navigation, widgets: canonicalIds.map(id => ({ id })),
-    currentWidgetId: panel, primaryDestination: navigation.sectionForWidget(panel),
+    currentWidgetId: panel, primaryDestination: navigation.sectionForWidget(panel), destinationPanels: {},
     perfMode: false, bridgeReachable: true, bridgeOrigin: "http://127.0.0.1:8976", widgetBase: "http://127.0.0.1:8976",
     lastPrimaryWidgetStorageKey: "last", widgetStorageKey: "current", lastBridgeSnapshotKey: "", bridgeSetup: { onboardingCompleted: false },
     readStoredWidget: () => panel, rendered: [], selected: [], feedback: [], gameFacePreviousWidgetId: "", gameActivity: { activeGameId: "fixture-game" },
@@ -221,8 +221,8 @@ function selectionHarness(panel) {
   };
   const functions = extractBetween(dashboard, "  function getWidgetById(", "  function getSchemaForWidget(")
     + extractBetween(dashboard, "  function renderCurrentSelection(", "  function resolveInitialWidget(")
-    + extractBetween(dashboard, "  function selectWidget(", "  function showLocalhostWarning(")
-    + extractBetween(dashboard, "  function refreshBridgeState(", "  function checkBridgeAndRender(");
+    + extractBetween(dashboard, "  function resolveInitialWidget(", "  function showLocalhostWarning(")
+    + extractBetween(dashboard, "  function refreshBridgeState(", '  window.addEventListener("error"');
   runInNewContext(functions, context);
   return context;
 }
@@ -265,4 +265,31 @@ test("rendering a known panel derives its section instead of displacing the requ
   invalid.renderCurrentSelection(true);
   assert.equal(invalid.currentWidgetId, "home");
   assert.equal(invalid.primaryDestination, "home");
+});
+
+test("host hydration preserves saved startup intent across the temporary setup screen", async () => {
+  for (const [destination, lastWidget, section, panel] of [
+    ["scenes", "scenes", "home", "home"],
+    ["library", "audio", "media", "audio"],
+    ["library", "wow-forever", "gaming", "wow-forever"],
+    ["settings", "updates", "settings", "updates"],
+    ["home", "system", "home", "home"]
+  ]) {
+    const context = selectionHarness(lastWidget);
+    context.primaryDestination = destination;
+    await context.checkBridgeAndRender(lastWidget, false);
+    assert.equal(context.currentWidgetId, panel, destination);
+    assert.equal(context.primaryDestination, section, destination);
+    assert.deepEqual(context.rendered, [panel]);
+  }
+  const deepLink = selectionHarness("network");
+  deepLink.primaryDestination = "settings";
+  await deepLink.checkBridgeAndRender("network", true);
+  assert.equal(deepLink.currentWidgetId, "network");
+  assert.equal(deepLink.primaryDestination, "pc");
+  const incomplete = selectionHarness("home");
+  incomplete.applyBridgeState = () => {};
+  await incomplete.checkBridgeAndRender("home", false);
+  assert.equal(incomplete.currentWidgetId, "setup");
+  assert.equal(incomplete.primaryDestination, "settings");
 });
