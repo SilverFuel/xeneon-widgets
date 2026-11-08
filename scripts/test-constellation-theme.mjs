@@ -372,3 +372,49 @@ test(fixtureCase.label + " fixture isolates full Audio reads and blocks unexpect
   assert.equal(liveFetches, 0);
 });
 }
+
+test("synthetic Mode activation stays authoritative during evaluation and late config reads", async () => {
+  const source = read("./test-rendered-dashboard.mjs");
+  const start = source.indexOf("function installLegacyModeAuthorityFixture() {");
+  const end = source.indexOf("async function validateLegacyLayoutPreservation(", start);
+  assert.ok(start >= 0 && end > start);
+  const helper = source.slice(start, end) + "\ninstallLegacyModeAuthorityFixture();";
+  const nativeScene = { activeSceneId: "scene-work", activeScene: { id: "scene-work" }, profiles: [{ id: "scene-work" }, { id: "scene-gaming" }] };
+  const nativeRequests = [];
+  let holdConfig = false, releaseConfig;
+  const window = { fetch: async (input, options) => {
+    const path = new URL(String(input), "http://127.0.0.1:18799").pathname;
+    const method = options?.method || "GET";
+    nativeRequests.push({ path, method });
+    if (path === "/api/config" && method === "GET") {
+      if (holdConfig) await new Promise(resolve => { releaseConfig = resolve; });
+      return new Response(JSON.stringify({ scenes: nativeScene, dashboard: { onboardingCompleted: true } }));
+    }
+    throw new Error("Unexpected native request: " + method + " " + path);
+  } };
+  const context = { window, URL, Response, location: { href: "http://127.0.0.1:18799/dashboard.html?legacyLayout=mode", origin: "http://127.0.0.1:18799" } };
+  runInNewContext(helper, context);
+  assert.equal((await window.fetch("/api/scenes/evaluate", { method: "POST" })).status, 503);
+  assert.equal(nativeRequests.length, 0, "Initializing the fixture must not evaluate a real Mode");
+  await window.fetch("/api/config");
+  const fixture = window.__legacyModeAuthorityFixture;
+  const gaming = { ...nativeScene, activeSceneId: "scene-gaming", activeScene: { id: "scene-gaming" }, manualOverrideActive: true };
+  fixture.scenes = gaming;
+  assert.equal((await (await window.fetch("/api/scenes")).json()).activeSceneId, "scene-gaming");
+  assert.equal((await (await window.fetch("/api/scenes/evaluate", { method: "POST" })).json()).activeSceneId, "scene-gaming");
+  holdConfig = true;
+  const lateConfig = window.fetch("/api/config");
+  fixture.scenes = { ...gaming, manualOverrideMinutesRemaining: 120 };
+  releaseConfig();
+  const config = await (await lateConfig).json();
+  assert.equal(config.scenes.activeSceneId, "scene-gaming", "A late native read must not replace the synthetic activation");
+  assert.equal(config.scenes.manualOverrideMinutesRemaining, 120);
+  assert.equal(config.dashboard.onboardingCompleted, true, "Unrelated native configuration remains real");
+  assert.equal(nativeScene.activeSceneId, "scene-work", "The test must not mutate the native host");
+  assert.equal(fixture.evaluations, 2);
+  assert.deepEqual(nativeRequests, [{ path: "/api/config", method: "GET" }, { path: "/api/config", method: "GET" }]);
+  const untouchedFetch = () => {};
+  const otherPage = { window: { fetch: untouchedFetch }, URL, location: { href: "http://127.0.0.1:18799/dashboard.html?legacyLayout=reload" } };
+  runInNewContext(helper, otherPage);
+  assert.equal(otherPage.window.fetch, untouchedFetch, "Other acceptance pages retain their real authority");
+});

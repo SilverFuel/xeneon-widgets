@@ -3427,6 +3427,40 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
   console.log(`rendered all ${actualIds.length} visible product surfaces at ${viewport.width}x${viewport.height} with terminal status, focus, touch, text, naming, and overflow checks: passed`);
 }
 
+function installLegacyModeAuthorityFixture() {
+  if (new URL(location.href).searchParams.get("legacyLayout") !== "mode") return;
+  const originalFetch = window.fetch;
+  const fixture = window.__legacyModeAuthorityFixture = { scenes: null, evaluations: 0 };
+  const response = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
+  window.fetch = function (input, options) {
+    const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
+    const method = String(options?.method || input?.method || "GET").toUpperCase();
+    if (url.origin !== location.origin) return originalFetch.apply(this, arguments);
+    if (url.pathname === "/api/scenes/evaluate" && method === "POST") {
+      // The activation below is synthetic, so background evaluation must observe
+      // the same authority and must never mutate the real isolated host.
+      fixture.evaluations += 1;
+      return Promise.resolve(response(fixture.scenes || { message: "Mode fixture is initializing" }, fixture.scenes ? 200 : 503));
+    }
+    if (url.pathname === "/api/scenes" && method === "GET" && fixture.scenes) {
+      return Promise.resolve(response(fixture.scenes));
+    }
+    if (method === "GET" && (url.pathname === "/api/config" || url.pathname === "/api/scenes")) {
+      return originalFetch.apply(this, arguments).then(async result => {
+        const payload = await result.json();
+        if (url.pathname === "/api/config") {
+          if (!fixture.scenes && payload.scenes) fixture.scenes = payload.scenes;
+          if (fixture.scenes) payload.scenes = fixture.scenes;
+          return response(payload, result.status);
+        }
+        if (!fixture.scenes) fixture.scenes = payload;
+        return response(fixture.scenes, result.status);
+      });
+    }
+    return originalFetch.apply(this, arguments);
+  };
+}
+
 async function validateLegacyLayoutPreservation(cdp) {
   await cdp.send('Storage.clearDataForOrigin', { origin: baseUrl, storageTypes: 'all' });
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 2048, height: 720, deviceScaleFactor: 1, mobile: false });
@@ -3447,6 +3481,7 @@ async function validateLegacyLayoutPreservation(cdp) {
   })()`, awaitPromise: true, returnByValue: true });
   assert(!seed.exceptionDetails && seed.result?.value?.modeLayouts, 'Could not seed legacy layout fixture');
   const expected = seed.result.value;
+  const authorityFixture = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `(${installLegacyModeAuthorityFixture.toString()})()` });
   await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=network&legacyLayout=mode` });
   await waitForCommittedUrl(cdp, 'legacyLayout=mode');
   const evaluation = await cdp.send('Runtime.evaluate', { expression: `(async () => {
@@ -3467,6 +3502,9 @@ async function validateLegacyLayoutPreservation(cdp) {
     const originalFetch = window.fetch;
     let scenes = await originalFetch('/api/scenes').then(response => response.json());
     scenes = { ...scenes, themeVariant: 'standard', profiles: scenes.profiles.filter(scene => scene.id !== 'scene-night') };
+    const authority = window.__legacyModeAuthorityFixture;
+    check(authority, 'Legacy Mode authority fixture was not installed before startup');
+    authority.scenes = scenes;
     let calls = 0; let nightCalls = 0; let release;
     const responseGate = new Promise(resolve => { release = resolve; });
     window.fetch = async (input, init) => {
@@ -3484,6 +3522,7 @@ async function validateLegacyLayoutPreservation(cdp) {
         await responseGate;
         const activeScene = scenes.profiles.find(scene => scene.id === payload.sceneId);
         scenes = { ...scenes, activeSceneId: payload.sceneId, activeScene, manualOverrideActive: true, automaticSwitchingActive: false };
+        authority.scenes = scenes;
         return new Response(JSON.stringify(scenes), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (url.pathname === '/api/scenes') return new Response(JSON.stringify(scenes), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -3527,6 +3566,7 @@ async function validateLegacyLayoutPreservation(cdp) {
       return { before, after, calls, nightCalls, modeLayouts: settings.modeLayouts, cardSizes: settings.cardSizes, errors: window.__auxoraRenderedRuntimeErrors || [] };
     } finally { release(); window.fetch = originalFetch; }
   })()`, awaitPromise: true, returnByValue: true });
+  await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: authorityFixture.identifier });
   const result = evaluation.result?.value;
   assert(!evaluation.exceptionDetails && result?.calls === 1 && result.nightCalls === 0 && result.errors.length === 0, `Legacy layout/header Mode fixture: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
   assert(result.modeLayouts === expected.modeLayouts && result.cardSizes === expected.cardSizes, `Mode/navigation changed preserved legacy layout data: ${JSON.stringify(result)}`);

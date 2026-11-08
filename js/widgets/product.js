@@ -1696,6 +1696,7 @@
         "Keep a stream-ready control surface nearby. This beta only verifies local OBS reachability; it does not issue OBS commands.",
         state.statusText,
         state.statusTone,
+        '<p class="inline-copy">This beta checks a local OBS connection. It does not issue OBS commands.</p>' +
         '<form class="inline-form product-control-panel" data-form="streaming">' +
           '<div class="inline-form-grid inline-form-grid--2">' +
             '<label class="inline-field"><span>OBS address</span><input class="inline-input" type="text" name="obsEndpoint" value="' + escapeHtml(endpoint) + '" placeholder="ws://127.0.0.1:4455"></label>' +
