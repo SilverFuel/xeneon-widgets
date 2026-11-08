@@ -860,6 +860,10 @@ function browserProbeThemeState(tokens, aliases) {
     bodyVariant: body?.getAttribute("data-theme-variant") || "",
     missingTokens,
     aliasMismatches,
+    tokenValues,
+    bodyTokenValues,
+    rootColorScheme: normalize(getComputedStyle(root).colorScheme),
+    bodyColorScheme: normalize(getComputedStyle(body).colorScheme),
     variantValues,
     variantSignature: Object.values(variantValues).join("|"),
     signature: ["--theme-page", "--theme-surface-primary", "--theme-accent", "--theme-focus-ring"]
@@ -1167,24 +1171,48 @@ function explicitSettings(themeId, variant, overrides = {}) {
   };
 }
 
+function assertNightThemeContract(probe, standardProbe, label) {
+  assert(standardProbe, `${label}: standard theme baseline is missing`);
+  assert(probe.rootTheme === standardProbe.rootTheme && probe.bodyTheme === standardProbe.bodyTheme,
+    `${label}: Night must retain the selected theme on root and body`);
+  assert(probe.rootVariant === "night" && probe.bodyVariant === "night", `${label}: Night must reach root and body`);
+  const nightSurfaces = {
+    "--theme-page": "#0c1726",
+    "--theme-surface-primary": "#132238",
+    "--theme-surface-secondary": "#101d30",
+    "--theme-surface-elevated": "#1b304d"
+  };
+  for (const [name, expected] of Object.entries(nightSurfaces)) {
+    assert(probe.tokenValues[name] === expected && probe.bodyTokenValues[name] === expected,
+      `${label}: Night ${name} must be ${expected} on root and body: ${JSON.stringify({ root: probe.tokenValues[name], body: probe.bodyTokenValues[name] })}`);
+  }
+  for (const name of ["--theme-accent", "--theme-accent-secondary"]) {
+    assert(probe.tokenValues[name] === standardProbe.tokenValues[name]
+      && probe.bodyTokenValues[name] === standardProbe.bodyTokenValues[name],
+    `${label}: Night must retain the selected theme's raw ${name}`);
+  }
+  assert(probe.rootColorScheme === "dark" && probe.bodyColorScheme === "dark", `${label}: Night controls must use a dark color scheme`);
+  assert(probe.signature !== standardProbe.signature, `${label}: Night did not switch to its dark surface palette`);
+}
+
 async function runPageMatrix() {
   for (const page of standalonePages) {
     for (const viewport of viewports) {
       await setViewport(viewport);
       const signatures = new Map();
       for (const themeId of themeIds) {
-        let standardSignature = "";
+        let standardProbe = null;
         let standardVariantSignature = "";
         for (const variant of variants) {
           const label = `${page} ${viewport.width}x${viewport.height} ${themeId}/${variant}`;
           await navigateSeeded(page, explicitSettings(themeId, variant), label);
           const probe = await probeThemeState(themeId, variant, label);
           if (variant === "standard") {
-            standardSignature = probe.signature;
+            standardProbe = probe;
             standardVariantSignature = probe.variantSignature;
             signatures.set(themeId, probe.signature);
           } else {
-            assert(probe.signature === standardSignature, `${label}: night variant replaced the selected ${themeId} token signature`);
+            assertNightThemeContract(probe, standardProbe, label);
             assert(probe.variantSignature !== standardVariantSignature, `${label}: night-specific presentation tokens did not change`);
             assert(
               probe.variantValues.motionScale === "0"

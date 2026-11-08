@@ -145,7 +145,7 @@
 
 .system-stat-card[data-tone="good"] .system-stat-value,
 .system-health-card[data-tone="good"] strong {
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
 }
 
 .system-stat-card[data-tone="warn"] .system-stat-value,

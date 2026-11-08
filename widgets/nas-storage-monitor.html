@@ -58,7 +58,7 @@
       padding: 16px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: linear-gradient(180deg, rgba(27, 36, 48, 0.97), rgba(14, 20, 28, 0.98));
+      background: linear-gradient(180deg, var(--theme-surface-primary), var(--theme-surface-secondary));
       box-shadow: var(--shadow);
       overflow: hidden;
     }
@@ -67,7 +67,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 38%);
+      background: linear-gradient(120deg, var(--theme-inner-highlight), transparent 38%);
       pointer-events: none;
     }
 
@@ -112,8 +112,8 @@
       display: grid;
       place-items: center;
       border-radius: 14px;
-      background: rgba(0, 224, 255, 0.16);
-      color: var(--accent);
+      background: var(--theme-accent-soft);
+      color: var(--theme-accent-text);
       font-size: 1rem;
       font-weight: 700;
       letter-spacing: 0.1em;
@@ -154,30 +154,30 @@
       padding: 10px 14px;
       border-radius: 999px;
       border: 1px solid transparent;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--theme-surface-muted);
       font-size: 0.82rem;
       white-space: nowrap;
     }
 
     .status[data-tone="good"],
     .badge[data-tone="good"] {
-      color: #bfffe1;
-      background: rgba(68, 209, 122, 0.16);
-      border-color: rgba(68, 209, 122, 0.25);
+      color: var(--status-success-text);
+      background: var(--status-success-surface);
+      border-color: var(--status-success-border);
     }
 
     .status[data-tone="warn"],
     .badge[data-tone="warn"] {
-      color: #ffe4bd;
-      background: rgba(255, 179, 71, 0.16);
-      border-color: rgba(255, 179, 71, 0.24);
+      color: var(--status-warning-text);
+      background: var(--status-warning-surface);
+      border-color: var(--status-warning-border);
     }
 
     .status[data-tone="danger"],
     .badge[data-tone="danger"] {
-      color: #ffd0d0;
-      background: rgba(255, 107, 107, 0.16);
-      border-color: rgba(255, 107, 107, 0.24);
+      color: var(--status-danger-text);
+      background: var(--status-danger-surface);
+      border-color: var(--status-danger-border);
     }
 
     .layout {
@@ -259,7 +259,7 @@
       height: 12px;
       border-radius: 999px;
       overflow: hidden;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--theme-hover-surface);
     }
 
     .meter > span {
@@ -302,15 +302,15 @@
     }
 
     .drive-card[data-tone="good"] {
-      border-color: rgba(68, 209, 122, 0.18);
+      border-color: var(--status-success-border);
     }
 
     .drive-card[data-tone="warn"] {
-      border-color: rgba(255, 179, 71, 0.18);
+      border-color: var(--status-warning-border);
     }
 
     .drive-card[data-tone="danger"] {
-      border-color: rgba(255, 107, 107, 0.18);
+      border-color: var(--status-danger-border);
     }
 
     .drive-name {
@@ -334,7 +334,7 @@
       place-items: center;
       min-height: 100%;
       padding: 20px 14px;
-      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border: 1px dashed var(--theme-border-strong);
       border-radius: 18px;
       color: var(--muted);
       text-align: center;

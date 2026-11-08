@@ -57,7 +57,7 @@
       var activeTheme = settingValue(env, "themeId", "focus");
       var activePreset = findById(themes, activeTheme);
       var accentMode = settingValue(env, "accentMode", "preset") === "custom" ? "custom" : "preset";
-      var customAccent = settingValue(env, "customAccentColor", activePreset.accent);
+      var customAccent = settingValue(env, "customAccentColor", activePreset.accent || "#2b4d7d");
       var themeVariant = settingValue(env, "themeVariant", "auto");
       var intensity = settingValue(env, "animationIntensity", "100");
       var opacity = settingValue(env, "dashboardOpacity", "100");
@@ -69,14 +69,14 @@
       patchStableDom(container, productShell(
         "Visual style",
         "Theme Studio",
-        "Adjust this companion display's theme, accent, transparency, and motion intensity.",
+        "Choose a Constellation palette and adjust this companion display's accent, transparency, and motion intensity.",
         activePreset.name,
         "good",
         '<div class="product-theme-grid" role="radiogroup" aria-label="Theme">' +
           themes.map(function (theme) {
             return '' +
               '<button class="product-swatch' + (theme.id === activeTheme ? " is-selected" : "") + '" type="button" role="radio" aria-checked="' + (theme.id === activeTheme ? "true" : "false") + '" aria-pressed="' + (theme.id === activeTheme ? "true" : "false") + '" data-theme="' + escapeHtml(theme.id) + '">' +
-                '<span class="product-swatch__chip" style="--swatch-a:' + escapeHtml(theme.accent) + ';--swatch-b:' + escapeHtml(theme.secondary || theme.accent) + '"></span>' +
+                '<span class="product-swatch__chip" style="--swatch-bg:' + escapeHtml(theme.background || "var(--theme-surface-elevated)") + ';--swatch-a:' + escapeHtml(theme.accent || "#2b4d7d") + ';--swatch-b:' + escapeHtml(theme.secondary || theme.accent || "#2b4d7d") + '"></span>' +
                 '<strong>' + escapeHtml(theme.name) + '</strong>' +
                 '<span>' + escapeHtml(theme.copy) + '</span>' +
               '</button>';
@@ -164,7 +164,7 @@
         form.elements.customAccentColor.disabled = event.target.value !== "custom";
         if (event.target.value === "custom") {
           var selectedPreset = findById(productThemes(env), settingValue(env, "themeId", "focus"));
-          saveSettings(env, { accentMode: "custom", customAccentColor: String(form.elements.customAccentColor.value || selectedPreset.accent) });
+          saveSettings(env, { accentMode: "custom", customAccentColor: String(form.elements.customAccentColor.value || selectedPreset.accent || "#2b4d7d") });
         } else {
           saveSettings(env, { accentMode: "preset", customAccentColor: "", accentColor: "" });
         }

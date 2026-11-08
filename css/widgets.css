@@ -66,7 +66,7 @@ html.is-touch-scrolling .is-touch-pressing {
 .router-inline-widget,
 .inline-list,
 .dashboard-launcher-dock__apps {
-  color-scheme: dark;
+  color-scheme: inherit;
   scrollbar-color: var(--theme-border-strong, rgba(77, 255, 194, 0.54)) var(--theme-hover-surface, rgba(255, 255, 255, 0.045));
   scrollbar-width: thin;
 }
@@ -509,7 +509,7 @@ a.is-touch-pressing,
   padding: 16px;
   border-radius: 16px;
   border: 1px solid var(--color-border);
-  background: rgba(3, 10, 18, 0.88);
+  background: var(--theme-surface-secondary);
   color: var(--color-text);
   font: 0.88rem/1.45 "Roboto Mono", "SFMono-Regular", Consolas, monospace;
   white-space: pre-wrap;
@@ -1213,10 +1213,26 @@ a.is-touch-pressing,
 }
 
 .auxora-brand {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.auxora-brand::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  inline-size: 48px;
+  block-size: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    var(--constellation-gold) 0 33.333%,
+    var(--constellation-orange) 33.333% 66.667%,
+    var(--constellation-red) 66.667% 100%);
+  pointer-events: none;
 }
 
 .auxora-brand__mark {
@@ -2109,9 +2125,9 @@ input[type="range"]:focus-visible {
   overflow: hidden;
   min-height: 24px;
   padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 999px;
-  background: rgba(7, 14, 22, calc(0.46 * var(--dashboard-surface-opacity)));
+  background: var(--theme-surface-muted);
   font-size: 0.67rem;
   flex-shrink: 0;
   white-space: nowrap;
@@ -2203,7 +2219,7 @@ input[type="range"]:focus-visible {
   height: 100%;
   border: 0;
   background: transparent;
-  color-scheme: dark;
+  color-scheme: inherit;
   /* Surface opacity must never fade embedded text or controls. */
   opacity: 1;
   transition: opacity 160ms ease;
@@ -2219,7 +2235,7 @@ input[type="range"]:focus-visible {
   z-index: 2;
   padding: 10px 14px;
   border-radius: 999px;
-  background: rgba(7, 14, 22, calc(0.82 * var(--dashboard-surface-opacity)));
+  background: rgba(var(--theme-surface-elevated-rgb), 0.96);
   border: 1px solid var(--color-border);
 }
 
@@ -2676,9 +2692,9 @@ input[type="range"]:focus-visible {
   display: grid;
   gap: 4px;
   padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--theme-surface-muted);
 }
 
 .inline-kpi strong {
@@ -2716,7 +2732,7 @@ input[type="range"]:focus-visible {
   padding: 0 10px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: rgba(7, 14, 22, calc(0.76 * var(--dashboard-surface-opacity)));
+  background: rgba(var(--theme-surface-secondary-rgb), 0.96);
   color: var(--color-text);
   outline: none;
   font: inherit;
@@ -2724,8 +2740,8 @@ input[type="range"]:focus-visible {
 
 .inline-input:focus,
 .inline-select:focus {
-  border-color: rgba(0, 224, 255, 0.36);
-  box-shadow: 0 0 0 1px rgba(0, 224, 255, 0.12);
+  border-color: var(--theme-accent-border);
+  box-shadow: 0 0 0 1px var(--theme-accent-soft);
 }
 
 .inline-button {
@@ -2737,7 +2753,7 @@ input[type="range"]:focus-visible {
   padding: 8px 12px;
   border: 0;
   border-radius: 12px;
-  background: rgba(255, 255, 255, calc(0.08 * var(--dashboard-surface-opacity)));
+  background: var(--theme-hover-surface);
   color: var(--color-text);
   cursor: pointer;
   font: inherit;
@@ -2911,8 +2927,8 @@ input[type="range"]:focus-visible {
   gap: 12px;
   padding: 34px 30px;
   background:
-    radial-gradient(circle at top right, rgba(0, 224, 255, calc(0.08 * var(--dashboard-surface-opacity))), transparent 26%),
-    rgba(10, 16, 24, calc(0.96 * var(--dashboard-surface-opacity)));
+    radial-gradient(circle at top right, var(--theme-ambient-primary), transparent 26%),
+    rgba(var(--theme-surface-secondary-rgb), 0.96);
 }
 
 .router-viewer__empty strong {
@@ -3292,7 +3308,7 @@ input[type="range"]:focus-visible {
   padding: 14px 16px;
   border-radius: 16px;
   border: 1px solid var(--color-border);
-  background: rgba(3, 10, 18, 0.9);
+  background: var(--theme-surface-secondary);
   color: var(--color-text);
   font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 0.95rem;
@@ -3982,12 +3998,15 @@ body.dashboard-native-page--adaptive {
 }
 
 .bar > span,
-.progress-track > span,
+.progress-track > span {
+  background: linear-gradient(90deg, var(--theme-accent), var(--theme-accent-secondary));
+}
+
 .control-button.is-primary,
 .button,
 .router-settings__button.is-primary,
 .inline-button.is-primary {
-  background: linear-gradient(90deg, var(--theme-accent), var(--theme-accent-secondary));
+  background: var(--theme-accent);
   color: var(--theme-on-accent);
 }
 
@@ -4069,19 +4088,19 @@ body.dashboard-native-page--adaptive {
 }
 
 .auxora-primary-nav button:hover,
-.auxora-quick-drawer button:hover,
-.router-settings__button:hover,
-.inline-button:hover,
-.control-button:hover {
+.auxora-quick-drawer button:where(:not(.is-primary)):hover,
+.router-settings__button:where(:not(.is-primary)):hover,
+.inline-button:where(:not(.is-primary)):hover,
+.control-button:where(:not(.is-primary)):hover {
   border-color: var(--theme-border-strong);
   background: var(--theme-hover-surface);
 }
 
 .auxora-primary-nav button:active,
-.auxora-quick-drawer button:active,
-.router-settings__button:active,
-.inline-button:active,
-.control-button:active {
+.auxora-quick-drawer button:where(:not(.is-primary)):active,
+.router-settings__button:where(:not(.is-primary)):active,
+.inline-button:where(:not(.is-primary)):active,
+.control-button:where(:not(.is-primary)):active {
   background: var(--theme-pressed-surface);
 }
 
@@ -4388,6 +4407,10 @@ input[type="range"]:focus-visible {
 }
 
 @media (forced-colors: active) {
+  .auxora-brand::after {
+    display: none;
+  }
+
   .dashboard-ambient-canvas,
   .dashboard-ambient-layer {
     display: none;

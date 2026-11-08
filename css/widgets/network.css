@@ -352,7 +352,7 @@ body.dashboard-native-page .router-inline-widget[data-card-size="compact"] .netw
 }
 
 .network-form-message[data-tone="good"] {
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
 }
 
 .network-form-message[data-tone="danger"] {

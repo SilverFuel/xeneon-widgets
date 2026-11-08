@@ -1,6 +1,4 @@
 html[data-standalone-ui] {
-  color-scheme: dark;
-
   /* Semantic aliases for the older self-contained widget pages. */
   --bg: var(--theme-page);
   --fg: var(--theme-text);

@@ -228,7 +228,7 @@
 }
 
 .game-mode-metric--primary .metric-value {
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
 }
 
 .game-mode-profile-panel {
@@ -289,7 +289,7 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
   background: rgba(2, 11, 10, 0.58);
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-weight: 850;
   letter-spacing: 0.06em;
 }
@@ -369,7 +369,7 @@
 .game-face-signals strong {
   margin-top: 4px;
   overflow: hidden;
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 0.9rem;
   line-height: 1.15;
   text-overflow: ellipsis;
@@ -449,7 +449,7 @@
 }
 
 .game-focus-identity span {
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -508,7 +508,7 @@
   background:
     radial-gradient(circle, rgba(77, 255, 194, 0.16), rgba(5, 14, 12, 0.88) 62%),
     rgba(2, 9, 8, 0.9);
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 2.4rem;
   font-weight: 900;
   letter-spacing: 0.07em;
@@ -551,7 +551,7 @@
 }
 
 .game-focus-lock span {
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 0.78rem;
   font-weight: 850;
   letter-spacing: 0.2em;
@@ -656,7 +656,7 @@
 
 .game-focus-hud__item strong {
   margin-top: 7px;
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 1.22rem;
   line-height: 1.05;
 }
@@ -696,8 +696,8 @@
   overflow: hidden;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 62% 52% at 50% 50%, rgba(77, 255, 194, 0.18), transparent 68%),
-    rgba(1, 6, 5, 0.76);
+    radial-gradient(ellipse 62% 52% at 50% 50%, var(--theme-accent-glow), transparent 68%),
+    var(--theme-page);
   opacity: 0;
 }
 
@@ -728,7 +728,7 @@
 }
 
 .game-focus-wake span {
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 0.9rem;
   font-weight: 900;
   letter-spacing: 0.24em;
@@ -980,7 +980,7 @@
 .game-focus-metric strong {
   align-self: center;
   overflow: hidden;
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 3.1rem;
   line-height: 0.95;
   text-overflow: ellipsis;
@@ -1076,7 +1076,7 @@
 .game-focus-network strong {
   display: block;
   margin-top: 8px;
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 2.25rem;
   line-height: 1;
 }
@@ -1150,7 +1150,7 @@
 }
 
 .game-focus-audio-row b {
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   font-size: 1.15rem;
 }
 
@@ -1292,7 +1292,7 @@
 .game-mode-ended-stats strong {
   display: block;
   margin-top: 5px;
-  color: var(--color-accent);
+  color: var(--theme-accent-text);
   font-size: 1rem;
 }
 
@@ -1663,7 +1663,7 @@
   background:
     radial-gradient(circle, color-mix(in srgb, var(--game-accent) 14%, transparent), transparent 64%),
     var(--theme-surface-secondary);
-  color: var(--game-accent);
+  color: var(--theme-accent-text);
   box-shadow: 0 0 calc(54px * var(--theme-glow-intensity)) color-mix(in srgb, var(--game-accent) 14%, transparent);
 }
 
@@ -1724,7 +1724,7 @@
 .game-focus-audio span,
 .game-focus-mic-panel span,
 .game-focus-network span {
-  color: color-mix(in srgb, var(--game-accent) 64%, var(--theme-text-muted));
+  color: var(--theme-accent-text);
 }
 
 .game-focus-card,

@@ -1163,7 +1163,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 540,
     title: productName,
-    backgroundColor: "#070912",
+    backgroundColor: "#f4f5f7",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
