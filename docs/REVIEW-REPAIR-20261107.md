@@ -69,4 +69,6 @@ The follow-up review also corrected these outstanding findings:
 
 Hosted CI at `048d08a9a85b4d482a0ba94a16efb239587e64ec` confirmed all 25 product surfaces at all ten viewport sizes, including touch targets, text sizes, naming, focus, and overflow. It then detected TMOG graph paths opting out of Windows forced colors. The follow-up removes that opt-out, retains system-color tokens and dashed-series differentiation, and adds a fast CSS contract check. Native and API checks now run before the longer rendered matrix; no checks were removed.
 
-The normal check pipeline includes the new regression tests. A complete passing run is still required on the final patch. Hosted CI, installed application validation, and public installer qualification remain distinct checks.
+Hosted CI at `8b9c38656ec7ffb523df6502a87d249058c875d7` passed all 320 native tests with zero failures or skips, the live native-host API suite, and the bridge API suite. The theme matrix then caught buttons animating from zero-width borders when Windows forced colors activated. The follow-up disables interactive-control transitions in forced colors so system boundaries apply immediately; test assertions remain unchanged.
+
+The normal check pipeline includes the new regression tests. A complete passing run is required on the final patch. Hosted CI, installed application validation, and public installer qualification remain distinct checks.

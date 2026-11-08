@@ -379,6 +379,18 @@ for (const token of REQUIRED_THEME_TOKENS) {
   check(usagePattern.test(allCss), `${token} is defined but not consumed by dashboard CSS`);
 }
 
+// System-color boundaries must apply immediately when Windows contrast mode changes.
+// Keep the body class outside :where() so this overrides the theme control duration.
+const forcedColorControlRules = extractCssBlocks(readWorkspaceFile("css/widgets.css")).filter(block =>
+  block.context.some(context => /^@media\s*\(\s*forced-colors\s*:\s*active\s*\)$/i.test(context))
+  && /^body\.dashboard-native-page\s+:where\(/.test(block.selector)
+  && /(?:\(|,)\s*\.inline-button\s*(?:,|\))/.test(block.selector)
+);
+check(
+  forcedColorControlRules.some(block => /(?:^|;)\s*transition\s*:\s*none\s*(?:!important\s*)?(?:;|$)/i.test(block.body.replace(/\/\*[\s\S]*?\*\//g, ""))),
+  "forced-color controls must disable transitions at dashboard specificity so visible boundaries do not interpolate from zero"
+);
+
 for (const path of cssFiles) {
   const source = readWorkspaceFile(path);
   for (const block of extractCssBlocks(source)) {
