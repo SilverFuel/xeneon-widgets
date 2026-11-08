@@ -12,6 +12,8 @@ public sealed class AppConfig
 
     public UniFiConfig UniFi { get; set; } = new();
 
+    public FrigateConfig Frigate { get; set; } = new();
+
     public NetworkConfig Network { get; set; } = new();
 
     public DashboardConfig Dashboard { get; set; } = new();
@@ -61,6 +63,17 @@ public sealed class UniFiConfig
     public string CertificateThumbprint { get; set; } = "";
 }
 
+public sealed class FrigateConfig
+{
+    public string BaseUrl { get; set; } = "";
+
+    public string Camera { get; set; } = "";
+
+    public string Username { get; set; } = "";
+
+    public string Password { get; set; } = "";
+}
+
 public sealed class NetworkConfig
 {
     public string HealthTarget { get; set; } = "";
@@ -77,6 +90,8 @@ public sealed class DashboardConfig
     public bool LauncherReviewRequired { get; set; } = true;
 
     public bool AutoApplyLauncherSuggestions { get; set; }
+
+    public bool ForegroundAppTrackingEnabled { get; set; }
 
     public bool OnboardingCompleted { get; set; }
 
@@ -96,13 +111,19 @@ public sealed class DashboardConfig
 
     public string ThemeReadability { get; set; } = "normal";
 
+    public string ThemeId { get; set; } = "focus";
+
+    public string AccentMode { get; set; } = "preset";
+
+    public string CustomAccentColor { get; set; } = "";
+
+    public string ThemeVariant { get; set; } = "auto";
+
+    public int AnimationIntensity { get; set; } = 25;
+
+    public int DashboardOpacity { get; set; } = 100;
+
     public string ReleaseChannel { get; set; } = "stable";
-
-    public bool UpdateRollbackEnabled { get; set; } = true;
-
-    public string LastKnownGoodVersion { get; set; } = "";
-
-    public string LastKnownGoodPath { get; set; } = "";
 
     public bool ClipboardHidePreviews { get; set; } = true;
 
@@ -127,7 +148,11 @@ public sealed class SceneCollectionConfig
 
     public string ManualOverrideUntil { get; set; } = "";
 
-    public string LastActivationReason { get; set; } = "Default scene";
+    public string ThemeVariant { get; set; } = "standard";
+
+    public string VariantOverrideUntil { get; set; } = "";
+
+    public string LastActivationReason { get; set; } = "Default mode";
 
     public List<SceneProfile> Profiles { get; set; } = [];
 
@@ -149,7 +174,9 @@ public sealed class SceneProfile
 
     public string Icon { get; set; } = "spark";
 
-    public string ThemeId { get; set; } = "edge";
+    public string ThemeId { get; set; } = "focus";
+
+    public string ThemeVariant { get; set; } = "standard";
 
     public string AccentColor { get; set; } = "";
 
@@ -227,6 +254,17 @@ public sealed class CalendarConfigRequest
     public string? IcsUrl { get; set; }
 }
 
+public sealed class FrigateConfigRequest
+{
+    public string? BaseUrl { get; set; }
+
+    public string? Camera { get; set; }
+
+    public string? Username { get; set; }
+
+    public string? Password { get; set; }
+}
+
 public sealed class DashboardConfigRequest
 {
     public bool? OnboardingCompleted { get; set; }
@@ -236,6 +274,8 @@ public sealed class DashboardConfigRequest
     public bool? LauncherReviewRequired { get; set; }
 
     public bool? AutoApplyLauncherSuggestions { get; set; }
+
+    public bool? ForegroundAppTrackingEnabled { get; set; }
 
     public string? PreferredDisplayId { get; set; }
 
@@ -247,9 +287,19 @@ public sealed class DashboardConfigRequest
 
     public string? ThemeReadability { get; set; }
 
-    public string? ReleaseChannel { get; set; }
+    public string? ThemeId { get; set; }
 
-    public bool? UpdateRollbackEnabled { get; set; }
+    public string? AccentMode { get; set; }
+
+    public string? CustomAccentColor { get; set; }
+
+    public string? ThemeVariant { get; set; }
+
+    public int? AnimationIntensity { get; set; }
+
+    public int? DashboardOpacity { get; set; }
+
+    public string? ReleaseChannel { get; set; }
 
     public bool? ClipboardHidePreviews { get; set; }
 
@@ -420,7 +470,7 @@ public sealed class SceneEvaluationRequest
 
 public sealed class PortableBackupRequest
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     public PortableDashboardConfig? Dashboard { get; set; }
 
@@ -434,6 +484,18 @@ public sealed class PortableDashboardConfig
     public bool? GameModeAutoTune { get; set; }
 
     public string? ThemeReadability { get; set; }
+
+    public string? ThemeId { get; set; }
+
+    public string? AccentMode { get; set; }
+
+    public string? CustomAccentColor { get; set; }
+
+    public string? ThemeVariant { get; set; }
+
+    public int? AnimationIntensity { get; set; }
+
+    public int? DashboardOpacity { get; set; }
 
     public string? ReleaseChannel { get; set; }
 

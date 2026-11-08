@@ -220,8 +220,7 @@ public sealed class GameActivityService
     private GameActivitySnapshot? _cachedSnapshot;
     private DateTimeOffset _cachedAt = DateTimeOffset.MinValue;
     private GameActivityPayload? _lastActiveGame;
-    private string _lastActiveGameId = "";
-    private DateTimeOffset? _sessionStartedAt;
+    private readonly GameActivitySession _session = new();
     private DateTimeOffset? _lastEndedAt;
     private DateTimeOffset _lastWmiProcessScanAt = DateTimeOffset.MinValue;
 
@@ -418,11 +417,10 @@ public sealed class GameActivityService
     {
         if (activeGame is null)
         {
-            if (!string.IsNullOrWhiteSpace(_lastActiveGameId))
+            if (_session.StartedAt.HasValue)
             {
                 _lastEndedAt = sampledAt;
-                _lastActiveGameId = "";
-                _sessionStartedAt = null;
+                _session.End();
                 return "ended";
             }
 
@@ -432,25 +430,17 @@ public sealed class GameActivityService
         }
 
         var activeId = TextOr(activeGame.Id, BuildStableId(activeGame.Platform, activeGame.Name, activeGame.ExecutablePath));
-        if (!string.Equals(_lastActiveGameId, activeId, StringComparison.OrdinalIgnoreCase))
-        {
-            _sessionStartedAt = activeGame.StartedAt ?? sampledAt;
-            _lastActiveGameId = activeId;
-        }
-        else
-        {
-            _sessionStartedAt ??= activeGame.StartedAt ?? sampledAt;
-        }
+        _session.Update(activeId, activeGame.ProcessId, activeGame.StartedAt, sampledAt);
 
         _lastActiveGame = activeGame;
         _lastEndedAt = null;
-        activeGame.SessionStartedAt = _sessionStartedAt;
-        activeGame.SessionDurationMs = _sessionStartedAt.HasValue
-            ? Math.Max(0, (long)(sampledAt - _sessionStartedAt.Value).TotalMilliseconds)
+        activeGame.SessionStartedAt = _session.StartedAt;
+        activeGame.SessionDurationMs = _session.StartedAt.HasValue
+            ? Math.Max(0, (long)(sampledAt - _session.StartedAt.Value).TotalMilliseconds)
             : 0;
         activeGame.ForegroundProcessName = foregroundProcess?.ProcessName ?? "";
         activeGame.Focused = IsForegroundGameProcess(activeGame, foregroundProcess);
-        activeGame.State = sampledAt - (_sessionStartedAt ?? sampledAt) < TimeSpan.FromSeconds(24)
+        activeGame.State = sampledAt - (_session.StartedAt ?? sampledAt) < TimeSpan.FromSeconds(24)
             ? "launching"
             : activeGame.Focused
                 ? "in-game"
@@ -471,7 +461,7 @@ public sealed class GameActivityService
         };
     }
 
-    private static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)
+    internal static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)
     {
         var candidateList = candidates.ToList();
         var best = candidateList
@@ -496,6 +486,11 @@ public sealed class GameActivityService
         if (string.IsNullOrWhiteSpace(best.ProcessName))
         {
             best.ProcessName = runtime.ProcessName;
+        }
+
+        if (string.IsNullOrWhiteSpace(best.ExecutablePath))
+        {
+            best.ExecutablePath = runtime.ExecutablePath;
         }
 
         best.StartedAt ??= runtime.StartedAt;
@@ -1067,8 +1062,38 @@ public sealed class GameActivityService
         return true;
     }
 
-    private static bool TryInferBattleNetGamePath(string lowerPath, out InferredGamePath inferred)
+    internal static bool IsWowForeverExecutable(string? executablePath)
     {
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var path = executablePath.Trim().Replace('/', '\\');
+            return Path.IsPathFullyQualified(path)
+                && Path.GetFullPath(path).EndsWith(@"\_forever_\Wow.exe", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static bool TryInferBattleNetGamePath(string lowerPath, out InferredGamePath inferred)
+    {
+        if (IsWowForeverExecutable(lowerPath))
+        {
+            inferred = new InferredGamePath(
+                "World of Warcraft: Forever",
+                "Battle.net",
+                "Battle.net library",
+                84,
+                "Matched the World of Warcraft: Forever game client.");
+            return true;
+        }
+
         foreach (var game in BattleNetKnownGames)
         {
             if (!game.PathMarkers.Any(marker => lowerPath.Contains(marker, StringComparison.OrdinalIgnoreCase)))
@@ -1424,7 +1449,7 @@ public sealed class GameActivityService
         string Name,
         string[] PathMarkers);
 
-    private readonly record struct InferredGamePath(
+    internal readonly record struct InferredGamePath(
         string Name,
         string Platform,
         string Source,
@@ -1471,6 +1496,45 @@ public sealed class GameActivitySnapshot
     public bool ForegroundAppActive { get; set; }
 }
 
+internal sealed class GameActivitySession
+{
+    private string _gameId = "";
+    private int? _processId;
+    private DateTimeOffset? _processStartedAt;
+
+    public DateTimeOffset? StartedAt { get; private set; }
+
+    public void Update(string gameId, int? processId, DateTimeOffset? processStartedAt, DateTimeOffset sampledAt)
+    {
+        var changed = !string.Equals(_gameId, gameId, StringComparison.OrdinalIgnoreCase)
+            || (_processId.HasValue && processId.HasValue && _processId != processId)
+            // WMI creation times have less precision than Process.StartTime.
+            || (_processStartedAt.HasValue && processStartedAt.HasValue
+                && Math.Abs((_processStartedAt.Value - processStartedAt.Value).Ticks) >= TimeSpan.TicksPerMillisecond);
+        if (changed || !StartedAt.HasValue)
+        {
+            _gameId = gameId;
+            _processId = processId;
+            _processStartedAt = processStartedAt;
+            StartedAt = processStartedAt ?? sampledAt;
+        }
+        else
+        {
+            // Missing runtime fields on a later probe do not erase known identity.
+            _processId ??= processId;
+            _processStartedAt ??= processStartedAt;
+        }
+    }
+
+    public void End()
+    {
+        _gameId = "";
+        _processId = null;
+        _processStartedAt = null;
+        StartedAt = null;
+    }
+}
+
 public sealed class GameActivityPayload
 {
     public string Id { get; set; } = "";
@@ -1489,6 +1553,9 @@ public sealed class GameActivityPayload
 
     [JsonIgnore]
     public string ExecutablePath { get; set; } = "";
+
+    // Stable routing identity without exposing the user's installation path.
+    public string GameKey => GameActivityService.IsWowForeverExecutable(ExecutablePath) ? "wow-forever" : "";
 
     public int Confidence { get; set; }
 

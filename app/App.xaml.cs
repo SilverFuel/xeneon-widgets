@@ -19,7 +19,7 @@ public partial class App : Application
     {
         Logger.Info("Auxora starting.");
         _mainWindow = new MainWindow();
-        _mainWindow.Activate();
+        _mainWindow.Start();
     }
 
     private void HandleUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs args)

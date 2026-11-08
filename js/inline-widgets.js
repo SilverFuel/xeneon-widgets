@@ -207,6 +207,69 @@
     return getSetting(env, "unifiNetworkEndpoint") || buildBridgeUrl(env, "/api/unifi/network");
   }
 
+  function fetchWithTimeout(url, options, timeoutMs, readResponse) {
+    var fetchOptions = Object.assign({}, options || {});
+    var callerSignal = fetchOptions.signal;
+    var controller = new AbortController();
+
+    fetchOptions.signal = controller.signal;
+
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timerId = window.setTimeout(function () {
+        abortRequest(new Error("Request timed out"));
+      }, timeoutMs);
+
+      function finish(callback, value) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timerId);
+        if (callerSignal) {
+          callerSignal.removeEventListener("abort", forwardCallerAbort);
+        }
+        callback(value);
+      }
+
+      function abortRequest(reason) {
+        if (settled) {
+          return;
+        }
+        controller.abort(reason);
+        finish(reject, reason === undefined ? controller.signal.reason : reason);
+      }
+
+      function forwardCallerAbort() {
+        abortRequest(callerSignal.reason);
+      }
+
+      if (callerSignal) {
+        if (callerSignal.aborted) {
+          forwardCallerAbort();
+          return;
+        }
+        callerSignal.addEventListener("abort", forwardCallerAbort, { once: true });
+      }
+
+      Promise.resolve().then(function () {
+        if (settled) {
+          return;
+        }
+        return fetch(url, fetchOptions);
+      }).then(function (response) {
+        if (!settled) {
+          // Keep the deadline and caller signal active until the response body is consumed.
+          return readResponse ? readResponse(response) : response;
+        }
+      }).then(function (value) {
+        finish(resolve, value);
+      }, function (error) {
+        finish(reject, error);
+      });
+    });
+  }
+
   function requestJson(url, options, timeoutMs) {
     var settings = options || {};
     var headers = Object.assign({}, settings.headers || {});
@@ -222,30 +285,21 @@
       }
       fetchOptions.body = typeof settings.body === "string" ? settings.body : JSON.stringify(settings.body);
     }
+    if (settings.signal) {
+      fetchOptions.signal = settings.signal;
+    }
 
-    return new Promise(function (resolve, reject) {
-      var timerId = window.setTimeout(function () {
-        reject(new Error("Request timed out"));
-      }, timeoutMs || 5000);
-
-      fetch(url, fetchOptions).then(function (response) {
-        if (!response.ok) {
-          return response.json().catch(function () {
-            return {};
-          }).then(function (payload) {
-            throw new Error(payload.error || payload.message || ("Request failed with status " + response.status));
-          });
-        }
-
+    return fetchWithTimeout(url, fetchOptions, timeoutMs || 5000, function (response) {
+      if (!response.ok) {
         return response.json().catch(function () {
           return {};
+        }).then(function (payload) {
+          throw new Error(payload.error || payload.message || ("Request failed with status " + response.status));
         });
-      }).then(function (payload) {
-        window.clearTimeout(timerId);
-        resolve(payload);
-      }, function (error) {
-        window.clearTimeout(timerId);
-        reject(error);
+      }
+
+      return response.json().catch(function () {
+        return {};
       });
     });
   }
@@ -261,6 +315,267 @@
     while (cleanups.length) {
       cleanups.pop()();
     }
+  }
+
+  function stableNodeKey(node) {
+    var explicitKey;
+    if (!node || node.nodeType !== 1) {
+      return "";
+    }
+
+    explicitKey = node.getAttribute("data-ui-key");
+    if (explicitKey) {
+      return "key:" + explicitKey;
+    }
+    if (node.id) {
+      return "id:" + node.id;
+    }
+    explicitKey = node.getAttribute("data-action");
+    if (explicitKey) {
+      return "action:" + node.tagName + ":" + explicitKey;
+    }
+    explicitKey = node.getAttribute("name");
+    if (explicitKey && node.matches("input, textarea, select, button")) {
+      if (node.matches('input[type="checkbox"], input[type="radio"]')) {
+        return "name:" + node.tagName + ":" + explicitKey + ":" + text(node.value, "on");
+      }
+      return "name:" + node.tagName + ":" + explicitKey;
+    }
+    return "";
+  }
+
+  function compatibleStableNodes(currentNode, nextNode) {
+    return Boolean(currentNode && nextNode
+      && currentNode.nodeType === nextNode.nodeType
+      && (currentNode.nodeType !== 1 || currentNode.tagName === nextNode.tagName));
+  }
+
+  function dirtyFormControl(node) {
+    var options;
+
+    if (!node || !node.matches || !node.matches("input, textarea, select")) {
+      return false;
+    }
+    if (node.matches('input[type="checkbox"], input[type="radio"]')) {
+      return node.checked !== node.defaultChecked;
+    }
+    if (node.matches('input[type="file"]')) {
+      return false;
+    }
+    if (node.matches("select")) {
+      options = Array.prototype.slice.call(node.options || []);
+      return options.some(function (option) {
+        return option.selected !== option.defaultSelected;
+      });
+    }
+    return node.value !== node.defaultValue;
+  }
+
+  function captureFormControlState(node) {
+    if (node.matches('input[type="checkbox"], input[type="radio"]')) {
+      return { node: node, kind: "checked", checked: node.checked };
+    }
+    if (node.matches("select")) {
+      return {
+        node: node,
+        kind: "select",
+        selectedValues: Array.prototype.slice.call(node.options || []).filter(function (option) {
+          return option.selected;
+        }).map(function (option) {
+          return option.value;
+        })
+      };
+    }
+    return { node: node, kind: "value", value: node.value };
+  }
+
+  function restoreFormControlState(state) {
+    if (!state.node.isConnected) {
+      return;
+    }
+    if (state.kind === "checked") {
+      state.node.checked = state.checked;
+      return;
+    }
+    if (state.kind === "select") {
+      Array.prototype.slice.call(state.node.options || []).forEach(function (option) {
+        option.selected = state.selectedValues.indexOf(option.value) !== -1;
+      });
+      return;
+    }
+    if (!state.node.matches('input[type="file"]')) {
+      state.node.value = state.value;
+    }
+  }
+
+  function syncStableAttributes(currentNode, nextNode, activeNode) {
+    var preserveValue = currentNode === activeNode;
+    var nextNames = {};
+
+    Array.prototype.slice.call(nextNode.attributes || []).forEach(function (attribute) {
+      nextNames[attribute.name] = true;
+      if (preserveValue && (attribute.name === "value" || attribute.name === "checked" || attribute.name === "selected")) {
+        return;
+      }
+      if (currentNode.getAttribute(attribute.name) !== attribute.value) {
+        currentNode.setAttribute(attribute.name, attribute.value);
+      }
+    });
+
+    Array.prototype.slice.call(currentNode.attributes || []).forEach(function (attribute) {
+      if (!nextNames[attribute.name]
+          && !(preserveValue && (attribute.name === "value" || attribute.name === "checked" || attribute.name === "selected"))) {
+        currentNode.removeAttribute(attribute.name);
+      }
+    });
+
+    if (!preserveValue && currentNode.matches && currentNode.matches("input, textarea, select")) {
+      if (currentNode.value !== nextNode.value) {
+        currentNode.value = nextNode.value;
+      }
+      if (currentNode.matches('input[type="checkbox"], input[type="radio"]')) {
+        currentNode.checked = nextNode.checked;
+      }
+    }
+  }
+
+  function reconcileStableNode(currentNode, nextNode, activeNode) {
+    var currentChildren;
+    var usedChildren = [];
+
+    if (!compatibleStableNodes(currentNode, nextNode)) {
+      return nextNode.cloneNode(true);
+    }
+
+    if (currentNode.nodeType === 3 || currentNode.nodeType === 8) {
+      if (currentNode.nodeValue !== nextNode.nodeValue) {
+        currentNode.nodeValue = nextNode.nodeValue;
+      }
+      return currentNode;
+    }
+
+    syncStableAttributes(currentNode, nextNode, activeNode);
+    currentChildren = Array.prototype.slice.call(currentNode.childNodes);
+
+    Array.prototype.slice.call(nextNode.childNodes).forEach(function (desiredChild, desiredIndex) {
+      var desiredKey = stableNodeKey(desiredChild);
+      var match = null;
+      var referenceNode = currentNode.childNodes[desiredIndex] || null;
+
+      if (desiredKey) {
+        match = currentChildren.filter(function (candidate) {
+          return usedChildren.indexOf(candidate) === -1 && stableNodeKey(candidate) === desiredKey;
+        })[0] || null;
+      } else if (referenceNode
+          && usedChildren.indexOf(referenceNode) === -1
+          && !stableNodeKey(referenceNode)
+          && compatibleStableNodes(referenceNode, desiredChild)) {
+        match = referenceNode;
+      } else {
+        match = currentChildren.filter(function (candidate) {
+          return usedChildren.indexOf(candidate) === -1
+            && !stableNodeKey(candidate)
+            && compatibleStableNodes(candidate, desiredChild);
+        })[0] || null;
+      }
+
+      if (!match) {
+        match = desiredChild.cloneNode(true);
+      } else {
+        match = reconcileStableNode(match, desiredChild, activeNode);
+      }
+
+      referenceNode = currentNode.childNodes[desiredIndex] || null;
+      if (referenceNode && referenceNode.parentNode !== currentNode) {
+        referenceNode = null;
+      }
+      if (match !== referenceNode) {
+        currentNode.insertBefore(match, referenceNode);
+      }
+      usedChildren.push(match);
+    });
+
+    Array.prototype.slice.call(currentNode.childNodes).forEach(function (child) {
+      if (usedChildren.indexOf(child) === -1 && child.parentNode === currentNode) {
+        currentNode.removeChild(child);
+      }
+    });
+    return currentNode;
+  }
+
+  function patchStableDom(container, html) {
+    var activeNode = document.activeElement && container.contains(document.activeElement) ? document.activeElement : null;
+    var formControlStates = [];
+    var detailsStates = [];
+    var selection = null;
+    var scrollStates = [];
+    var fragment;
+    var nextContainer;
+
+    if (activeNode && typeof activeNode.selectionStart === "number") {
+      selection = {
+        start: activeNode.selectionStart,
+        end: activeNode.selectionEnd,
+        direction: activeNode.selectionDirection
+      };
+    }
+
+    [container].concat(Array.prototype.slice.call(container.querySelectorAll("*"))).forEach(function (node) {
+      if (node.scrollTop || node.scrollLeft) {
+        scrollStates.push({ node: node, top: node.scrollTop, left: node.scrollLeft });
+      }
+    });
+
+    Array.prototype.slice.call(container.querySelectorAll("input, textarea, select")).forEach(function (node) {
+      if (node === activeNode || dirtyFormControl(node)) {
+        formControlStates.push(captureFormControlState(node));
+      }
+    });
+
+    Array.prototype.slice.call(container.querySelectorAll("details[data-preserve-open]")).forEach(function (node) {
+      detailsStates.push({ node: node, open: node.open });
+    });
+
+    var range = document.createRange();
+    range.selectNodeContents(container);
+    fragment = range.createContextualFragment(String(html || "").trim());
+    nextContainer = container.cloneNode(false);
+    nextContainer.appendChild(fragment);
+    if (container.innerHTML === nextContainer.innerHTML) {
+      return container.firstElementChild;
+    }
+    reconcileStableNode(container, nextContainer, activeNode);
+
+    formControlStates.forEach(restoreFormControlState);
+
+    detailsStates.forEach(function (state) {
+      if (state.node.isConnected) {
+        state.node.open = state.open;
+      }
+    });
+
+    scrollStates.forEach(function (state) {
+      if (state.node.isConnected) {
+        state.node.scrollTop = state.top;
+        state.node.scrollLeft = state.left;
+      }
+    });
+
+    if (activeNode && activeNode.isConnected && document.activeElement !== activeNode) {
+      try {
+        activeNode.focus({ preventScroll: true });
+      } catch (error) {
+        activeNode.focus();
+      }
+    }
+    if (selection && activeNode && activeNode.isConnected && typeof activeNode.setSelectionRange === "function") {
+      try {
+        activeNode.setSelectionRange(selection.start, selection.end, selection.direction || "none");
+      } catch (error) {
+        // Some input types expose selectionStart but do not accept setSelectionRange.
+      }
+    }
+    return container.firstElementChild;
   }
 
   function createTimerLoop(refreshFn, intervalMs, shouldPauseFn) {
@@ -386,8 +701,18 @@
     return sliders;
   }
 
-  function statusPill(textValue, tone) {
-    return '<div class="widget-status" data-tone="' + escapeHtml(tone || "muted") + '">' + escapeHtml(textValue || "--") + "</div>";
+  function liveRegionAttributes(mode) {
+    if (mode === "alert") {
+      return ' role="alert" aria-live="assertive" aria-atomic="true"';
+    }
+    if (mode === "status") {
+      return ' role="status" aria-live="polite" aria-atomic="true"';
+    }
+    return "";
+  }
+
+  function statusPill(textValue, tone, liveMode) {
+    return '<div class="widget-status" data-tone="' + escapeHtml(tone || "muted") + '"' + liveRegionAttributes(liveMode) + '>' + escapeHtml(textValue || "--") + "</div>";
   }
 
   function emptyState(title, copy) {
@@ -437,34 +762,33 @@
   }
 
   function mountPlaceholderWidget(widget, container) {
-    container.innerHTML = '' +
+    patchStableDom(container, '' +
       '<div class="inline-widget-shell">' +
         '<div class="inline-toolbar">' +
           '<div>' +
-            '<div class="eyebrow">Inline migration</div>' +
+            '<div class="eyebrow">Panel unavailable</div>' +
             '<h3 class="inline-title">' + escapeHtml(text(widget.title, widget.id)) + '</h3>' +
-            '<p class="inline-copy">This panel is still being converted to the native inline runtime.</p>' +
+            '<p class="inline-copy">This panel could not be loaded. The rest of Auxora is still available.</p>' +
           '</div>' +
-          statusPill("In Progress", "warn") +
+          statusPill("Unavailable", "danger") +
         '</div>' +
-        '<article class="list-card inline-card">' + emptyState("Panel still moving off iframe", "The remaining widget conversions are being wired into the same dashboard DOM now.") + '</article>' +
-      '</div>';
+        '<article class="list-card inline-card">' + emptyState("Panel renderer unavailable", "Open another panel, then restart Auxora. If this keeps happening, use Recovery to open logs or repair the installed copy.") + '</article>' +
+      '</div>');
 
     return {
       refresh: function () {
         return Promise.resolve();
       },
       destroy: function () {
-        container.innerHTML = "";
+        patchStableDom(container, "");
       }
     };
   }
 
   var fallbackProductThemes = [
-    { id: "edge", name: "Edge Neon", accent: "#00e0ff", secondary: "#44f0c2", copy: "Kinetic cyan, green, and amber motion." },
-    { id: "afterburn", name: "Afterburn", accent: "#ff4d8d", secondary: "#f5a623", copy: "Rose and amber stream energy." },
-    { id: "deepcore", name: "Deep Core", accent: "#7a5cff", secondary: "#00e0ff", copy: "Quieter dark control-room contrast." },
-    { id: "verdant", name: "Verdant", accent: "#44f0c2", secondary: "#00e0ff", copy: "Green-forward telemetry glow." }
+    { id: "focus", name: "Focus", accent: "#46bce8", secondary: "#7f9fb3", copy: "Calm charcoal surfaces and restrained cyan." },
+    { id: "gaming", name: "Gaming", accent: "#9a7cff", secondary: "#36c8f0", copy: "Deep black, purple, and cyan performance energy." },
+    { id: "warm", name: "Warm", accent: "#d9a35f", secondary: "#ce7d86", copy: "Muted amber and rose for comfortable sessions." }
   ];
 
   function productThemes(env) {
@@ -484,11 +808,10 @@
 
   function productShell(kicker, title, copy, statusText, statusTone, bodyHtml) {
     return '' +
-      '<div class="inline-widget-shell product-shell">' +
+      '<div class="inline-widget-shell product-shell" aria-label="' + escapeHtml(title) + '">' +
         '<div class="inline-toolbar">' +
           '<div>' +
             '<div class="eyebrow">' + escapeHtml(kicker) + '</div>' +
-            '<h3 class="inline-title">' + escapeHtml(title) + '</h3>' +
             '<p class="inline-copy">' + escapeHtml(copy) + '</p>' +
           '</div>' +
           statusPill(statusText, statusTone) +
@@ -515,7 +838,43 @@
 
   function mountWidget(widget, container, env) {
     var renderer = renderers[widget && widget.id] || mountPlaceholderWidget;
-    return renderer(widget || { id: "unknown", title: "Widget" }, container, env || {});
+    var mountRoot = document.createElement("div");
+    var controller;
+    var destroyed = false;
+
+    mountRoot.className = "inline-widget-mount";
+    mountRoot.setAttribute("data-inline-widget-mount", text(widget && widget.id, "unknown"));
+    container.appendChild(mountRoot);
+
+    try {
+      controller = renderer(widget || { id: "unknown", title: "Widget" }, mountRoot, env || {});
+    } catch (error) {
+      if (mountRoot.parentNode === container) {
+        container.removeChild(mountRoot);
+      }
+      throw error;
+    }
+
+    return {
+      refresh: function () {
+        if (destroyed || !controller || typeof controller.refresh !== "function") {
+          return Promise.resolve();
+        }
+        return controller.refresh();
+      },
+      destroy: function () {
+        if (destroyed) {
+          return;
+        }
+        destroyed = true;
+        if (controller && typeof controller.destroy === "function") {
+          controller.destroy();
+        }
+        if (mountRoot.parentNode === container) {
+          container.removeChild(mountRoot);
+        }
+      }
+    };
   }
 
   var runtime = {
@@ -540,10 +899,12 @@
     formatWhen: formatWhen,
     getUniFiNetworkEndpoint: getUniFiNetworkEndpoint,
     initXnSlider: initXnSlider,
+    liveRegionAttributes: liveRegionAttributes,
     metricCard: metricCard,
     normalizeMediaPayload: normalizeMediaPayload,
     nullableNumber: nullableNumber,
     optionalNumber: optionalNumber,
+    patchStableDom: patchStableDom,
     productShell: productShell,
     productThemes: productThemes,
     registerHelpers: registerRuntimeHelpers,
