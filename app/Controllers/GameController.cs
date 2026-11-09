@@ -58,4 +58,29 @@ public sealed class GameController
     {
         return _gameActivityService.PinCandidate(request);
     }
+
+    public GameActivitySnapshot Select(GameActivitySelectRequest request)
+    {
+        return _gameActivityService.Select(request);
+    }
+
+    public GameBlocklistSnapshot GetBlocklist()
+    {
+        return _gameActivityService.GetBlocklist();
+    }
+
+    public GameBlocklistSources GetBlocklistSources()
+    {
+        return _gameActivityService.GetBlocklistSources();
+    }
+
+    public GameBlocklistAddResult AddToBlocklist(GameBlocklistAddRequest request)
+    {
+        return _gameActivityService.AddToBlocklist(request);
+    }
+
+    public GameBlocklistRemoveResult RemoveFromBlocklist(GameBlocklistRemoveRequest request)
+    {
+        return _gameActivityService.RemoveFromBlocklist(request);
+    }
 }

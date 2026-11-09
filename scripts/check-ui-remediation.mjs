@@ -32,6 +32,7 @@ const integrations = read("js/widgets/integrations.js");
 const setup = read("js/widgets/setup.js");
 const gameMode = read("js/widgets/game-mode.js");
 const wowForever = read("js/widgets/wow-forever.js");
+const gameBlocklist = read("js/widgets/game-blocklist.js");
 const sceneDefaults = read("app/Services/SceneDefaults.cs");
 const sceneService = read("app/Services/SceneService.cs");
 const systemMetrics = read("app/Services/SystemMetricsService.cs");
@@ -62,7 +63,7 @@ const homeSource = product.slice(
 
 const canonicalIds = [
   "home", "scenes", "setup", "theme-studio", "updates", "layout-editor", "streaming",
-  "marketplace", "privacy", "remote", "installer", "game-mode", "system", "network",
+  "marketplace", "privacy", "game-blocklist", "remote", "installer", "game-mode", "system", "network",
   "audio", "quick-actions", "shortcuts", "display-controls", "clipboard", "weather",
   "calendar", "hue", "frigate", "wow-forever", "tmog"
 ];
@@ -89,7 +90,7 @@ assert(/function getVisibleWidgets\(\)\s*\{\s*return sortWidgetsByLayout\(widget
 assert(/modeLayouts/.test(dashboard) && /getCardSize\(widget\.id\)/.test(dashboard), "Mode layout preferences and card sizes must remain available to panel presentation");
 assert(!/layout:\s*\[[^\]]*"(?:nas|plex|unifi-camera|automation)"/.test(product), "shipped packs must not reference unregistered planned panels");
 
-const rendererSources = [system, network, audio, actions, homelab, integrations, setup, product, gameMode, wowForever, read("js/widgets/tmog-companion.js")].join("\n");
+const rendererSources = [system, network, audio, actions, homelab, integrations, setup, product, gameMode, gameBlocklist, wowForever, read("js/widgets/tmog-companion.js")].join("\n");
 for (const id of canonicalIds) {
   assert(new RegExp(`registerRenderer\\("${id.replaceAll("-", "\\-")}"`).test(rendererSources), `shipped surface ${id} must have a registered inline renderer`);
 }

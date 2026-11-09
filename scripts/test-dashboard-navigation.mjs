@@ -15,7 +15,7 @@ const expectedTabs = {
   media: [["audio", "Audio & Media"], ["streaming", "Streaming"]],
   pc: [["system", "Performance"], ["tmog", "Graphs (TMOG)"], ["network", "Network"], ["display-controls", "Display"], ["shortcuts", "Windows controls"], ["quick-actions", "Windows tools"], ["clipboard", "Clipboard"]],
   "smart-home": [["hue", "Lights"], ["frigate", "Cameras"]],
-  settings: [["theme-studio", "Appearance"], ["layout-editor", "Layout"], ["scenes", "Modes & automation"], ["updates", "Updates"], ["privacy", "Privacy & Backup"], ["remote", "Phone Remote"], ["marketplace", "Widget Packs"], ["setup", "Setup & status"], ["installer", "Repair & recovery"]]
+  settings: [["theme-studio", "Appearance"], ["layout-editor", "Layout"], ["scenes", "Modes & automation"], ["game-blocklist", "Game blocklist"], ["updates", "Updates"], ["privacy", "Privacy & Backup"], ["remote", "Phone Remote"], ["marketplace", "Widget Packs"], ["setup", "Setup & status"], ["installer", "Repair & recovery"]]
 };
 const canonicalIds = Object.values(expectedTabs).flat().map(([id]) => id);
 
@@ -36,7 +36,7 @@ function realCatalogIds() {
   return Array.from(ids);
 }
 
-test("section metadata keeps all 25 requested tabs and a separate Recovery item", () => {
+test("section metadata keeps all 26 tabs and a separate Recovery item", () => {
   assert.deepEqual(navigation.sections.map(section => [section.id, section.label]), [
     ["home", "Home"], ["gaming", "Gaming"], ["media", "Media"], ["pc", "PC"], ["smart-home", "Smart Home"], ["settings", "Settings"]
   ]);
@@ -44,13 +44,13 @@ test("section metadata keeps all 25 requested tabs and a separate Recovery item"
     assert.deepEqual(section.tabs.map(tab => [tab.id, tab.label]), expectedTabs[section.id]);
     for (const tab of section.tabs) assert.equal(navigation.sectionForWidget(tab.id), section.id);
   }
-  assert.equal(canonicalIds.length, 25);
-  assert.equal(new Set(canonicalIds).size, 25);
+  assert.equal(canonicalIds.length, 26);
+  assert.equal(new Set(canonicalIds).size, 26);
 });
 
 test("navigation exactly covers the executed real dashboard catalog", () => {
   const actual = realCatalogIds();
-  assert.equal(actual.length, 25);
+  assert.equal(actual.length, 26);
   assert.equal(navigation.validateCatalog(actual), true);
   assert.deepEqual([...actual].sort(), [...canonicalIds].sort());
 });

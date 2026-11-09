@@ -1280,6 +1280,80 @@ try {
   }
   assert(/not included in this beta/i.test(rollback.message || ""), "beta rollback capability must explain the manual-only boundary");
 
+  // Game Mode blocklist and followed-game selection (spec 001).
+  const blocklistResponse = await fetchWithTimeout("/api/game/blocklist", {}, 15000);
+  assert(blocklistResponse.ok, `game blocklist returned HTTP ${blocklistResponse.status}`);
+  const blocklist = await blocklistResponse.json();
+  assert(["ready", "unavailable"].includes(blocklist.status) && Array.isArray(blocklist.entries) && Array.isArray(blocklist.systemExclusions) && typeof blocklist.message === "string",
+    `game blocklist must return status, message, entries and systemExclusions: ${JSON.stringify(blocklist).slice(0, 400)}`);
+  assert(blocklist.systemExclusions.some(rule => rule.kind === "nameFragment" && rule.value === "launcher")
+    && blocklist.systemExclusions.some(rule => rule.kind === "pathFragment" && rule.value === "\\windows\\"),
+    "game blocklist must expose the built-in system exclusions as read-only rules");
+
+  const blocklistSourcesResponse = await fetchWithTimeout("/api/game/blocklist/sources", {}, 15000);
+  assert(blocklistSourcesResponse.ok, `game blocklist sources returned HTTP ${blocklistSourcesResponse.status}`);
+  const blocklistSources = await blocklistSourcesResponse.json();
+  assert(Array.isArray(blocklistSources.detected) && Array.isArray(blocklistSources.running), "game blocklist sources must return detected and running lists");
+  for (const item of [...blocklistSources.detected, ...blocklistSources.running]) {
+    assert(!("executablePath" in item), "game blocklist sources must never return full executable paths");
+  }
+  assert(blocklistSources.running.every(item => String(item.ref || "").startsWith("process:")), "running blocklist sources must use process refs");
+
+  const missingBlockResponse = await fetchWithTimeout("/api/game/blocklist", {
+    method: "POST",
+    headers: sessionHeaders,
+    body: JSON.stringify({ ref: "candidate:does-not-exist" })
+  }, 15000);
+  assert(missingBlockResponse.status === 404, `blocking an unknown candidate must return HTTP 404; received ${missingBlockResponse.status}`);
+  const missingProcessResponse = await fetchWithTimeout("/api/game/blocklist", {
+    method: "POST",
+    headers: sessionHeaders,
+    body: JSON.stringify({ ref: "process:0" })
+  }, 15000);
+  assert(missingProcessResponse.status === 404, `blocking an unknown process must return HTTP 404; received ${missingProcessResponse.status}`);
+  const pathOnlyBlockResponse = await fetchWithTimeout("/api/game/blocklist", {
+    method: "POST",
+    headers: sessionHeaders,
+    body: JSON.stringify({ executablePath: "C:\\Windows\\notepad.exe" })
+  }, 15000);
+  assert(pathOnlyBlockResponse.status === 400, `a client-supplied path without a ref must be rejected with HTTP 400; received ${pathOnlyBlockResponse.status}`);
+  const unknownRemoveResponse = await fetchWithTimeout("/api/game/blocklist/remove", {
+    method: "POST",
+    headers: sessionHeaders,
+    body: JSON.stringify({ id: "block-unknown" })
+  }, 15000);
+  if (blocklist.status === "ready") {
+    assert(unknownRemoveResponse.ok, `removing an unknown blocklist id returned HTTP ${unknownRemoveResponse.status}`);
+    const unknownRemove = await unknownRemoveResponse.json();
+    assert(unknownRemove.ok === true && unknownRemove.removed === false, "removing an unknown blocklist id must be a no-op");
+  }
+
+  const activityResponse = await fetchWithTimeout("/api/game/activity", {}, 15000);
+  assert(activityResponse.ok, `game activity returned HTTP ${activityResponse.status}`);
+  const activity = await activityResponse.json();
+  assert(Array.isArray(activity.trackable) && activity.selection?.mode === "auto" && typeof activity.blocklist?.status === "string",
+    "game activity must include trackable candidates, an automatic selection and the blocklist state");
+  const emptySelectResponse = await fetchWithTimeout("/api/game/activity/select", {
+    method: "POST",
+    headers: sessionHeaders,
+    body: "{}"
+  }, 15000);
+  assert(emptySelectResponse.status === 400, `selecting without candidateId or mode must return HTTP 400; received ${emptySelectResponse.status}`);
+  const missingSelectResponse = await fetchWithTimeout("/api/game/activity/select", {
+    method: "POST",
+    headers: sessionHeaders,
+    body: JSON.stringify({ candidateId: "missing" })
+  }, 15000);
+  assert(missingSelectResponse.status === 404, `selecting an unknown candidate must return HTTP 404; received ${missingSelectResponse.status}`);
+  const autoSelectResponse = await fetchWithTimeout("/api/game/activity/select", {
+    method: "POST",
+    headers: sessionHeaders,
+    body: JSON.stringify({ mode: "auto" })
+  }, 15000);
+  assert(autoSelectResponse.ok, `returning to automatic selection returned HTTP ${autoSelectResponse.status}`);
+  const autoSelect = await autoSelectResponse.json();
+  assert(autoSelect.selection?.mode === "auto", "returning to automatic selection must report selection.mode auto");
+
   const displayResponse = await fetchWithTimeout("/api/display/diagnostics");
   assert(displayResponse.ok, `live display diagnostics returned HTTP ${displayResponse.status}`);
   const displayDiagnostics = await displayResponse.json();

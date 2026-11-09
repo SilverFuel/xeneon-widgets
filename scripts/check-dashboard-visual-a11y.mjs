@@ -153,6 +153,7 @@ const expectedJsAssets = [
   "js/widgets/actions.js",
   "js/widgets/integrations.js",
   "js/widgets/game-mode.js",
+  "js/widgets/game-blocklist.js",
   "js/widgets/wow-forever.js",
   "js/widgets/tmog-companion.js",
   "js/quick-controls.js",

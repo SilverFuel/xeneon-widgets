@@ -5,6 +5,7 @@ public sealed class LocalDataResetService
     private readonly ConfigStore _configStore;
     private readonly LauncherService _launcherService;
     private readonly GamePerformanceService _gamePerformanceService;
+    private readonly GameBlocklistStore _gameBlocklistStore;
     private readonly HostLogger _logger;
     private readonly string _legacyRoamingRoot;
     private readonly string _legacyLocalRoot;
@@ -15,9 +16,10 @@ public sealed class LocalDataResetService
         ConfigStore configStore,
         LauncherService launcherService,
         GamePerformanceService gamePerformanceService,
+        GameBlocklistStore gameBlocklistStore,
         HostLogger logger,
         Action? clearIntegrationRuntimeState = null)
-        : this(configStore, launcherService, gamePerformanceService, logger, null, null, clearIntegrationRuntimeState)
+        : this(configStore, launcherService, gamePerformanceService, gameBlocklistStore, logger, null, null, clearIntegrationRuntimeState)
     {
     }
 
@@ -25,6 +27,7 @@ public sealed class LocalDataResetService
         ConfigStore configStore,
         LauncherService launcherService,
         GamePerformanceService gamePerformanceService,
+        GameBlocklistStore gameBlocklistStore,
         HostLogger logger,
         string? legacyRoamingRoot,
         string? legacyLocalRoot,
@@ -33,6 +36,7 @@ public sealed class LocalDataResetService
         _configStore = configStore;
         _launcherService = launcherService;
         _gamePerformanceService = gamePerformanceService;
+        _gameBlocklistStore = gameBlocklistStore;
         _logger = logger;
         _clearIntegrationRuntimeState = clearIntegrationRuntimeState;
         _legacyRoamingRoot = legacyRoamingRoot ?? Path.Combine(
@@ -67,6 +71,12 @@ public sealed class LocalDataResetService
         {
             var removed = _launcherService.ClearRecentHistory();
             return removed == 0 ? "No retained recent-app history was present." : $"Deleted {removed} retained recent-app record source(s).";
+        });
+
+        RunRequired(steps, "game-blocklist", "Game Mode blocklist", () =>
+        {
+            var removed = _gameBlocklistStore.Clear();
+            return removed == 0 ? "No Game Mode blocklist was present." : "Deleted the Game Mode blocklist.";
         });
 
         RunRequired(steps, "game-telemetry", "Retained game telemetry", () =>
