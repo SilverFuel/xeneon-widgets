@@ -2089,7 +2089,7 @@ async function validateSectionNavigation(cdp) {
   const reset = resetProbe.result?.value;
   assert(!resetProbe.exceptionDetails && reset?.requests === 1 && reset.widget === 'setup' && reset.section === 'settings' && reset.normalized.order.join('|') === defaults.join('|') && reset.normalized.hidden.length === 0 && reset.errors.length === 0, `Privacy reset did not clear navigation preferences: ${JSON.stringify(reset)}`);
   await cdp.send('Storage.clearDataForOrigin', { origin: baseUrl, storageTypes: 'all' });
-  console.log('section order/visibility, all25 two-click selection with scrolling, hidden deep links, migration, corrupt settings, reset, and keyboard targets: passed');
+  console.log('section order/visibility, all26 two-click selection with scrolling, hidden deep links, migration, corrupt settings, reset, and keyboard targets: passed');
 }
 
 // This fixture is installed before dashboard scripts. Every audio/media request,

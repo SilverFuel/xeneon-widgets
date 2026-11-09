@@ -378,8 +378,7 @@ public sealed class GameActivityService
                     DateTimeOffset.UtcNow);
                 // Force the next read to treat the choice as a new session, even when the chosen
                 // candidate is already the active one.
-                _lastActiveGameId = "";
-                _sessionStartedAt = null;
+                _session.End();
             }
 
             InvalidateCache();
