@@ -4,6 +4,11 @@ namespace XenonEdgeHost.Tests;
 
 public sealed class SceneServiceTests
 {
+    // Schedule rules compare against the machine's local clock, so build the instant from local 23:30.
+    private static readonly string LocalNight = new DateTimeOffset(
+        new DateTime(2026, 7, 12, 23, 30, 0, DateTimeKind.Unspecified),
+        TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 7, 12, 23, 30, 0))).ToString("O");
+
     private string _tempDirectory = "";
     private HostLogger? _logger;
 
@@ -34,11 +39,11 @@ public sealed class SceneServiceTests
         var service = CreateService();
         service.Activate(new SceneActivationRequest { SceneId = "scene-gaming", ManualOverrideMinutes = -1 });
 
-        var overridden = Snapshot(service.Evaluate(new SceneEvaluationRequest { SampledAt = "2026-07-12T23:30:00-04:00" }));
+        var overridden = Snapshot(service.Evaluate(new SceneEvaluationRequest { SampledAt = LocalNight }));
         Assert.That(overridden.ActiveSceneId, Is.EqualTo("scene-gaming"));
 
         service.ResumeAutomation();
-        var automatic = Snapshot(service.Evaluate(new SceneEvaluationRequest { SampledAt = "2026-07-12T23:30:00-04:00" }));
+        var automatic = Snapshot(service.Evaluate(new SceneEvaluationRequest { SampledAt = LocalNight }));
         Assert.That(automatic.ActiveSceneId, Is.EqualTo("scene-work"));
         Assert.That(automatic.ThemeVariant, Is.EqualTo("night"));
     }
@@ -100,7 +105,7 @@ public sealed class SceneServiceTests
         {
             ActiveGame = "Example Game",
             MediaPlaying = true,
-            SampledAt = "2026-07-12T23:30:00-04:00"
+            SampledAt = LocalNight
         }));
 
         Assert.That(snapshot.ActiveSceneId, Is.EqualTo("scene-gaming"));
