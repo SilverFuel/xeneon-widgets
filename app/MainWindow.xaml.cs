@@ -72,6 +72,7 @@ public sealed partial class MainWindow : Window
     private string? _webViewDiagnosticsScriptId;
     private CancellationTokenSource? _displayRecoveryCancellation;
     private DisplayWindowNativeGuard? _displayWindowGuard;
+    private TouchCursorGuard? _touchCursorGuard;
     private int _nativeDisplayRecoveryQueued;
 
     public MainWindow()
@@ -165,6 +166,7 @@ public sealed partial class MainWindow : Window
         // TrayIcon installs a legacy window-procedure wrapper. Install our
         // independent subclass after it, and detach before disposing the tray.
         StartDisplayWindowGuard();
+        StartTouchCursorGuard();
         var placementReady = ConfigureWindow(saveSelection: false);
         if (placementReady)
         {
@@ -523,6 +525,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void StartTouchCursorGuard()
+    {
+        try
+        {
+            _touchCursorGuard = new TouchCursorGuard(_logger);
+            _logger.Info("Touch cursor guard installed.");
+        }
+        catch (Exception error)
+        {
+            // Cosmetic only: without it the cursor follows touches, as before.
+            _logger.Error("Touch cursor guard could not start; the cursor will follow touches.", error);
+        }
+    }
+
     private void HandleNativeDisplayChange(uint message)
     {
         if (_disposed)
@@ -856,6 +872,16 @@ public sealed partial class MainWindow : Window
                 });
               }, true);
 
+              function postTouch(phase, event) {
+                if (event && event.pointerType === "touch") {
+                  post("touch-pointer", { phase, id: event.pointerId });
+                }
+              }
+
+              window.addEventListener("pointerdown", function (event) { postTouch("down", event); }, true);
+              window.addEventListener("pointerup", function (event) { postTouch("up", event); }, true);
+              window.addEventListener("pointercancel", function (event) { postTouch("up", event); }, true);
+
               window.addEventListener("unhandledrejection", function (event) {
                 const reason = event && event.reason;
                 post("unhandled-rejection", {
@@ -1132,12 +1158,47 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            _logger.Warn($"WebView message: {args.TryGetWebMessageAsString()}");
+            var message = args.TryGetWebMessageAsString();
+            if (TryHandleTouchPointerMessage(args.Source, message))
+            {
+                return;
+            }
+
+            _logger.Warn($"WebView message: {message}");
         }
         catch (Exception error)
         {
             _logger.Error("Failed to read WebView diagnostics message", error);
         }
+    }
+
+    // Touch reports arrive at pointer rate, so they are consumed here instead of
+    // being logged. Only the local dashboard origin may drive the cursor guard.
+    private bool TryHandleTouchPointerMessage(string source, string? message)
+    {
+        if (message is null || !message.Contains("\"touch-pointer\"", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(source, UriKind.Absolute, out var origin)
+            || origin.Host != _dashboardUri.Host
+            || origin.Port != _dashboardUri.Port)
+        {
+            return false;
+        }
+
+        using var document = System.Text.Json.JsonDocument.Parse(message);
+        var root = document.RootElement;
+        if (root.TryGetProperty("kind", out var kind) && kind.GetString() == "touch-pointer"
+            && root.TryGetProperty("phase", out var phase)
+            && root.TryGetProperty("id", out var id) && id.TryGetInt32(out var pointerId))
+        {
+            _touchCursorGuard?.NotifyTouch(phase.GetString() == "down", pointerId);
+            return true;
+        }
+
+        return false;
     }
 
     private void HandleProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs args)
@@ -2029,6 +2090,8 @@ public sealed partial class MainWindow : Window
     private void DisposeWindowHooks()
     {
         // Reverse installation order on both explicit Quit and window close.
+        _touchCursorGuard?.Dispose();
+        _touchCursorGuard = null;
         // The tray restores a raw WndProc, so its outer subclass must go first.
         _displayWindowGuard?.Dispose();
         if (_displayWindowGuard?.IsAttached == true)

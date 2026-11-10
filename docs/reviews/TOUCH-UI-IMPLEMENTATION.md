@@ -33,7 +33,17 @@ Tracing requires the exact process environment opt-in `AUXORA_TOUCH_CURSOR_TRACE
 
 The native diagnostic host and test assembly compile. The focused NUnit run aborted because VSTest could not connect to its test host within 20 seconds; no tests were reported executed. C1 (normal Edge), C2 (WinUI Gallery WebView2), and C3 (Gallery native Button) observations are still pending, as is physical Auxora testing. The installed WebView2 runtime differs from the older evidence, so those observations cannot be treated as current reproduction results.
 
-See the diagnostic branch's `docs/diagnostics/TOUCH-CURSOR-TRACE.md` for the exact isolation environment, interpretation limits, source references, log location, and collection procedure. No automatic cursor-restoration mitigation has been selected or implemented.
+See the diagnostic branch's `docs/diagnostics/TOUCH-CURSOR-TRACE.md` for the exact isolation environment, interpretation limits, source references, log location, and collection procedure.
+
+## Cursor mitigation
+
+Host logs from the Xeneon Edge showed each touch arriving at the mouse hook as plain, untagged mouse input (`flags=0x0 extra=0x0`) that teleports the cursor, so neither Windows' touch tag nor the size of the jump identifies it, and WebView2's pointer messages live in another process. The page does see the touch: a browser check on the Edge reported `pointerType: "touch"`.
+
+1. The injected diagnostics script reports `pointerdown`, `pointerup`, and `pointercancel` for `pointerType === "touch"` as `touch-pointer` messages. The host accepts them only from the local dashboard origin and does not log them.
+2. `TouchCursorGuard` runs a passive low-level mouse hook that only records cursor positions; it never swallows input.
+3. `TouchCursorPolicy` anchors on the last position older than 200 ms when the first finger goes down. After the last finger lifts and 150 ms settle, it moves the cursor back with `SetCursorPos` if the touch moved it. Multi-touch, long presses, drags, and a release that never arrives (5 s) are handled; real mouse movement without a reported touch is never undone. Windows keeps the cursor hidden after touch until it sees real mouse movement, so after `SetCursorPos` the guard injects a net-zero 1 px mouse nudge and sets the position again; on the Xeneon Edge the cursor reappears after roughly a second.
+
+Decision logic is covered by `TouchCursorPolicyTests`. The host log records `Touch moved the cursor; restored it to its position before the touch.` (at most 20 times). Confirmed on a Xeneon Edge: the cursor returns to its position and becomes visible again. Re-check with the touch-pointer check in `docs/release/DISPLAY-CERTIFICATION.md`.
 
 ## Validation and assertion migration
 

@@ -51,3 +51,9 @@ app/dist/
 app/installer-build/
 desktop/electron/dist/
 /release/
+/.idea
+
+# AI artifacts
+specs/
+.specify/
+.atl/

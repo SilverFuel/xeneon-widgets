@@ -9,6 +9,7 @@ Auxora is designed as a local-first dashboard.
 - On Windows, those integration secrets are protected with Windows per-user data protection.
 - On macOS, the Electron beta host uses Electron safe storage for protected secrets when available.
 - System, network, audio, media, launcher, clipboard, and local integration state are served from `127.0.0.1`.
+- To keep the mouse cursor in place when you touch the companion display, Windows builds use a read-only mouse hook that remembers recent cursor positions in memory for about two seconds. Positions are never written to disk, logged, or sent anywhere, and the hook does not read keystrokes or change mouse input.
 
 ## Network Access
 
