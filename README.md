@@ -184,6 +184,10 @@ http://127.0.0.1:8976/api/unifi/network/link
 
 When linked, Xenon reads local UniFi Network client and AP stats from the controller and folds them into the Network page and the compact Game Mode network strip. If UniFi is not linked, Network Monitor still remains useful from native Windows metrics.
 
+## Touch And The Mouse Cursor
+
+Windows moves the mouse cursor to wherever a touchscreen is touched. Auxora puts it back: when you touch the companion display, the cursor returns to the spot it was in before the touch and is shown again after you lift your finger. The dashboard reports touch pointers (`pointerType` `touch`) to the host, and a passive, read-only mouse hook remembers where the cursor was. Real mouse movement is never changed, positions are kept in memory only for about two seconds, and nothing is stored or sent. If the hook cannot start, the cursor simply follows touches as Windows normally does. Details and the design rationale are in `docs/reviews/TOUCH-UI-IMPLEMENTATION.md`.
+
 ## GPU Power In System Monitor
 
 The System Monitor includes a GPU Power section for RTX 50-series and other modern GPUs. It does not hardcode an Astral-only path; it discovers connector, rail, current, voltage, power, and protection sensors from local public sources when they are exposed.

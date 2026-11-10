@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep the Windows mouse cursor where it was when the companion display is touched. The dashboard reports touch pointers, a passive mouse hook remembers where the cursor was, and the host puts it back once the touch settles and makes it visible again. Real mouse movement is never altered, and nothing is stored or sent.
 - Fixed WoW Forever reopening after a quick game restart and kept game appearance and automatic Modes stable during unavailable or stale activity readings.
 - Fixed journal backup import races and preserved the original recovery export when replacement could not be saved.
 - Fixed stale TMOG readings after Pause/Resume, network readings kept falsely fresh by ping updates, and throughput spikes after counter failures.
