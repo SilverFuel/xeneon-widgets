@@ -3589,6 +3589,112 @@ async function validateLegacyLayoutPreservation(cdp) {
   console.log('legacy layout preservation, full panel width, mocked Mode action pending/deduplication, selection, and reload: passed');
 }
 
+function installGameProfileFixture() {
+  if (new URL(location.href).searchParams.get("gameProfileTest") !== "1") return;
+  const originalFetch = window.fetch;
+  const fixture = window.__gameProfileFixture = { activity: { supported: true, active: false, status: "idle" }, reads: 0, evaluations: [] };
+  window.fetch = function (input, options) {
+    const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
+    const method = String(options?.method || input?.method || "GET").toUpperCase();
+    if (url.origin === location.origin && url.pathname === "/api/game/activity" && method === "GET") {
+      // Only the detected game is synthetic. Profiles are evaluated by the real isolated host.
+      fixture.reads += 1;
+      return Promise.resolve(new Response(JSON.stringify({ ...fixture.activity, sampledAt: new Date().toISOString() }), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      }));
+    }
+    if (url.origin === location.origin && url.pathname === "/api/scenes/evaluate" && method === "POST") {
+      try { fixture.evaluations.push(JSON.parse(String(options?.body || "{}"))); } catch (error) { fixture.evaluations.push({}); }
+    }
+    return originalFetch.apply(this, arguments);
+  };
+}
+
+// A game starting, the user moving on, and the game exiting, against the real host's Profiles.
+async function validateGameProfileSwitching(cdp) {
+  await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1920, height: 720, deviceScaleFactor: 1, mobile: false });
+  const fixture = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(${installGameProfileFixture.toString()})()` });
+  try {
+    await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=system&gameProfileTest=1` });
+    await waitForCommittedUrl(cdp, "gameProfileTest=1");
+    const evaluation = await cdp.send("Runtime.evaluate", { expression: `(async () => {
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const check = (condition, message) => { if (!condition) throw new Error(message); };
+      const fixture = window.__gameProfileFixture;
+      const state = () => ({
+        scene: document.body?.dataset.scene || "",
+        theme: document.documentElement.getAttribute("data-theme") || "",
+        panel: document.body?.dataset.activeWidgetId || ""
+      });
+      const until = async (predicate, label, timeoutMs = 45000) => {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+          if (predicate(state())) return state();
+          await wait(100);
+        }
+        throw new Error(label + ": " + JSON.stringify(state()) + " after " + fixture.reads + " game reads and evaluations " + JSON.stringify(fixture.evaluations.slice(-3)));
+      };
+      const forever = () => ({
+        supported: true, configured: true, status: "active", active: true, candidates: [],
+        activeGame: {
+          id: "battle.net:rendered-fixture", name: "World of Warcraft", gameKey: "wow-forever", platform: "Battle.net",
+          source: "Battle.net library", confidence: 84, reason: "Rendered fixture", startedAt: new Date().toISOString(), tileLabel: "W"
+        }
+      });
+      const ended = { supported: true, configured: true, active: false, status: "ended" };
+
+      await until(() => document.body?.dataset.bridgeHydrated === "true" && state().panel === "system", "dashboard did not open System");
+      const resumed = await fetch("/api/scenes/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Xenon-Session": window.XenonSessionToken || "" },
+        body: "{}"
+      });
+      check(resumed.ok, "could not resume automatic Profiles: " + resumed.status);
+      const scenes = await resumed.json();
+      const defaultId = scenes.defaultSceneId;
+      const wowProfile = (scenes.profiles || []).find(profile => profile.id === "scene-wow-forever");
+      check(wowProfile && wowProfile.isBuiltIn && wowProfile.homeWidget === "wow-forever", "the host does not ship the WoW Forever Profile: " + JSON.stringify(wowProfile));
+      const before = await until(current => current.scene === defaultId && current.panel === "system", "the default Profile was not active before the game");
+
+      // 1. The game starts: Profile, theme and panel change.
+      fixture.activity = forever();
+      const started = await until(current => current.scene === "scene-wow-forever" && current.theme === wowProfile.themeId && current.panel === "wow-forever",
+        "WoW Forever did not get its Profile, theme and home panel");
+      const toast = document.getElementById("dashboard-touch-feedback")?.textContent || "";
+      check(fixture.evaluations.some(request => request.activeGameKey === "wow-forever"), "the game key was not sent for Profile evaluation");
+
+      // 2. The user moves on: later polls must not pull them back.
+      window.__auxoraTestOpenWidget("audio");
+      await until(current => current.panel === "audio", "the user could not leave the game panel");
+      const readsAfterLeaving = fixture.reads;
+      await until(() => fixture.reads >= readsAfterLeaving + 2, "the game was not polled again after the user left", 60000);
+      const afterPolls = state();
+      check(afterPolls.panel === "audio" && afterPolls.scene === "scene-wow-forever" && afterPolls.theme === wowProfile.themeId,
+        "polling pulled the user back or dropped the Profile: " + JSON.stringify(afterPolls));
+
+      // 3. The game exits: the default Profile and its theme return; the panel the user chose stays.
+      fixture.activity = ended;
+      const exited = await until(current => current.scene === defaultId && current.theme === before.theme, "the default Profile did not return when the game exited");
+      check(exited.panel === "audio", "exiting the game replaced the panel the user chose: " + JSON.stringify(exited));
+
+      // 4. A new session where the user stays on the game panel: the previous panel returns on exit.
+      fixture.activity = forever();
+      await until(current => current.scene === "scene-wow-forever" && current.panel === "wow-forever", "a new game session did not reopen the game panel");
+      fixture.activity = ended;
+      const returned = await until(current => current.scene === defaultId && current.panel === "audio" && current.theme === before.theme,
+        "the panel from before the game did not return when it exited");
+      return { before, started, toast, exited, returned, evaluations: fixture.evaluations.length };
+    })()`, awaitPromise: true, returnByValue: true });
+    assert(!evaluation.exceptionDetails, `Game Profile switching failed: ${evaluation.exceptionDetails?.exception?.description || evaluation.exceptionDetails?.text}`);
+    const result = evaluation.result?.value;
+    assert(result && /WoW Forever profile/.test(result.toast), `Game start did not announce its Profile: ${JSON.stringify(result)}`);
+    console.log(`rendered game Profile switching: ${result.before.scene}/${result.before.theme} -> ${result.started.scene}/${result.started.theme}/${result.started.panel} -> ${result.returned.scene}/${result.returned.panel}; the user was not pulled back: passed`);
+  } finally {
+    await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier });
+  }
+}
+
 async function validateForcedColorsProductSurfaces(cdp) {
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 2560,
@@ -4065,6 +4171,7 @@ try {
     }
     assert(surfaceFailures.length === 0, "Product-surface matrix failed:\n" + surfaceFailures.join("\n"));
     await validateLegacyLayoutPreservation(cdp);
+    await validateGameProfileSwitching(cdp);
     await validateDeletableMusicCards(cdp);
     await validateForcedColorsProductSurfaces(cdp);
     await validateOptionalSetupHandoffs(cdp);

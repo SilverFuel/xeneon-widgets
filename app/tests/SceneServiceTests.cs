@@ -65,7 +65,7 @@ public sealed class SceneServiceTests
         var snapshot = Snapshot(service.GetSnapshot());
 
         Assert.That(snapshot.Profiles.Select(scene => scene.Id), Does.Not.Contain("scene-night"));
-        Assert.That(snapshot.Profiles, Has.Count.EqualTo(4));
+        Assert.That(snapshot.Profiles, Has.Count.EqualTo(5));
         Assert.That(snapshot.ManualOverrideActive, Is.False);
         Assert.That(snapshot.AutomaticSwitchingActive, Is.True);
     }
@@ -108,13 +108,160 @@ public sealed class SceneServiceTests
     }
 
     [Test]
-    public void Defaults_ContainFiveDistinctBuiltInScenes()
+    public void Defaults_ContainSixDistinctBuiltInScenes()
     {
         var scenes = SceneDefaults.Create();
 
-        Assert.That(scenes.Profiles, Has.Count.EqualTo(5));
+        Assert.That(scenes.Profiles, Has.Count.EqualTo(6));
         Assert.That(scenes.Profiles.Select(scene => scene.Id), Is.Unique);
         Assert.That(scenes.Profiles, Has.All.Property(nameof(SceneProfile.IsBuiltIn)).True);
+    }
+
+    [Test]
+    public void Evaluate_WowForeverGetsItsOwnProfileThemeAndHomePanel()
+    {
+        var service = CreateService();
+        var game = new GameActivityPayload
+        {
+            Id = "battle.net:1a2b3c",
+            Name = "World of Warcraft: Forever",
+            ExecutablePath = @"D:\Games\World of Warcraft\_forever_\Wow.exe"
+        };
+
+        var snapshot = Snapshot(service.Evaluate(new SceneEvaluationRequest
+        {
+            ActiveGame = game.Name,
+            ActiveGameKey = game.GameKey,
+            SampledAt = "2026-07-12T14:00:00-04:00"
+        }));
+        var active = snapshot.Profiles.Single(scene => scene.Id == snapshot.ActiveSceneId);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(game.GameKey, Is.EqualTo("wow-forever"));
+            Assert.That(snapshot.ActiveSceneId, Is.EqualTo("scene-wow-forever"));
+            Assert.That(active.ThemeId, Is.EqualTo("horde"));
+            Assert.That(active.HomeWidget, Is.EqualTo("wow-forever"));
+            Assert.That(snapshot.LastActivationReason, Does.Contain("game"));
+        }));
+    }
+
+    [Test]
+    public void Evaluate_UnknownGameFallsBackToGamingAndItsHud()
+    {
+        var service = CreateService();
+        var game = new GameActivityPayload { Id = "epic:9f8e7d", Name = "Example Game", ExecutablePath = @"D:\Games\Example\Example.exe" };
+
+        var snapshot = Snapshot(service.Evaluate(new SceneEvaluationRequest
+        {
+            ActiveGame = game.Name,
+            ActiveGameKey = game.GameKey,
+            SampledAt = "2026-07-12T14:00:00-04:00"
+        }));
+        var active = snapshot.Profiles.Single(scene => scene.Id == snapshot.ActiveSceneId);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(game.GameKey, Is.EqualTo("game:example-game"));
+            Assert.That(snapshot.ActiveSceneId, Is.EqualTo("scene-gaming"));
+            Assert.That(active.HomeWidget, Is.EqualTo("game-mode"));
+        }));
+    }
+
+    [TestCase(@"C:\Games\World of Warcraft\_retail_\Wow.exe", "World of Warcraft")]
+    [TestCase(@"C:\Games\World of Warcraft\_classic_\WowClassic.exe", "World of Warcraft")]
+    [TestCase(@"C:\Program Files (x86)\Battle.net\Battle.net.exe", "World of Warcraft: Forever")]
+    [TestCase("", "World of Warcraft: Forever")]
+    [TestCase(@"D:\Tools\notwow.exe", "wow-forever")]
+    public void Evaluate_OtherWarcraftClientsAndLaunchersDoNotGetTheForeverProfile(string executablePath, string name)
+    {
+        var service = CreateService();
+        var game = new GameActivityPayload { Name = name, ExecutablePath = executablePath };
+
+        var snapshot = Snapshot(service.Evaluate(new SceneEvaluationRequest
+        {
+            ActiveGame = game.Name,
+            ActiveGameKey = game.GameKey,
+            SampledAt = "2026-07-12T14:00:00-04:00"
+        }));
+
+        Assert.That(snapshot.ActiveSceneId, Is.EqualTo("scene-gaming"));
+    }
+
+    [Test]
+    public void Evaluate_WhenTheGameExitsTheDefaultProfileReturns()
+    {
+        var service = CreateService();
+        service.Evaluate(new SceneEvaluationRequest { ActiveGame = "World of Warcraft", ActiveGameKey = "wow-forever", SampledAt = "2026-07-12T14:00:00-04:00" });
+
+        var snapshot = Snapshot(service.Evaluate(new SceneEvaluationRequest { SampledAt = "2026-07-12T14:05:00-04:00" }));
+
+        Assert.That(snapshot.ActiveSceneId, Is.EqualTo("scene-work"));
+    }
+
+    [Test]
+    public void Evaluate_ASecondGameProfileNeedsOnlyAProfileWithAGameKeyRule()
+    {
+        var service = CreateService();
+        var duplicated = Snapshot(service.Duplicate(new SceneDuplicateRequest { SceneId = "scene-gaming", Name = "Diablo" }));
+        var custom = duplicated.Profiles.Single(scene => !scene.IsBuiltIn);
+        custom.ThemeId = "ember";
+        custom.HomeWidget = "system";
+        custom.Rules = [new SceneRule { Id = "rule-diablo", Type = "game", Value = "diablo-iv", Priority = 110 }];
+        service.Save(new SceneSaveRequest { Scene = custom });
+        service.ResumeAutomation();
+        var game = new GameActivityPayload { Name = "Diablo IV", ExecutablePath = @"D:\Games\Diablo IV\Diablo IV.exe" };
+
+        var snapshot = Snapshot(service.Evaluate(new SceneEvaluationRequest
+        {
+            ActiveGame = game.Name,
+            ActiveGameKey = game.GameKey,
+            SampledAt = "2026-07-12T14:00:00-04:00"
+        }));
+        var active = snapshot.Profiles.Single(scene => scene.Id == snapshot.ActiveSceneId);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(game.GameKey, Is.EqualTo("diablo-iv"));
+            Assert.That(snapshot.ActiveSceneId, Is.EqualTo(custom.Id));
+            Assert.That(active.ThemeId, Is.EqualTo("ember"));
+            Assert.That(active.HomeWidget, Is.EqualTo("system"));
+        }));
+    }
+
+    [Test]
+    public void SetTheme_ChangesABuiltInProfileAndSurvivesNormalization()
+    {
+        var service = CreateService();
+
+        var snapshot = Snapshot(service.SetTheme(new SceneThemeRequest { SceneId = "scene-work", ThemeId = "midnight" }));
+        var reloaded = Snapshot(service.GetSnapshot());
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(snapshot.Profiles.Single(scene => scene.Id == "scene-work").ThemeId, Is.EqualTo("midnight"));
+            Assert.That(reloaded.Profiles.Single(scene => scene.Id == "scene-work").ThemeId, Is.EqualTo("midnight"));
+            Assert.That(reloaded.Profiles.Single(scene => scene.Id == "scene-work").IsBuiltIn, Is.True);
+            Assert.That(SceneDefaults.NormalizeProfile(new SceneProfile { Id = "scene-gaming", ThemeId = "ocean", IsBuiltIn = true }).ThemeId, Is.EqualTo("ocean"));
+        }));
+        Assert.Throws<InvalidOperationException>((Action)(() => service.SetTheme(new SceneThemeRequest { SceneId = "no-such-profile", ThemeId = "focus" })));
+    }
+
+    [Test]
+    public void Normalize_ProfilesSavedBeforeHomePanelsGainTheBuiltInDefaults()
+    {
+        var scenes = SceneDefaults.Create();
+        scenes.Profiles.RemoveAll(scene => scene.Id == "scene-wow-forever");
+        scenes.Profiles.Single(scene => scene.Id == "scene-gaming").HomeWidget = "";
+
+        var normalized = SceneDefaults.Normalize(scenes);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(normalized.Profiles.Single(scene => scene.Id == "scene-gaming").HomeWidget, Is.EqualTo("game-mode"));
+            Assert.That(normalized.Profiles.Single(scene => scene.Id == "scene-wow-forever").HomeWidget, Is.EqualTo("wow-forever"));
+            Assert.That(normalized.Profiles.Single(scene => scene.Id == "scene-work").HomeWidget, Is.Empty);
+        }));
     }
 
     [Test]

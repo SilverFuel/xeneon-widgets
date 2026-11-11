@@ -188,6 +188,9 @@ public sealed class SceneProfile
 
     public string PerformanceBudget { get; set; } = "balanced";
 
+    // The panel to open when this Profile activates automatically. Empty means none.
+    public string HomeWidget { get; set; } = "";
+
     public bool IsBuiltIn { get; set; }
 
     public List<string> Widgets { get; set; } = [];
@@ -463,9 +466,19 @@ public sealed class SceneEvaluationRequest
 
     public string? ActiveGame { get; set; }
 
+    // Stable game identity from GameActivityPayload.GameKey; never an install path.
+    public string? ActiveGameKey { get; set; }
+
     public bool MediaPlaying { get; set; }
 
     public string? SampledAt { get; set; }
+}
+
+public sealed class SceneThemeRequest
+{
+    public string? SceneId { get; set; }
+
+    public string? ThemeId { get; set; }
 }
 
 public sealed class PortableBackupRequest

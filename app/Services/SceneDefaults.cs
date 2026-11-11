@@ -19,6 +19,9 @@ public static class SceneDefaults
                 BuiltIn("scene-gaming", "Gaming", "gamepad", "gaming", "standard", "compact", 82, 60, "game",
                     ["home", "game-mode", "system", "network", "audio"],
                     ["night-light", "task-manager"]),
+                BuiltIn("scene-wow-forever", "WoW Forever", "gamepad", "horde", "standard", "compact", 82, 60, "game",
+                    ["wow-forever", "game-mode", "audio", "system"],
+                    ["night-light", "task-manager"]),
                 BuiltIn("scene-media", "Media", "play", "warm", "standard", "comfortable", 65, 48, "balanced",
                     ["home", "audio", "hue", "weather"],
                     ["dark-mode", "night-light"]),
@@ -95,7 +98,13 @@ public static class SceneDefaults
         scene.Id = NormalizeId(scene.Id);
         scene.Name = string.IsNullOrWhiteSpace(scene.Name) ? "Custom Mode" : scene.Name.Trim()[..Math.Min(scene.Name.Trim().Length, 40)];
         scene.Icon = NormalizeToken(scene.Icon, "spark");
-        scene.ThemeId = BuiltInThemeId(scene.Id) ?? NormalizeThemeId(scene.ThemeId);
+        // Any Profile's theme can be changed, built-in ones included. Create() supplies the fresh-install defaults.
+        scene.ThemeId = NormalizeThemeId(scene.ThemeId);
+        scene.HomeWidget = NormalizeToken(scene.HomeWidget, "");
+        if (scene.HomeWidget.Length == 0)
+        {
+            scene.HomeWidget = BuiltInHomeWidget(scene.Id);
+        }
         scene.ThemeVariant = string.Equals(scene.Id, "scene-night", StringComparison.OrdinalIgnoreCase)
             ? "night"
             : NormalizeThemeVariant(scene.ThemeVariant);
@@ -140,14 +149,12 @@ public static class SceneDefaults
 
     public static string NormalizeAccentColor(string? value) => NormalizeColor(value);
 
-    private static string? BuiltInThemeId(string id) => id switch
+    // Built-in game Profiles open their own panel. Profiles saved before HomeWidget existed pick this up on load.
+    private static string BuiltInHomeWidget(string id) => id switch
     {
-        "scene-work" => "focus",
-        "scene-gaming" => "gaming",
-        "scene-media" => "warm",
-        "scene-night" => "focus",
-        "scene-home" => "focus",
-        _ => null
+        "scene-gaming" => "game-mode",
+        "scene-wow-forever" => "wow-forever",
+        _ => ""
     };
 
     private static SceneProfile BuiltIn(string id, string name, string icon, string theme, string themeVariant, string density, int brightness, int animation, string budget, List<string> widgets, List<string> actions)
@@ -165,9 +172,12 @@ public static class SceneDefaults
             PerformanceBudget = budget,
             Widgets = widgets,
             QuickActions = actions,
+            HomeWidget = BuiltInHomeWidget(id),
             IsBuiltIn = true,
             Rules = id switch
             {
+                // A rule for one named game outranks the any-game rule, so a game with its own Profile gets it.
+                "scene-wow-forever" => [new SceneRule { Id = "rule-wow-forever", Type = "game", Value = "wow-forever", Priority = 110 }],
                 "scene-gaming" => [new SceneRule { Id = "rule-game", Type = "game", Priority = 100 }],
                 "scene-media" => [new SceneRule { Id = "rule-media", Type = "media", Priority = 70 }],
                 "scene-night" => [new SceneRule { Id = "rule-night", Type = "schedule", StartTime = "22:00", EndTime = "06:30", Priority = 60 }],

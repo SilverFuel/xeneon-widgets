@@ -19,6 +19,8 @@ public sealed class SceneController
 
     public object Duplicate(SceneDuplicateRequest request) => _sceneService.Duplicate(request);
 
+    public object SetTheme(SceneThemeRequest request) => _sceneService.SetTheme(request);
+
     public object Delete(SceneDeleteRequest request) => _sceneService.Delete(request);
 
     public object Evaluate(SceneEvaluationRequest request) => _sceneService.Evaluate(request);
