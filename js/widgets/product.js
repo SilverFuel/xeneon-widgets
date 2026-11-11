@@ -76,9 +76,8 @@
           themes.map(function (theme) {
             return '' +
               '<button class="product-swatch' + (theme.id === activeTheme ? " is-selected" : "") + '" type="button" role="radio" aria-checked="' + (theme.id === activeTheme ? "true" : "false") + '" aria-pressed="' + (theme.id === activeTheme ? "true" : "false") + '" data-theme="' + escapeHtml(theme.id) + '">' +
-                '<span class="product-swatch__chip" style="--swatch-bg:' + escapeHtml(theme.background || "var(--theme-surface-elevated)") + ';--swatch-a:' + escapeHtml(theme.accent || "#2b4d7d") + ';--swatch-b:' + escapeHtml(theme.secondary || theme.accent || "#2b4d7d") + '"></span>' +
+                '<span class="product-swatch__chip" style="--swatch-bg:' + escapeHtml(theme.page || "var(--theme-surface-elevated)") + ';--swatch-a:' + escapeHtml(theme.accent || "#2b4d7d") + ';--swatch-b:' + escapeHtml(theme.secondary || theme.accent || "#2b4d7d") + '"></span>' +
                 '<strong>' + escapeHtml(theme.name) + '</strong>' +
-                '<span>' + escapeHtml(theme.copy) + '</span>' +
               '</button>';
           }).join("") +
         '</div>' +
@@ -1185,7 +1184,7 @@
             '<form class="inline-form product-mode-editor" data-scene-edit="' + escapeHtml(scene.id) + '">' +
               '<div class="inline-form-grid inline-form-grid--2">' +
                 '<label class="inline-field"><span>Mode name</span><input class="inline-input" name="name" maxlength="40" value="' + escapeHtml(scene.name) + '" aria-label="Mode name for ' + escapeHtml(scene.name) + '"></label>' +
-                '<label class="inline-field"><span>Theme</span><select class="inline-select" name="themeId" aria-label="Theme for ' + escapeHtml(scene.name) + '"><option value="focus"' + (scene.themeId === "focus" ? " selected" : "") + '>Focus</option><option value="gaming"' + (scene.themeId === "gaming" ? " selected" : "") + '>Gaming</option><option value="warm"' + (scene.themeId === "warm" ? " selected" : "") + '>Warm</option></select></label>' +
+                '<label class="inline-field"><span>Theme</span><select class="inline-select" name="themeId" aria-label="Theme for ' + escapeHtml(scene.name) + '">' + productThemes(env).map(function (theme) { return '<option value="' + escapeHtml(theme.id) + '"' + (scene.themeId === theme.id ? " selected" : "") + '>' + escapeHtml(theme.name) + '</option>'; }).join("") + '</select></label>' +
                 '<label class="inline-field"><span>Spacing</span><select class="inline-select" name="density" aria-label="Spacing for ' + escapeHtml(scene.name) + '"><option value="compact"' + (scene.density === "compact" ? " selected" : "") + '>Compact</option><option value="comfortable"' + (scene.density === "comfortable" ? " selected" : "") + '>Comfortable</option><option value="spacious"' + (scene.density === "spacious" ? " selected" : "") + '>Spacious</option></select></label>' +
                 '<label class="inline-field"><span>Performance</span><select class="inline-select" name="performanceBudget" aria-label="Performance for ' + escapeHtml(scene.name) + '"><option value="balanced"' + (scene.performanceBudget === "balanced" ? " selected" : "") + '>Balanced</option><option value="battery"' + (scene.performanceBudget === "battery" ? " selected" : "") + '>Quiet</option><option value="game"' + (scene.performanceBudget === "game" ? " selected" : "") + '>Gaming</option><option value="max"' + (scene.performanceBudget === "max" ? " selected" : "") + '>Maximum</option></select></label>' +
               '</div>' +

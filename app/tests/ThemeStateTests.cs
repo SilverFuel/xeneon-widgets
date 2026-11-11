@@ -49,11 +49,21 @@ public sealed class ThemeStateTests
     [TestCase(null)]
     [TestCase("")]
     [TestCase("   ")]
-    [TestCase("unknown-theme")]
-    [TestCase("focus-night")]
-    public void NormalizeThemeId_UnknownOrMissingValueFallsBackToFocus(string? input)
+    [TestCase("not a theme")]
+    [TestCase("horde!")]
+    [TestCase("<script>")]
+    [TestCase("a-theme-id-that-is-longer-than-thirty-two-characters")]
+    public void NormalizeThemeId_MissingOrMalformedValueFallsBackToFocus(string? input)
     {
         Assert.That(SceneDefaults.NormalizeThemeId(input), Is.EqualTo("focus"));
+    }
+
+    [TestCase("horde", "horde")]
+    [TestCase(" Midnight ", "midnight")]
+    [TestCase("a-theme-added-later", "a-theme-added-later")]
+    public void NormalizeThemeId_KeepsAnyWellFormedIdSoThemesAreDefinedOnlyInTheDashboard(string input, string expected)
+    {
+        Assert.That(SceneDefaults.NormalizeThemeId(input), Is.EqualTo(expected));
     }
 
     [Test]

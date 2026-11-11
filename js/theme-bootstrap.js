@@ -13,16 +13,6 @@
     performanceBudget: "balanced",
     themeReadability: "normal"
   };
-  var themeBackgrounds = {
-    focus: "#f4f5f7",
-    gaming: "#132238",
-    warm: "#f5f1e9"
-  };
-  var themeAccents = {
-    focus: "#2b4d7d",
-    gaming: "#d4ac63",
-    warm: "#e56335"
-  };
   var themeOverrideProperties = [
     "--theme-accent",
     "--theme-accent-text",
@@ -57,15 +47,7 @@
   }
 
   function normalizeThemeId(value) {
-    var requested = String(value || "").trim().toLowerCase();
-    var aliases = {
-      edge: "focus",
-      deepcore: "gaming",
-      afterburn: "warm",
-      verdant: "focus"
-    };
-    requested = aliases[requested] || requested;
-    return ["focus", "gaming", "warm"].indexOf(requested) === -1 ? "focus" : requested;
+    return window.AuxoraThemes.normalizeId(value);
   }
 
   function normalizeAccentMode(value) {
@@ -351,7 +333,7 @@
       colors = [];
     }
     // Computed variant surfaces take precedence over the preset's page color.
-    return colors.length ? colors : [themeBackgrounds[themeId]].filter(Boolean);
+    return colors.length ? colors : [window.AuxoraThemes.get(themeId).page];
   }
 
   function removeInlineThemeOverrides(node) {
@@ -408,7 +390,7 @@
       effectiveIntensity: effectiveIntensity,
       reducedMotion: Boolean(reducedMotionQuery && reducedMotionQuery.matches)
     };
-    var accent = customAccent || themeAccents[state.themeId];
+    var accent = customAccent || window.AuxoraThemes.get(state.themeId).accent;
     var accentText;
 
     root.setAttribute("data-standalone-ui", "");
