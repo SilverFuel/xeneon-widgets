@@ -76,9 +76,7 @@ public sealed class ThemeStateTests
         Assert.That(profiles["scene-media"].ThemeId, Is.EqualTo("warm"));
         Assert.That(profiles["scene-night"].ThemeId, Is.EqualTo("focus"));
         Assert.That(profiles["scene-home"].ThemeId, Is.EqualTo("focus"));
-        Assert.That(
-            profiles.Values.Select(profile => profile.ThemeId),
-            Is.All.Matches<string>(themeId => themeId is "focus" or "gaming" or "warm"));
+        Assert.That(profiles["scene-wow-forever"].ThemeId, Is.EqualTo("horde"));
     }
 
     [TestCase("focus")]

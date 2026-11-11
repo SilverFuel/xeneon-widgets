@@ -200,16 +200,16 @@ public sealed class GameActivityService
 
     private static readonly BattleNetKnownGame[] BattleNetKnownGames =
     [
-        new("Diablo IV", [@"\diablo iv\", @"\diablo 4\"]),
-        new("Diablo Immortal", [@"\diablo immortal\"]),
-        new("Diablo III", [@"\diablo iii\", @"\diablo 3\"]),
-        new("World of Warcraft", [@"\world of warcraft\"]),
-        new("Overwatch 2", [@"\overwatch\", @"\overwatch 2\"]),
-        new("Hearthstone", [@"\hearthstone\"]),
-        new("StarCraft II", [@"\starcraft ii\", @"\starcraft 2\"]),
-        new("StarCraft", [@"\starcraft\"]),
-        new("Heroes of the Storm", [@"\heroes of the storm\"]),
-        new("Call of Duty", [@"\call of duty\"])
+        new("diablo-iv", "Diablo IV", [@"\diablo iv\", @"\diablo 4\"]),
+        new("diablo-immortal", "Diablo Immortal", [@"\diablo immortal\"]),
+        new("diablo-iii", "Diablo III", [@"\diablo iii\", @"\diablo 3\"]),
+        new("world-of-warcraft", "World of Warcraft", [@"\world of warcraft\"]),
+        new("overwatch-2", "Overwatch 2", [@"\overwatch\", @"\overwatch 2\"]),
+        new("hearthstone", "Hearthstone", [@"\hearthstone\"]),
+        new("starcraft-ii", "StarCraft II", [@"\starcraft ii\", @"\starcraft 2\"]),
+        new("starcraft", "StarCraft", [@"\starcraft\"]),
+        new("heroes-of-the-storm", "Heroes of the Storm", [@"\heroes of the storm\"]),
+        new("call-of-duty", "Call of Duty", [@"\call of duty\"])
     ];
 
     private readonly SteamService _steamService;
@@ -1081,6 +1081,55 @@ public sealed class GameActivityService
         }
     }
 
+    // Every game gets a stable key that Profiles can match. The key never contains the install path:
+    // the Forever client and the known Battle.net games use a fixed key, Steam games use their app id,
+    // and anything else uses a slug of the name the dashboard already shows.
+    internal static string BuildGameKey(string? id, string? name, string? executablePath)
+    {
+        if (IsWowForeverExecutable(executablePath))
+        {
+            return "wow-forever";
+        }
+
+        var trimmedId = id?.Trim() ?? "";
+        if (trimmedId.StartsWith("steam:", StringComparison.OrdinalIgnoreCase) && trimmedId.Length > "steam:".Length)
+        {
+            return trimmedId.ToLowerInvariant();
+        }
+
+        var lowerPath = (executablePath ?? "").Replace('/', '\\').ToLowerInvariant();
+        foreach (var game in BattleNetKnownGames)
+        {
+            if (game.PathMarkers.Any(marker => lowerPath.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+            {
+                return game.Key;
+            }
+        }
+
+        var slug = new List<char>();
+        foreach (var character in (name ?? "").Trim().ToLowerInvariant())
+        {
+            if (character is (>= 'a' and <= 'z') or (>= '0' and <= '9'))
+            {
+                slug.Add(character);
+            }
+            else if (slug.Count > 0 && slug[^1] != '-')
+            {
+                slug.Add('-');
+            }
+        }
+
+        var text = new string(slug.Take(48).ToArray()).Trim('-');
+        return text.Length == 0 ? "" : $"game:{text}";
+    }
+
+    // Fixed keys are earned by the executable, never by a display name.
+    internal static bool IsFixedGameKey(string? value)
+    {
+        return string.Equals(value, "wow-forever", StringComparison.OrdinalIgnoreCase)
+            || BattleNetKnownGames.Any(game => string.Equals(game.Key, value, StringComparison.OrdinalIgnoreCase));
+    }
+
     internal static bool TryInferBattleNetGamePath(string lowerPath, out InferredGamePath inferred)
     {
         if (IsWowForeverExecutable(lowerPath))
@@ -1446,6 +1495,7 @@ public sealed class GameActivityService
         string LaunchExecutablePath);
 
     private sealed record BattleNetKnownGame(
+        string Key,
         string Name,
         string[] PathMarkers);
 
@@ -1555,7 +1605,7 @@ public sealed class GameActivityPayload
     public string ExecutablePath { get; set; } = "";
 
     // Stable routing identity without exposing the user's installation path.
-    public string GameKey => GameActivityService.IsWowForeverExecutable(ExecutablePath) ? "wow-forever" : "";
+    public string GameKey => GameActivityService.BuildGameKey(Id, Name, ExecutablePath);
 
     public int Confidence { get; set; }
 

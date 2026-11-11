@@ -101,6 +101,7 @@ public sealed class SceneService
                 Brightness = source.Brightness,
                 AnimationIntensity = source.AnimationIntensity,
                 PerformanceBudget = source.PerformanceBudget,
+                HomeWidget = source.HomeWidget,
                 Widgets = [.. source.Widgets],
                 QuickActions = [.. source.QuickActions],
                 Layout = source.Layout,
@@ -122,6 +123,20 @@ public sealed class SceneService
                 config.Scenes.ManualOverrideUntil = "indefinite";
             }
             config.Scenes.LastActivationReason = "Mode duplicated";
+            return config;
+        });
+        return GetSnapshot();
+    }
+
+    // The one edit allowed on a built-in Profile: its theme.
+    public object SetTheme(SceneThemeRequest request)
+    {
+        var requestedId = request.SceneId?.Trim() ?? "";
+        _configStore.Update(config =>
+        {
+            var scene = config.Scenes.Profiles.FirstOrDefault(item => string.Equals(item.Id, requestedId, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Mode not found.");
+            scene.ThemeId = SceneDefaults.NormalizeThemeId(request.ThemeId);
             return config;
         });
         return GetSnapshot();
@@ -261,8 +276,13 @@ public sealed class SceneService
     {
         return rule.Type switch
         {
-            "game" => !string.IsNullOrWhiteSpace(context.ActiveGame)
-                && (string.IsNullOrWhiteSpace(rule.Value) || context.ActiveGame.Contains(rule.Value, StringComparison.OrdinalIgnoreCase)),
+            // An empty value matches any game. Otherwise match the stable game key exactly, or the game name as before.
+            // A fixed key such as wow-forever is matched by key only, so a display name cannot impersonate it.
+            "game" => (!string.IsNullOrWhiteSpace(context.ActiveGame) || !string.IsNullOrWhiteSpace(context.ActiveGameKey))
+                && (string.IsNullOrWhiteSpace(rule.Value)
+                    || string.Equals(context.ActiveGameKey?.Trim(), rule.Value, StringComparison.OrdinalIgnoreCase)
+                    || (!GameActivityService.IsFixedGameKey(rule.Value)
+                        && (context.ActiveGame?.Contains(rule.Value, StringComparison.OrdinalIgnoreCase) ?? false))),
             "application" => !string.IsNullOrWhiteSpace(context.ForegroundProcess)
                 && !string.IsNullOrWhiteSpace(rule.Value)
                 && context.ForegroundProcess.Contains(rule.Value, StringComparison.OrdinalIgnoreCase),

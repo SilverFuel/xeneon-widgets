@@ -65,6 +65,7 @@
       var performanceBudget = settingValue(env, "performanceBudget", text(dashboard.performanceBudget, "balanced"));
       var gameModeAutoTune = settingValue(env, "gameModeAutoTune", dashboard.gameModeAutoTune === false ? "0" : "1");
       var gameModeAutoFace = settingValue(env, "gameModeAutoFace", "1");
+      var profileName = typeof env.activeProfileName === "function" ? env.activeProfileName() : "";
 
       patchStableDom(container, productShell(
         "Visual style",
@@ -72,6 +73,8 @@
         "Choose a Constellation palette and adjust this companion display's accent, transparency, and motion intensity.",
         activePreset.name,
         "good",
+        '<div class="product-theme-picker">' +
+        (profileName ? '<p class="inline-copy product-theme-owner">Theme for: <strong>' + escapeHtml(profileName) + '</strong></p>' : '') +
         '<div class="product-theme-grid" role="radiogroup" aria-label="Theme">' +
           themes.map(function (theme) {
             return '' +
@@ -80,7 +83,7 @@
                 '<strong>' + escapeHtml(theme.name) + '</strong>' +
               '</button>';
           }).join("") +
-        '</div>' +
+        '</div></div>' +
         '<form class="inline-form product-control-panel" data-form="theme-studio">' +
           '<div class="inline-form-grid inline-form-grid--2">' +
             '<label class="inline-field"><span>Accent</span><select class="inline-select" name="accentMode"><option value="preset"' + (accentMode === "preset" ? " selected" : "") + '>Theme preset</option><option value="custom"' + (accentMode === "custom" ? " selected" : "") + '>Custom accent</option></select></label>' +
@@ -125,6 +128,9 @@
         customAccentColor: "",
         accentColor: ""
       });
+      if (typeof env.saveProfileTheme === "function") {
+        env.saveProfileTheme(String(themeId || "focus"));
+      }
     }
 
     addListener(cleanups, container, "click", function (event) {
