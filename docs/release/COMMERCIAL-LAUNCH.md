@@ -22,7 +22,7 @@ Copy `docs/release/commercial-launch-evidence.example.json` to `commercial-launc
 Before running either command below, replace both `<version>` and `<timestamp>` in `-InstallerPath` with the exact values from the candidate installer filename.
 
 ```powershell
-npm run check
+npm run check:release
 npm run audit:deps
 powershell -File scripts\run-release-gauntlet.ps1 `
   -InstallerPath app\dist\Auxora-Setup-<version>-<timestamp>.exe `
