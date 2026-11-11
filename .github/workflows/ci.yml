@@ -39,7 +39,7 @@ jobs:
       - name: Validate JavaScript and native app
         env:
           AUXORA_THEME_ARTIFACT_DIR: ${{ runner.temp }}/auxora-theme-rendered
-        run: npm run check:release
+        run: npm run check
 
       - name: Preserve rendered theme previews
         if: always()
