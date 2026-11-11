@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
+import { createRequire } from "node:module";
 
 const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
+const themes = createRequire(import.meta.url)("../js/themes.js");
+const legacyThemeIds = ["focus", "gaming", "warm"];
+const themeIds = themes.list.map(theme => theme.id);
 const bootstrapSource = read("../js/theme-bootstrap.js");
 const dashboardSource = read("../js/dashboard.js");
 const themeCss = read("../css/theme.css");
@@ -46,7 +50,13 @@ function tokenRules(source) {
   }
   return rules;
 }
-const rules = tokenRules(themeCss);
+const baseRules = tokenRules(themeCss);
+let rulesCache = { size: -1, rules: [] };
+// The generated theme rules come first, exactly as the browser installs them ahead of theme.css.
+function currentRules() {
+  if (rulesCache.size !== themes.list.length) rulesCache = { size: themes.list.length, rules: tokenRules(themes.cssText()).concat(baseRules) };
+  return rulesCache.rules;
+}
 
 function element(tag) {
   const attributes = new Map();
@@ -74,7 +84,7 @@ function matchSelector(selector, node) {
   return [...selector.matchAll(/\.([\w-]+)/g)].every(([, name]) => node.classes.has(name));
 }
 
-function computedTokens(node, root, appliedRules = rules) {
+function computedTokens(node, root, appliedRules = currentRules()) {
   const inherited = node === root ? {} : computedTokens(root, root, appliedRules);
   const values = { ...inherited };
   const priorities = new Map();
@@ -126,7 +136,7 @@ function contrast(foreground, background, underlay = "#ffffff") {
 }
 
 function harness(runtime, initial = {}, pageRules = []) {
-  const appliedRules = rules.concat(pageRules);
+  const appliedRules = currentRules().concat(pageRules);
   let settings = { themeSchemaVersion: "2", themeId: "focus", accentMode: "preset", customAccentColor: "", themeVariant: "standard", themeReadability: "normal", animationIntensity: "25", performanceBudget: "balanced", dashboardOpacity: "100", ...initial };
   const root = element("html");
   const body = element("body");
@@ -137,6 +147,7 @@ function harness(runtime, initial = {}, pageRules = []) {
       getComputedStyle(node) { return { getPropertyValue(name) { return computedTokens(node, root, appliedRules)[name] || ""; } }; },
       localStorage: { getItem() { return JSON.stringify(settings); } },
       matchMedia() { return { matches: false, addEventListener() {} }; },
+      AuxoraThemes: themes,
       addEventListener(name, callback) { events.set(name, callback); }
     },
     defaultSettings: { themeId: "focus" }, bridgeConfig: null,
@@ -146,11 +157,10 @@ function harness(runtime, initial = {}, pageRules = []) {
   if (runtime === "standalone") {
     runInNewContext(bootstrapSource, context, { timeout: 1000 });
   } else {
-    const presets = dashboardSource.match(/  var productThemePresets = \[[\s\S]*?\n  \];/)?.[0];
     const first = dashboardSource.indexOf("  function normalizeOpacityPercent(");
     const last = dashboardSource.indexOf("  function getParam(", first);
-    assert.ok(presets && first >= 0 && last > first, "real dashboard presentation functions must be available");
-    runInNewContext(presets + dashboardSource.slice(first, last), context, { timeout: 1000 });
+    assert.ok(first >= 0 && last > first, "real dashboard presentation functions must be available");
+    runInNewContext(dashboardSource.slice(first, last), context, { timeout: 1000 });
     context.applyDashboardPresentation();
   }
   return {
@@ -164,7 +174,7 @@ function harness(runtime, initial = {}, pageRules = []) {
   };
 }
 
-function checkReadable(tokens, label, highContrast = false) {
+function checkReadable(tokens, label, highContrast = false, legacy = true) {
   for (const surface of surfaces) {
     for (const foreground of ["--theme-text", "--theme-text-muted", "--theme-accent-text"]) {
       const minimum = highContrast && foreground !== "--theme-accent-text" ? 7 : 4.5;
@@ -173,8 +183,10 @@ function checkReadable(tokens, label, highContrast = false) {
     }
   }
   assert.ok(contrast(tokens["--theme-on-accent"], tokens["--theme-accent"]) >= 4.5, `${label}: filled accent text must meet 4.5:1`);
-  assert.equal(tokens["--theme-section-selected"], "#d4ac63", `${label}: selected sections retain Constellation Gold`);
-  assert.equal(tokens["--theme-on-section-selected"], "#132238", `${label}: selected sections retain the navy foreground`);
+  if (legacy) {
+    assert.equal(tokens["--theme-section-selected"], "#d4ac63", `${label}: selected sections retain Constellation Gold`);
+    assert.equal(tokens["--theme-on-section-selected"], "#132238", `${label}: selected sections retain the navy foreground`);
+  }
   assert.ok(contrast(tokens["--theme-on-section-selected"], tokens["--theme-section-selected"]) >= 7, `${label}: selected section text must meet 7:1`);
   for (const status of ["success", "warning", "danger"]) {
     const ratio = contrast(tokens[`--status-${status}-text`], tokens[`--status-${status}-surface`], tokens["--theme-surface-primary"]);
@@ -182,9 +194,82 @@ function checkReadable(tokens, label, highContrast = false) {
   }
 }
 
-test("Constellation palette and light/dark surface contracts agree across both runtimes", () => {
+test("the theme table holds 16 well-formed themes", () => {
+  assert.equal(themes.list.length, 16);
+  assert.equal(new Set(themeIds).size, themeIds.length, "theme ids must be unique");
+  for (const theme of themes.list) {
+    assert.match(theme.id, /^[a-z0-9-]{1,32}$/, `${theme.id}: the native host only keeps ids of this shape`);
+    assert.ok(theme.name, `${theme.id}: name`);
+    assert.ok(["light", "dark"].includes(theme.scheme), `${theme.id}: scheme`);
+    for (const key of ["page", "surface", "text", "accent", "secondary"]) {
+      assert.match(theme[key], /^#[0-9a-f]{6}$/, `${theme.id}: ${key} must be a six-digit lowercase hex colour`);
+    }
+  }
+  for (const [legacyId, themeId] of [["edge", "focus"], ["verdant", "focus"], ["deepcore", "gaming"], ["afterburn", "warm"], ["no-such-theme", "focus"], ["", "focus"]]) {
+    assert.equal(themes.normalizeId(legacyId), themeId);
+  }
+});
+
+test("every theme is readable in standard and Night: text, accent text, and text on the accent reach 4.5:1", () => {
   for (const runtime of ["dashboard", "standalone"]) {
-    for (const themeId of ["focus", "gaming", "warm"]) {
+    for (const theme of themes.list) {
+      for (const themeVariant of ["standard", "night"]) {
+        const tokens = harness(runtime, { themeId: theme.id, themeVariant }).tokens();
+        const label = `${runtime}/${theme.id}/${themeVariant}`;
+        for (const surface of ["--theme-page", "--theme-surface-primary"]) {
+          assert.ok(contrast(tokens["--theme-text"], tokens[surface]) >= 4.5, `${label}: text on ${surface}`);
+          assert.ok(contrast(tokens["--theme-accent-text"], tokens[surface]) >= 4.5, `${label}: accent text on ${surface}`);
+        }
+        assert.ok(contrast(tokens["--theme-on-accent"], tokens["--theme-accent"]) >= 4.5, `${label}: text on the accent`);
+      }
+    }
+  }
+  // New themes must also work with the raw accent as text. Focus, Gaming and Warm predate
+  // that rule; their accent text is the contrast-adjusted colour checked above.
+  for (const theme of themes.list.filter(item => !legacyThemeIds.includes(item.id))) {
+    for (const surface of [theme.page, theme.surface]) {
+      assert.ok(contrast(theme.accent, surface) >= 4.5, `${theme.id}: accent ${theme.accent} on ${surface} is ${contrast(theme.accent, surface).toFixed(2)}:1`);
+    }
+  }
+});
+
+test("selecting a theme applies that theme's own colours in both runtimes", () => {
+  for (const runtime of ["dashboard", "standalone"]) {
+    for (const theme of themes.list) {
+      const fixture = harness(runtime, { themeId: theme.id });
+      const tokens = fixture.tokens();
+      assert.equal(fixture.root.attributes.get("data-theme"), theme.id);
+      assert.deepEqual(
+        [tokens["--theme-page"], tokens["--theme-surface-primary"], tokens["--theme-text"], tokens["--theme-accent"], tokens["--theme-accent-secondary"], tokens["color-scheme"]],
+        [theme.page, theme.surface, theme.text, theme.accent, theme.secondary, theme.scheme],
+        `${runtime}/${theme.id}`);
+    }
+  }
+});
+
+test("adding a theme takes one table entry and nothing else", () => {
+  const added = { id: "example-17", name: "Example", scheme: "dark", page: "#101014", surface: "#1a1a22", text: "#f0f0f5", accent: "#7cc4ff", secondary: "#ffd27c" };
+  themes.list.push(added);
+  try {
+    assert.equal(themes.normalizeId("example-17"), "example-17");
+    for (const runtime of ["dashboard", "standalone"]) {
+      for (const themeVariant of ["standard", "night"]) {
+        const fixture = harness(runtime, { themeId: added.id, themeVariant });
+        assert.equal(fixture.root.attributes.get("data-theme"), added.id);
+        assert.equal(fixture.tokens()["--theme-accent"], added.accent);
+        checkReadable(fixture.tokens(), `${runtime}/${added.id}/${themeVariant}`, false, false);
+      }
+      assert.equal(harness(runtime, { themeId: added.id }).tokens()["--theme-page"], added.page);
+    }
+  } finally {
+    themes.list.pop();
+  }
+  assert.equal(themes.normalizeId("example-17"), "focus", "an id the table does not know falls back to Focus");
+});
+
+test("Focus, Gaming and Warm keep the exact colours they shipped with, in both runtimes", () => {
+  for (const runtime of ["dashboard", "standalone"]) {
+    for (const themeId of legacyThemeIds) {
       for (const themeVariant of ["standard", "night"]) {
         for (const themeReadability of ["normal", "high-contrast"]) {
           const fixture = harness(runtime, { themeId, themeVariant, themeReadability });
@@ -210,11 +295,11 @@ test("standalone embedded styles cannot revert Focus controls to a dark color sc
     const pageRules = [...page.html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)]
       .flatMap(([, css]) => tokenRules(css));
     if (pageRules.some(rule => rule.selector === ":root" && rule.declarations.some(({ name, value }) => name === "color-scheme" && value === "dark"))) lateDarkDefaults++;
-    for (const themeId of ["focus", "gaming", "warm"]) {
+    for (const themeId of themeIds) {
       for (const themeVariant of ["standard", "night"]) {
         for (const themeReadability of ["normal", "high-contrast"]) {
           const fixture = harness("standalone", { themeId, themeVariant, themeReadability }, pageRules);
-          const expected = themeId === "gaming" || themeVariant === "night" || themeReadability === "high-contrast" ? "dark" : "light";
+          const expected = themes.get(themeId).scheme === "dark" || themeVariant === "night" || themeReadability === "high-contrast" ? "dark" : "light";
           assert.equal(fixture.tokens()["color-scheme"], expected, `${page.path}/${themeId}/${themeVariant}/${themeReadability}: native controls must match the current surface palette`);
         }
       }
@@ -223,16 +308,16 @@ test("standalone embedded styles cannot revert Focus controls to a dark color sc
   assert.ok(lateDarkDefaults > 0, "the regression must exercise real embedded dark defaults after theme.css");
 });
 
-test("324 preset/custom accent states preserve text, filled-control, and status contrast", () => {
+test("every theme keeps text, filled-control, and status contrast with preset and custom accents", () => {
   let count = 0;
   for (const runtime of ["dashboard", "standalone"]) {
-    for (const themeId of ["focus", "gaming", "warm"]) {
+    for (const themeId of themeIds) {
       for (const themeVariant of ["standard", "night"]) {
         for (const themeReadability of ["normal", "clean", "high-contrast"]) {
           for (const customAccentColor of ["", ...palette, "#000000", "#ffffff", "#777777"]) {
             const fixture = harness(runtime, { themeId, themeVariant, themeReadability, customAccentColor, accentMode: customAccentColor ? "custom" : "preset" });
             const label = `${runtime}/${themeId}/${themeVariant}/${themeReadability}/${customAccentColor || "preset"}`;
-            checkReadable(fixture.tokens(), label, themeReadability === "high-contrast");
+            checkReadable(fixture.tokens(), label, themeReadability === "high-contrast", legacyThemeIds.includes(themeId));
             assert.equal(fixture.tokens()["--theme-accent-text"], fixture.tokens(fixture.body)["--theme-accent-text"], `${label}: root/body contrast-safe text must agree`);
             count++;
           }
@@ -240,7 +325,7 @@ test("324 preset/custom accent states preserve text, filled-control, and status 
       }
     }
   }
-  assert.equal(count, 324);
+  assert.equal(count, 2 * themeIds.length * 2 * 3 * 9);
 });
 
 test("widget accent text consumers remain readable on light, Night, and high-contrast surfaces", () => {
@@ -269,7 +354,7 @@ test("widget accent text consumers remain readable on light, Night, and high-con
   assert.ok(cameraEyebrow, "camera viewer eyebrow foreground must be checked");
   cases.push({ label: "camera viewer eyebrow", value: cameraEyebrow.value });
 
-  for (const themeId of ["focus", "gaming", "warm"]) {
+  for (const themeId of themeIds) {
     for (const themeVariant of ["standard", "night"]) {
       for (const themeReadability of ["normal", "high-contrast"]) {
         const tokens = harness("dashboard", { themeId, themeVariant, themeReadability }).tokens();

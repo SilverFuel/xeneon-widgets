@@ -227,35 +227,6 @@
       fields: []
     }
   };
-  var productThemePresets = [
-    {
-      id: "focus",
-      name: "Focus",
-      accent: "#2b4d7d",
-      secondary: "#d4ac63",
-      warm: "#e56335",
-      background: "#f4f5f7",
-      copy: "Lunar light surfaces with Cosmic Blue controls and warm gold details."
-    },
-    {
-      id: "gaming",
-      name: "Gaming",
-      accent: "#d4ac63",
-      secondary: "#e56335",
-      warm: "#cd2435",
-      background: "#132238",
-      copy: "Deep Cosmic Blue surfaces with gold highlights and orange details."
-    },
-    {
-      id: "warm",
-      name: "Warm",
-      accent: "#e56335",
-      secondary: "#d4ac63",
-      warm: "#cd2435",
-      background: "#f5f1e9",
-      copy: "Warm Lunar surfaces with orange controls and gold details."
-    }
-  ];
   var localProductWidgetIds = ["game-mode", "wow-forever", "tmog"];
   var surfaceContracts = {
     home: { destination: "home", category: "Home", defaultStatus: "Available" },
@@ -651,15 +622,7 @@
   }
 
   function normalizeThemeId(value) {
-    var requested = String(value || "").trim().toLowerCase();
-    var aliases = {
-      edge: "focus",
-      deepcore: "gaming",
-      afterburn: "warm",
-      verdant: "focus"
-    };
-    requested = aliases[requested] || requested;
-    return ["focus", "gaming", "warm"].indexOf(requested) === -1 ? "focus" : requested;
+    return window.AuxoraThemes.normalizeId(value);
   }
 
   function normalizeAccentMode(value) {
@@ -672,10 +635,7 @@
   }
 
   function getProductTheme(themeId) {
-    var requested = normalizeThemeId(themeId || getSetting("themeId") || defaultSettings.themeId);
-    return productThemePresets.filter(function (preset) {
-      return preset.id === requested;
-    })[0] || productThemePresets[0];
+    return window.AuxoraThemes.get(themeId || getSetting("themeId") || defaultSettings.themeId);
   }
 
   function parseHexColor(value) {
@@ -819,7 +779,7 @@
     ].map(parseHexColor).filter(Boolean);
     // Night and high contrast may use a different palette from the preset.
     // Mixing the light preset fallback with those dark surfaces is unreadable.
-    return colors.length ? colors : [theme && theme.background].filter(Boolean);
+    return colors.length ? colors : [theme && theme.page].filter(Boolean);
   }
 
   function removeInlineThemeOverrides() {
@@ -3509,7 +3469,7 @@
         }
         reportWidgetError(widget, error, phase || "updating", generation);
       },
-      productThemes: productThemePresets.slice(),
+      productThemes: window.AuxoraThemes.list.slice(),
       saveSettings: saveDashboardSettings,
       normalizeReleaseChannel: function (value) { return normalizeReleaseChannelForVersion(value, bridgeApp.version); },
       resetSettings: resetLocalDashboardSettings,
