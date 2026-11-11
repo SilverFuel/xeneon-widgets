@@ -334,13 +334,13 @@ assert(
 );
 
 assert(
-  packageJson.scripts.check.includes("test:iexpress-packaging")
-    && packageJson.scripts.check.includes("test:webview2-runtime")
-    && packageJson.scripts.check.includes("check:installer-safety")
+  packageJson.scripts["check:release"].includes("test:iexpress-packaging")
+    && packageJson.scripts["check:release"].includes("test:webview2-runtime")
+    && packageJson.scripts["check:release"].includes("check:installer-safety")
     && packageJson.scripts["test:iexpress-packaging"]?.includes("test-iexpress-packaging.ps1")
     && packageJson.scripts["test:webview2-runtime"]?.includes("test-webview2-runtime-probe.ps1")
     && packageJson.scripts["check:installer-safety"] === "node scripts/check-installer-safety.mjs",
-  "npm run check must include installer safety validation"
+  "npm run check:release must include installer safety validation"
 );
 
 console.log("checked installer transaction, autostart, cleanup, and release safety");

@@ -89,8 +89,8 @@ assert(
 );
 assert(
   typeof packageJson.scripts?.check === "string"
-    && packageJson.scripts.check.includes("check:commercial-readiness")
-    && packageJson.scripts.check.includes("test:release-artifact")
+    && packageJson.scripts["check:release"].includes("check:commercial-readiness")
+    && packageJson.scripts["check:release"].includes("test:release-artifact")
     && packageJson.scripts?.["release:commercial"]?.startsWith("npm run test:release-artifact &&"),
   "project and commercial checks must explicitly run commercial-readiness and release-artifact regression tests"
 );

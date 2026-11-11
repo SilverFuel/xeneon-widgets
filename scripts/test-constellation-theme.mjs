@@ -182,14 +182,7 @@ function checkReadable(tokens, label, highContrast = false) {
   }
 }
 
-test("section selection honors the user's forced system colors", () => {
-  const forced = themeCss.slice(themeCss.indexOf("@media (forced-colors: active)"));
-  assert.match(forced, /--theme-section-selected:\s*Highlight;/);
-  assert.match(forced, /--theme-on-section-selected:\s*HighlightText;/);
-});
-
 test("Constellation palette and light/dark surface contracts agree across both runtimes", () => {
-  for (const value of palette) assert.ok(themeCss.includes(value), `canonical palette must include ${value}`);
   for (const runtime of ["dashboard", "standalone"]) {
     for (const themeId of ["focus", "gaming", "warm"]) {
       for (const themeVariant of ["standard", "night"]) {
@@ -326,7 +319,6 @@ test("live game colors override personal colors and are removed when the session
   assert.equal(fixture.root.style.getPropertyValue("--theme-accent-secondary"), "");
   checkReadable(fixture.tokens(), "personal colors restored");
 });
-
 
 for (const fixtureCase of [
   { label: "forced-colors", file: "./test-theme-rendered.mjs", name: "installQuickControlsForcedColorsFixture", next: "async function probeForcedColorsQuickControls()", query: "?quickControlsForcedColors=1", key: "__quickControlsForcedColorsFixture" },

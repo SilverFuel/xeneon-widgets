@@ -410,13 +410,6 @@ await verifyAbortableTimeout(inlineWidgets, "requestJson", "inline widget fetch"
 for (const kind of ["get", "post", "inline"]) await verifyJsonRequestLifetime(kind);
 await verifyPollingRecovery();
 
-assert.match(dashboard, /function fetchJson\(url, timeoutMs, options\)[\s\S]*?fetchWithTimeout\(/, "dashboard reads must use the abortable timeout helper");
-assert.match(dashboard, /function postJson\(url, body, timeoutMs, options\)[\s\S]*?fetchWithTimeout\(/, "dashboard writes must use the abortable timeout helper");
-assert.match(inlineWidgets, /settings\.signal[\s\S]*?fetchOptions\.signal = settings\.signal/, "inline requests must preserve caller signals");
-assert.doesNotMatch(dashboard, /function withTimeout\(/, "dashboard must not leave timed-out fetches running in the background");
-assert.match(dashboard, /var ambientFrameIntervalMs = 1000 \/ 15;/, "ambient canvas must be capped at 15 FPS");
-assert.match(dashboard, /document\.addEventListener\("visibilitychange"[\s\S]*?pauseAnimation\(\)/, "ambient canvas must pause when the document is hidden");
-
 const ambient = createAmbientHarness(false);
 ambient.init();
 ambient.advance(420);

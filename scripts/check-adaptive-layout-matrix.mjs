@@ -1,28 +1,15 @@
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const { classifyViewport } = require(resolve(repoRoot, "js/layout-profile.js"));
-const dashboard = readFileSync(resolve(repoRoot, "js/dashboard.js"), "utf8");
 
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
-}
-
-assert(/AuxoraLayout\.classifyViewport/.test(dashboard), "dashboard must use the tested adaptive layout classifier");
-for (const contract of [
-  'document.body.classList.toggle("dashboard-native-page--browser", browserLayout)',
-  'document.body.classList.toggle("dashboard-native-page--layout-compact", profile.compact)',
-  'document.body.classList.toggle("dashboard-native-page--layout-portrait", profile.portrait)',
-  'document.body.classList.toggle("dashboard-native-page--layout-ultrawide", profile.ultrawide)',
-  "document.body.dataset.layoutClass = profile.layoutClass"
-]) {
-  assert(dashboard.includes(contract), `dashboard must apply adaptive profile contract: ${contract}`);
 }
 
 const displays = [

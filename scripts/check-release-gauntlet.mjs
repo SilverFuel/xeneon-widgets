@@ -137,8 +137,8 @@ assert(
 );
 
 assert(
-  packageJson.scripts.check.includes("check:release-gauntlet") && packageJson.scripts["check:release-gauntlet"] === "node scripts/check-release-gauntlet.mjs",
-  "npm run check must include the release gauntlet validation"
+  packageJson.scripts["check:release"].includes("check:release-gauntlet") && packageJson.scripts["check:release-gauntlet"] === "node scripts/check-release-gauntlet.mjs",
+  "npm run check:release must include the release gauntlet validation"
 );
 
 assert(

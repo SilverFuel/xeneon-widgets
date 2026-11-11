@@ -63,7 +63,7 @@ jobs:
       - name: Audit and validate
         run: |
           npm run audit:deps
-          npm run check
+          npm run check:release
 
       - name: Require commercial evidence
         shell: pwsh

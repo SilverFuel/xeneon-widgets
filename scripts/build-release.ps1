@@ -33,7 +33,7 @@ try {
     Invoke-CheckedCommand "npm" @("run", "audit:deps") "Dependency audit failed."
 
     Write-Step "Running repository checks"
-    Invoke-CheckedCommand "npm" @("run", "check") "Repository checks failed."
+    Invoke-CheckedCommand "npm" @("run", "check:release") "Repository checks failed."
   }
 
   if (-not $SkipInstaller) {

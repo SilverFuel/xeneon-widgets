@@ -29,4 +29,4 @@ Existing profiles, themes, layout order, preferred display, and Game Mode settin
 
 ## Release verification
 
-Before promoting this build, run `npm run check` and `npm run audit:deps`, then complete the clean-install, upgrade, rollback, and uninstall checklist on a fresh Windows profile or VM. Test touch behavior at the supported layout sizes and Windows scaling levels, including unsupported DDC/CI hardware and disconnected integrations.
+Before promoting this build, run `npm run check:release` and `npm run audit:deps`, then complete the clean-install, upgrade, rollback, and uninstall checklist on a fresh Windows profile or VM. Test touch behavior at the supported layout sizes and Windows scaling levels, including unsupported DDC/CI hardware and disconnected integrations.
