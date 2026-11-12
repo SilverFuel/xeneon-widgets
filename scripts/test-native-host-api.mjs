@@ -1250,6 +1250,23 @@ try {
     assert(!provisioningJson.includes(`"${privateKey}"`), `live /api/provisioning leaked private launcher field '${privateKey}'`);
   }
 
+  // Phone Remote and third-party extensions are not part of Auxora: no route answers for them.
+  for (const removedRoute of ["/api/remote/session", "/api/remote/session/stop", "/api/extensions"]) {
+    const removedResponse = await fetchWithTimeout(removedRoute);
+    assert(removedResponse.status === 404, `${removedRoute} must not exist; received HTTP ${removedResponse.status}`);
+  }
+
+  // Without the game installed, the companion route says so and never carries a path.
+  const companionResponse = await fetchWithTimeout("/api/wow/companion");
+  assert(companionResponse.status === 200, `/api/wow/companion must answer; received HTTP ${companionResponse.status}`);
+  const companion = await companionResponse.json();
+  assert(typeof companion.gameFound === "boolean" && typeof companion.installed === "boolean" && typeof companion.available === "boolean"
+    && typeof companion.message === "string" && companion.message.length > 0,
+    `/api/wow/companion returned an unexpected shape: ${JSON.stringify(companion)}`);
+  assert(companion.available === false ? companion.character == null : typeof companion.character?.name === "string",
+    `/api/wow/companion character does not match its availability: ${JSON.stringify(companion)}`);
+  assert(!/[A-Za-z]:\\\\|\\\\WTF|_forever_/i.test(JSON.stringify(companion)), "/api/wow/companion must not expose a file or folder path");
+
   const unconfiguredSnapshotResponse = await fetchWithTimeout("/api/frigate/snapshot?id=current-event");
   assert(unconfiguredSnapshotResponse.status === 404, `unconfigured Camera Detection snapshot must return HTTP 404; received ${unconfiguredSnapshotResponse.status}`);
   assert(/not configured/i.test((await unconfiguredSnapshotResponse.json()).error || ""), "unconfigured Camera Detection snapshot must explain that Frigate is not configured");
