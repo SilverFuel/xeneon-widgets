@@ -2,16 +2,20 @@
 --
 -- Saves a small snapshot of the character you are playing so the Auxora
 -- dashboard can show it. The game writes add-on data to disk only when you
--- log out or reload the interface, so the snapshot is taken at that moment
--- and nothing runs while you play. /auxora takes a snapshot and reloads.
+-- log out or reload the interface. /auxora takes a snapshot and reloads.
+--
+-- The snapshot is taken during play, a few seconds after something it records
+-- changes, and never at logout: by then the client has already cleared money,
+-- experience and quest details, and a snapshot taken there saves zeros.
 --
 -- It reads your own character only. It sends nothing anywhere: no chat, no
 -- add-on messages, no network. The data stays in this add-on's saved file.
 
-local ADDON_VERSION = "0.1.0"
+local ADDON_VERSION = "0.1.1"
 local SCHEMA = 1
 local MAX_QUESTS = 40
 local MAX_OBJECTIVES = 8
+local SAVE_DELAY = 5 -- seconds; one snapshot for each burst of changes
 
 -- Calls a game function without letting an error or a missing function stop
 -- the snapshot. Returns up to four results, or nothing.
@@ -138,9 +142,20 @@ local function collectSnapshot()
   }
 end
 
+local leavingWorld = false
+local saveQueued = false
+
+local function inCombat()
+  return type(InCombatLockdown) == "function" and InCombatLockdown() == true
+end
+
 -- Takes a snapshot into the saved table. Returns the snapshot, or nil when the
--- character is not available yet.
+-- character cannot be read right now: before it has loaded, in combat, or
+-- while the client is leaving the world.
 local function save()
+  if leavingWorld or inCombat() then
+    return nil
+  end
   local snapshot = collectSnapshot()
   if not snapshot then
     return nil
@@ -154,6 +169,20 @@ local function save()
   db.characters[key] = snapshot
   AuxoraCompanionDB = db
   return snapshot
+end
+
+-- Asks for one snapshot a few seconds from now. Requests made while one is
+-- already waiting are dropped, so a burst of quest or money updates costs one
+-- snapshot.
+local function saveSoon()
+  if saveQueued or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
+    return
+  end
+  saveQueued = true
+  C_Timer.After(SAVE_DELAY, function()
+    saveQueued = false
+    save()
+  end)
 end
 
 local function say(message)
@@ -173,6 +202,10 @@ end
 SLASH_AUXORACOMPANION1 = "/auxora"
 SlashCmdList["AUXORACOMPANION"] = function(message)
   local command = string.lower((message or ""):match("^%s*(.-)%s*$") or "")
+  if inCombat() then
+    say("leave combat first, then type /auxora again.")
+    return
+  end
   local snapshot = save()
   if not snapshot then
     say("your character is not ready yet. Try again in a moment.")
@@ -180,11 +213,7 @@ SlashCmdList["AUXORACOMPANION"] = function(message)
   end
   if command == "status" then
     say(describe(snapshot))
-    say("this is saved for Auxora when you log out or type /auxora.")
-    return
-  end
-  if type(InCombatLockdown) == "function" and InCombatLockdown() then
-    say("leave combat first, then type /auxora again.")
+    say("this reaches Auxora when you log out or type /auxora.")
     return
   end
   local reload = (type(C_UI) == "table" and C_UI.Reload) or ReloadUI
@@ -195,14 +224,37 @@ SlashCmdList["AUXORACOMPANION"] = function(message)
   reload()
 end
 
+-- Anything that changes what the snapshot records asks for a new one.
+local CHANGE_EVENTS = {
+  "PLAYER_ENTERING_WORLD",
+  "ZONE_CHANGED_NEW_AREA",
+  "ZONE_CHANGED",
+  "PLAYER_LEVEL_UP",
+  "PLAYER_XP_UPDATE",
+  "PLAYER_MONEY",
+  "QUEST_LOG_UPDATE",
+  "HEARTHSTONE_BOUND",
+  "PLAYER_REGEN_ENABLED"
+}
+
 local frame = CreateFrame("Frame")
-frame:RegisterEvent("PLAYER_LOGIN")
-frame:RegisterEvent("PLAYER_LOGOUT")
+for _, event in ipairs({ "PLAYER_LOGIN", "PLAYER_LEAVING_WORLD", "PLAYER_LOGOUT" }) do
+  frame:RegisterEvent(event)
+end
+for _, event in ipairs(CHANGE_EVENTS) do
+  -- A client that does not know an event refuses to register it.
+  pcall(frame.RegisterEvent, frame, event)
+end
 frame:SetScript("OnEvent", function(_, event)
-  if event == "PLAYER_LOGOUT" then
-    -- The last event before the game writes saved data to disk.
-    save()
-  elseif event == "PLAYER_LOGIN" then
+  if event == "PLAYER_LOGIN" then
     say("companion loaded. /auxora saves and reloads; /auxora status shows what is saved.")
+  elseif event == "PLAYER_LEAVING_WORLD" or event == "PLAYER_LOGOUT" then
+    -- Loading screens and logout: the character's data is being cleared.
+    leavingWorld = true
+  else
+    if event == "PLAYER_ENTERING_WORLD" then
+      leavingWorld = false
+    end
+    saveSoon()
   end
 end)

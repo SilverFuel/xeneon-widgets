@@ -86,4 +86,4 @@ Phase 1 removed these source-text checks on `GameActivityService.cs` without a b
 
 ## WoW companion add-on
 
-`addons/AuxoraCompanion` is a World of Warcraft add-on, written in Lua. `scripts/test-wow-companion-addon.lua` runs it against a fake game and checks what it saves. It is not part of `npm run check` because the project has no Lua runtime. Run it with any Lua 5.2 or newer: `lua scripts/test-wow-companion-addon.lua`. It cannot show that the add-on loads in the real client; only the game can.
+`addons/AuxoraCompanion` is a World of Warcraft add-on, written in Lua. `scripts/test-wow-companion-addon.lua` runs it against a fake game and checks what it saves and when. It is not part of `npm run check` because the project has no Lua runtime. Run it with any Lua 5.2 or newer: `lua scripts/test-wow-companion-addon.lua`. It cannot show that the add-on loads in the real client; only the game can.
