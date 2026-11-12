@@ -128,6 +128,73 @@ public sealed class SceneService
         return GetSnapshot();
     }
 
+    internal const int MaxProfiles = 24;
+    internal const int GameProfilePriority = 110;
+
+    // Gives one game a Profile of its own: a copy of Gaming with a rule that
+    // names the game's key. The rule outranks Gaming's any-game rule, so the
+    // next evaluation switches to it while that game runs. Nothing is
+    // activated here and no manual override is set. Asking again for a game
+    // that already has a Profile changes nothing.
+    public object CreateForGame(SceneGameProfileRequest request)
+    {
+        var gameKey = (request.GameKey ?? "").Trim().ToLowerInvariant();
+        if (gameKey.Length is 0 or > 96 || gameKey.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is ':' or '-' or '_' or '.')))
+        {
+            throw new InvalidOperationException("A game is required to create its Profile.");
+        }
+
+        var name = new string((request.Name ?? "").Where(character => !char.IsControl(character)).ToArray()).Trim();
+        name = name.Length == 0 ? "Game" : name[..Math.Min(name.Length, 40)];
+        _configStore.Update(config =>
+        {
+            var profiles = config.Scenes.Profiles;
+            if (profiles.Any(scene => scene.Rules.Any(rule => rule.Enabled
+                    && string.Equals(rule.Type, "game", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(rule.Value?.Trim(), gameKey, StringComparison.OrdinalIgnoreCase))))
+            {
+                return config;
+            }
+
+            if (profiles.Count >= MaxProfiles)
+            {
+                throw new InvalidOperationException("There is no room for another Profile. Delete one you no longer use.");
+            }
+
+            var source = profiles.FirstOrDefault(scene => string.Equals(scene.Id, "scene-gaming", StringComparison.OrdinalIgnoreCase))
+                ?? profiles.First(scene => string.Equals(scene.Id, config.Scenes.DefaultSceneId, StringComparison.OrdinalIgnoreCase));
+            profiles.Add(SceneDefaults.NormalizeProfile(new SceneProfile
+            {
+                Id = $"scene-{Guid.NewGuid():N}",
+                Name = name,
+                Icon = source.Icon,
+                ThemeId = source.ThemeId,
+                ThemeVariant = "standard",
+                AccentColor = source.AccentColor,
+                Density = source.Density,
+                Brightness = source.Brightness,
+                AnimationIntensity = source.AnimationIntensity,
+                PerformanceBudget = source.PerformanceBudget,
+                HomeWidget = source.HomeWidget,
+                Widgets = [.. source.Widgets],
+                QuickActions = [.. source.QuickActions],
+                Layout = new DisplayLayoutProfile
+                {
+                    NavigationPlacement = source.Layout.NavigationPlacement,
+                    Orientation = source.Layout.Orientation,
+                    MaxColumns = source.Layout.MaxColumns,
+                    MinimumCardWidth = source.Layout.MinimumCardWidth
+                },
+                Rules =
+                [
+                    new SceneRule { Id = $"rule-{Guid.NewGuid():N}", Type = "game", Value = gameKey, Priority = GameProfilePriority }
+                ]
+            }));
+            return config;
+        });
+        return GetSnapshot();
+    }
+
     // The one edit allowed on a built-in Profile: its theme.
     public object SetTheme(SceneThemeRequest request)
     {

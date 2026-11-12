@@ -1747,7 +1747,7 @@
     }
     lastSceneEvaluationAt = now;
     lastSceneEvaluationGame = evaluatedGame;
-    fetchJson(buildUrl(bridgeOrigin, "/api/media"), 2600).catch(function () { return {}; }).then(function (media) {
+    return fetchJson(buildUrl(bridgeOrigin, "/api/media"), 2600).catch(function () { return {}; }).then(function (media) {
       return postJson(buildUrl(bridgeOrigin, "/api/scenes/evaluate"), {
         activeGame: activeGame ? (activeGame.name || activeGame.processName || activeGame.id || "Game") : "",
         activeGameKey: activeGame ? String(activeGame.gameKey || "") : "",
@@ -3115,6 +3115,43 @@
     });
   }
 
+  // The running game, when no Profile names it yet, so one can be offered.
+  function gameWithoutProfile() {
+    var game = bridgeReachable === true ? gameForAutoOpen(gameActivity) : null;
+    var gameKey = String(game && game.gameKey || "");
+    if (!game || !gameKey || gameHasOwnProfile(game)) {
+      return null;
+    }
+    return { gameKey: gameKey, name: String(game.name || "This game").trim().slice(0, 40) || "This game" };
+  }
+
+  // Gives the running game a Profile of its own, then lets the host switch to it.
+  // Resolves to the Profile's name when it is now active, "" when it was created
+  // but a manual choice is holding another Profile, and rejects on failure.
+  function createGameProfile() {
+    var game = gameWithoutProfile();
+    if (!game) {
+      return Promise.reject(new Error("No game is running without a Profile"));
+    }
+    return postJson(buildUrl(bridgeOrigin, "/api/scenes/game-profile"), { gameKey: game.gameKey, name: game.name }, 5000).then(function (payload) {
+      if (!payload || !Array.isArray(payload.profiles)) {
+        throw new Error("The Profile was not created");
+      }
+      bridgeConfig.scenes = payload;
+      lastSceneEvaluationAt = 0;
+      lastSceneEvaluationGame = "";
+      return evaluateSceneContext(gameActivity);
+    }).then(function () {
+      var created = profileForGame(game);
+      var active = activeProfile();
+      if (created && active && created.id === active.id) {
+        return String(active.name || "");
+      }
+      showTouchFeedback("Profile created. Choose Automatic in the Profile selector to use it.");
+      return "";
+    });
+  }
+
   function activateScene(sceneId, manualOverrideMinutes) {
     if (sceneId === "scene-night") {
       // Toggle the displayed variant, including a local Appearance override.
@@ -3523,6 +3560,8 @@
         return profile && profile.name ? String(profile.name) : "";
       },
       saveProfileTheme: saveProfileTheme,
+      gameWithoutProfile: gameWithoutProfile,
+      createGameProfile: createGameProfile,
       saveSettings: saveDashboardSettings,
       normalizeReleaseChannel: function (value) { return normalizeReleaseChannelForVersion(value, bridgeApp.version); },
       resetSettings: resetLocalDashboardSettings,
