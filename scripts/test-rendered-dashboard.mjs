@@ -1176,11 +1176,18 @@ async function validateResetConfirmationExpiry(cdp) {
         return originalFetch.apply(this, arguments);
       };
       const initialText = resetButton?.textContent?.trim() || '';
+      // A disclosure the user opened must stay open when the panel redraws.
+      // Arming and expiring the reset both redraw Setup with changed markup.
+      const disclosures = Array.from(document.querySelectorAll('#dashboard-inline-widget details.setup-diagnostics-details'));
+      disclosures.forEach(details => { details.open = true; });
+      const disclosuresOpen = () => disclosures.length > 0 && disclosures.every(details => details.isConnected && details.open);
       resetButton?.click();
       await wait(100);
+      const disclosuresOpenWhenArmed = disclosuresOpen();
       const armedText = document.querySelector('#dashboard-inline-widget [data-action="reset-local-data"]')?.textContent?.trim() || '';
       const armedCopy = document.querySelector('#dashboard-inline-widget')?.innerText || '';
       await wait(8300);
+      const disclosuresOpenAfterExpiry = disclosuresOpen();
       resetButton = document.querySelector('#dashboard-inline-widget [data-action="reset-local-data"]');
       const expiredText = resetButton?.textContent?.trim() || '';
       const expiredCopy = document.querySelector('#dashboard-inline-widget')?.innerText || '';
@@ -1202,6 +1209,9 @@ async function validateResetConfirmationExpiry(cdp) {
         rearmedText,
         cancelledText,
         resetPostCount,
+        disclosureCount: disclosures.length,
+        disclosuresOpenWhenArmed,
+        disclosuresOpenAfterExpiry,
         fatalVisible: /Dashboard failed|Dashboard runtime error/.test(document.body?.innerText || ''),
         errors
       };
@@ -1215,8 +1225,9 @@ async function validateResetConfirmationExpiry(cdp) {
   assert(result.expiredText === "Reset local data" && /Reset cancelled/i.test(result.expiredCopy || ""), `Diagnostics reset confirmation did not expire safely: ${JSON.stringify(result)}`);
   assert(result.rearmedText === "Confirm reset" && result.cancelledText === "Reset local data", `Diagnostics reset did not re-arm or cancel safely: ${JSON.stringify(result)}`);
   assert(result.resetPostCount === 0, `an expired or cancelled reset confirmation invoked destructive native reset: ${JSON.stringify(result)}`);
+  assert(result.disclosureCount > 0 && result.disclosuresOpenWhenArmed && result.disclosuresOpenAfterExpiry, `a Setup redraw closed a disclosure the user had opened: ${JSON.stringify({ count: result.disclosureCount, armed: result.disclosuresOpenWhenArmed, expired: result.disclosuresOpenAfterExpiry })}`);
   assert(!result.fatalVisible && (result.errors || []).length === 0, `Diagnostics reset expiry emitted a dashboard runtime failure: ${JSON.stringify(result)}`);
-  console.log("rendered Diagnostics reset confirmation expiry and cancellation: passed");
+  console.log("rendered Diagnostics reset confirmation expiry, cancellation, and open disclosures across redraws: passed");
 }
 
 async function validateBackgroundTerminalStatuses(cdp) {
