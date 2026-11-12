@@ -249,7 +249,7 @@
       })[0];
       var name = text(active && active.name, fallback.name);
       return {
-        label: /mode$/i.test(name) ? name : name + " Mode",
+        label: /profile$/i.test(name) ? name : name + " Profile",
         widgets: active && Array.isArray(active.widgets) ? active.widgets : fallback.widgets
       };
     }
@@ -269,14 +269,14 @@
       patchStableDom(container, productShell(
         "Auto-saved layout",
         "Layout Editor",
-        "Arrange panels for this Mode. Use the plain controls below or drag a row.",
+        "Arrange panels for this Profile. Use the plain controls below or drag a row.",
         rows.length + " panels",
         "good",
         renderSections() +
         '<div class="product-layout-guide" aria-label="How the layout controls work">' +
           '<div><strong>Editing</strong><span>' + escapeHtml(mode.label) + '<br>Changes save automatically.</span></div>' +
           '<div><strong>Order</strong><span>Drag a row, or use Earlier and Later.</span></div>' +
-          '<div><strong>Appears</strong><span>Choose Home, Section only, or hidden on Home in this Mode.</span></div>' +
+          '<div><strong>Appears</strong><span>Choose Home, Section only, or hidden on Home in this Profile.</span></div>' +
         '</div>' +
         '<ol class="product-layout-list" aria-label="Panel order" style="--layout-column-rows:' + columnRows + '">' +
           rows.map(function (row, index) {
@@ -691,99 +691,6 @@
     };
   }
 
-  var productProfiles = [
-    {
-      id: "glance",
-      name: "Glance",
-      copy: "Large, immediate system, network, audio, and Game Mode information for a quick glance.",
-      themeId: "focus",
-      pack: "core",
-      layout: ["system", "network", "audio", "game-mode", "quick-actions", "privacy"]
-    },
-    {
-      id: "command",
-      name: "Command",
-      copy: "Balanced daily dashboard with setup, telemetry, sound, style, and packaging close at hand.",
-      themeId: "focus",
-      pack: "core",
-      layout: ["system", "network", "audio", "theme-studio", "layout-editor", "updates", "installer", "privacy"]
-    },
-    {
-      id: "gaming",
-      name: "Gaming",
-      copy: "System pressure, network state, audio, and game mode first.",
-      themeId: "gaming",
-      pack: "gaming",
-      layout: ["game-mode", "system", "network", "audio", "quick-actions", "theme-studio", "updates"]
-    },
-    {
-      id: "streaming",
-      name: "Streaming",
-      copy: "Local OBS reachability preview, audio and media shortcuts, system load, and release confidence.",
-      themeId: "warm",
-      pack: "streamer",
-      layout: ["streaming", "audio", "system", "network", "quick-actions", "theme-studio", "updates", "privacy"]
-    },
-    {
-      id: "homelab",
-      name: "Home Lab",
-      copy: "Network health, display controls, system telemetry, and configured local integrations move forward.",
-      themeId: "focus",
-      pack: "homelab",
-      layout: ["network", "system", "display-controls", "hue", "marketplace", "privacy"]
-    },
-    {
-      id: "minimal",
-      name: "Minimal",
-      copy: "A clean product demo surface with the essentials and privacy visible.",
-      themeId: "focus",
-      pack: "core",
-      layout: ["system", "network", "theme-studio", "privacy", "installer", "updates"]
-    }
-  ];
-
-  var productPacks = [
-    {
-      id: "glance",
-      name: "Glance",
-      copy: "Core telemetry, audio, Game Mode, and only the controls useful at a glance.",
-      layout: ["system", "network", "audio", "game-mode", "quick-actions", "privacy"]
-    },
-    {
-      id: "core",
-      name: "Core Owner",
-      copy: "System, network, audio/media, setup, and trust panels for a normal install.",
-      layout: ["system", "network", "audio", "theme-studio", "layout-editor", "installer", "privacy"]
-    },
-    {
-      id: "gaming",
-      name: "Gaming Desk",
-      copy: "Telemetry, audio/media, and game mode for a player-focused panel.",
-      layout: ["game-mode", "system", "network", "audio", "quick-actions", "theme-studio"]
-    },
-    {
-      id: "streamer",
-      name: "Streamer",
-      copy: "Local OBS reachability preview, audio/media shortcuts, update checks, and privacy up front.",
-      layout: ["streaming", "audio", "quick-actions", "system", "network", "updates", "privacy"]
-    },
-    {
-      id: "homelab",
-      name: "Home Lab",
-      copy: "Network health, system telemetry, display controls, and configured Hue controls.",
-      layout: ["network", "system", "display-controls", "hue", "marketplace", "privacy"]
-    }
-  ];
-
-  function productButtonCard(item, active, actionName, extraHtml) {
-    return '' +
-      '<button class="product-card product-card--button' + (active ? " is-selected" : "") + '" type="button" data-' + actionName + '="' + escapeHtml(item.id) + '">' +
-        '<span class="product-card__topline">' + escapeHtml(item.name) + '</span>' +
-        '<strong>' + escapeHtml(item.copy) + '</strong>' +
-        (extraHtml || "") +
-      '</button>';
-  }
-
   function copyTextToClipboard(value) {
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
       return navigator.clipboard.writeText(value);
@@ -976,7 +883,7 @@
           homeCard("Next Event", calendarReading, calendarDetail, "calendar", "Open Calendar") +
         '</div>' +
         (state.message && !state.loading && state.message !== "Loading your quick look" ? '<p class="auxora-home-feedback" role="status">' + escapeHtml(state.message) + '</p>' : '') +
-        (chains.length ? '<details class="list-card inline-card auxora-glance-chains" data-ui-key="home-setups"><summary>One-tap setups</summary><p class="router-inline-copy">Apply a Mode and Windows settings together.</p><div class="inline-actions">' + chains.map(function (chain) {
+        (chains.length ? '<details class="list-card inline-card auxora-glance-chains" data-ui-key="home-setups"><summary>One-tap setups</summary><p class="router-inline-copy">Apply a Profile and Windows settings together.</p><div class="inline-actions">' + chains.map(function (chain) {
           return '<button class="inline-button" type="button" data-action-chain="' + escapeHtml(chain.id) + '"' + (state.executingChainId ? ' disabled' : '') + '><strong>' + escapeHtml(state.executingChainId === chain.id ? "Applying " + chain.name : chain.name) + '</strong><small>' + escapeHtml(chain.description) + '</small></button>';
         }).join("") + '</div></details>' : '')
       ));
@@ -1141,7 +1048,7 @@
 
   function mountScenesWidget(widget, container, env) {
     var cleanups = [];
-    var state = { payload: null, displays: [], busy: false, confirmDeleteId: "", message: "Loading Modes", tone: "warn" };
+    var state = { payload: null, displays: [], busy: false, confirmDeleteId: "", message: "Loading Profiles", tone: "warn" };
     var deleteConfirmationTimer = 0;
 
     function sceneWidgetIds(scene) {
@@ -1180,7 +1087,7 @@
       var assignments = state.payload && Array.isArray(state.payload.displayAssignments) ? state.payload.displayAssignments : [];
       patchStableDom(container, productShell(
         "Adaptive experience",
-        "Modes",
+        "Profiles",
         "Change Auxora's layout, energy, controls, and priorities in one tap.",
         state.message,
         state.tone,
@@ -1189,30 +1096,30 @@
           var customEditor = scene.isBuiltIn ? "" :
             '<form class="inline-form product-mode-editor" data-scene-edit="' + escapeHtml(scene.id) + '">' +
               '<div class="inline-form-grid inline-form-grid--2">' +
-                '<label class="inline-field"><span>Mode name</span><input class="inline-input" name="name" maxlength="40" value="' + escapeHtml(scene.name) + '" aria-label="Mode name for ' + escapeHtml(scene.name) + '"></label>' +
+                '<label class="inline-field"><span>Profile name</span><input class="inline-input" name="name" maxlength="40" value="' + escapeHtml(scene.name) + '" aria-label="Profile name for ' + escapeHtml(scene.name) + '"></label>' +
                 '<label class="inline-field"><span>Theme</span><select class="inline-select" name="themeId" aria-label="Theme for ' + escapeHtml(scene.name) + '">' + productThemes(env).map(function (theme) { return '<option value="' + escapeHtml(theme.id) + '"' + (scene.themeId === theme.id ? " selected" : "") + '>' + escapeHtml(theme.name) + '</option>'; }).join("") + '</select></label>' +
                 '<label class="inline-field"><span>Spacing</span><select class="inline-select" name="density" aria-label="Spacing for ' + escapeHtml(scene.name) + '"><option value="compact"' + (scene.density === "compact" ? " selected" : "") + '>Compact</option><option value="comfortable"' + (scene.density === "comfortable" ? " selected" : "") + '>Comfortable</option><option value="spacious"' + (scene.density === "spacious" ? " selected" : "") + '>Spacious</option></select></label>' +
                 '<label class="inline-field"><span>Performance</span><select class="inline-select" name="performanceBudget" aria-label="Performance for ' + escapeHtml(scene.name) + '"><option value="balanced"' + (scene.performanceBudget === "balanced" ? " selected" : "") + '>Balanced</option><option value="battery"' + (scene.performanceBudget === "battery" ? " selected" : "") + '>Quiet</option><option value="game"' + (scene.performanceBudget === "game" ? " selected" : "") + '>Gaming</option><option value="max"' + (scene.performanceBudget === "max" ? " selected" : "") + '>Maximum</option></select></label>' +
               '</div>' +
               '<label class="inline-field product-range-field"><span>Motion ' + escapeHtml(String(scene.animationIntensity == null ? 25 : scene.animationIntensity)) + '%</span><input class="inline-range" type="range" min="0" max="100" name="animationIntensity" value="' + escapeHtml(String(scene.animationIntensity == null ? 25 : scene.animationIntensity)) + '" aria-label="Motion for ' + escapeHtml(scene.name) + '"></label>' +
-              '<div class="inline-actions"><button class="inline-button is-primary" type="submit"' + (state.busy ? " disabled" : "") + '>Save Mode</button><button class="inline-button" type="button" data-scene-delete="' + escapeHtml(scene.id) + '" aria-label="' + escapeHtml(state.confirmDeleteId === scene.id ? "Confirm delete " + scene.name + " Mode" : "Delete " + scene.name + " Mode") + '"' + (state.busy ? " disabled" : "") + '>' + (state.confirmDeleteId === scene.id ? "Confirm delete" : "Delete Mode") + '</button></div>' +
+              '<div class="inline-actions"><button class="inline-button is-primary" type="submit"' + (state.busy ? " disabled" : "") + '>Save Profile</button><button class="inline-button" type="button" data-scene-delete="' + escapeHtml(scene.id) + '" aria-label="' + escapeHtml(state.confirmDeleteId === scene.id ? "Confirm delete " + scene.name + " Profile" : "Delete " + scene.name + " Profile") + '"' + (state.busy ? " disabled" : "") + '>' + (state.confirmDeleteId === scene.id ? "Confirm delete" : "Delete Profile") + '</button></div>' +
             '</form>';
           return '<article class="product-card' + (active ? " is-selected" : "") + '" data-scene-card="' + escapeHtml(scene.id) + '">' +
             '<span class="product-card__topline">' + escapeHtml(scene.icon || "scene") + (scene.isBuiltIn ? " · Built in" : " · Custom") + '</span>' +
             '<strong>' + escapeHtml(scene.name) + '</strong>' +
             '<span class="product-card__meta">' + escapeHtml(friendlySurfaceNames(scene).join(" · ")) + '</span>' +
             '<div class="auxora-scene-stats"><span>' + escapeHtml(friendlyChoice(scene.density, "density")) + '</span><span>' + escapeHtml(String(scene.animationIntensity == null ? 25 : scene.animationIntensity)) + '% motion</span><span>' + escapeHtml(friendlyChoice(scene.performanceBudget, "performance")) + '</span></div>' +
-            '<div class="inline-actions">' + (active ? '<span class="inline-copy">Active Mode</span>' : '') + '<button class="inline-button" type="button" data-scene-duplicate="' + escapeHtml(scene.id) + '" aria-label="' + escapeHtml("Duplicate " + scene.name + " Mode") + '"' + (state.busy ? " disabled" : "") + '>Duplicate</button></div>' +
+            '<div class="inline-actions">' + (active ? '<span class="inline-copy">Active Profile</span>' : '') + '<button class="inline-button" type="button" data-scene-duplicate="' + escapeHtml(scene.id) + '" aria-label="' + escapeHtml("Duplicate " + scene.name + " Profile") + '"' + (state.busy ? " disabled" : "") + '>Duplicate</button></div>' +
             customEditor +
           '</article>';
         }).join("") + '</div>' +
-        (state.displays.length ? '<article class="list-card inline-card"><div class="inline-card-header"><div><div class="metric-label">Display assignments</div><div class="router-inline-copy">Choose the Mode each companion display should use, or leave it unassigned.</div></div></div><div class="inline-form-grid inline-form-grid--2">' + state.displays.map(function (display) {
+        (state.displays.length ? '<article class="list-card inline-card"><div class="inline-card-header"><div><div class="metric-label">Display assignments</div><div class="router-inline-copy">Choose the Profile each companion display should use, or leave it unassigned.</div></div></div><div class="inline-form-grid inline-form-grid--2">' + state.displays.map(function (display) {
           var assignment = assignments.filter(function (item) { return item.displayId === display.id; })[0];
           return '<label class="inline-field"><span>' + escapeHtml(display.label) + '</span><select class="inline-select" data-mode-display-id="' + escapeHtml(display.id) + '"><option value="">Not assigned</option>' + profiles.map(function (scene) {
             return '<option value="' + escapeHtml(scene.id) + '"' + (assignment && assignment.sceneId === scene.id ? " selected" : "") + '>' + escapeHtml(scene.name) + '</option>';
           }).join("") + '</select></label>';
         }).join("") + '</div></article>' : '') +
-        '<p class="inline-copy">' + (state.payload && state.payload.automaticSwitchingActive ? "Automatic switching is on" : "Choose Automatic in the Mode selector to resume automatic switching.") + '</p>'
+        '<p class="inline-copy">' + (state.payload && state.payload.automaticSwitchingActive ? "Automatic switching is on" : "Choose Automatic in the Profile selector to resume automatic switching.") + '</p>'
       ));
       initXnSlider(container);
     }
@@ -1224,11 +1131,11 @@
       ]).then(function (payloads) {
         state.payload = payloads[0];
         state.displays = Array.isArray(payloads[1].displays) ? payloads[1].displays : [];
-        state.message = text(payloads[0].message, "Modes ready");
+        state.message = text(payloads[0].message, "Profiles ready");
         state.tone = "good";
         redraw();
       }, function (error) {
-        state.message = error.message || "Modes unavailable";
+        state.message = error.message || "Profiles unavailable";
         state.tone = "danger";
         redraw();
       });
@@ -1275,10 +1182,10 @@
           return payload;
         }).then(function (payload) {
           state.payload = payload;
-          state.message = text(payload.message, "Mode updated");
+          state.message = text(payload.message, "Profile updated");
           state.tone = "good";
         }, function (error) {
-          state.message = error.message || "Mode update failed";
+          state.message = error.message || "Profile update failed";
           state.tone = "danger";
         }).finally(function () {
           state.busy = false;
@@ -1303,7 +1210,7 @@
         return candidate && candidate.id === form.getAttribute("data-scene-edit") && candidate.isBuiltIn === false;
       })[0] : null;
       if (!scene) {
-        state.message = "Custom Mode is no longer available";
+        state.message = "Custom Profile is no longer available";
         state.tone = "danger";
         redraw();
         return;
@@ -1331,10 +1238,10 @@
         return payload;
       }).then(function (payload) {
         state.payload = payload;
-        state.message = "Custom Mode saved";
+        state.message = "Custom Profile saved";
         state.tone = "good";
       }, function (error) {
-        state.message = error.message || "Custom Mode could not be saved";
+        state.message = error.message || "Custom Profile could not be saved";
         state.tone = "danger";
       }).finally(function () {
         state.busy = false;
@@ -1630,271 +1537,6 @@
     } };
   }
 
-  function mountRemoteWidget(widget, container, env) {
-    if (typeof env.publishStatus === "function") {
-      env.publishStatus("Unavailable", "danger", "Phone Remote is not included in this beta.");
-    }
-    patchStableDom(container, productShell(
-      "Not included in 0.3.0-beta.1",
-      "Phone Remote",
-      "Phone Remote is unavailable for this beta. Auxora does not open a phone-control listener or create remote links.",
-      "Unavailable",
-      "muted",
-      '<div class="inline-empty"><strong>No phone session is available</strong><span>There is no phone-control action in this build. Use the Auxora display on this PC.</span></div>'
-    ));
-    return { refresh: function () { return Promise.resolve(); }, destroy: function () { patchStableDom(container, ""); } };
-  }
-
-  function mountStreamingWidget(widget, container, env) {
-    var cleanups = [];
-    var obsSocket = null;
-    var state = {
-      statusText: "Not checked",
-      statusTone: "muted",
-      busy: false
-    };
-
-    function closeSocket() {
-      if (obsSocket) {
-        try {
-          obsSocket.close();
-        } catch (error) {
-          // Ignore socket shutdown failures.
-        }
-      }
-      obsSocket = null;
-    }
-
-    function normalizeLocalObsEndpoint(value) {
-      var raw = text(value, "").trim();
-      var parsed;
-      try {
-        parsed = new URL(raw);
-      } catch (error) {
-        return "";
-      }
-
-      var host = parsed.hostname.toLowerCase();
-      var loopback = host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
-      if ((parsed.protocol !== "ws:" && parsed.protocol !== "wss:")
-          || !loopback
-          || parsed.username
-          || parsed.password
-          || (parsed.pathname && parsed.pathname !== "/")
-          || parsed.search
-          || parsed.hash) {
-        return "";
-      }
-
-      return parsed.toString();
-    }
-
-    function redraw() {
-      var endpoint = settingValue(env, "obsEndpoint", "ws://127.0.0.1:4455");
-      var scene = settingValue(env, "streamScene", "Main");
-      if (typeof env.publishStatus === "function") {
-        env.publishStatus("Preview", "warn", "Local OBS reachability only; this beta does not issue OBS commands.");
-      }
-      patchStableDom(container, productShell(
-        "OBS reachability preview",
-        "Streaming",
-        "Keep a stream-ready control surface nearby. This beta only verifies local OBS reachability; it does not issue OBS commands.",
-        state.statusText,
-        state.statusTone,
-        '<p class="inline-copy">This beta checks a local OBS connection. It does not issue OBS commands.</p>' +
-        '<form class="inline-form product-control-panel" data-form="streaming">' +
-          '<div class="inline-form-grid inline-form-grid--2">' +
-            '<label class="inline-field"><span>OBS address</span><input class="inline-input" type="text" name="obsEndpoint" value="' + escapeHtml(endpoint) + '" placeholder="ws://127.0.0.1:4455"></label>' +
-            '<label class="inline-field"><span>Main scene</span><input class="inline-input" type="text" name="streamScene" value="' + escapeHtml(scene) + '" placeholder="Main"></label>' +
-          '</div>' +
-          '<div class="inline-actions"><button class="inline-button is-primary" type="submit"' + (state.busy ? " disabled" : "") + '>Save &amp; check OBS</button></div>' +
-        '</form>' +
-        '<div class="inline-grid inline-grid--3">' +
-          metricCard("Scene", scene, "Saved locally", null) +
-          metricCard("OBS", state.statusText, "Connection probe", null) +
-          metricCard("Layout", "Stream controls", "Quick glance setup", null) +
-        '</div>'
-      ));
-    }
-
-    function probeObs(endpointValue) {
-      var endpoint = normalizeLocalObsEndpoint(endpointValue || settingValue(env, "obsEndpoint", "ws://127.0.0.1:4455"));
-      var timerId;
-
-      if (!endpoint) {
-        state.busy = false;
-        state.statusText = "Local address required";
-        state.statusTone = "danger";
-        redraw();
-        return;
-      }
-
-      if (!window.WebSocket) {
-        state.statusText = "WebSocket unavailable";
-        state.statusTone = "danger";
-        redraw();
-        return;
-      }
-
-      closeSocket();
-      state.busy = true;
-      state.statusText = "Checking";
-      state.statusTone = "warn";
-      redraw();
-
-      timerId = window.setTimeout(function () {
-        state.busy = false;
-        state.statusText = "Timed out";
-        state.statusTone = "danger";
-        closeSocket();
-        redraw();
-      }, 4000);
-
-      try {
-        obsSocket = new WebSocket(endpoint);
-        obsSocket.addEventListener("open", function () {
-          window.clearTimeout(timerId);
-          state.busy = false;
-          state.statusText = "OBS reachable";
-          state.statusTone = "good";
-          closeSocket();
-          redraw();
-        });
-        obsSocket.addEventListener("error", function () {
-          window.clearTimeout(timerId);
-          state.busy = false;
-          state.statusText = "OBS unavailable";
-          state.statusTone = "danger";
-          closeSocket();
-          redraw();
-        });
-      } catch (error) {
-        window.clearTimeout(timerId);
-        state.busy = false;
-        state.statusText = error.message || "Invalid endpoint";
-        state.statusTone = "danger";
-        closeSocket();
-        redraw();
-      }
-    }
-
-    function saveForm(form) {
-      var data = new FormData(form);
-      var endpoint = normalizeLocalObsEndpoint(data.get("obsEndpoint"));
-      if (!endpoint) {
-        state.busy = false;
-        state.statusText = "Local address required";
-        state.statusTone = "danger";
-        redraw();
-        return "";
-      }
-
-      saveSettings(env, {
-        obsEndpoint: endpoint,
-        streamScene: String(data.get("streamScene") || "Main")
-      });
-      return endpoint;
-    }
-
-    addListener(cleanups, container, "submit", function (event) {
-      var form = event.target;
-      if (!form || form.getAttribute("data-form") !== "streaming") {
-        return;
-      }
-
-      event.preventDefault();
-      var endpoint = saveForm(form);
-      if (endpoint) {
-        probeObs(endpoint);
-      }
-    });
-
-    redraw();
-    return {
-      refresh: function () {
-        redraw();
-        return Promise.resolve();
-      },
-      destroy: function () {
-        closeSocket();
-        runCleanups(cleanups);
-        patchStableDom(container, "");
-      }
-    };
-  }
-
-  function mountMarketplaceWidget(widget, container, env) {
-    var cleanups = [];
-    var state = { extensions: [], trustedPublisherCount: 0, message: "Checking third-party manifests", tone: "warn" };
-
-    function redraw() {
-      var activePack = settingValue(env, "marketplacePack", "core");
-      var verifiedCount = state.extensions.filter(function (extension) { return extension.verified; }).length;
-      if (typeof env.publishStatus === "function") {
-        env.publishStatus("Available", "good", "Built-in widget packs are available. Third-party loading is disabled in this beta.");
-      }
-      patchStableDom(container, productShell(
-        "Local dashboard layouts",
-        "Widget Packs",
-        "Apply a built-in dashboard layout. Auxora can inspect third-party manifests, but this beta never loads or runs third-party code.",
-        findById(productPacks, activePack).name,
-        "good",
-        '<div class="product-profile-grid product-profile-grid--packs">' +
-          productPacks.map(function (pack) {
-            return productButtonCard(pack, pack.id === activePack, "pack", '<span class="product-card__meta">' + escapeHtml(pack.layout.length + " panels") + '</span>');
-          }).join("") +
-        '</div>' +
-        '<div class="product-checklist">' +
-          '<span>Pack manifest</span><span>Screenshots</span><span>Version tags</span><span>Support link</span>' +
-        '</div>' +
-        '<article class="list-card inline-card"><div class="inline-card-header"><div><div class="metric-label">Third-party manifest inspection</div><div class="router-inline-copy">' + escapeHtml(state.message) + ' · ' + escapeHtml(String(state.trustedPublisherCount)) + ' trusted publishers</div></div>' + statusPill(state.extensions.length ? verifiedCount + " verified" : "Inspection only", state.extensions.length && verifiedCount !== state.extensions.length ? "warn" : "muted") + '</div><div class="inline-list">' + (state.extensions.length ? state.extensions.map(function (extension) {
-          return '<div class="inline-list-item"><div><strong>' + escapeHtml(extension.name) + '</strong><div class="inline-list-copy">' + escapeHtml(extension.message) + '</div><div class="inline-list-meta">' + escapeHtml((extension.permissions || []).join(" · ") || "No permissions") + '</div></div>' + statusPill(extension.verified ? "Verified manifest" : "Rejected", extension.verified ? "good" : "danger") + '</div>';
-        }).join("") : '<div class="inline-empty"><strong>No third-party manifests installed</strong><span>Built-in packs are ready. Third-party loading is disabled in this beta, even when a manifest passes inspection.</span></div>') + '</div></article>'
-      ));
-    }
-
-    addListener(cleanups, container, "click", function (event) {
-      var target = event.target && event.target.closest ? event.target.closest("[data-pack]") : null;
-      var pack;
-      if (!target) {
-        return;
-      }
-
-      pack = findById(productPacks, target.getAttribute("data-pack"));
-      saveSettings(env, {
-        marketplacePack: pack.id,
-        layoutOrder: pack.layout.join(",")
-      });
-      redraw();
-    });
-
-    function refreshExtensions() {
-      return requestJson(buildBridgeUrl(env, "/api/extensions"), {}, 7000).then(function (payload) {
-        state.extensions = Array.isArray(payload.extensions) ? payload.extensions : [];
-        state.trustedPublisherCount = Number(payload.trustedPublisherCount || 0);
-        state.message = text(payload.message, "Third-party manifests checked");
-        state.tone = "good";
-        redraw();
-      }, function (error) {
-        state.message = error.message || "Manifest inspection unavailable";
-        state.tone = "danger";
-        redraw();
-      });
-    }
-
-    redraw();
-    refreshExtensions();
-    return {
-      refresh: function () {
-        return refreshExtensions();
-      },
-      destroy: function () {
-        runCleanups(cleanups);
-        patchStableDom(container, "");
-      }
-    };
-  }
-
   function mountInstallerWidget(widget, container, env) {
     var cleanups = [];
     var confirmTimer = 0;
@@ -2115,7 +1757,7 @@
                 '<button class="inline-button" type="button" data-action="reset-all-local-data">' + (state.confirmReset ? "Confirm reset" : "Reset all app data") + '</button>' +
                 '<a class="inline-button" href="/support.html" target="_blank" rel="noreferrer">Support</a>' +
               '</div>' +
-              '<label class="inline-field"><span>Restore presentation and Modes</span><textarea class="inline-input" data-ui-key="privacy-settings-import" data-settings-import rows="4" placeholder="Paste an Auxora backup. Passwords, private connections, app paths, display identifiers, and logs are never included."></textarea></label>' +
+              '<label class="inline-field"><span>Restore presentation and Profiles</span><textarea class="inline-input" data-ui-key="privacy-settings-import" data-settings-import rows="4" placeholder="Paste an Auxora backup. Passwords, private connections, app paths, display identifiers, and logs are never included."></textarea></label>' +
               '<div><div class="metric-label">Current portable settings</div><div class="product-code-preview">' + escapeHtml(JSON.stringify(settings, null, 2).slice(0, 520)) + '</div></div>' +
             '</div>' +
           '</details>' +
@@ -2291,12 +1933,9 @@
   runtime.registerRenderer("home", mountAuxoraHomeWidget);
   runtime.registerRenderer("scenes", mountScenesWidget);
   runtime.registerRenderer("display-controls", mountDisplayControlsWidget);
-  runtime.registerRenderer("remote", mountRemoteWidget);
   runtime.registerRenderer("theme-studio", mountThemeStudioWidget);
   runtime.registerRenderer("layout-editor", mountLayoutEditorWidget);
   runtime.registerRenderer("updates", mountUpdatesWidget);
-  runtime.registerRenderer("streaming", mountStreamingWidget);
-  runtime.registerRenderer("marketplace", mountMarketplaceWidget);
   runtime.registerRenderer("installer", mountInstallerWidget);
   runtime.registerRenderer("privacy", mountPrivacyWidget);
 }());

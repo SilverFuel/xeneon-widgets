@@ -21,7 +21,7 @@ public sealed class SceneService
         _configStore.Update(config =>
         {
             var scene = config.Scenes.Profiles.FirstOrDefault(item => string.Equals(item.Id, requestedId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Mode not found.");
+                ?? throw new InvalidOperationException("Profile not found.");
             var overrideUntil = CalculateOverrideUntil(request.ManualOverrideMinutes);
             if (string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
             {
@@ -58,7 +58,7 @@ public sealed class SceneService
 
     public object Save(SceneSaveRequest request)
     {
-        var incoming = request.Scene ?? throw new InvalidOperationException("Mode configuration is required.");
+        var incoming = request.Scene ?? throw new InvalidOperationException("Profile configuration is required.");
         incoming.IsBuiltIn = false;
         var normalized = SceneDefaults.NormalizeProfile(incoming);
         _configStore.Update(config =>
@@ -66,7 +66,7 @@ public sealed class SceneService
             var existingIndex = config.Scenes.Profiles.FindIndex(scene => string.Equals(scene.Id, normalized.Id, StringComparison.OrdinalIgnoreCase));
             if (existingIndex >= 0 && config.Scenes.Profiles[existingIndex].IsBuiltIn)
             {
-                throw new InvalidOperationException("Built-in Modes must be duplicated before editing.");
+                throw new InvalidOperationException("Built-in Profiles must be duplicated before editing.");
             }
 
             if (existingIndex >= 0)
@@ -88,7 +88,7 @@ public sealed class SceneService
         _configStore.Update(config =>
         {
             var source = config.Scenes.Profiles.FirstOrDefault(scene => string.Equals(scene.Id, requestedId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Mode not found.");
+                ?? throw new InvalidOperationException("Profile not found.");
             var copy = SceneDefaults.NormalizeProfile(new SceneProfile
             {
                 Id = $"scene-{Guid.NewGuid():N}",
@@ -122,7 +122,7 @@ public sealed class SceneService
                 config.Scenes.ActiveSceneId = copy.Id;
                 config.Scenes.ManualOverrideUntil = "indefinite";
             }
-            config.Scenes.LastActivationReason = "Mode duplicated";
+            config.Scenes.LastActivationReason = "Profile duplicated";
             return config;
         });
         return GetSnapshot();
@@ -135,7 +135,7 @@ public sealed class SceneService
         _configStore.Update(config =>
         {
             var scene = config.Scenes.Profiles.FirstOrDefault(item => string.Equals(item.Id, requestedId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Mode not found.");
+                ?? throw new InvalidOperationException("Profile not found.");
             scene.ThemeId = SceneDefaults.NormalizeThemeId(request.ThemeId);
             return config;
         });
@@ -148,10 +148,10 @@ public sealed class SceneService
         _configStore.Update(config =>
         {
             var scene = config.Scenes.Profiles.FirstOrDefault(item => string.Equals(item.Id, requestedId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Mode not found.");
+                ?? throw new InvalidOperationException("Profile not found.");
             if (scene.IsBuiltIn)
             {
-                throw new InvalidOperationException("Built-in Modes cannot be deleted.");
+                throw new InvalidOperationException("Built-in Profiles cannot be deleted.");
             }
             config.Scenes.Profiles.Remove(scene);
             if (string.Equals(config.Scenes.ActiveSceneId, scene.Id, StringComparison.OrdinalIgnoreCase))
@@ -192,7 +192,7 @@ public sealed class SceneService
             scene = scenes.Profiles.FirstOrDefault(item =>
                 string.Equals(item.Id, normalizedSceneId, StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(item.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Mode not found.");
+                ?? throw new InvalidOperationException("Profile not found.");
         }
 
         scenes.DisplayAssignments.RemoveAll(item =>
@@ -325,7 +325,7 @@ public sealed class SceneService
             lastActivationReason = scenes.LastActivationReason,
             profiles,
             displayAssignments = scenes.DisplayAssignments.Where(assignment => profileIds.Contains(assignment.SceneId)).ToList(),
-            message = $"{active?.Name ?? "Work"} Mode is active."
+            message = $"{active?.Name ?? "Work"} Profile is active."
         };
     }
 }

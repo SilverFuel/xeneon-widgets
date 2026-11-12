@@ -496,7 +496,6 @@ async function assertReducedMotion(cdp, label) {
     const selectors = ['.dashboard-ambient-canvas', '.dashboard-ambient-layer', '.dashboard-stage-shell', '.router-rail', '.router-viewer', '.product-swatch', '.xn-slider'];
     const pseudoSelectors = [
       ['.auxora-panel-link', '::before'],
-      ['.product-card--button', '::after'],
       ['.product-swatch', '::after'],
       ['.product-layout-row', '::after']
     ];

@@ -334,7 +334,7 @@ function securityHeaders(contentType, nonce = "") {
   headers["Content-Security-Policy"] = [
     "default-src 'self'",
     `script-src ${scriptSource}`,
-    "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+    "connect-src 'self' http://127.0.0.1:* http://localhost:*",
     "img-src 'self' data: blob: http: https:",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",

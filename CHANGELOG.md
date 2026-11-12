@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Settings now has seven tabs in one order: Appearance, Profiles, Layout, Setup & status, Repair & recovery, Updates, Privacy & Backup.
+- Removed the Streaming, Widget Packs, and Phone Remote panels. Links saved to them open Audio & Media, Layout, and Appearance. The dashboard no longer allows WebSocket connections, which only the Streaming panel used.
+- "Mode" is now "Profile" everywhere it meant a saved setup. Game Mode, Safe Mode, and Night keep their names.
+
 - Fixed WoW Forever reopening after a quick game restart and kept game appearance and automatic Modes stable during unavailable or stale activity readings.
 - Fixed journal backup import races and preserved the original recovery export when replacement could not be saved.
 - Fixed stale TMOG readings after Pause/Resume, network readings kept falsely fresh by ping updates, and throughput spikes after counter failures.

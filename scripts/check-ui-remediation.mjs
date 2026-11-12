@@ -18,8 +18,8 @@ const homeSource = product.slice(
 );
 
 const canonicalIds = [
-  "home", "scenes", "setup", "theme-studio", "updates", "layout-editor", "streaming",
-  "marketplace", "privacy", "remote", "installer", "game-mode", "system", "network",
+  "home", "scenes", "setup", "theme-studio", "updates", "layout-editor",
+  "privacy", "installer", "game-mode", "system", "network",
   "audio", "quick-actions", "shortcuts", "display-controls", "clipboard", "weather",
   "calendar", "hue", "frigate", "wow-forever", "tmog"
 ];
