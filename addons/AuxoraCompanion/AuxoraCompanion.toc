@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Auxora Companion
+## Notes: Saves your character, zone, gold and quest log for the Auxora dashboard. Type /auxora to save now.
+## Author: SilverFuel
+## Version: 0.1.0
+## SavedVariables: AuxoraCompanionDB
+
+AuxoraCompanion.lua
