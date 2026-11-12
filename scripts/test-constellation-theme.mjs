@@ -333,7 +333,7 @@ test("every theme keeps text, filled-control, and status contrast with preset an
 test("widget accent text consumers remain readable on light, Night, and high-contrast surfaces", () => {
   const consumers = {
     "audio.css": [".audio-route-button strong", ".audio-session-row__level strong", ".audio-media-state", ".audio-album-cover__placeholder-label"],
-    "product.css": [".auxora-remote-share code", ".product-layout-guide strong"],
+    "product.css": [".product-layout-guide strong"],
     "actions.css": [".inline-launcher-icon"],
     "network.css": ['.network-form-message[data-tone="good"]'],
     "system.css": ['.system-stat-card[data-tone="good"] .system-stat-value', '.system-health-card[data-tone="good"] strong'],

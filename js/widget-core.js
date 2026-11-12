@@ -25,7 +25,6 @@
     "[data-widget-id]",
     "[data-profile]",
     "[data-theme]",
-    "[data-pack]",
     "[data-layout-action]",
     ".router-picker__button",
     ".router-diagnostics",
@@ -34,7 +33,6 @@
     ".inline-action-button",
     ".inline-launcher-hit",
     ".inline-list-item--button",
-    ".product-card--button",
     ".product-swatch"
   ].join(",");
   var touchFineControlSelector = [

@@ -1,5 +1,5 @@
 // Navigation migration coverage map:
-// Favorites/catalog -> five-section order/visibility, Settings categories, all-25 two-click reach.
+// Favorites/catalog -> five-section order/visibility, Settings categories, every panel within two clicks.
 // Reachability includes scrolling before clicks; this is not physical touch/DPI acceptance.
 // Catalog modal focus -> Quick modal inertness/Escape/focus return plus stable section/tab focus.
 // Panel options -> Appearance form persistence, focused edits, and opacity reset.
@@ -686,47 +686,6 @@ async function validateFocusedInlineWidgetReconciliation(cdp) {
   );
 
   await runProbe(
-    `${baseUrl}/dashboard.html?widget=streaming&focusedStreamingTest=1`,
-    `(async () => {
-      const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-      const deadline = Date.now() + 10000;
-      while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true' || !document.querySelector('[data-form="streaming"] input[name="obsEndpoint"]'))) await wait(50);
-      await wait(750);
-      const errors = [];
-      window.addEventListener('error', event => errors.push(String(event.error?.message || event.message || 'runtime error')), true);
-      const pickerButton = document.querySelector('.auxora-panel-link[data-widget-id="streaming"]');
-      pickerButton?.focus(); pickerButton?.click(); await wait(150);
-      const chromePreserved = !!pickerButton && pickerButton.isConnected && document.activeElement === pickerButton
-        && document.body.dataset.activeWidgetId === 'streaming';
-      const input = document.querySelector('[data-form="streaming"] input[name="obsEndpoint"]');
-      if (!input) return { ready: false, errors };
-      input.focus();
-      input.value = 'ws://example.test:4455';
-      input.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-      await wait(150);
-      const connected = input.isConnected;
-      const focused = document.activeElement === input;
-      const valuePreserved = input.value === 'ws://example.test:4455';
-      const audioTab = document.querySelector('.auxora-panel-link[data-widget-id="audio"]');
-      if (!audioTab) throw new Error("Streaming teardown requires the Audio & Media tab");
-      audioTab.focus();
-      audioTab.click();
-      await wait(150);
-      return {
-        ready: true,
-        connected,
-        focused,
-        valuePreserved,
-        chromePreserved,
-        teardownSafe: document.body?.dataset.activeWidgetId === 'audio',
-        errors,
-        fatalVisible: /Dashboard failed|Dashboard runtime error/.test(document.body.innerText || '')
-      };
-    })()`,
-    "Streaming validation redraw"
-  );
-
-  await runProbe(
     `${baseUrl}/dashboard.html?widget=privacy&focusedPrivacyTest=1`,
     `(async () => {
       const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -845,7 +804,48 @@ async function validateFocusedInlineWidgetReconciliation(cdp) {
     "Camera Detection draft refresh"
   );
 
-  console.log("focused Theme Studio, Streaming, Privacy, and Camera Detection redraw reconciliation: passed");
+  console.log("focused Theme Studio, Privacy, and Camera Detection redraw reconciliation: passed");
+}
+
+// Streaming, Widget Packs and Phone Remote were removed. A link or shortcut
+// saved before that must open the nearest tab that still exists, on the real
+// host, with no tab left behind for the removed panel.
+async function validateRetiredDeepLinks(cdp) {
+  const retired = [["streaming", "audio", "media"], ["marketplace", "layout-editor", "settings"], ["remote", "theme-studio", "settings"]];
+  for (const [requested, expectedWidget, expectedSection] of retired) {
+    const url = `${baseUrl}/dashboard.html?widget=${requested}&retiredLinkTest=1`;
+    await cdp.send("Page.navigate", { url });
+    await waitForCommittedUrl(cdp, "retiredLinkTest");
+    const evaluation = await cdp.send("Runtime.evaluate", {
+      expression: `(async () => {
+        const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+        const deadline = Date.now() + 15000;
+        const errors = [];
+        window.addEventListener('error', event => errors.push(String(event.error?.message || event.message || 'runtime error')), true);
+        while (Date.now() < deadline && (document.body?.dataset.bridgeHydrated !== 'true'
+          || document.body.dataset.activeWidgetId !== ${JSON.stringify(expectedWidget)}
+          || !document.querySelector('#dashboard-inline-widget')?.children.length)) await wait(50);
+        await wait(250);
+        return {
+          widget: document.body.dataset.activeWidgetId || '',
+          section: document.body.dataset.section || '',
+          selectedTab: document.querySelector('.auxora-panel-link.is-active')?.dataset.widgetId || '',
+          retiredTab: Boolean(document.querySelector('[data-widget-id="${requested}"]')),
+          rendered: Boolean(document.querySelector('#dashboard-inline-widget')?.children.length),
+          errors,
+          fatalVisible: /Dashboard failed|Dashboard runtime error|Panel unavailable/.test(document.body.innerText || '')
+        };
+      })()`,
+      awaitPromise: true,
+      returnByValue: true
+    });
+    const result = evaluation.result?.value || {};
+    assert(!evaluation.exceptionDetails && result.widget === expectedWidget && result.section === expectedSection && result.selectedTab === expectedWidget,
+      `?widget=${requested} did not open ${expectedWidget}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
+    assert(result.rendered && !result.retiredTab && (result.errors || []).length === 0 && !result.fatalVisible,
+      `?widget=${requested} left a removed tab or a failed panel behind: ${JSON.stringify(result)}`);
+  }
+  console.log("saved links to Streaming, Widget Packs, and Phone Remote open Audio & Media, Layout, and Appearance: passed");
 }
 
 async function validateStableRuntimeIsolation(cdp) {
@@ -1176,11 +1176,18 @@ async function validateResetConfirmationExpiry(cdp) {
         return originalFetch.apply(this, arguments);
       };
       const initialText = resetButton?.textContent?.trim() || '';
+      // A disclosure the user opened must stay open when the panel redraws.
+      // Arming and expiring the reset both redraw Setup with changed markup.
+      const disclosures = Array.from(document.querySelectorAll('#dashboard-inline-widget details.setup-diagnostics-details'));
+      disclosures.forEach(details => { details.open = true; });
+      const disclosuresOpen = () => disclosures.length > 0 && disclosures.every(details => details.isConnected && details.open);
       resetButton?.click();
       await wait(100);
+      const disclosuresOpenWhenArmed = disclosuresOpen();
       const armedText = document.querySelector('#dashboard-inline-widget [data-action="reset-local-data"]')?.textContent?.trim() || '';
       const armedCopy = document.querySelector('#dashboard-inline-widget')?.innerText || '';
       await wait(8300);
+      const disclosuresOpenAfterExpiry = disclosuresOpen();
       resetButton = document.querySelector('#dashboard-inline-widget [data-action="reset-local-data"]');
       const expiredText = resetButton?.textContent?.trim() || '';
       const expiredCopy = document.querySelector('#dashboard-inline-widget')?.innerText || '';
@@ -1202,6 +1209,9 @@ async function validateResetConfirmationExpiry(cdp) {
         rearmedText,
         cancelledText,
         resetPostCount,
+        disclosureCount: disclosures.length,
+        disclosuresOpenWhenArmed,
+        disclosuresOpenAfterExpiry,
         fatalVisible: /Dashboard failed|Dashboard runtime error/.test(document.body?.innerText || ''),
         errors
       };
@@ -1215,8 +1225,9 @@ async function validateResetConfirmationExpiry(cdp) {
   assert(result.expiredText === "Reset local data" && /Reset cancelled/i.test(result.expiredCopy || ""), `Diagnostics reset confirmation did not expire safely: ${JSON.stringify(result)}`);
   assert(result.rearmedText === "Confirm reset" && result.cancelledText === "Reset local data", `Diagnostics reset did not re-arm or cancel safely: ${JSON.stringify(result)}`);
   assert(result.resetPostCount === 0, `an expired or cancelled reset confirmation invoked destructive native reset: ${JSON.stringify(result)}`);
+  assert(result.disclosureCount > 0 && result.disclosuresOpenWhenArmed && result.disclosuresOpenAfterExpiry, `a Setup redraw closed a disclosure the user had opened: ${JSON.stringify({ count: result.disclosureCount, armed: result.disclosuresOpenWhenArmed, expired: result.disclosuresOpenAfterExpiry })}`);
   assert(!result.fatalVisible && (result.errors || []).length === 0, `Diagnostics reset expiry emitted a dashboard runtime failure: ${JSON.stringify(result)}`);
-  console.log("rendered Diagnostics reset confirmation expiry and cancellation: passed");
+  console.log("rendered Diagnostics reset confirmation expiry, cancellation, and open disclosures across redraws: passed");
 }
 
 async function validateBackgroundTerminalStatuses(cdp) {
@@ -1382,7 +1393,7 @@ async function validateProductSurfaceSemantics(cdp) {
   assert(new Set(layout.labels).size === layout.labels.length, `Layout Editor row action names are ambiguous: ${JSON.stringify(layout.labels)}`);
   assert(layout.listTag === "OL" && layout.positions.every((position, index) => position === String(index + 1)), `Layout Editor did not expose one numbered order: ${JSON.stringify(layout)}`);
   assert(layout.rowKeys.every(Boolean) && new Set(layout.rowKeys).size === layout.rowKeys.length, `Layout Editor rows did not have stable identities: ${JSON.stringify(layout.rowKeys)}`);
-  assert(/Editing/i.test(layout.guide) && /Mode/i.test(layout.guide) && /Changes save automatically/i.test(layout.guide), `Layout Editor did not identify the Mode or autosave behavior: ${JSON.stringify(layout.guide)}`);
+  assert(/Editing/i.test(layout.guide) && /Profile/i.test(layout.guide) && /Changes save automatically/i.test(layout.guide), `Layout Editor did not identify the Mode or autosave behavior: ${JSON.stringify(layout.guide)}`);
   assert(layout.placementOptions.every(options => options.includes("home") && options.includes("hidden")) && layout.placementOptions.some(options => options.includes("library")), `Layout Editor placement choices were incomplete: ${JSON.stringify(layout.placementOptions)}`);
   assert(layout.placementLabels.every(labels => labels.includes("Hidden on Home") && ["On Home", "Home after setup"].includes(labels[0])), `Layout Editor placement labels did not match their real scope or setup state: ${JSON.stringify(layout.placementLabels)}`);
   assert(layout.retiredWidthControlCount === 0, `Layout Editor exposed a width setting that no longer controls section width: ${JSON.stringify(layout)}`);
@@ -1429,7 +1440,7 @@ async function validateProductSurfaceSemantics(cdp) {
       // Wait for the real form to settle before testing the delete confirmation.
       const saveUiDeadline = Date.now() + 10000;
       while (Date.now() < saveUiDeadline && (document.querySelector('[data-scene-delete]')?.disabled
-        || !/Custom Mode saved/.test(document.querySelector('#dashboard-inline-widget')?.textContent || ''))) await wait(25);
+        || !/Custom Profile saved/.test(document.querySelector('#dashboard-inline-widget')?.textContent || ''))) await wait(25);
       const deleteControl = document.querySelector('[data-scene-delete]');
       if (!deleteControl || deleteControl.disabled) throw new Error('Mode save did not restore the delete control');
       deleteControl.click();
@@ -1522,31 +1533,6 @@ async function validateProductSurfaceSemantics(cdp) {
   assert(systemPrivacy.exposesTopProcesses === false, `System API exposed process identity: ${JSON.stringify(systemPrivacy)}`);
   assert(/Privacy-safe telemetry/i.test(systemPrivacy.frameCopy || "") && /without listing running applications or process IDs/i.test(systemPrivacy.frameCopy || ""), `System Monitor did not explain its privacy-safe telemetry boundary: ${JSON.stringify(systemPrivacy)}`);
   assert(!/Top apps right now|PID \d+/i.test(systemPrivacy.frameCopy || "") && systemPrivacy.taskManagerVisible, `System Monitor still exposed process identity or lost the Task Manager handoff: ${JSON.stringify(systemPrivacy)}`);
-
-  const streaming = await navigateAndEvaluate("streaming", "productStreamingTruthTest", `(async () => {
-    const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline && !document.querySelector('[data-form="streaming"]')) await wait(50);
-    const input = document.querySelector('[data-form="streaming"] input[name="obsEndpoint"]');
-    const form = document.querySelector('[data-form="streaming"]');
-    const initialEndpoint = input?.value || '';
-    if (input && form) {
-      input.value = 'ws://example.com:4455';
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-      await wait(100);
-    }
-    return {
-      headerCopy: document.querySelector('#dashboard-inline-widget')?.innerText || '',
-      frameCopy: document.querySelector('#dashboard-inline-widget')?.innerText || '',
-      pickerStatus: document.querySelector('[data-widget-id="streaming"]')?.dataset.status || '',
-      outerStatus: document.getElementById('dashboard-status')?.dataset.surfaceStatus || '',
-      initialEndpoint
-    };
-  })()`);
-  assert(streaming.pickerStatus === "Preview" && streaming.outerStatus === "Preview", `Streaming was not labeled Preview: ${JSON.stringify(streaming)}`);
-  assert(/does not issue OBS commands/i.test((streaming.headerCopy || "") + " " + (streaming.frameCopy || "")), "Streaming did not disclose its commandless beta boundary");
-  assert(/Local address required/i.test(streaming.frameCopy || ""), "Streaming accepted a non-loopback OBS endpoint");
-  assert(/^ws:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\/?$/i.test(streaming.initialEndpoint || ""), `Streaming default was not loopback-only: ${JSON.stringify(streaming)}`);
 
   await cdp.send("Runtime.evaluate", {
     expression: `(() => {
@@ -2006,7 +1992,7 @@ async function validateSectionNavigation(cdp) {
             ids.push(tab.id);
           }
         }
-        check(new Set(ids).size === 25, 'Navigation did not expose every panel');
+        check(new Set(ids).size === 22, 'Navigation did not expose every panel');
         window.__auxoraTestOpenWidget('layout-editor'); await wait(150);
         const visibility = document.querySelector('[data-section-visible="gaming"]'); await target(visibility); visibility.click(); await wait(150);
         check(!document.querySelector('#dashboard-section-nav [data-section-id="gaming"]') && document.getElementById('dashboard-settings-toggle'), 'Hidden section or permanent Settings contract failed');
@@ -2019,7 +2005,7 @@ async function validateSectionNavigation(cdp) {
       })()`, awaitPromise: true, returnByValue: true
     });
     const result = evaluation.result?.value;
-    assert(!evaluation.exceptionDetails && result?.ids.length === 25 && result.errors.length === 0, `section navigation ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
+    assert(!evaluation.exceptionDetails && result?.ids.length === 22 && result.errors.length === 0, `section navigation ${width}x${height}: ${evaluation.exceptionDetails?.exception?.description || JSON.stringify(result)}`);
     await cdp.send('Page.navigate', { url: `${baseUrl}/dashboard.html?widget=wow-forever&sectionHiddenReload=${width}` });
     await waitForCommittedUrl(cdp, `sectionHiddenReload=${width}`);
     const reload = await cdp.send('Runtime.evaluate', { expression: `(async () => {
@@ -2089,7 +2075,7 @@ async function validateSectionNavigation(cdp) {
   const reset = resetProbe.result?.value;
   assert(!resetProbe.exceptionDetails && reset?.requests === 1 && reset.widget === 'setup' && reset.section === 'settings' && reset.normalized.order.join('|') === defaults.join('|') && reset.normalized.hidden.length === 0 && reset.errors.length === 0, `Privacy reset did not clear navigation preferences: ${JSON.stringify(reset)}`);
   await cdp.send('Storage.clearDataForOrigin', { origin: baseUrl, storageTypes: 'all' });
-  console.log('section order/visibility, all25 two-click selection with scrolling, hidden deep links, migration, corrupt settings, reset, and keyboard targets: passed');
+  console.log('section order/visibility, every panel two-click selection with scrolling, hidden deep links, migration, corrupt settings, reset, and keyboard targets: passed');
 }
 
 // This fixture is installed before dashboard scripts. Every audio/media request,
@@ -3357,8 +3343,8 @@ async function validateAllVisibleProductSurfaces(cdp, viewport) {
   }
   const expectedIds = [
     "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
-    "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
+    "installer", "layout-editor", "network", "privacy", "quick-actions",
+    "scenes", "setup", "shortcuts", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
   ];
   const actualIds = (audit.results || []).map(result => result.id).sort();
   const viewportLabel = `${viewport.name} ${viewport.width}x${viewport.height}`;
@@ -3775,8 +3761,8 @@ async function validateForcedColorsProductSurfaces(cdp) {
 
   const expectedIds = [
     "audio", "calendar", "clipboard", "display-controls", "frigate", "game-mode", "home", "hue",
-    "installer", "layout-editor", "marketplace", "network", "privacy", "quick-actions", "remote",
-    "scenes", "setup", "shortcuts", "streaming", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
+    "installer", "layout-editor", "network", "privacy", "quick-actions",
+    "scenes", "setup", "shortcuts", "system", "theme-studio", "tmog", "updates", "weather", "wow-forever"
   ];
   const actualIds = (audit.results || []).map(result => result.id).sort();
   assert(audit.mediaActive && audit.ambientHidden, `forced-colors dashboard media contract failed: ${JSON.stringify(audit)}`);
@@ -4177,6 +4163,7 @@ try {
     await validateOptionalSetupHandoffs(cdp);
     await validateTouchLockIsolation(cdp);
     await validateFocusedInlineWidgetReconciliation(cdp);
+    await validateRetiredDeepLinks(cdp);
     await validateStableRuntimeIsolation(cdp);
     await validateHomeRefreshStability(cdp);
     await validateSurfaceStatusOwnership(cdp);
@@ -4249,7 +4236,7 @@ try {
     cdp.close();
   }
   console.log(surfaceOnlyViewport
-    ? `launched isolated hidden native host and checked all 25 product surfaces at ${surfaceOnlyViewport.width}x${surfaceOnlyViewport.height}`
+    ? `launched isolated hidden native host and checked all 22 product surfaces at ${surfaceOnlyViewport.width}x${surfaceOnlyViewport.height}`
     : process.argv.includes("--quick-controls-only")
     ? "launched isolated hidden native host and checked direct Quick controls with hardware-isolated fixtures at four viewports"
     : process.argv.includes("--navigation-only")

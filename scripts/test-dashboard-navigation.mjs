@@ -12,12 +12,14 @@ const sectionIds = ["home", "gaming", "media", "pc", "smart-home"];
 const expectedTabs = {
   home: [["home", "Overview"], ["calendar", "Calendar"], ["weather", "Weather"]],
   gaming: [["game-mode", "Game Mode"], ["wow-forever", "WoW Forever"]],
-  media: [["audio", "Audio & Media"], ["streaming", "Streaming"]],
+  media: [["audio", "Audio & Media"]],
   pc: [["system", "Performance"], ["tmog", "Graphs (TMOG)"], ["network", "Network"], ["display-controls", "Display"], ["shortcuts", "Windows controls"], ["quick-actions", "Windows tools"], ["clipboard", "Clipboard"]],
   "smart-home": [["hue", "Lights"], ["frigate", "Cameras"]],
-  settings: [["theme-studio", "Appearance"], ["layout-editor", "Layout"], ["scenes", "Modes & automation"], ["updates", "Updates"], ["privacy", "Privacy & Backup"], ["remote", "Phone Remote"], ["marketplace", "Widget Packs"], ["setup", "Setup & status"], ["installer", "Repair & recovery"]]
+  settings: [["theme-studio", "Appearance"], ["scenes", "Profiles"], ["layout-editor", "Layout"], ["setup", "Setup & status"], ["installer", "Repair & recovery"], ["updates", "Updates"], ["privacy", "Privacy & Backup"]]
 };
 const canonicalIds = Object.values(expectedTabs).flat().map(([id]) => id);
+// Tabs that used to exist, and the surviving tab a saved link to each must open.
+const retiredTabs = { media: "audio", streaming: "audio", marketplace: "layout-editor", remote: "theme-studio" };
 
 function extractBetween(source, start, end) {
   const first = source.indexOf(start);
@@ -36,7 +38,7 @@ function realCatalogIds() {
   return Array.from(ids);
 }
 
-test("section metadata keeps all 25 requested tabs and a separate Recovery item", () => {
+test("section metadata lists every tab once, in order, with Settings last", () => {
   assert.deepEqual(navigation.sections.map(section => [section.id, section.label]), [
     ["home", "Home"], ["gaming", "Gaming"], ["media", "Media"], ["pc", "PC"], ["smart-home", "Smart Home"], ["settings", "Settings"]
   ]);
@@ -44,13 +46,29 @@ test("section metadata keeps all 25 requested tabs and a separate Recovery item"
     assert.deepEqual(section.tabs.map(tab => [tab.id, tab.label]), expectedTabs[section.id]);
     for (const tab of section.tabs) assert.equal(navigation.sectionForWidget(tab.id), section.id);
   }
-  assert.equal(canonicalIds.length, 25);
-  assert.equal(new Set(canonicalIds).size, 25);
+  assert.equal(canonicalIds.length, 22);
+  assert.equal(new Set(canonicalIds).size, 22);
+});
+
+test("saved links to removed tabs open the nearest tab that still exists", () => {
+  for (const [retired, survivor] of Object.entries(retiredTabs)) {
+    assert.equal(canonicalIds.includes(retired), false, `${retired} must not be a tab`);
+    assert.equal(navigation.canonicalWidget(retired), survivor);
+    const expected = { sectionId: navigation.sectionForWidget(survivor), widgetId: survivor };
+    assert.deepEqual(navigation.resolveNavigation({ requestedWidget: retired }), expected);
+    assert.deepEqual(navigation.resolveNavigation({ lastWidget: retired, onboardingCompleted: true }), expected);
+    assert.deepEqual(navigation.resolveNavigation({
+      storedDestination: expected.sectionId, onboardingCompleted: true, sectionPanels: { [expected.sectionId]: retired }
+    }), expected);
+    assert.throws(() => navigation.validateCatalog([...canonicalIds, retired]), new RegExp(`extra: ${retired}`));
+  }
+  assert.equal(navigation.canonicalWidget("missing"), null);
+  assert.equal(navigation.canonicalWidget("constructor"), null);
 });
 
 test("navigation exactly covers the executed real dashboard catalog", () => {
   const actual = realCatalogIds();
-  assert.equal(actual.length, 25);
+  assert.equal(actual.length, 22);
   assert.equal(navigation.validateCatalog(actual), true);
   assert.deepEqual([...actual].sort(), [...canonicalIds].sort());
 });
