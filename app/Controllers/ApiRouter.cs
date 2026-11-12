@@ -23,8 +23,6 @@ public sealed class ApiRouter
     private readonly SceneController _sceneController;
     private readonly ActionChainController _actionChainController;
     private readonly MonitorControlController _monitorControlController;
-    private readonly ExtensionController _extensionController;
-    private readonly RemoteSessionController _remoteSessionController;
     private readonly LocalDataResetController _localDataResetController;
     private readonly RecoveryController _recoveryController;
     private readonly WeatherService _weatherService;
@@ -43,8 +41,6 @@ public sealed class ApiRouter
         SceneController sceneController,
         ActionChainController actionChainController,
         MonitorControlController monitorControlController,
-        ExtensionController extensionController,
-        RemoteSessionController remoteSessionController,
         LocalDataResetController localDataResetController,
         RecoveryController recoveryController,
         WeatherService weatherService,
@@ -62,8 +58,6 @@ public sealed class ApiRouter
         _sceneController = sceneController;
         _actionChainController = actionChainController;
         _monitorControlController = monitorControlController;
-        _extensionController = extensionController;
-        _remoteSessionController = remoteSessionController;
         _localDataResetController = localDataResetController;
         _recoveryController = recoveryController;
         _weatherService = weatherService;
@@ -177,18 +171,6 @@ public sealed class ApiRouter
                 return;
             case "/api/displays/controls" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _monitorControlController.Set(await ReadJsonAsync<MonitorControlRequest>(request, cancellationToken)), cancellationToken);
-                return;
-            case "/api/extensions" when request.HttpMethod == "GET":
-                await WriteJsonAsync(response, 200, _extensionController.Get(), cancellationToken);
-                return;
-            case "/api/remote/session" when request.HttpMethod == "GET":
-                await WriteJsonAsync(response, 200, _remoteSessionController.Get(), cancellationToken);
-                return;
-            case "/api/remote/session" when request.HttpMethod == "POST":
-                await WriteJsonAsync(response, 200, _remoteSessionController.Start(), cancellationToken);
-                return;
-            case "/api/remote/session/stop" when request.HttpMethod == "POST":
-                await WriteJsonAsync(response, 200, _remoteSessionController.Stop(), cancellationToken);
                 return;
             case "/api/config/weather" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _configController.UpdateWeather(await ReadJsonAsync<WeatherConfigRequest>(request, cancellationToken)), cancellationToken);
