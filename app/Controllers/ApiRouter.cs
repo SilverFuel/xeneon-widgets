@@ -235,6 +235,9 @@ public sealed class ApiRouter
             case "/api/game/activity/pin" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _gameController.PinCandidate(await ReadJsonAsync<GameActivityPinRequest>(request, cancellationToken)), cancellationToken);
                 return;
+            case "/api/wow/companion" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _gameController.GetWowCompanion(), cancellationToken);
+                return;
             case "/api/system":
                 await WriteJsonAsync(response, 200, _telemetryController.GetSystemSnapshot(), cancellationToken);
                 return;

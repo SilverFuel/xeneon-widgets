@@ -83,3 +83,7 @@ Phase 1 removed these source-text checks on `GameActivityService.cs` without a b
 - Game detection ignores Teams and other chat apps, and launcher processes.
 - A keyword-only game match stays below the active threshold.
 - Game activity scans are cached and the WMI fallback is throttled.
+
+## WoW companion add-on
+
+`addons/AuxoraCompanion` is a World of Warcraft add-on, written in Lua. `scripts/test-wow-companion-addon.lua` runs it against a fake game and checks what it saves and when. It is not part of `npm run check` because the project has no Lua runtime. Run it with any Lua 5.2 or newer: `lua scripts/test-wow-companion-addon.lua`. It cannot show that the add-on loads in the real client; only the game can.
