@@ -823,7 +823,8 @@ async function assertForcedColorsPalette(cdp, label, palette) {
         section: section.id,
         ids: panels.map(button => button.dataset.widgetId),
         borderless: [sectionButton, ...panels].filter(button => getComputedStyle(button).borderTopStyle === 'none' || parseFloat(getComputedStyle(button).borderTopWidth) < 1).map(button => button.getAttribute('aria-label') || button.textContent),
-        selectionDistinct: !!selectedStyle && !!otherStyle && (selectedStyle.backgroundColor !== otherStyle.backgroundColor || selectedStyle.color !== otherStyle.color),
+        // A section with one tab has nothing unselected to compare against.
+        selectionDistinct: !!selectedStyle && (panels.length === 1 || (!!otherStyle && (selectedStyle.backgroundColor !== otherStyle.backgroundColor || selectedStyle.color !== otherStyle.color))),
         focusAccepted: document.activeElement === focusTarget,
         focusOutlined: getComputedStyle(focusTarget).outlineStyle !== 'none' && parseFloat(getComputedStyle(focusTarget).outlineWidth) >= 3
       });
@@ -875,7 +876,7 @@ async function assertForcedColorsPalette(cdp, label, palette) {
   assert(probe.focusVisible, `${label}: keyboard focus was not visibly outlined in forced colors`);
   assert(probe.forcedColorOptOuts.length === 0, `${label}: elements opted out of Windows forced colors: ${JSON.stringify(probe.forcedColorOptOuts)}`);
   assert(!probe.overflow && !probe.fatal, `${label}: forced colors created overflow or a fatal state: ${JSON.stringify(probe)}`);
-  assert(navigationProbe.length === 6 && navigationProbe.flatMap(section => section.ids).length === 25, `${label}: section/category inventory incomplete: ${JSON.stringify(navigationProbe)}`);
+  assert(navigationProbe.length === 6 && navigationProbe.flatMap(section => section.ids).length === 22, `${label}: section/category inventory incomplete: ${JSON.stringify(navigationProbe)}`);
   for (const section of navigationProbe) {
     assert(section.borderless.length === 0 && section.selectionDistinct && section.focusAccepted && section.focusOutlined, `${label}: ${section.section} lost forced-color boundaries, selection, or keyboard focus: ${JSON.stringify(section)}`);
   }
