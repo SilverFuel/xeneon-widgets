@@ -395,15 +395,33 @@ public sealed class SceneServiceTests
         Assert.That(named.Profiles.Any(scene => scene.Name == ("Tabbed " + new string('n', 80))[..40]), Is.True);
         Assert.That(blank.Profiles.Count(scene => scene.Name == "Game"), Is.EqualTo(1));
 
-        var index = 0;
-        while (Snapshot(service.GetSnapshot()).Profiles.Count < SceneService.MaxProfiles)
+        // Fill the list. The host counts every stored Profile, so the test
+        // does not assume how many of them a snapshot shows.
+        var beforeFilling = Snapshot(service.GetSnapshot()).Profiles.Count;
+        var created = 0;
+        InvalidOperationException? full = null;
+        for (var index = 0; index < SceneService.MaxProfiles + 4 && full is null; index++)
         {
-            service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:filler-" + index++, Name = "Filler" });
+            try
+            {
+                service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:filler-" + index, Name = "Filler" });
+                created++;
+            }
+            catch (InvalidOperationException error)
+            {
+                full = error;
+            }
         }
 
-        var full = Assert.Throws<InvalidOperationException>((Action)(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:one-too-many", Name = "Extra" })));
+        Assert.That(full, Is.Not.Null, "the list never filled up");
         Assert.That(full!.Message, Does.Contain("no room"));
-        Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(SceneService.MaxProfiles));
+        Assert.That(created, Is.GreaterThan(0));
+        Assert.That(created, Is.LessThan(SceneService.MaxProfiles));
+        // Every Profile that was accepted is still there: none was dropped silently.
+        Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(beforeFilling + created));
+
+        Assert.Throws<InvalidOperationException>((Action)(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:one-too-many", Name = "Extra" })));
+        Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(beforeFilling + created));
     }
 
     private SceneService CreateService()
