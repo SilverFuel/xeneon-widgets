@@ -381,8 +381,8 @@ public sealed class SceneServiceTests
         var service = CreateService();
         var before = Snapshot(service.GetSnapshot()).Profiles.Count;
 
-        Assert.That(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = gameKey, Name = "Game" }), Throws.InvalidOperationException);
-        Assert.That(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:" + new string('a', 96), Name = "Game" }), Throws.InvalidOperationException);
+        Assert.Throws<InvalidOperationException>((Action)(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = gameKey, Name = "Game" })));
+        Assert.Throws<InvalidOperationException>((Action)(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:" + new string('a', 96), Name = "Game" })));
         Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(before));
     }
 
@@ -401,8 +401,8 @@ public sealed class SceneServiceTests
             service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:filler-" + index++, Name = "Filler" });
         }
 
-        Assert.That(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:one-too-many", Name = "Extra" }),
-            Throws.InvalidOperationException.With.Message.Contains("no room"));
+        var full = Assert.Throws<InvalidOperationException>((Action)(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:one-too-many", Name = "Extra" })));
+        Assert.That(full!.Message, Does.Contain("no room"));
         Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(SceneService.MaxProfiles));
     }
 
