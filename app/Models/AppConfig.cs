@@ -474,6 +474,15 @@ public sealed class SceneEvaluationRequest
     public string? SampledAt { get; set; }
 }
 
+// Asks for a Profile of its own for one game, named by its routing key
+// (GameActivityPayload.GameKey), never by a path.
+public sealed class SceneGameProfileRequest
+{
+    public string? GameKey { get; set; }
+
+    public string? Name { get; set; }
+}
+
 public sealed class SceneThemeRequest
 {
     public string? SceneId { get; set; }

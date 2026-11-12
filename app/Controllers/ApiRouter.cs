@@ -154,6 +154,9 @@ public sealed class ApiRouter
             case "/api/scenes/theme" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _sceneController.SetTheme(await ReadJsonAsync<SceneThemeRequest>(request, cancellationToken)), cancellationToken);
                 return;
+            case "/api/scenes/game-profile" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, _sceneController.CreateForGame(await ReadJsonAsync<SceneGameProfileRequest>(request, cancellationToken)), cancellationToken);
+                return;
             case "/api/scenes/delete" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, _sceneController.Delete(await ReadJsonAsync<SceneDeleteRequest>(request, cancellationToken)), cancellationToken);
                 return;

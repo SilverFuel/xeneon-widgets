@@ -455,3 +455,106 @@ test("other games retain Game Mode behavior and do not replace an open adventure
   journal.context.handleGameActivity(other);
   assert.equal(journal.selections.length, 0);
 });
+
+// A fake native host for the "Create a Profile for this game" flow.
+function gameProfileHarness({ activeSceneId = "scene-gaming", manualOverride = false, failCreate = false } = {}) {
+  const requests = [];
+  const toasts = [];
+  const applied = [];
+  let profiles = builtInProfiles();
+  const context = {
+    lastSceneEvaluationAt: 0,
+    lastSceneEvaluationGame: "",
+    bridgeReachable: true,
+    bridgeOrigin: "http://fixture.invalid",
+    gameActivity: null,
+    bridgeConfig: { scenes: { activeSceneId, profiles } },
+    buildUrl: (origin, path) => origin + path,
+    fetchJson: async () => ({}),
+    async postJson(url, body) {
+      requests.push({ path: url.replace("http://fixture.invalid", ""), body });
+      if (url.endsWith("/api/scenes/game-profile")) {
+        if (failCreate) throw new Error("There is no room for another Profile. Delete one you no longer use.");
+        profiles = profiles.concat({
+          id: "scene-created", name: body.name, themeId: "gaming", homeWidget: "game-mode",
+          rules: [{ type: "game", value: body.gameKey, priority: 110, enabled: true }]
+        });
+        return { activeSceneId: context.bridgeConfig.scenes.activeSceneId, profiles };
+      }
+      // Evaluation: the host switches unless a manual choice is holding another Profile.
+      const created = profiles.find(profile => profile.rules.some(rule => rule.value === body.activeGameKey));
+      const next = manualOverride || !created ? context.bridgeConfig.scenes.activeSceneId : created.id;
+      return { activeSceneId: next, activeScene: profiles.find(profile => profile.id === next), profiles };
+    },
+    applyScenePresentation(scene) { applied.push(scene.id); }, renderQuickDrawer() {},
+    showTouchFeedback(message) { toasts.push(message); },
+    console: { warn: error => { throw error; } }
+  };
+  runInNewContext(
+    functionsBetween("gameProfiles", "gameHomeWidgetId")
+      + functionsBetween("evaluateSceneContext", "scheduleGameActivityLoop")
+      + functionsBetween("activeProfile", "saveProfileTheme")
+      + functionsBetween("gameWithoutProfile", "activateScene"),
+    context);
+  return { context, requests, toasts, applied };
+}
+
+test("a Profile is offered only for a running game that has none of its own", () => {
+  const { context } = gameProfileHarness();
+  assert.equal(context.gameWithoutProfile(), null, "nothing is running");
+  context.gameActivity = activity({ id: "steam:1086940", name: "  Baldur's Gate 3  ", gameKey: "steam:1086940" });
+  assert.deepEqual({ ...context.gameWithoutProfile() }, { gameKey: "steam:1086940", name: "Baldur's Gate 3" });
+  context.gameActivity = activity();
+  assert.equal(context.gameWithoutProfile(), null, "the Forever client already has its Profile");
+  context.gameActivity = activity({ gameKey: "", name: "Unknown" });
+  assert.equal(context.gameWithoutProfile(), null, "a game without a key cannot be named by a rule");
+  context.gameActivity = { active: true, stale: true, activeGame: { name: "Hades", gameKey: "steam:1145360" } };
+  assert.equal(context.gameWithoutProfile(), null, "a stale snapshot is not a running game");
+  context.gameActivity = activity({ name: "Hades", gameKey: "steam:1145360" });
+  context.bridgeReachable = false;
+  assert.equal(context.gameWithoutProfile(), null, "the host must be reachable to create one");
+  context.bridgeReachable = true;
+  context.gameActivity = activity({ name: "x".repeat(90), gameKey: "game:long" });
+  assert.equal(context.gameWithoutProfile().name.length, 40);
+});
+
+test("creating a game's Profile sends its key, then switches to it at once", async () => {
+  const { context, requests, toasts, applied } = gameProfileHarness();
+  context.gameActivity = activity({ id: "steam:1086940", name: "Baldur's Gate 3", gameKey: "steam:1086940" });
+  context.lastSceneEvaluationAt = Date.now();
+  context.lastSceneEvaluationGame = "steam:1086940";
+
+  const name = await context.createGameProfile();
+
+  assert.equal(name, "Baldur's Gate 3");
+  assert.deepEqual(requests.map(request => request.path), ["/api/scenes/game-profile", "/api/scenes/evaluate"]);
+  assert.deepEqual({ ...requests[0].body }, { gameKey: "steam:1086940", name: "Baldur's Gate 3" });
+  assert.equal(requests[1].body.activeGameKey, "steam:1086940", "the 20 second evaluation throttle must not delay the switch");
+  assert.equal(context.bridgeConfig.scenes.activeSceneId, "scene-created");
+  assert.deepEqual(applied, ["scene-created"]);
+  assert.deepEqual(toasts, ["Baldur's Gate 3 profile"]);
+  assert.equal(context.gameWithoutProfile(), null, "the game now has its own Profile");
+  assert.equal(JSON.stringify(requests).includes("\\\\"), false, "no path is sent");
+});
+
+test("a manual Profile choice is respected: the new Profile waits for automatic switching", async () => {
+  const { context, toasts, applied } = gameProfileHarness({ activeSceneId: "scene-work", manualOverride: true });
+  context.gameActivity = activity({ name: "Hades", gameKey: "steam:1145360" });
+
+  assert.equal(await context.createGameProfile(), "");
+  assert.equal(context.bridgeConfig.scenes.activeSceneId, "scene-work");
+  assert.deepEqual(applied, []);
+  assert.deepEqual(toasts, ["Profile created. Choose Automatic in the Profile selector to use it."]);
+});
+
+test("a failed or pointless request creates nothing and says why", async () => {
+  const failing = gameProfileHarness({ failCreate: true });
+  failing.context.gameActivity = activity({ name: "Hades", gameKey: "steam:1145360" });
+  await assert.rejects(failing.context.createGameProfile(), /no room for another Profile/);
+  assert.deepEqual(failing.requests.map(request => request.path), ["/api/scenes/game-profile"]);
+  assert.equal(failing.context.bridgeConfig.scenes.profiles.length, builtInProfiles().length);
+
+  const idle = gameProfileHarness();
+  await assert.rejects(idle.context.createGameProfile(), /No game is running without a Profile/);
+  assert.deepEqual(idle.requests, []);
+});

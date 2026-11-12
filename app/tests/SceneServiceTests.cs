@@ -305,6 +305,125 @@ public sealed class SceneServiceTests
         Assert.That(deleted.Profiles, Has.None.Property(nameof(SceneProfile.IsBuiltIn)).False);
     }
 
+    [Test]
+    public void CreateForGame_GivesTheGameItsOwnProfileWithoutActivatingIt()
+    {
+        var service = CreateService();
+        var before = Snapshot(service.GetSnapshot());
+        var gaming = before.Profiles.Single(scene => scene.Id == "scene-gaming");
+
+        var after = Snapshot(service.CreateForGame(new SceneGameProfileRequest { GameKey = "Steam:1086940", Name = "Baldur's Gate 3" }));
+        var created = after.Profiles.Single(scene => scene.Name == "Baldur's Gate 3");
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(after.Profiles, Has.Count.EqualTo(before.Profiles.Count + 1));
+            Assert.That(created.IsBuiltIn, Is.False);
+            Assert.That(created.ThemeId, Is.EqualTo(gaming.ThemeId));
+            Assert.That(created.ThemeVariant, Is.EqualTo("standard"));
+            Assert.That(created.HomeWidget, Is.EqualTo(gaming.HomeWidget));
+            Assert.That(created.Widgets, Is.EqualTo(gaming.Widgets));
+            Assert.That(created.Rules, Has.Count.EqualTo(1));
+            Assert.That(created.Rules[0].Type, Is.EqualTo("game"));
+            Assert.That(created.Rules[0].Value, Is.EqualTo("steam:1086940"));
+            Assert.That(created.Rules[0].Priority, Is.EqualTo(110));
+            Assert.That(created.Rules[0].Enabled, Is.True);
+            Assert.That(after.ActiveSceneId, Is.EqualTo(before.ActiveSceneId));
+            Assert.That(after.ManualOverrideActive, Is.False);
+        }));
+    }
+
+    [Test]
+    public void CreateForGame_TheNewProfileWinsForThatGameOnly()
+    {
+        var service = CreateService();
+        service.CreateForGame(new SceneGameProfileRequest { GameKey = "steam:1086940", Name = "Baldur's Gate 3" });
+
+        var playing = Snapshot(service.Evaluate(new SceneEvaluationRequest
+        {
+            ActiveGame = "Baldur's Gate 3", ActiveGameKey = "steam:1086940", SampledAt = "2026-07-12T14:00:00-04:00"
+        }));
+        Assert.That(playing.Profiles.Single(scene => scene.Id == playing.ActiveSceneId).Name, Is.EqualTo("Baldur's Gate 3"));
+
+        var other = Snapshot(service.Evaluate(new SceneEvaluationRequest
+        {
+            ActiveGame = "Hades", ActiveGameKey = "steam:1145360", SampledAt = "2026-07-12T14:05:00-04:00"
+        }));
+        Assert.That(other.ActiveSceneId, Is.EqualTo("scene-gaming"));
+
+        var theme = Snapshot(service.SetTheme(new SceneThemeRequest { SceneId = playing.ActiveSceneId, ThemeId = "ember" }));
+        Assert.That(theme.Profiles.Single(scene => scene.Id == playing.ActiveSceneId).ThemeId, Is.EqualTo("ember"));
+        Assert.That(theme.Profiles.Single(scene => scene.Id == "scene-gaming").ThemeId, Is.Not.EqualTo("ember"));
+    }
+
+    [Test]
+    public void CreateForGame_AGameThatAlreadyHasAProfileGetsNoSecondOne()
+    {
+        var service = CreateService();
+        var before = Snapshot(service.GetSnapshot()).Profiles.Count;
+
+        Assert.That(Snapshot(service.CreateForGame(new SceneGameProfileRequest { GameKey = "wow-forever", Name = "WoW" })).Profiles, Has.Count.EqualTo(before));
+
+        service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:hades", Name = "Hades" });
+        var again = Snapshot(service.CreateForGame(new SceneGameProfileRequest { GameKey = " GAME:HADES ", Name = "Hades again" }));
+        Assert.That(again.Profiles, Has.Count.EqualTo(before + 1));
+        Assert.That(again.Profiles.Any(scene => scene.Name == "Hades again"), Is.False);
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase(@"C:\Games\Hades\Hades.exe")]
+    [TestCase("game:two words")]
+    [TestCase("game:<script>")]
+    public void CreateForGame_RefusesAnythingThatIsNotAGameKey(string? gameKey)
+    {
+        var service = CreateService();
+        var before = Snapshot(service.GetSnapshot()).Profiles.Count;
+
+        Assert.Throws<InvalidOperationException>((Action)(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = gameKey, Name = "Game" })));
+        Assert.Throws<InvalidOperationException>((Action)(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:" + new string('a', 96), Name = "Game" })));
+        Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(before));
+    }
+
+    [Test]
+    public void CreateForGame_CleansTheNameAndStopsWhenTheListIsFull()
+    {
+        var service = CreateService();
+        var named = Snapshot(service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:long", Name = "  Tab\tbed " + new string('n', 80) }));
+        var blank = Snapshot(service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:blank", Name = " \n " }));
+        Assert.That(named.Profiles.Any(scene => scene.Name == ("Tabbed " + new string('n', 80))[..40]), Is.True);
+        Assert.That(blank.Profiles.Count(scene => scene.Name == "Game"), Is.EqualTo(1));
+
+        // Fill the list. The host counts every stored Profile, so the test
+        // does not assume how many of them a snapshot shows.
+        var beforeFilling = Snapshot(service.GetSnapshot()).Profiles.Count;
+        var created = 0;
+        InvalidOperationException? full = null;
+        for (var index = 0; index < SceneService.MaxProfiles + 4 && full is null; index++)
+        {
+            try
+            {
+                service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:filler-" + index, Name = "Filler" });
+                created++;
+            }
+            catch (InvalidOperationException error)
+            {
+                full = error;
+            }
+        }
+
+        Assert.That(full, Is.Not.Null, "the list never filled up");
+        Assert.That(full!.Message, Does.Contain("no room"));
+        Assert.That(created, Is.GreaterThan(0));
+        Assert.That(created, Is.LessThan(SceneService.MaxProfiles));
+        // Every Profile that was accepted is still there: none was dropped silently.
+        Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(beforeFilling + created));
+
+        Assert.Throws<InvalidOperationException>((Action)(() => service.CreateForGame(new SceneGameProfileRequest { GameKey = "game:one-too-many", Name = "Extra" })));
+        Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(beforeFilling + created));
+    }
+
     private SceneService CreateService()
     {
         return new SceneService(new ConfigStore(_logger!, Path.Combine(_tempDirectory, "config")));

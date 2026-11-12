@@ -25,6 +25,8 @@
     var redrawPending = false;
     var redrawTimerId = 0;
     var destroyed = false;
+    var creatingGameProfile = false;
+    var gameProfileNotice = "";
 
     function focusedFormControl() {
       var active = document.activeElement;
@@ -66,6 +68,8 @@
       var gameModeAutoTune = settingValue(env, "gameModeAutoTune", dashboard.gameModeAutoTune === false ? "0" : "1");
       var gameModeAutoFace = settingValue(env, "gameModeAutoFace", "1");
       var profileName = typeof env.activeProfileName === "function" ? env.activeProfileName() : "";
+      // A running game that shares the Gaming Profile can be given its own.
+      var unprofiledGame = typeof env.gameWithoutProfile === "function" ? env.gameWithoutProfile() : null;
 
       patchStableDom(container, productShell(
         "Visual style",
@@ -75,6 +79,11 @@
         "good",
         '<div class="product-theme-picker">' +
         (profileName ? '<p class="inline-copy product-theme-owner">Theme for: <strong>' + escapeHtml(profileName) + '</strong></p>' : '') +
+        (unprofiledGame
+          ? '<div class="product-game-profile"><button class="inline-button" type="button" data-action="create-game-profile"' + (creatingGameProfile ? ' disabled' : '') + '>' +
+              escapeHtml(creatingGameProfile ? "Creating Profile" : "Create a Profile for " + unprofiledGame.name) + '</button>' +
+              '<span class="inline-copy">' + escapeHtml(gameProfileNotice || "Gives this game its own theme. Other games keep " + (profileName || "Gaming") + ".") + '</span></div>'
+          : (gameProfileNotice ? '<p class="inline-copy product-game-profile" role="status">' + escapeHtml(gameProfileNotice) + '</p>' : '')) +
         '<div class="product-theme-grid" role="radiogroup" aria-label="Theme">' +
           themes.map(function (theme) {
             return '' +
@@ -134,6 +143,26 @@
     }
 
     addListener(cleanups, container, "click", function (event) {
+      var create = event.target && event.target.closest ? event.target.closest('[data-action="create-game-profile"]') : null;
+      if (create && container.contains(create)) {
+        if (creatingGameProfile || typeof env.createGameProfile !== "function") {
+          return;
+        }
+        creatingGameProfile = true;
+        gameProfileNotice = "";
+        requestRedraw();
+        env.createGameProfile().then(function (profileName) {
+          gameProfileNotice = profileName ? "Created. Pick a theme for " + profileName + "." : "Created. It takes over when Profiles switch automatically.";
+        }, function (error) {
+          gameProfileNotice = error && error.message ? error.message : "The Profile could not be created.";
+        }).then(function () {
+          creatingGameProfile = false;
+          if (!destroyed) {
+            requestRedraw();
+          }
+        });
+        return;
+      }
       var reset = event.target && event.target.closest ? event.target.closest("[data-opacity-reset]") : null;
       if (reset && container.contains(reset)) {
         saveSettings(env, { dashboardOpacity: "100" });
@@ -148,6 +177,7 @@
 
       theme = findById(productThemes(env), target.getAttribute("data-theme"));
       selectPreset(theme.id);
+      gameProfileNotice = "";
       requestRedraw();
     });
 
