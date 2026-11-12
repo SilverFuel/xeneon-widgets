@@ -279,6 +279,10 @@
 .wow-quest-copy strong { color: #352b1f; font-size: 14px; font-weight: 600; line-height: 1.45; }
 .wow-quest-copy small { color: #6c583a; font-size: 12px; }
 .wow-quest.is-complete .wow-quest-copy strong { color: #76664d; text-decoration: line-through; text-decoration-color: #9d8a67; }
+.wow-quest--game { min-height: 44px; }
+.wow-quest-objectives { color: #5d4c33; font-size: 12px; line-height: 1.5; }
+.wow-quest--game.is-ready .wow-quest-objectives { color: #2a5530; font-weight: 600; }
+.wow-quest-tabs button[hidden] { display: none; }
 .wow-quest .wow-icon-button { border-color: transparent; color: #6b5638; background: transparent; }
 .wow-quest .wow-icon-button:hover { border-color: #94764a; color: #332719; background: rgba(109, 77, 30, .08); }
 .wow-empty { padding: 30px 10px; color: #766143; text-align: center; font-size: 13px; line-height: 1.8; }

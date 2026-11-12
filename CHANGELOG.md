@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New Auxora Companion add-on for World of Warcraft Forever (`addons/AuxoraCompanion`). With it installed, the WoW Forever journal shows your character, experience, coin, location and quest log as of your last logout or `/auxora`.
+
 - Settings now has seven tabs in one order: Appearance, Profiles, Layout, Setup & status, Repair & recovery, Updates, Privacy & Backup.
 - Removed the Streaming, Widget Packs, and Phone Remote panels. Links saved to them open Audio & Media, Layout, and Appearance. The dashboard no longer allows WebSocket connections, which only the Streaming panel used.
 - "Mode" is now "Profile" everywhere it meant a saved setup. Game Mode, Safe Mode, and Night keep their names.
