@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Larger, plainer text in the WoW Forever panel. Nothing is smaller than 14px, quest titles are 17px, and small all-capitals labels are now ordinary words. At the EDGE's full resolution (2560x720) the text is larger again, 16 to 20px. On the EDGE the zone buttons are one row you swipe through, so the quest list keeps its height.
 - The WoW Forever panel fits one screen on the EDGE. The game's quest log is shown one view at a time (the zone you are in, quests ready to turn in, each other zone, or all) and scrolls inside its own card. The panel opens on the game's log when the add-on is saving. Edit character moved onto the character card, and Export and Import moved to the bottom row.
 - Removed the host endpoints behind the retired Phone Remote and extension-inspection features (`/api/remote/session`, `/api/extensions`). Nothing in the dashboard used them.
 - Any game can have its own Profile. While a game without one is running, Settings > Appearance offers "Create a Profile for <game>". The new Profile takes over whenever that game runs, and the theme you pick for it stays with it. Other games keep the Gaming Profile.

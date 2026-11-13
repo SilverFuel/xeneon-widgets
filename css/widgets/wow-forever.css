@@ -12,6 +12,11 @@
   --wow-faction-wash: rgba(154, 61, 46, .19);
   --wow-paper: #e8d8b4;
   --wow-paper-ink: #332d23;
+  /* Reading sizes. Everything in the panel uses one of these four. */
+  --wow-fs: 16px;
+  --wow-fs-sub: 15px;
+  --wow-fs-small: 14px;
+  --wow-fs-strong: 17px;
   position: relative;
   container-type: inline-size;
   isolation: isolate;
@@ -25,7 +30,7 @@
   border-radius: 5px;
   color: var(--wow-text);
   background: linear-gradient(145deg, #15232b 0%, #101b20 60%, #172421 100%);
-  font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  font: 16px/1.5 "Segoe UI", system-ui, sans-serif;
 }
 
 .wow-adventure::before {
@@ -42,6 +47,7 @@
 .wow-adventure *,
 .wow-adventure *::before,
 .wow-adventure *::after { box-sizing: border-box; }
+.wow-adventure > * { font-size: var(--wow-fs); }
 .wow-adventure [hidden] { display: none !important; }
 .wow-adventure h2,
 .wow-adventure h3,
@@ -91,10 +97,9 @@
 .wow-adventure .wow-eyebrow {
   margin-bottom: 5px;
   color: var(--wow-gold-bright);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .2em;
-  text-transform: uppercase;
+  font-size: var(--wow-fs-small);
+  font-weight: 600;
+  letter-spacing: .02em;
 }
 .wow-brand h2 {
   color: #f5e9ce;
@@ -102,7 +107,7 @@
   letter-spacing: -.025em;
   text-shadow: 0 2px 8px #101b20;
 }
-.wow-adventure .wow-subtitle { margin-top: 7px; color: #c3c9be; font-size: 13px; }
+.wow-adventure .wow-subtitle { margin-top: 7px; color: #c3c9be; font-size: var(--wow-fs-sub); }
 .wow-timer-actions,
 .wow-footer-actions {
   display: flex;
@@ -123,7 +128,7 @@
   border-radius: 3px;
   color: #ebdfc6;
   background: linear-gradient(#2a3331, #1b2527);
-  font-size: 12px;
+  font-size: var(--wow-fs-sub);
   font-weight: 600;
   line-height: 1.4;
   text-align: center;
@@ -184,7 +189,7 @@
   margin-bottom: 16px;
 }
 .wow-card-heading h3 { color: #eee2c8; font: 400 21px/1.2 Georgia, "Times New Roman", serif; }
-.wow-card-heading small { color: var(--wow-muted); font-size: 12px; }
+.wow-card-heading small { color: var(--wow-muted); font-size: var(--wow-fs-small); }
 .wow-card-heading > button { flex-shrink: 0; }
 
 .wow-character {
@@ -210,7 +215,7 @@
 .wow-emblem svg { display: block; width: 68px; height: 68px; overflow: visible; }
 .wow-character-name,
 .wow-character-name h3 { color: #f3e7cd; font: 400 26px/1.15 Georgia, "Times New Roman", serif; overflow-wrap: anywhere; }
-.wow-adventure .wow-character-meta { margin-top: 7px; color: var(--wow-faction-light); font-size: 12px; overflow-wrap: anywhere; }
+.wow-adventure .wow-character-meta { margin-top: 7px; color: var(--wow-faction-light); font-size: var(--wow-fs-sub); overflow-wrap: anywhere; }
 .wow-level-badge {
   display: inline-flex;
   align-items: center;
@@ -221,20 +226,18 @@
   border-radius: 3px;
   color: var(--wow-gold-bright);
   background: #111b1e;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .07em;
-  text-transform: uppercase;
+  font-size: var(--wow-fs-small);
+  font-weight: 600;
 }
-.wow-adventure .wow-location { margin-top: 16px; color: #c2c8bb; font-size: 12px; overflow-wrap: anywhere; }
+.wow-adventure .wow-location { margin-top: 16px; color: #dfe3d6; font-size: var(--wow-fs); overflow-wrap: anywhere; }
 .wow-location > :is(span, strong) { display: block; }
 .wow-location > strong { font-weight: 600; }
 .wow-progress-track { height: 6px; margin-top: 13px; overflow: hidden; border: 1px solid #7e6944; border-radius: 3px; background: #101819; }
 .wow-progress-track > span { display: block; height: 100%; background: linear-gradient(90deg, #9f763d, #e0c583); }
 .wow-profile-summary { display: grid; gap: 9px; margin-top: 20px !important; padding-top: 15px; border-top: 1px solid #4c4939; text-align: left; }
 .wow-profile-summary > div { display: grid; grid-template-columns: minmax(75px, .7fr) minmax(0, 1fr); gap: 12px; }
-.wow-profile-summary dt { color: #acb3a7; font-size: 12px; }
-.wow-profile-summary dd { color: #e1dccd; font-size: 12px; text-align: right; overflow-wrap: anywhere; }
+.wow-profile-summary dt { color: #b9c0b3; font-size: var(--wow-fs-sub); }
+.wow-profile-summary dd { color: #ece7d8; font-size: var(--wow-fs-sub); text-align: right; overflow-wrap: anywhere; }
 .wow-character > .wow-button { width: 100%; margin-top: 18px; }
 
 .wow-quests {
@@ -246,7 +249,7 @@
 .wow-quests .wow-card-heading { padding-bottom: 14px; border-bottom: 1px solid rgba(100, 76, 39, .35); }
 .wow-quests .wow-card-heading h3 { color: #3b2d1a; font-size: 24px; }
 .wow-quests .wow-card-heading small { color: #645638; }
-.wow-quest-count { max-width: 135px; text-align: right; }
+.wow-quest-count { text-align: right; white-space: nowrap; }
 .wow-quest-tabs { display: flex; gap: 5px; margin-bottom: 13px; }
 .wow-quest-tabs button { flex: 1 1 0; min-height: 44px; padding: 7px 9px; color: #5a4930; background: transparent; border-color: #aa9165; }
 .wow-quest-tabs button[aria-pressed="true"] { border-color: #594730; color: #f1e2c2; background: #51432f; }
@@ -272,8 +275,8 @@
 .wow-quest:last-child { border-bottom: 0; }
 .wow-quest > label { display: flex; flex: 1 1 auto; align-items: center; gap: 12px; min-width: 0; min-height: 44px; cursor: pointer; }
 .wow-quest-copy { display: grid; flex: 1 1 auto; min-width: 0; gap: 3px; overflow-wrap: anywhere; }
-.wow-quest-copy strong { color: #352b1f; font-size: 14px; font-weight: 600; line-height: 1.45; }
-.wow-quest-copy small { color: #6c583a; font-size: 12px; }
+.wow-quest-copy strong { color: #2e251a; font-size: var(--wow-fs-strong); font-weight: 600; line-height: 1.35; }
+.wow-quest-copy small { color: #5f4d32; font-size: var(--wow-fs-small); }
 .wow-quest.is-complete .wow-quest-copy strong { color: #76664d; text-decoration: line-through; text-decoration-color: #9d8a67; }
 .wow-quest-tabs button[hidden], .wow-quest-form[hidden], .wow-quest-views[hidden] { display: none; }
 
@@ -290,14 +293,14 @@
   color: #4d3e28;
   background: rgba(255, 250, 233, .45);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--wow-fs-sub);
   font-weight: 600;
   cursor: pointer;
 }
 .wow-quest-views button > span { color: #6c583a; font-weight: 400; }
 .wow-quest-views button[aria-pressed="true"] { border-color: #594730; color: #f1e2c2; background: #51432f; }
 .wow-quest-views button[aria-pressed="true"] > span { color: #e0cfa8; }
-.wow-quest-list--game { grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); column-gap: 22px; align-content: start; }
+.wow-quest-list--game { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); column-gap: 22px; align-content: start; }
 .wow-quest--game { align-items: flex-start; min-height: 52px; padding: 7px 0; }
 .wow-quest--game:last-child { border-bottom: 1px solid rgba(105, 80, 42, .22); }
 .wow-quest--game .wow-quest-copy { gap: 1px; }
@@ -305,8 +308,8 @@
 .wow-quest-objectives {
   display: -webkit-box;
   overflow: hidden;
-  color: #5d4c33;
-  font-size: 12px;
+  color: #4f402a;
+  font-size: var(--wow-fs-sub);
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -315,33 +318,33 @@
 .wow-quest--game.is-ready .wow-quest-objectives { color: #2a5530; font-weight: 600; }
 .wow-quest-level {
   flex: 0 0 auto;
-  min-width: 26px;
+  min-width: 30px;
   margin-top: 2px;
   padding: 1px 5px;
   border: 1px solid rgba(105, 80, 42, .45);
   border-radius: 3px;
-  color: #5d4c33;
-  font-size: 12px;
+  color: #4f402a;
+  font-size: var(--wow-fs-small);
   line-height: 1.5;
   text-align: center;
 }
 .wow-quest .wow-icon-button { border-color: transparent; color: #6b5638; background: transparent; }
 .wow-quest .wow-icon-button:hover { border-color: #94764a; color: #332719; background: rgba(109, 77, 30, .08); }
-.wow-empty { padding: 30px 10px; color: #766143; text-align: center; font-size: 13px; line-height: 1.8; }
+.wow-empty { padding: 30px 10px; color: #766143; text-align: center; font-size: var(--wow-fs-sub); line-height: 1.6; }
 .wow-empty strong { display: block; margin-bottom: 7px; color: #51402b; font: 400 22px/1.3 Georgia, "Times New Roman", serif; }
 
-.wow-adventure .wow-timer-label { color: #c8baa0; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.wow-adventure .wow-timer-label { color: #d6c9ae; font-size: var(--wow-fs-sub); font-weight: 600; }
 .wow-timer-value { margin-top: 3px; color: #efdbad; font: 400 clamp(30px, 3.5cqi, 42px)/1.25 Georgia, "Times New Roman", serif; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .wow-timer-actions { margin-top: 12px; }
 .wow-timer-actions > button { flex: 1 1 auto; }
-.wow-adventure .wow-timer-help { margin: 10px 0 22px; color: var(--wow-muted); font-size: 12px; line-height: 1.6; }
+.wow-adventure .wow-timer-help { margin: 10px 0 22px; color: var(--wow-muted); font-size: var(--wow-fs-small); line-height: 1.5; }
 .wow-timer-help + .wow-card-heading { margin-bottom: 7px; }
 .wow-prep-list { display: grid; gap: 0; margin-top: 20px; padding-top: 14px; border-top: 1px solid #4e4d3c; }
 .wow-camp .wow-prep-list { margin-top: 0; padding-top: 4px; border-top: 0; }
-.wow-prep-list > label { display: flex; align-items: center; gap: 11px; min-height: 44px; color: #d3d6c8; font-size: 12px; cursor: pointer; }
+.wow-prep-list > label { display: flex; align-items: center; gap: 11px; min-height: 44px; color: #e0e3d6; font-size: var(--wow-fs-sub); line-height: 1.35; cursor: pointer; }
 .wow-prep-list > label:has(input:checked) { color: #a7b7a3; }
-.wow-prep-list > :is(h3, h4, p, .wow-eyebrow) { margin: 0 0 7px; color: #cdb98d; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
-.wow-camp > p:last-child { margin-top: 12px; color: var(--wow-muted); font-size: 12px; }
+.wow-prep-list > :is(h3, h4, p, .wow-eyebrow) { margin: 0 0 7px; color: #cdb98d; font-size: var(--wow-fs-small); font-weight: 600; }
+.wow-camp > p:last-child { margin-top: 12px; color: var(--wow-muted); font-size: var(--wow-fs-small); }
 
 .wow-journal { grid-column: 1 / span 2; }
 .wow-journal textarea {
@@ -352,7 +355,7 @@
   border-color: #655d44;
   color: #e3decd;
   background: repeating-linear-gradient(transparent 0, transparent 27px, rgba(179, 158, 110, .12) 27px, rgba(179, 158, 110, .12) 28px), #152124;
-  font-size: 13px;
+  font-size: var(--wow-fs);
   line-height: 28px;
 }
 .wow-resource-links { display: grid; gap: 7px; }
@@ -368,10 +371,10 @@
   text-decoration: none;
 }
 .wow-resource-links a:hover { border-left-color: #e9cf91; background: #2b3935; }
-.wow-resource-links strong { font-size: 12px; font-weight: 600; }
-.wow-resource-links small { color: #aeb7a7; font-size: 12px; }
-.wow-resources > p { margin-top: 12px; color: #adb5a9; font-size: 12px; }
-.wow-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 17px 3px 0; color: #adb6aa; font-size: 12px; }
+.wow-resource-links strong { font-size: var(--wow-fs-sub); font-weight: 600; }
+.wow-resource-links small { color: #b8c0b1; font-size: var(--wow-fs-small); }
+.wow-resources > p { margin-top: 12px; color: #adb5a9; font-size: var(--wow-fs-small); }
+.wow-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 17px 3px 0; color: #c0c8bb; font-size: var(--wow-fs-small); }
 .wow-save-status { display: inline-flex; gap: 7px; align-items: center; }
 .wow-footer > span { min-width: 0; overflow-wrap: anywhere; }
 .wow-footer-actions { margin-left: auto; }
@@ -381,14 +384,14 @@
 
 .wow-editor { grid-column: 1 / -1; margin-bottom: 18px; }
 .wow-editor .wow-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-.wow-fields label { display: grid; align-content: start; gap: 5px; color: #cfccb9; font-size: 12px; }
+.wow-fields label { display: grid; align-content: start; gap: 5px; color: #dcd9c7; font-size: var(--wow-fs-small); }
 .wow-fields :is(input, select) { width: 100%; }
 .wow-fields + :is(div, p) { margin-top: 16px; }
 .wow-editor > form > .wow-button { margin-top: 16px; }
-.wow-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 13px; margin-bottom: 16px; border: 1px solid #aa8f5b; border-radius: 3px; color: #e8d7b3; background: #283128; font-size: 12px; }
+.wow-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 13px; margin-bottom: 16px; border: 1px solid #aa8f5b; border-radius: 3px; color: #e8d7b3; background: #283128; font-size: var(--wow-fs-sub); }
 .wow-notice button { min-height: 44px; padding: 8px 12px; border: 1px solid #9c8454; border-radius: 3px; color: #f0daaa; background: #19251e; }
 .wow-recovery { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
-.wow-recovery > p { flex-basis: 100%; margin-bottom: 5px; color: #f0d3af; font-size: 13px; }
+.wow-recovery > p { flex-basis: 100%; margin-bottom: 5px; color: #f0d3af; font-size: var(--wow-fs-sub); }
 .wow-adventure .wow-sr-only,
 .wow-backup-file { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
@@ -433,7 +436,7 @@
   .wow-brand h2 { font-size: 26px; }
   .wow-card-heading { flex-wrap: wrap; }
   .wow-quest-tabs { gap: 4px; }
-  .wow-quest-tabs button { font-size: 12px; padding-inline: 5px; }
+  .wow-quest-tabs button { font-size: var(--wow-fs-small); padding-inline: 4px; }
   .wow-quest { gap: 6px; }
   .wow-quest > label { gap: 9px; }
 }
@@ -452,7 +455,7 @@
   .wow-adventure :is(.wow-button, .wow-icon-button, .wow-quest-tabs button, .wow-quest-views button, .wow-notice button),
   .wow-adventure :is(input:not([type="checkbox"]), select, textarea),
   .wow-resource-links a,
-  .wow-resource-links strong { font-size: 15px; }
+  .wow-resource-links strong { font-size: var(--wow-fs); }
 }
 
 /* The EDGE is wide and short. Everything sits on one screen: the title gives way to the
@@ -462,8 +465,8 @@
     .wow-masthead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     .wow-grid {
       /* Room for the tallest fixed card, so a notice above shrinks the quest list and nothing else. */
-      flex: 1 0 392px;
-      grid-template-columns: 300px minmax(0, 1fr) 300px 280px;
+      flex: 1 0 396px;
+      grid-template-columns: 300px minmax(0, 1fr) 300px 300px;
       grid-template-rows: minmax(0, 1fr) auto;
       align-items: stretch;
       gap: 16px;
@@ -482,13 +485,13 @@
     .wow-character-content > .wow-emblem { grid-row: 1 / span 3; width: 72px; height: 72px; margin: 0 4px; }
     .wow-emblem svg { width: 48px; height: 48px; }
     .wow-character-content > .wow-level-badge { justify-self: start; margin: 0 0 4px; }
+    .wow-character-content > .wow-character-meta:not(.wow-character-meta ~ .wow-character-meta) { margin-top: 2px; }
+    /* The place and the faction speak for themselves here. */
+    .wow-location > .wow-eyebrow, .wow-character-meta > span { display: none; }
     .wow-character-content > :is(.wow-location, .wow-progress-track, .wow-profile-summary, .wow-character-meta ~ .wow-character-meta) { grid-column: 1 / -1; }
     .wow-adventure .wow-location, .wow-progress-track { margin-top: 10px; }
-    .wow-profile-summary { gap: 6px; margin-top: 10px !important; padding-top: 8px; }
-    .wow-profile-summary :is(dt, dd), .wow-adventure .wow-location, .wow-adventure .wow-character-meta { font-size: 13px; }
-    .wow-character-content { margin-bottom: 10px; }
-    .wow-character-meta > span { display: inline; margin: 0; }
-    .wow-character-meta > span::before { content: "\00b7  "; }
+    .wow-profile-summary { gap: 5px; margin-top: 8px !important; padding-top: 6px; }
+    .wow-character-content { margin-bottom: 6px; }
     .wow-character > .wow-button { flex: 0 0 auto; margin-top: auto; }
 
     /* Quests: title and tabs share a row, the list takes what is left and scrolls. */
@@ -499,6 +502,9 @@
     .wow-quest-tabs { margin-bottom: 10px; }
     .wow-quest-form, .wow-quest-views, .wow-quest-list, .wow-empty { grid-column: 1 / -1; }
     .wow-quest-form, .wow-quest-views { grid-row: 2; margin-bottom: 10px; }
+    /* One row of views to swipe through, so the quests keep the height. */
+    .wow-quest-views { flex-wrap: nowrap; margin: -6px -8px 4px; padding: 6px 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: #8e7650 transparent; }
+    .wow-quest-views button { flex: 0 0 auto; white-space: nowrap; }
     .wow-quest-list, .wow-empty { grid-row: 3; }
     .wow-quest-list {
       grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
@@ -515,10 +521,8 @@
       scrollbar-width: thin;
       scrollbar-color: #8e7650 transparent;
     }
-    .wow-quest-list--game { grid-template-columns: repeat(auto-fill, minmax(min(100%, 215px), 1fr)); }
+    .wow-quest-list--game { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
     .wow-quest:last-child { border-bottom: 1px solid rgba(105, 80, 42, .22); }
-    .wow-quest-copy strong { font-size: 15px; }
-    .wow-quest-objectives, .wow-quest-copy small { font-size: 13px; }
     .wow-empty { padding: 14px 10px; }
 
     /* Campfire: the timer label already says where you are; the checklist in two columns. */
@@ -527,19 +531,25 @@
     .wow-timer-actions { margin-top: 8px; }
     .wow-adventure .wow-timer-help { margin: 8px 0 14px; }
     .wow-camp .wow-prep-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
-    .wow-prep-list > label { font-size: 13px; line-height: 1.35; }
+    .wow-prep-list > label { line-height: 1.3; }
 
     /* Notes fill their card; the guides sit two by two beneath. */
     .wow-journal textarea { flex: 1 1 auto; min-height: 84px; resize: none; }
     .wow-resource-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .wow-resource-links a { padding: 6px 10px; line-height: 1.3; }
+    .wow-resource-links a { padding: 6px 10px; line-height: 1.25; }
+    .wow-resources .wow-card-heading small { display: none; }
     .wow-resource-links small { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
     .wow-notice { flex: 0 0 auto; margin-bottom: 10px; padding-block: 0; }
     .wow-footer { flex: 0 0 auto; padding-top: 10px; }
   }
-  @container (min-width: 1900px) {
-    .wow-grid { grid-template-columns: 340px minmax(0, 1fr) 320px 340px; }
+  /* The EDGE at full resolution packs more pixels into the same glass, so the text is larger there. */
+  @container (min-width: 2100px) {
+    .wow-adventure > * { --wow-fs: 19px; --wow-fs-sub: 18px; --wow-fs-small: 16px; --wow-fs-strong: 20px; }
+    .wow-grid { grid-template-columns: 380px minmax(0, 1fr) 360px 360px; }
+    .wow-card-heading h3, .wow-quests .wow-card-heading h3 { font-size: 24px; }
+    .wow-character-name { font-size: 30px; }
+    .wow-timer-value { font-size: 40px; }
   }
 }
 @media (max-height: 820px) and (min-width: 1800px) {
