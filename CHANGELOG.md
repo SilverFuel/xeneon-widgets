@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The WoW Forever panel fits one screen on the EDGE. The game's quest log is shown one view at a time (the zone you are in, quests ready to turn in, each other zone, or all) and scrolls inside its own card. The panel opens on the game's log when the add-on is saving. Edit character moved onto the character card, and Export and Import moved to the bottom row.
 - Removed the host endpoints behind the retired Phone Remote and extension-inspection features (`/api/remote/session`, `/api/extensions`). Nothing in the dashboard used them.
 - Any game can have its own Profile. While a game without one is running, Settings > Appearance offers "Create a Profile for <game>". The new Profile takes over whenever that game runs, and the theme you pick for it stays with it. Other games keep the Gaming Profile.
 - New Auxora Companion add-on for World of Warcraft Forever (`addons/AuxoraCompanion`). With it installed, the WoW Forever journal shows your character, experience, coin, location and quest log as of your last logout or `/auxora`.

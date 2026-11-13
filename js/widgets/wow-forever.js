@@ -150,11 +150,56 @@
     };
   }
 
+  // The short list of views for the game's quest log, so a long log is never
+  // shown all at once: the zone the character is standing in first, then the
+  // quests ready to hand in, then the other zones in the game's own order, then
+  // everything. Each view is { id, label, count }.
+  function questViews(game) {
+    var quests = game && Array.isArray(game.quests) ? game.quests : [];
+    var zones = [];
+    var counts = {};
+    quests.forEach(function (quest) {
+      var zone = quest.zone || "Other";
+      if (!counts[zone]) { counts[zone] = 0; zones.push(zone); }
+      counts[zone] += 1;
+    });
+    var here = game && counts[game.zone] ? game.zone : "";
+    var ready = quests.filter(function (quest) { return quest.complete; }).length;
+    var views = [];
+    if (here) views.push({ id: "zone:" + here, label: here, count: counts[here], here: true });
+    if (ready) views.push({ id: "ready", label: "Ready to turn in", count: ready });
+    zones.forEach(function (zone) {
+      if (zone !== here) views.push({ id: "zone:" + zone, label: zone, count: counts[zone] });
+    });
+    if (zones.length > 1 || ready) views.push({ id: "all", label: "All", count: quests.length });
+    return views;
+  }
+
+  // The view to show: the one asked for when it still exists, else the first.
+  function questViewId(game, wanted) {
+    var views = questViews(game);
+    for (var index = 0; index < views.length; index += 1) {
+      if (views[index].id === wanted) return wanted;
+    }
+    return views.length ? views[0].id : "all";
+  }
+
+  function questsInView(game, viewId) {
+    var quests = game && Array.isArray(game.quests) ? game.quests : [];
+    if (viewId === "ready") return quests.filter(function (quest) { return quest.complete; });
+    if (typeof viewId === "string" && viewId.indexOf("zone:") === 0) {
+      var zone = viewId.slice(5);
+      return quests.filter(function (quest) { return (quest.zone || "Other") === zone; });
+    }
+    return quests.slice();
+  }
+
   // Pure state helpers are also available to the Node regression tests.
   if (typeof module === "object" && module.exports) {
     module.exports = {
       freshJournal: freshJournal, validateJournal: validateJournal, elapsedSession: elapsedSession, formatSession: formatSession,
-      formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter
+      formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter,
+      questViews: questViews, questViewId: questViewId, questsInView: questsInView
     };
     return;
   }
@@ -184,6 +229,7 @@
     var cleanups = [];
     var journal = freshJournal();
     var activeFilter = "active";
+    var filterChosen = false;
     var storageProblem = "";
     var notice = "";
     var undo = null;
@@ -200,6 +246,8 @@
     var gameSignature = "";
     var gameRequestId = 0;
     var gameTicks = 0;
+    // The view of the game's quest log the user picked; "" follows the character's zone.
+    var gameView = "";
 
     try {
       var saved = window.localStorage.getItem(STORAGE_KEY);
@@ -300,13 +348,22 @@
         '</div><div class="wow-timer-actions"><button class="wow-button wow-button--primary" type="submit">Save character</button>' + button("cancel-profile", "Cancel", "quiet") + '</div>';
     }
 
-    // The game's own quest log: read-only, grouped as the game groups it.
-    function gameQuestsMarkup() {
-      return game.quests.map(function (quest) {
-        var detail = [quest.zone, quest.level ? "Level " + quest.level : ""].filter(Boolean).join(" / ");
-        var objectives = quest.complete ? "Ready to turn in" : quest.objectives.map(function (objective) { return objective.text; }).join(" / ");
-        return '<li class="wow-quest wow-quest--game' + (quest.complete ? ' is-ready' : '') + '"><span class="wow-quest-copy"><small>' + escapeHtml(detail || "Quest") + '</small><strong>' + escapeHtml(quest.title) + '</strong>' +
-          (objectives ? '<span class="wow-quest-objectives">' + escapeHtml(objectives) + '</span>' : '') + '</span></li>';
+    // The game's own quest log, read-only and one view at a time.
+    function gameQuestsMarkup(viewId) {
+      var showZone = viewId === "ready" || viewId === "all";
+      return questsInView(game, viewId).map(function (quest) {
+        var progress = quest.complete ? "Ready to turn in" : quest.objectives.map(function (objective) { return objective.text; }).join(" / ");
+        return '<li class="wow-quest wow-quest--game' + (quest.complete ? ' is-ready' : '') + '"><span class="wow-quest-copy"><strong>' + escapeHtml(quest.title) + '</strong>' +
+          (progress ? '<span class="wow-quest-objectives">' + escapeHtml(progress) + '</span>' : '') +
+          (showZone && quest.zone ? '<small>' + escapeHtml(quest.zone) + '</small>' : '') + '</span>' +
+          (quest.level ? '<span class="wow-quest-level" aria-label="Level ' + quest.level + '">' + quest.level + '</span>' : '') + '</li>';
+      }).join("");
+    }
+
+    function gameViewsMarkup(viewId) {
+      return questViews(game).map(function (view) {
+        return '<button type="button" data-wow-view="' + escapeHtml(view.id) + '" aria-pressed="' + String(view.id === viewId) + '">' +
+          escapeHtml(view.label) + ' <span>' + view.count + '</span></button>';
       }).join("");
     }
 
@@ -316,18 +373,27 @@
       gameTab.hidden = !game;
       if (!game && activeFilter === "game") activeFilter = "active";
       container.querySelectorAll("[data-wow-filter]").forEach(function (tab) { tab.setAttribute("aria-pressed", String(tab.dataset.wowFilter === activeFilter)); });
+      var list = query(".wow-quest-list");
+      var views = query(".wow-quest-views");
+      // The game's log is read-only: no add form, and one view of it at a time.
+      query(".wow-quest-form").hidden = activeFilter === "game";
+      views.hidden = activeFilter !== "game";
+      list.classList.toggle("wow-quest-list--game", activeFilter === "game");
       if (activeFilter === "game") {
+        var viewId = questViewId(game, gameView);
         var ready = game.quests.filter(function (quest) { return quest.complete; }).length;
         query(".wow-quest-count").textContent = game.quests.length + " in game / " + ready + " ready";
-        query(".wow-quest-list").innerHTML = gameQuestsMarkup();
+        views.innerHTML = gameViewsMarkup(viewId);
+        list.innerHTML = gameQuestsMarkup(viewId);
         var none = query(".wow-empty");
         none.hidden = game.quests.length > 0;
         none.innerHTML = '<strong>An empty quest log.</strong><p>Quests you accept in game appear here after the next save.</p>';
         return;
       }
+      views.innerHTML = "";
       query(".wow-quest-count").textContent = (journal.quests.length - done) + " active / " + done + " complete";
       var entries = journal.quests.filter(function (quest) { return activeFilter === "all" || (activeFilter === "completed" ? quest.done : !quest.done); });
-      query(".wow-quest-list").innerHTML = entries.map(function (quest) {
+      list.innerHTML = entries.map(function (quest) {
         return '<li class="wow-quest' + (quest.done ? ' is-complete' : '') + '"><label><input type="checkbox" data-wow-quest="' + quest.id + '"' + (quest.done ? ' checked' : '') + '><span class="wow-quest-copy"><small>' + escapeHtml(quest.category) + '</small><strong>' + escapeHtml(quest.title) + '</strong></span></label><button type="button" class="wow-icon-button" data-wow-remove="' + quest.id + '" aria-label="Remove ' + escapeHtml(quest.title) + '" title="Remove entry">' +
           '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7m4-7v7"/></svg></button></li>';
       }).join("");
@@ -357,8 +423,8 @@
       gameSignature = signature;
       game = next;
       gameMessage = message;
-      // With nothing tracked by hand, the game's quest log is the useful view.
-      if (firstGame && !journal.quests.length && activeFilter === "active") activeFilter = "game";
+      // The game's quest log is the useful view, unless a tab was already picked.
+      if (firstGame && !filterChosen) activeFilter = "game";
       renderProfile();
       renderQuests();
       renderGameStatus();
@@ -390,17 +456,17 @@
 
     function render() {
       container.innerHTML = '<section class="wow-adventure" data-faction="' + journal.profile.faction + '" aria-label="World of Warcraft Forever adventure journal">' +
-        '<header class="wow-masthead"><div class="wow-brand"><p class="wow-eyebrow">World of Warcraft / Forever</p><h2>The Adventure Journal</h2><p class="wow-subtitle">Your next quest. Your unfolding story.</p></div><div class="wow-masthead-actions">' + button("profile", "Edit character") + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</div></header>' +
+        '<header class="wow-masthead"><div class="wow-brand"><p class="wow-eyebrow">World of Warcraft / Forever</p><h2>The Adventure Journal</h2><p class="wow-subtitle">Your next quest. Your unfolding story.</p></div></header>' +
         '<form class="wow-editor wow-card" hidden aria-label="Edit character"></form>' +
         '<div class="wow-notice" role="status" hidden></div>' +
         (originalUnreadable !== null ? '<div class="wow-recovery wow-card"><p>Your existing saved data is protected until you choose how to recover it.</p>' + button("export-recovery", "Export recovery copy") + button("new-journal", "Start new journal", "quiet") + '</div>' : '') +
-        '<div class="wow-grid"><article class="wow-card wow-character"><div class="wow-card-heading"><span class="wow-eyebrow">The adventurer</span><span class="wow-eyebrow">Chapter I</span></div><div class="wow-character-content"></div></article>' +
-        '<article class="wow-card wow-quests"><div class="wow-card-heading"><h3>Quest ledger</h3><small class="wow-quest-count"></small></div><div class="wow-quest-tabs" role="group" aria-label="Filter quest ledger"><button type="button" data-wow-filter="active" aria-pressed="true">Active</button><button type="button" data-wow-filter="completed" aria-pressed="false">Completed</button><button type="button" data-wow-filter="all" aria-pressed="false">All entries</button><button type="button" data-wow-filter="game" aria-pressed="false" hidden>In game</button></div>' +
-        '<form class="wow-quest-form" aria-label="Add adventure entry"><label class="wow-sr-only" for="wow-quest-title">Your next objective</label><input id="wow-quest-title" name="title" placeholder="What will you pursue next?" maxlength="180" required autocomplete="off"><label class="wow-sr-only" for="wow-quest-category">Entry type</label><select id="wow-quest-category" name="category">' + options(CATEGORIES, "Quest") + '</select><button class="wow-button wow-button--primary" type="submit">Add entry</button></form><ul class="wow-quest-list"></ul><div class="wow-empty"></div></article>' +
+        '<div class="wow-grid"><article class="wow-card wow-character"><div class="wow-card-heading"><span class="wow-eyebrow">The adventurer</span><span class="wow-eyebrow">Chapter I</span></div><div class="wow-character-content"></div>' + button("profile", "Edit character") + '</article>' +
+        '<article class="wow-card wow-quests"><div class="wow-card-heading"><h3>Quest ledger</h3><small class="wow-quest-count"></small></div><div class="wow-quest-tabs" role="group" aria-label="Filter quest ledger"><button type="button" data-wow-filter="game" aria-pressed="false" hidden>In game</button><button type="button" data-wow-filter="active" aria-pressed="true">Active</button><button type="button" data-wow-filter="completed" aria-pressed="false">Completed</button><button type="button" data-wow-filter="all" aria-pressed="false">All entries</button></div>' +
+        '<form class="wow-quest-form" aria-label="Add adventure entry"><label class="wow-sr-only" for="wow-quest-title">Your next objective</label><input id="wow-quest-title" name="title" placeholder="What will you pursue next?" maxlength="180" required autocomplete="off"><label class="wow-sr-only" for="wow-quest-category">Entry type</label><select id="wow-quest-category" name="category">' + options(CATEGORIES, "Quest") + '</select><button class="wow-button wow-button--primary" type="submit">Add entry</button></form><div class="wow-quest-views" role="group" aria-label="Quest log views" hidden></div><ul class="wow-quest-list"></ul><div class="wow-empty"></div></article>' +
         '<aside class="wow-card wow-camp"><div class="wow-card-heading"><h3>At the campfire</h3></div><p class="wow-timer-label"></p><div class="wow-timer-value" role="timer" aria-label="Session elapsed time">00:00:00</div><div class="wow-timer-actions">' + button("toggle-session", "Begin session", "primary") + button("reset-session", "Reset", "quiet") + '</div><p class="wow-timer-help">Runs until you pause, even when you leave this tab.</p><div class="wow-card-heading"><h3>Before you set out</h3></div><div class="wow-prep-list">' + PREPARATIONS.map(function (label, index) { return '<label><input type="checkbox" data-wow-prep="' + index + '"' + (journal.preparations[index] ? ' checked' : '') + '><span>' + label + '</span></label>'; }).join("") + '</div></aside>' +
         '<article class="wow-card wow-journal"><div class="wow-card-heading"><h3>Field notes</h3><small>Saved as you write</small></div><label class="wow-sr-only" for="wow-field-notes">Field notes</label><textarea id="wow-field-notes" maxlength="20000" placeholder="A hidden path. A helpful stranger. The materials you still need. Leave a note for your next session.">' + escapeHtml(journal.notes) + '</textarea></article>' +
         '<aside class="wow-card wow-resources"><div class="wow-card-heading"><h3>The wayfinder</h3><small>Official field guides</small></div><div class="wow-resource-links">' + resources.map(function (resource) { return '<a href="' + resource.url + '" target="_blank" rel="noopener noreferrer"><strong>' + resource.label + '</strong><small>' + resource.detail + '</small></a>'; }).join("") + '</div></aside></div>' +
-        '<footer class="wow-footer"><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
+        '<footer class="wow-footer"><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
       query('[data-wow-action="profile"]').setAttribute("aria-expanded", "false");
       renderProfile();
       renderQuests();
@@ -516,10 +582,19 @@
     });
 
     runtime.addListener(cleanups, container, "click", function (event) {
-      var target = event.target.closest("[data-wow-action], [data-wow-filter], [data-wow-remove]");
+      var target = event.target.closest("[data-wow-action], [data-wow-filter], [data-wow-remove], [data-wow-view]");
       if (!target || !container.contains(target)) return;
+      if (target.hasAttribute("data-wow-view")) {
+        gameView = target.dataset.wowView;
+        renderQuests();
+        // The buttons were redrawn; keep keyboard focus on the one just chosen.
+        var chosen = query('.wow-quest-views [aria-pressed="true"]');
+        if (chosen) chosen.focus();
+        return;
+      }
       if (target.hasAttribute("data-wow-filter")) {
         activeFilter = target.dataset.wowFilter;
+        filterChosen = true;
         renderQuests();
         return;
       }

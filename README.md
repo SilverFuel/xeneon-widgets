@@ -145,7 +145,7 @@ The journal can show your character from the game: name, level, experience, loca
 
 World of Warcraft writes add-on data to disk only when you log out or reload the interface, so the journal shows the character as of the last save, with its age. Type `/auxora` in game to save and reload at once; `/auxora status` shows what will be saved. The add-on reads your own character only and sends nothing anywhere.
 
-Auxora looks for the Forever client in the usual install folders, and in the folder of a running Forever client. It reads that one saved file and never writes to the game's folders. Once a character is found, the character card follows the game and the quest ledger gains an **In game** tab; the entries you track by hand are unchanged.
+Auxora looks for the Forever client in the usual install folders, and in the folder of a running Forever client. It reads that one saved file and never writes to the game's folders. Once a character is found, the character card follows the game and the quest ledger opens on an **In game** tab. It shows one view of the game's log at a time: the zone you are in, quests ready to turn in, each other zone, or all of them. The entries you track by hand are unchanged, under **Active**, **Completed** and **All entries**.
 
 ## Camera Detection
 
