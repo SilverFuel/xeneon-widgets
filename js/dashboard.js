@@ -193,6 +193,7 @@
     gameModeAutoTune: "1",
     gameModeAutoFace: "1",
     themeReadability: "normal",
+    textSize: "normal",
     releaseChannel: "stable",
     updateChannel: "stable",
     updateNotifications: "0",
@@ -600,6 +601,11 @@
     return normalizeChoice(getSetting("performanceBudget"), "balanced", ["balanced", "battery", "game", "max"]);
   }
 
+  // Panel text is sized in rem, so one step on the root scales all of it.
+  function getTextSize() {
+    return normalizeChoice(getSetting("textSize"), "normal", ["normal", "large", "larger"]);
+  }
+
   function getThemeReadability() {
     return normalizeChoice(getSetting("themeReadability"), "normal", ["normal", "clean", "high-contrast", "visor"]);
   }
@@ -875,6 +881,7 @@
     document.documentElement.setAttribute("data-theme", theme.id);
     document.documentElement.setAttribute("data-theme-variant", variant);
     document.documentElement.setAttribute("data-readability", readability);
+    document.documentElement.setAttribute("data-text-size", getTextSize());
     if (document.body) {
       document.body.setAttribute("data-theme", theme.id);
       document.body.setAttribute("data-theme-variant", variant);
@@ -3264,6 +3271,21 @@
       }).join("") + '</div>');
   }
 
+  // The quick drawer is modal: while it is open, keyboard focus belongs inside it.
+  // Focus that lands elsewhere, or falls to the page, is put back on its first control.
+  // A dialog opened on top of the drawer keeps its own focus.
+  function keepFocusInQuickDrawer() {
+    if (!quickDrawerNode || !isDrawerOpen(quickDrawerNode)) {
+      return;
+    }
+    var active = document.activeElement;
+    if (active && (quickDrawerNode.contains(active)
+        || (active.closest && active.closest("dialog, [role='dialog'], [role='alertdialog']")))) {
+      return;
+    }
+    (drawerFocusableControls(quickDrawerNode)[0] || quickDrawerNode).focus();
+  }
+
   function setQuickDrawerOpen(open) {
     if (!quickDrawerNode || !quickToggleNode || (open && isTouchLockEnabled())) {
       return;
@@ -3286,11 +3308,9 @@
     if (open) {
       renderQuickDrawer();
       if (quickControls) { quickControls.open(); }
-      window.setTimeout(function () {
-        if (isDrawerOpen(quickDrawerNode)) {
-          (drawerFocusableControls(quickDrawerNode)[0] || quickDrawerNode).focus();
-        }
-      }, 0);
+      window.setTimeout(keepFocusInQuickDrawer, 0);
+      // Whatever is still starting up can take focus just after the drawer opens.
+      window.setTimeout(keepFocusInQuickDrawer, 150);
     } else {
       if (quickControls) { quickControls.close(); }
       if (quickDrawerOpener && typeof quickDrawerOpener.focus === "function") {
@@ -4633,6 +4653,15 @@
             saveDashboardSettings({ themeVariant: night.getAttribute("data-quick-night") });
             renderQuickDrawer();
             showTouchFeedback("Night display " + night.textContent.trim());
+          }
+        });
+      }
+
+      if (quickDrawerNode) {
+        document.addEventListener("focusin", keepFocusInQuickDrawer);
+        quickDrawerNode.addEventListener("focusout", function (event) {
+          if (!event.relatedTarget) {
+            window.setTimeout(keepFocusInQuickDrawer, 0);
           }
         });
       }
