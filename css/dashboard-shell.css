@@ -40,7 +40,8 @@ body.auxora-section-shell .router-rail {
   background: var(--theme-surface-muted);
   color: var(--theme-text);
   font: inherit;
-  font-size: 14px;
+  /* A pixel floor with a rem size, so the Text size setting scales the menu and tabs too. */
+  font-size: max(14px, 0.875rem);
   font-weight: 650;
   line-height: 1.2;
   text-decoration: none;
@@ -105,7 +106,9 @@ body.auxora-section-shell .auxora-section-header {
 .auxora-section-tabs .auxora-panel-link { flex: 0 0 auto; }
 .auxora-section-shell .router-viewer__header-actions { margin-left: auto; flex-wrap: wrap; min-width: 0; }
 .auxora-mode-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.auxora-mode-copy { display: grid; gap: 3px; font-size: 14px; color: var(--theme-text-muted); }
+.auxora-mode-copy { display: grid; gap: 3px; font-size: max(14px, 0.875rem); color: var(--theme-text-muted); }
+/* Enlarged text leaves no room for the tagline beside the logo. */
+:root:is([data-text-size="large"], [data-text-size="larger"]) .auxora-brand small { display: none; }
 .auxora-mode-copy strong { color: var(--theme-text); }
 .auxora-mode-select { flex: 1 1 auto; min-width: 136px; max-width: 220px; padding-inline: 12px 28px; text-overflow: ellipsis; }
 .auxora-mode-select[aria-busy="true"] { cursor: progress; opacity: 0.7; }
@@ -125,9 +128,9 @@ body.auxora-section-shell.dashboard-native-page--game-focus-active .router-viewe
   body.auxora-section-shell :is(.auxora-section-link, .auxora-panel-link, .auxora-mode-select, .auxora-shell-status) {
     min-width: 54px;
     min-height: 54px;
-    font-size: 15px;
+    font-size: max(15px, 0.9375rem);
   }
-  .auxora-section-nav .auxora-section-link { min-height: 58px; font-size: 16px; }
+  .auxora-section-nav .auxora-section-link { min-height: 58px; font-size: max(16px, 1rem); }
 }
 
 @media (max-width: 1100px), (max-height: 480px) {
