@@ -77,6 +77,8 @@ public sealed class ThemeStateTests
         Assert.That(profiles["scene-night"].ThemeId, Is.EqualTo("focus"));
         Assert.That(profiles["scene-home"].ThemeId, Is.EqualTo("focus"));
         Assert.That(profiles["scene-wow-forever"].ThemeId, Is.EqualTo("horde"));
+        Assert.That(profiles["scene-battlefield"].ThemeId, Is.EqualTo("frontline"));
+        Assert.That(profiles["scene-fable"].ThemeId, Is.EqualTo("albion"));
     }
 
     [TestCase("focus")]

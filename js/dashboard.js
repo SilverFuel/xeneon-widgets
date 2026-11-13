@@ -1461,18 +1461,32 @@
     });
   }
 
-  // True when a Profile names this game by its key, so the game is "programmed in".
-  function gameHasOwnProfile(game) {
+  // Keys the host gives a game for its executable. A rule holding one never matches by name.
+  // Keep in step with GameActivityService.IsFixedGameKey.
+  var fixedGameKeys = ["wow-forever", "diablo-iv", "diablo-immortal", "diablo-iii", "world-of-warcraft", "overwatch-2",
+    "hearthstone", "starcraft-ii", "starcraft", "heroes-of-the-storm", "call-of-duty"];
+
+  // Whether a game rule picks this game, as SceneService.RuleMatches decides it: an empty rule takes
+  // any game; otherwise the rule is the game's key, or words found in the game's name.
+  function gameRuleMatches(rule, game) {
     var gameKey = String(game && game.gameKey || "").toLowerCase();
-    return Boolean(gameKey) && gameProfiles().some(function (profile) {
-      return gameRuleValues(profile).some(function (rule) { return rule.value === gameKey; });
+    var name = String(game && game.name || "").toLowerCase();
+    if (!rule.value) {
+      return Boolean(gameKey || name);
+    }
+    return rule.value === gameKey || (fixedGameKeys.indexOf(rule.value) === -1 && name.indexOf(rule.value) !== -1);
+  }
+
+  // True when a Profile names this game, by key or by name, so the game is "programmed in".
+  function gameHasOwnProfile(game) {
+    return Boolean(game) && gameProfiles().some(function (profile) {
+      return gameRuleValues(profile).some(function (rule) { return Boolean(rule.value) && gameRuleMatches(rule, game); });
     });
   }
 
-  // The Profile the native host will activate for this game: a rule naming the game's key,
+  // The Profile the native host will activate for this game: a rule naming the game by key or name,
   // otherwise the any-game rule. Highest priority wins, then name, as in SceneService.Evaluate.
   function profileForGame(game) {
-    var gameKey = String(game && game.gameKey || "").toLowerCase();
     var best = null;
     var bestPriority = -1;
     if (!game) {
@@ -1480,7 +1494,7 @@
     }
     gameProfiles().forEach(function (profile) {
       gameRuleValues(profile).forEach(function (rule) {
-        if (rule.value && rule.value !== gameKey) {
+        if (!gameRuleMatches(rule, game)) {
           return;
         }
         if (rule.priority > bestPriority
