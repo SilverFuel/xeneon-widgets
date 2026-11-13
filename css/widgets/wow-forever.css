@@ -229,6 +229,8 @@
   font-size: var(--wow-fs-small);
   font-weight: 600;
 }
+/* The level sits in its badge, except where the one-screen layout folds it into this line. */
+.wow-meta-level { display: none; font-weight: inherit; }
 .wow-adventure .wow-location { margin-top: 16px; color: #dfe3d6; font-size: var(--wow-fs); overflow-wrap: anywhere; }
 .wow-location > :is(span, strong) { display: block; }
 .wow-location > strong { font-weight: 600; }
@@ -238,6 +240,7 @@
 .wow-profile-summary > div { display: grid; grid-template-columns: minmax(75px, .7fr) minmax(0, 1fr); gap: 12px; }
 .wow-profile-summary dt { color: #b9c0b3; font-size: var(--wow-fs-sub); }
 .wow-profile-summary dd { color: #ece7d8; font-size: var(--wow-fs-sub); text-align: right; overflow-wrap: anywhere; }
+.wow-profile-summary > [data-state="low"] dd { color: var(--wow-faction-light); font-weight: 600; }
 .wow-character > .wow-button { width: 100%; margin-top: 18px; }
 
 .wow-quests {
@@ -482,16 +485,19 @@
     .wow-character { display: flex; flex-direction: column; text-align: left; }
     .wow-character > .wow-card-heading { display: none; }
     .wow-character-content { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: center; }
-    .wow-character-content > .wow-emblem { grid-row: 1 / span 3; width: 72px; height: 72px; margin: 0 4px; }
+    .wow-character-content > .wow-emblem { grid-row: 1 / span 2; width: 72px; height: 72px; margin: 0 4px; }
     .wow-emblem svg { width: 48px; height: 48px; }
-    .wow-character-content > .wow-level-badge { justify-self: start; margin: 0 0 4px; }
-    .wow-character-content > .wow-character-meta:not(.wow-character-meta ~ .wow-character-meta) { margin-top: 2px; }
+    .wow-character-content > .wow-level-badge { display: none; }
+    .wow-meta-level { display: inline; }
+    .wow-character-content > .wow-character-name { align-self: end; }
+    .wow-character-content > .wow-character-meta:not(.wow-character-meta ~ .wow-character-meta) { align-self: start; margin-top: 2px; }
     /* The place and the faction speak for themselves here. */
     .wow-location > .wow-eyebrow, .wow-character-meta > span { display: none; }
     .wow-character-content > :is(.wow-location, .wow-progress-track, .wow-profile-summary, .wow-character-meta ~ .wow-character-meta) { grid-column: 1 / -1; }
     .wow-adventure .wow-location, .wow-progress-track { margin-top: 10px; }
     .wow-profile-summary { gap: 5px; margin-top: 8px !important; padding-top: 6px; }
     .wow-character-content { margin-bottom: 6px; }
+    .wow-character-content:has(+ .wow-button[hidden]) { margin-bottom: 0; }
     .wow-character > .wow-button { flex: 0 0 auto; margin-top: auto; }
 
     /* Quests: title and tabs share a row, the list takes what is left and scrolls. */

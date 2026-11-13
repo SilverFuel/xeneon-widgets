@@ -224,6 +224,69 @@ public sealed class WowCompanionServiceTests
     }
 
     [Test]
+    public void ASaveFromTheOlderAddonHasNoProfessionsDurabilityOrBags()
+    {
+        var character = WowCompanionService.Parse(SavedFile)!.Character!;
+
+        Assert.That(character.Professions, Is.Empty);
+        Assert.That(character.Durability, Is.Null);
+        Assert.That(character.DurabilityLowest, Is.Null);
+        Assert.That(character.BagFree, Is.Null);
+        Assert.That(character.BagTotal, Is.Null);
+    }
+
+    private static string CharacterWith(string fields) =>
+        "AuxoraCompanionDB = {\n[\"last\"] = \"A-B\",\n[\"characters\"] = {\n[\"A-B\"] = {\n[\"name\"] = \"A\",\n" + fields + "},\n},\n}\n";
+
+    [Test]
+    public void ReadsProfessionsDurabilityAndBagSpace()
+    {
+        // The layout add-on 0.2.0 writes.
+        var text = CharacterWith(
+            "[\"professions\"] = {\n"
+            + "{\n[\"name\"] = \"Mining\",\n[\"rank\"] = 75,\n[\"maxRank\"] = 150,\n[\"primary\"] = true,\n},\n"
+            + "{\n[\"name\"] = \"Cooking\",\n[\"rank\"] = 40,\n[\"maxRank\"] = 75,\n[\"primary\"] = false,\n},\n"
+            + "},\n[\"durability\"] = 36,\n[\"durabilityLowest\"] = 0,\n[\"bagFree\"] = 0,\n[\"bagTotal\"] = 34,\n");
+
+        var character = WowCompanionService.Parse(text)!.Character!;
+
+        Assert.That(character.Professions.Select(profession => profession.Name), Is.EqualTo(new[] { "Mining", "Cooking" }));
+        Assert.That(character.Professions.Select(profession => profession.Rank), Is.EqualTo(new[] { 75, 40 }));
+        Assert.That(character.Professions.Select(profession => profession.MaxRank), Is.EqualTo(new[] { 150, 75 }));
+        Assert.That(character.Professions.Select(profession => profession.Primary), Is.EqualTo(new[] { true, false }));
+        Assert.That(character.Durability, Is.EqualTo(36));
+        // A broken piece and full bags are real readings, not "missing".
+        Assert.That(character.DurabilityLowest, Is.EqualTo(0));
+        Assert.That(character.BagFree, Is.EqualTo(0));
+        Assert.That(character.BagTotal, Is.EqualTo(34));
+    }
+
+    [Test]
+    public void ImplausibleProfessionDurabilityAndBagValuesAreBoundedOrDropped()
+    {
+        var professions = string.Concat(Enumerable.Range(1, 20).Select(index =>
+            "{\n[\"name\"] = \"Skill " + index + "\",\n[\"rank\"] = 1e9,\n[\"maxRank\"] = -3,\n},\n"));
+        var character = WowCompanionService.Parse(CharacterWith(
+            "[\"professions\"] = {\n{\n[\"rank\"] = 5,\n},\n" + professions + "},\n"
+            + "[\"durability\"] = 250,\n[\"durabilityLowest\"] = -1,\n[\"bagFree\"] = 40,\n[\"bagTotal\"] = 34,\n"))!.Character!;
+
+        Assert.That(character.Professions, Has.Count.EqualTo(WowCompanionService.MaxProfessions));
+        Assert.That(character.Professions[0].Name, Is.EqualTo("Skill 1"), "a profession with no name is skipped");
+        Assert.That(character.Professions[0].Rank, Is.EqualTo(9999));
+        Assert.That(character.Professions[0].MaxRank, Is.EqualTo(0));
+        Assert.That(character.Professions[0].Primary, Is.False);
+        Assert.That(character.Durability, Is.EqualTo(100));
+        Assert.That(character.DurabilityLowest, Is.Null);
+        // More free slots than slots cannot be right: show neither.
+        Assert.That(character.BagFree, Is.Null);
+        Assert.That(character.BagTotal, Is.Null);
+
+        var noBags = WowCompanionService.Parse(CharacterWith("[\"bagFree\"] = 0,\n[\"bagTotal\"] = 0,\n[\"professions\"] = \"Mining\",\n"))!.Character!;
+        Assert.That(noBags.BagTotal, Is.Null);
+        Assert.That(noBags.Professions, Is.Empty);
+    }
+
+    [Test]
     public void TheSnapshotSentToTheDashboardHasNoPath()
     {
         WriteSaved("ACCOUNT1", SavedFile);
