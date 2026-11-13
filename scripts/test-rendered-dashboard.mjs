@@ -2193,7 +2193,18 @@ async function checkQuickControlsInPage(deep) {
   check(Number(volume.value) === 42 && /42/.test(output.textContent), "Initial volume did not reflect the observed endpoint");
   check(/^mute$/i.test(mute.textContent.trim()), "Unmuted audio should offer Mute");
   check(/pause/i.test(playback.textContent), "Playing media should offer Pause");
-  check(drawer.contains(document.activeElement), "Quick drawer did not receive keyboard focus");
+  const focusDescription = () => { const node = document.activeElement; return node ? node.tagName.toLowerCase() + (node.id ? "#" + node.id : "") + (node.className ? "." + String(node.className).trim().replace(/\s+/g, ".") : "") : "nothing"; };
+  check(drawer.contains(document.activeElement), "Quick drawer did not receive keyboard focus; focus is on " + focusDescription());
+  // The drawer is modal: focus sent elsewhere while it is open comes back.
+  const outside = document.querySelector("#dashboard-primary-nav button, .auxora-section-link");
+  if (outside) {
+    outside.focus();
+    await frames();
+    check(drawer.contains(document.activeElement), "Focus escaped the open Quick drawer to " + focusDescription());
+  }
+  document.activeElement.blur();
+  await wait(40);
+  check(drawer.contains(document.activeElement), "Focus dropped out of the open Quick drawer and was not put back; focus is on " + focusDescription());
   const visible = node => node && !node.closest(".is-hidden,[hidden],[aria-hidden=true]") && getComputedStyle(node).display !== "none" && node.getBoundingClientRect().width > 0;
   const controls = [...drawer.querySelectorAll("button,input,select,[tabindex]")].filter(node => !node.disabled && node.tabIndex >= 0 && visible(node));
   const targetMinimum = innerWidth >= 1800 && innerHeight >= 600 ? 54 : 44;
@@ -2351,6 +2362,9 @@ async function checkQuickControlsInPage(deep) {
 
 async function validateQuickControls(cdp) {
   const fixture = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(${installQuickControlsFixture.toString()})()` });
+  // Focus and blur events only fire in a page that has focus. Headless pages do not always have it,
+  // and this scenario is about where keyboard focus goes.
+  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
   try {
     for (const { width, height } of [{ width: 800, height: 480 }, { width: 720, height: 480 }, { width: 390, height: 844 }, { width: 2560, height: 720 }]) {
       await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
@@ -2377,6 +2391,7 @@ async function validateQuickControls(cdp) {
       console.log(`rendered Quick controls ${width}x${height}: passed; ${result.controls} accessible controls, ${result.writes} fixture-only actions${result.deep ? ", state validation, single-send, failures, late reads, cancellation and Touch Lock" : ""}`);
     }
   } finally {
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false });
     await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier });
     await cdp.send("Page.navigate", { url: "about:blank" });
     await waitForCommittedUrl(cdp, "about:blank");
@@ -3892,6 +3907,53 @@ async function validateWowQuestLog(cdp) {
   }
 }
 
+// Settings > Appearance > Text size scales panel text through the root size, and the choice is kept.
+async function checkTextSizeInPage(expectedAtLoad) {
+  const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+  const check = (condition, message) => { if (!condition) throw new Error(message); };
+  const select = () => document.querySelector('select[name="textSize"]');
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline && !select()) await wait(100);
+  check(select(), "Appearance has no Text size control");
+  const rootSize = () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const labelSize = () => Number.parseFloat(getComputedStyle(select().closest("label").querySelector("span")).fontSize);
+  const sizes = { normal: 16, large: 20, larger: 24 };
+  check(select().value === expectedAtLoad && rootSize() === sizes[expectedAtLoad] && document.documentElement.dataset.textSize === expectedAtLoad,
+    "Text size at load is " + select().value + " with a " + rootSize() + "px root; expected " + expectedAtLoad);
+  check(Array.from(select().options).map(option => option.value).join() === "normal,large,larger", "Text size choices changed");
+  const seen = {};
+  for (const choice of ["normal", "large", "larger"]) {
+    select().value = choice;
+    select().dispatchEvent(new Event("change", { bubbles: true }));
+    await wait(300);
+    check(select().value === choice && rootSize() === sizes[choice], "Choosing " + choice + " left a " + rootSize() + "px root");
+    seen[choice] = labelSize();
+    check(document.documentElement.scrollWidth <= innerWidth + 1, choice + " text makes the page scroll sideways");
+  }
+  check(seen.large > seen.normal && seen.larger > seen.large, "Panel text did not grow with the setting: " + JSON.stringify(seen));
+  // Leave Large chosen, for the reload that follows.
+  select().value = "large";
+  select().dispatchEvent(new Event("change", { bubbles: true }));
+  await wait(300);
+  return seen;
+}
+
+async function validateTextSize(cdp) {
+  await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width: 2560, height: 720, deviceScaleFactor: 1, mobile: false });
+  let seen = null;
+  for (const [marker, expected] of [["textSizeTest=first", "normal"], ["textSizeTest=reload", "large"]]) {
+    await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=theme-studio&${marker}` });
+    await waitForCommittedUrl(cdp, marker);
+    const evaluation = await cdp.send("Runtime.evaluate", { expression: `(${checkTextSizeInPage.toString()})(${JSON.stringify(expected)})`, awaitPromise: true, returnByValue: true });
+    assert(!evaluation.exceptionDetails, `Text size (${marker}) failed: ${evaluation.exceptionDetails?.exception?.description || evaluation.exceptionDetails?.text}`);
+    seen = evaluation.result.value;
+  }
+  // Put the default back so later scenarios see the usual sizes.
+  await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
+  console.log(`rendered Text size: Normal, Large and Extra large scale panel text (${seen.normal}px, ${seen.large}px, ${seen.larger}px) and the choice survives a reload: passed`);
+}
+
 async function validateForcedColorsProductSurfaces(cdp) {
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 2560,
@@ -4370,6 +4432,7 @@ try {
     await validateLegacyLayoutPreservation(cdp);
     await validateGameProfileSwitching(cdp);
     await validateWowQuestLog(cdp);
+    await validateTextSize(cdp);
     await validateDeletableMusicCards(cdp);
     await validateForcedColorsProductSurfaces(cdp);
     await validateOptionalSetupHandoffs(cdp);

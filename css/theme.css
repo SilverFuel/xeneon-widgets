@@ -125,6 +125,10 @@
   --status-danger-border: rgba(255, 189, 198, 0.46);
 }
 
+/* Text size (Settings > Appearance). Panel text is sized in rem, so the root size scales it. */
+:root[data-text-size="large"] { font-size: 125%; }
+:root[data-text-size="larger"] { font-size: 150%; }
+
 :root[data-readability="high-contrast"],
 .dashboard-native-page--readability-high-contrast {
   color-scheme: dark;
