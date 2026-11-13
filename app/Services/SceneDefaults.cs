@@ -22,6 +22,12 @@ public static class SceneDefaults
                 BuiltIn("scene-wow-forever", "WoW Forever", "gamepad", "horde", "standard", "compact", 82, 60, "game",
                     ["wow-forever", "game-mode", "audio", "system"],
                     ["night-light", "task-manager"]),
+                BuiltIn("scene-battlefield", "Battlefield", "gamepad", "frontline", "standard", "compact", 82, 60, "game",
+                    ["game-mode", "audio", "system", "network"],
+                    ["night-light", "task-manager"]),
+                BuiltIn("scene-fable", "Fable", "gamepad", "albion", "standard", "compact", 82, 60, "game",
+                    ["game-mode", "audio", "system"],
+                    ["night-light", "task-manager"]),
                 BuiltIn("scene-media", "Media", "play", "warm", "standard", "comfortable", 65, 48, "balanced",
                     ["home", "audio", "hue", "weather"],
                     ["dark-mode", "night-light"]),
@@ -154,6 +160,8 @@ public static class SceneDefaults
     {
         "scene-gaming" => "game-mode",
         "scene-wow-forever" => "wow-forever",
+        "scene-battlefield" => "game-mode",
+        "scene-fable" => "game-mode",
         _ => ""
     };
 
@@ -178,6 +186,10 @@ public static class SceneDefaults
             {
                 // A rule for one named game outranks the any-game rule, so a game with its own Profile gets it.
                 "scene-wow-forever" => [new SceneRule { Id = "rule-wow-forever", Type = "game", Value = "wow-forever", Priority = 110 }],
+                // These two match by name, so every Battlefield title and any store's copy of Fable is covered
+                // without knowing its executable or store id.
+                "scene-battlefield" => [new SceneRule { Id = "rule-battlefield", Type = "game", Value = "Battlefield", Priority = 110 }],
+                "scene-fable" => [new SceneRule { Id = "rule-fable", Type = "game", Value = "Fable", Priority = 110 }],
                 "scene-gaming" => [new SceneRule { Id = "rule-game", Type = "game", Priority = 100 }],
                 "scene-media" => [new SceneRule { Id = "rule-media", Type = "media", Priority = 70 }],
                 "scene-night" => [new SceneRule { Id = "rule-night", Type = "schedule", StartTime = "22:00", EndTime = "06:30", Priority = 60 }],

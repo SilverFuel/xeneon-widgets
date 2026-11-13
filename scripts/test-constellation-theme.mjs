@@ -196,8 +196,8 @@ function checkReadable(tokens, label, highContrast = false, legacy = true) {
   }
 }
 
-test("the theme table holds 16 well-formed themes", () => {
-  assert.equal(themes.list.length, 16);
+test("the theme table holds 18 well-formed themes", () => {
+  assert.equal(themes.list.length, 18);
   assert.equal(new Set(themeIds).size, themeIds.length, "theme ids must be unique");
   for (const theme of themes.list) {
     assert.match(theme.id, /^[a-z0-9-]{1,32}$/, `${theme.id}: the native host only keeps ids of this shape`);
