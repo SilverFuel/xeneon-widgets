@@ -381,6 +381,8 @@
 .wow-save-status { display: inline-flex; gap: 7px; align-items: center; }
 .wow-footer > span { min-width: 0; overflow-wrap: anywhere; }
 .wow-footer-actions { margin-left: auto; }
+/* The page switch only exists where the panel is split in two pages. */
+.wow-pages { display: none; }
 .wow-save-status::before { content: ""; flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: #9eaf80; }
 .wow-save-status[data-state="error"] { color: #f6b7a7; }
 .wow-save-status[data-state="error"]::before { background: #f6b7a7; }
@@ -550,12 +552,46 @@
     .wow-footer { flex: 0 0 auto; padding-top: 10px; }
   }
   /* The EDGE at full resolution packs more pixels into the same glass, so the text is larger there. */
+  /* The EDGE at full resolution packs 183 pixels into an inch and sits behind the keyboard, so
+     text is sized to read from a seat: about the size of ordinary text on a desktop monitor.
+     That does not fit four cards, so the panel is two pages, switched in the bottom row. */
   @container (min-width: 2100px) {
-    .wow-adventure > * { --wow-fs: 19px; --wow-fs-sub: 18px; --wow-fs-small: 16px; --wow-fs-strong: 20px; }
-    .wow-grid { grid-template-columns: 380px minmax(0, 1fr) 360px 360px; }
-    .wow-card-heading h3, .wow-quests .wow-card-heading h3 { font-size: 24px; }
-    .wow-character-name { font-size: 30px; }
-    .wow-timer-value { font-size: 40px; }
+    .wow-adventure > * { --wow-fs: 24px; --wow-fs-sub: 22px; --wow-fs-small: 18px; --wow-fs-strong: 26px; }
+    .wow-adventure :is(.wow-button, .wow-icon-button, .wow-quest-tabs button, .wow-quest-views button, .wow-notice button),
+    .wow-adventure :is(input:not([type="checkbox"]), select, textarea),
+    .wow-resource-links a,
+    .wow-resource-links strong { font-size: var(--wow-fs-sub); }
+    .wow-adventure .wow-button, .wow-quest-views button { padding-inline: 20px; }
+    .wow-adventure input[type="checkbox"] { width: 28px; height: 28px; min-height: 28px; }
+    .wow-card-heading h3, .wow-quests .wow-card-heading h3 { font-size: 30px; }
+    .wow-character-name { font-size: 38px; }
+    .wow-timer-value { font-size: 56px; }
+    .wow-quest-level { min-width: 40px; }
+    .wow-icon-button svg { width: 26px; height: 26px; }
+
+    .wow-pages { display: inline-flex; gap: 8px; margin-right: 8px; }
+    .wow-pages button[aria-pressed="true"] { border-color: #d8b879; color: #201c16; background: linear-gradient(#e6c98f, #b89354); }
+
+    /* Page one: the character and the quests. */
+    .wow-grid { grid-template-columns: 560px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+    .wow-character, .wow-quests { grid-row: 1; }
+    .wow-camp, .wow-journal, .wow-resources { display: none; }
+    .wow-card { padding: 14px 16px; }
+    .wow-adventure .wow-location, .wow-progress-track { margin-top: 6px; }
+    .wow-adventure .wow-character-meta { margin-top: 4px; }
+    .wow-profile-summary { gap: 2px; margin-top: 6px !important; padding-top: 4px; }
+    .wow-profile-summary > div { grid-template-columns: auto minmax(0, 1fr); }
+    .wow-quest-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); column-gap: 32px; }
+    .wow-quest-list--game { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+
+    /* Page two: the timer and checklist, the notes, the guides. */
+    .wow-adventure[data-page="camp"] :is(.wow-character, .wow-quests) { display: none; }
+    .wow-adventure[data-page="camp"] .wow-grid { grid-template-columns: 760px minmax(0, 1fr) 520px; }
+    .wow-adventure[data-page="camp"] .wow-camp { display: block; grid-column: 1; grid-row: 1; }
+    .wow-adventure[data-page="camp"] .wow-journal { display: flex; grid-column: 2; grid-row: 1; }
+    .wow-adventure[data-page="camp"] .wow-resources { display: block; grid-column: 3; grid-row: 1; }
+    .wow-resource-links { grid-template-columns: minmax(0, 1fr); }
+    .wow-journal textarea { line-height: 36px; background: repeating-linear-gradient(transparent 0, transparent 35px, rgba(179, 158, 110, .12) 35px, rgba(179, 158, 110, .12) 36px), #152124; }
   }
 }
 @media (max-height: 820px) and (min-width: 1800px) {

@@ -3834,10 +3834,41 @@ async function checkWowQuestLogInPage() {
     check(outside.length === 0, size + ": below the screen: " + outside.join(", "));
   }
 
+  // Text is sized for the screen: nothing under 14px anywhere, nothing under 18px on the EDGE at full resolution.
+  const shown = node => { const rect = node.getBoundingClientRect(); return rect.width > 1 && rect.height > 1; };
+  const largeText = oneScreen && panel().getBoundingClientRect().width >= 2100;
+  const smallest = largeText ? 18 : 14;
+  const tooSmall = Array.from(panel().querySelectorAll("*")).filter(node => shown(node) && node.children.length === 0 && node.textContent.trim()
+    && Number.parseFloat(getComputedStyle(node).fontSize) < smallest).map(node => node.className + "@" + getComputedStyle(node).fontSize);
+  check(tooSmall.length === 0, size + ": text below " + smallest + "px: " + tooSmall.slice(0, 6).join(", "));
+  // Large text does not fit four cards, so the panel is two pages there, and only there.
+  const pageSwitch = panel().querySelector(".wow-pages");
+  check(shown(pageSwitch) === largeText, size + ": the page switch is " + (shown(pageSwitch) ? "shown" : "missing"));
+  if (largeText) {
+    check(Number.parseFloat(getComputedStyle(list.querySelector("strong")).fontSize) >= 26, size + ": quest titles are not large");
+    check(shown(panel().querySelector(".wow-character")) && shown(panel().querySelector(".wow-quests")) && !shown(panel().querySelector(".wow-camp"))
+      && !shown(panel().querySelector(".wow-journal")) && !shown(panel().querySelector(".wow-resources")), size + ": page one is not the character and the quests");
+    const toCamp = pageSwitch.querySelector('[data-wow-page="camp"]');
+    toCamp.click();
+    await wait(250);
+    check(toCamp.getAttribute("aria-pressed") === "true" && !shown(panel().querySelector(".wow-quests")) && !shown(panel().querySelector(".wow-character"))
+      && shown(panel().querySelector(".wow-camp")) && shown(panel().querySelector("#wow-field-notes")) && shown(panel().querySelector(".wow-resources")),
+      size + ": page two is not the timer, notes and guides");
+    check(pageFits(), size + ": page two runs off the screen: " + page.scrollHeight + " > " + page.clientHeight);
+    const cramped = Array.from(panel().querySelectorAll("button, a, textarea, .wow-prep-list > label")).filter(shown)
+      .filter(control => { const rect = control.getBoundingClientRect(); return rect.width < 54 || rect.height < 54 || control.scrollWidth > control.clientWidth + 1; }).map(label);
+    check(cramped.length === 0, size + ": page two controls are small or clipped: " + cramped.join(", "));
+    pageSwitch.querySelector('[data-wow-page="quests"]').click();
+    await wait(250);
+    check(shown(panel().querySelector(".wow-quests")) && !shown(panel().querySelector(".wow-camp")), size + ": could not return to the quests");
+  } else {
+    check(shown(panel().querySelector(".wow-camp")) && shown(panel().querySelector(".wow-resources")), size + ": the timer and guides are missing from the single page");
+  }
+
   views().find(view => view.dataset.wowView === "ready").click();
   await wait(250);
   check(list.children.length === 2 && Array.from(list.children).every(row => row.classList.contains("is-ready")), size + ": Ready to turn in lists the wrong quests");
-  return { size, oneScreen, listScrolls, views: views().length };
+  return { size, oneScreen, largeText, listScrolls, views: views().length };
 }
 
 // The game's quest log stays short: one view at a time, and on the EDGE the whole panel fits one screen.
@@ -3853,9 +3884,9 @@ async function validateWowQuestLog(cdp) {
       assert(!evaluation.exceptionDetails, `WoW quest log failed: ${evaluation.exceptionDetails?.exception?.description || evaluation.exceptionDetails?.text}`);
       seen.push(evaluation.result.value);
     }
-    assert(seen[0].oneScreen && seen[1].oneScreen && !seen[2].oneScreen && seen[0].listScrolls && seen[1].listScrolls,
+    assert(seen[0].oneScreen && seen[1].oneScreen && !seen[2].oneScreen && seen[0].listScrolls && seen[1].listScrolls && seen[0].largeText && !seen[1].largeText,
       `The one-screen layout did not apply where expected: ${JSON.stringify(seen)}`);
-    console.log("rendered WoW quest log: zone views, no overlap, one screen at 2560x720 and 2048x720, list scrolls inside its card: passed");
+    console.log("rendered WoW quest log: zone views, no overlap, one screen at 2560x720 and 2048x720, large text in two pages at 2560x720, list scrolls inside its card: passed");
   } finally {
     await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier });
   }

@@ -275,6 +275,9 @@
     var journal = freshJournal();
     var activeFilter = "active";
     var filterChosen = false;
+    // On the EDGE at full resolution the text is large and the panel is two
+    // pages: the character and quests, or the timer, checklist, notes and guides.
+    var page = "quests";
     var storageProblem = "";
     var notice = "";
     var undo = null;
@@ -512,7 +515,7 @@
     }
 
     function render() {
-      container.innerHTML = '<section class="wow-adventure" data-faction="' + journal.profile.faction + '" aria-label="World of Warcraft Forever adventure journal">' +
+      container.innerHTML = '<section class="wow-adventure" data-page="quests" data-faction="' + journal.profile.faction + '" aria-label="World of Warcraft Forever adventure journal">' +
         '<header class="wow-masthead"><div class="wow-brand"><p class="wow-eyebrow">World of Warcraft / Forever</p><h2>The Adventure Journal</h2><p class="wow-subtitle">Your next quest. Your unfolding story.</p></div></header>' +
         '<form class="wow-editor wow-card" hidden aria-label="Edit character"></form>' +
         '<div class="wow-notice" role="status" hidden></div>' +
@@ -523,7 +526,7 @@
         '<aside class="wow-card wow-camp"><div class="wow-card-heading"><h3>At the campfire</h3></div><p class="wow-timer-label"></p><div class="wow-timer-value" role="timer" aria-label="Session elapsed time">00:00:00</div><div class="wow-timer-actions">' + button("toggle-session", "Begin session", "primary") + button("reset-session", "Reset", "quiet") + '</div><p class="wow-timer-help">Keeps running when you leave this tab.</p><div class="wow-card-heading"><h3>Before you set out</h3></div><div class="wow-prep-list">' + PREPARATIONS.map(function (label, index) { return '<label><input type="checkbox" data-wow-prep="' + index + '"' + (journal.preparations[index] ? ' checked' : '') + '><span>' + label + '</span></label>'; }).join("") + '</div></aside>' +
         '<article class="wow-card wow-journal"><div class="wow-card-heading"><h3>Field notes</h3><small>Saved as you write</small></div><label class="wow-sr-only" for="wow-field-notes">Field notes</label><textarea id="wow-field-notes" maxlength="20000" placeholder="A hidden path. A helpful stranger. The materials you still need. Leave a note for your next session.">' + escapeHtml(journal.notes) + '</textarea></article>' +
         '<aside class="wow-card wow-resources"><div class="wow-card-heading"><h3>The wayfinder</h3><small>Official field guides</small></div><div class="wow-resource-links">' + resources.map(function (resource) { return '<a href="' + resource.url + '" target="_blank" rel="noopener noreferrer"><strong>' + resource.label + '</strong><small>' + resource.detail + '</small></a>'; }).join("") + '</div></aside></div>' +
-        '<footer class="wow-footer"><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
+        '<footer class="wow-footer"><span class="wow-pages" role="group" aria-label="Panel page"><button type="button" class="wow-button" data-wow-page="quests" aria-pressed="true">Quests</button><button type="button" class="wow-button" data-wow-page="camp" aria-pressed="false">Camp and notes</button></span><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
       query('[data-wow-action="profile"]').setAttribute("aria-expanded", "false");
       renderProfile();
       renderQuests();
@@ -639,7 +642,7 @@
     });
 
     runtime.addListener(cleanups, container, "click", function (event) {
-      var target = event.target.closest("[data-wow-action], [data-wow-filter], [data-wow-remove], [data-wow-view]");
+      var target = event.target.closest("[data-wow-action], [data-wow-filter], [data-wow-remove], [data-wow-view], [data-wow-page]");
       if (!target || !container.contains(target)) return;
       if (target.hasAttribute("data-wow-view")) {
         gameView = target.dataset.wowView;
@@ -647,6 +650,12 @@
         // The buttons were redrawn; keep keyboard focus on the one just chosen.
         var chosen = query('.wow-quest-views [aria-pressed="true"]');
         if (chosen) chosen.focus();
+        return;
+      }
+      if (target.hasAttribute("data-wow-page")) {
+        page = target.dataset.wowPage === "camp" ? "camp" : "quests";
+        query(".wow-adventure").dataset.page = page;
+        container.querySelectorAll("[data-wow-page]").forEach(function (choice) { choice.setAttribute("aria-pressed", String(choice.dataset.wowPage === page)); });
         return;
       }
       if (target.hasAttribute("data-wow-filter")) {
