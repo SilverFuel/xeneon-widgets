@@ -11,10 +11,13 @@
 -- It reads your own character only. It sends nothing anywhere: no chat, no
 -- add-on messages, no network. The data stays in this add-on's saved file.
 
-local ADDON_VERSION = "0.1.1"
+local ADDON_VERSION = "0.2.0"
 local SCHEMA = 1
 local MAX_QUESTS = 40
 local MAX_OBJECTIVES = 8
+local MAX_PROFESSIONS = 8
+local LAST_GEAR_SLOT = 18 -- head to ranged; shirt and tabard have no durability
+local LAST_BAG = 4 -- backpack is 0, then four bag slots
 local SAVE_DELAY = 5 -- seconds; one snapshot for each burst of changes
 
 -- Calls a game function without letting an error or a missing function stop
@@ -107,6 +110,100 @@ local function collectQuests()
   return quests, true
 end
 
+-- Professions with their skill. The client offers one of two ways to ask;
+-- whichever exists is used. Returns nil when neither does.
+local function collectProfessions()
+  local professions = {}
+  if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
+    local ok, first, second, archaeology, fishing, cooking = pcall(GetProfessions)
+    if not ok then
+      return nil
+    end
+    local slots = { { first, true }, { second, true }, { cooking, false }, { fishing, false }, { archaeology, false } }
+    for _, slot in ipairs(slots) do
+      local index = number(slot[1])
+      if index then
+        local name, _, rank, maxRank = safe(GetProfessionInfo, index)
+        name = text(name)
+        if name and #professions < MAX_PROFESSIONS then
+          professions[#professions + 1] = { name = name, rank = number(rank) or 0, maxRank = number(maxRank) or 0, primary = slot[2] }
+        end
+      end
+    end
+    return professions
+  end
+  if type(GetNumSkillLines) == "function" and type(GetSkillLineInfo) == "function" then
+    -- The older skill list. Professions sit under their own two headings,
+    -- named in the game's language; only the English names are recognised.
+    local count = number(safe(GetNumSkillLines)) or 0
+    local primary
+    for index = 1, count do
+      local ok, name, isHeader, _, rank, _, _, maxRank = pcall(GetSkillLineInfo, index)
+      name = ok and text(name) or nil
+      if name and plain(isHeader) then
+        if name == "Professions" then
+          primary = true
+        elseif name == "Secondary Skills" then
+          primary = false
+        else
+          primary = nil
+        end
+      elseif name and primary ~= nil and #professions < MAX_PROFESSIONS then
+        professions[#professions + 1] = { name = name, rank = number(rank) or 0, maxRank = number(maxRank) or 0, primary = primary }
+      end
+    end
+    return professions
+  end
+  return nil
+end
+
+-- How worn the equipped gear is, as whole percentages: all of it together,
+-- and the most worn piece. Returns nothing when no piece reports durability.
+local function collectDurability()
+  if type(GetInventoryItemDurability) ~= "function" then
+    return nil
+  end
+  local current, maximum, lowest = 0, 0, nil
+  for slot = 1, LAST_GEAR_SLOT do
+    local now, full = safe(GetInventoryItemDurability, slot)
+    now, full = number(now), number(full)
+    if now and full and full > 0 then
+      current = current + now
+      maximum = maximum + full
+      local percent = math.floor(now / full * 100)
+      if lowest == nil or percent < lowest then
+        lowest = percent
+      end
+    end
+  end
+  if maximum == 0 then
+    return nil
+  end
+  return math.floor(current / maximum * 100), lowest
+end
+
+-- Free and total bag slots across the backpack and the four bags.
+local function collectBags()
+  local container = type(C_Container) == "table" and C_Container or nil
+  local slotsIn = (container and container.GetContainerNumSlots) or GetContainerNumSlots
+  local freeIn = (container and container.GetContainerNumFreeSlots) or GetContainerNumFreeSlots
+  if type(slotsIn) ~= "function" or type(freeIn) ~= "function" then
+    return nil
+  end
+  local free, total = 0, 0
+  for bag = 0, LAST_BAG do
+    local slots = number(safe(slotsIn, bag)) or 0
+    if slots > 0 then
+      total = total + slots
+      free = free + (number(safe(freeIn, bag)) or 0)
+    end
+  end
+  if total == 0 then
+    return nil
+  end
+  return free, total
+end
+
 local function collectSnapshot()
   local name = text(safe(UnitName, "player"))
   if not name then
@@ -117,6 +214,8 @@ local function collectSnapshot()
   local raceName, raceToken = safe(UnitRace, "player")
   local clientVersion, clientBuild, _, clientInterface = safe(GetBuildInfo)
   local quests, questsRead = collectQuests()
+  local durability, durabilityLowest = collectDurability()
+  local bagFree, bagTotal = collectBags()
   return {
     name = name,
     realm = realm,
@@ -135,6 +234,11 @@ local function collectSnapshot()
     copper = number(safe(GetMoney)),
     quests = quests,
     questsRead = questsRead,
+    professions = collectProfessions(),
+    durability = durability,
+    durabilityLowest = durabilityLowest,
+    bagFree = bagFree,
+    bagTotal = bagTotal,
     savedAt = number(safe(time)),
     clientVersion = text(clientVersion),
     clientBuild = text(clientBuild),
@@ -191,12 +295,22 @@ end
 
 local function describe(snapshot)
   local gold = math.floor((snapshot.copper or 0) / 10000)
-  return string.format("%s, level %s, %s, %d gold, %d quests",
+  local line = string.format("%s, level %s, %s, %d gold, %d quests",
     snapshot.name,
     tostring(snapshot.level or "?"),
     snapshot.zone or "unknown zone",
     gold,
     #snapshot.quests)
+  if snapshot.professions then
+    line = line .. string.format(", %d professions", #snapshot.professions)
+  end
+  if snapshot.durability then
+    line = line .. string.format(", gear %d%%", snapshot.durability)
+  end
+  if snapshot.bagFree then
+    line = line .. string.format(", %d of %d bag slots free", snapshot.bagFree, snapshot.bagTotal)
+  end
+  return line
 end
 
 SLASH_AUXORACOMPANION1 = "/auxora"
@@ -234,7 +348,10 @@ local CHANGE_EVENTS = {
   "PLAYER_MONEY",
   "QUEST_LOG_UPDATE",
   "HEARTHSTONE_BOUND",
-  "PLAYER_REGEN_ENABLED"
+  "PLAYER_REGEN_ENABLED",
+  "BAG_UPDATE_DELAYED",
+  "UPDATE_INVENTORY_DURABILITY",
+  "SKILL_LINES_CHANGED"
 }
 
 local frame = CreateFrame("Frame")

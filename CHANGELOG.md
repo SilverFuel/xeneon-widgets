@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Auxora Companion add-on 0.2.0 also saves your professions and skill, how worn your gear is, and free bag slots. The WoW Forever character card shows them, and marks a piece of gear below 25% or fewer than four free slots. Copy the new add-on folder into the game to get them. Edit character is hidden while the game supplies the character.
 - Larger, plainer text in the WoW Forever panel. Nothing is smaller than 14px, quest titles are 17px, and small all-capitals labels are now ordinary words. At the EDGE's full resolution (2560x720) the text is larger again, 16 to 20px. On the EDGE the zone buttons are one row you swipe through, so the quest list keeps its height.
 - The WoW Forever panel fits one screen on the EDGE. The game's quest log is shown one view at a time (the zone you are in, quests ready to turn in, each other zone, or all) and scrolls inside its own card. The panel opens on the game's log when the add-on is saving. Edit character moved onto the character card, and Export and Import moved to the bottom row.
 - Removed the host endpoints behind the retired Phone Remote and extension-inspection features (`/api/remote/session`, `/api/extensions`). Nothing in the dashboard used them.
