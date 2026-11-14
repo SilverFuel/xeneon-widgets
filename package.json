@@ -70,7 +70,7 @@
     "test:installer-architecture": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-installer-architecture.ps1 && pwsh -NoProfile -File scripts/test-installer-architecture.ps1",
     "test:constellation-theme": "node scripts/test-constellation-theme.mjs",
     "test:dashboard-navigation": "node scripts/test-dashboard-navigation.mjs",
-    "test:header-modes": "node scripts/test-header-modes.mjs",
+    "test:header-modes": "node scripts/test-header-modes.mjs && node scripts/test-profile-refresh.mjs",
     "test:home-navigation": "node scripts/test-home-navigation.mjs",
     "test:ui-action-ownership": "node scripts/test-ui-action-ownership.mjs"
   },
