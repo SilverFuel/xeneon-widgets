@@ -19,7 +19,7 @@
     "check:frontend-performance": "node scripts/check-frontend-performance.mjs",
     "check:settings-handlers": "node scripts/check-settings-handlers.mjs",
     "check:quick-controls": "node scripts/check-quick-controls.mjs",
-    "check:album-carousel": "node scripts/check-album-carousel.mjs",
+    "check:album-carousel": "node scripts/check-album-carousel.mjs && node scripts/test-media-layout.mjs",
     "check:dependency-pins": "node scripts/check-dependency-pins.mjs",
     "check:support-redaction": "node scripts/check-support-redaction.mjs",
     "check:display-recovery": "node scripts/check-display-recovery.mjs",
