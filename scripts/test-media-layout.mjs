@@ -30,14 +30,16 @@ assert(helpers?.renderAudioWidget, "the Media widget must expose its render func
 const count = (html, needle) => html.split(needle).length - 1;
 const apps = number => Array.from({ length: number }, (_, index) => ({ id: `s${index}`, name: `App ${index}`, displayName: `App ${index}`, volume: 50, muted: false, active: true, state: "active" }));
 
-function state({ equalizer = {}, sessions = 2, playing = true, equalizerOpen = false } = {}) {
+const outputs = number => Array.from({ length: number }, (_, index) => ({ id: `d${index}`, name: `Output ${index}`, kind: "speakers", isDefault: index === 0 }));
+
+function state({ equalizer = {}, sessions = 2, playing = true, equalizerOpen = false, devices = null, outputsOpen = false } = {}) {
   return {
     data: helpers.normalizeAudioPayload({ supported: true, status: "live", masterVolume: 40, defaultDeviceId: "a",
-      devices: [{ id: "a", name: "Speakers", kind: "speakers", isDefault: true }, { id: "b", name: "Headset", kind: "headset" }], sessions: apps(sessions) }),
+      devices: devices || [{ id: "a", name: "Speakers", kind: "speakers", isDefault: true }, { id: "b", name: "Headset", kind: "headset" }], sessions: apps(sessions) }),
     equalizer: helpers.normalizeEqualizerPayload(equalizer),
     media: playing ? { status: "live", playbackStatus: "playing", title: "Track", artist: "Artist", canPause: true, canGoNext: true } : { status: "idle" },
     statusText: "Ready", statusTone: "good", mediaStatusText: "Ready", mediaStatusTone: "good",
-    busy: false, interacting: false, equalizerFineTuneOpen: equalizerOpen, equalizerOpen,
+    busy: false, interacting: false, equalizerFineTuneOpen: equalizerOpen, equalizerOpen, outputsOpen,
     observedAlbums: [], dismissedAlbumKeys: [], carouselIndex: 0
   };
 }
@@ -93,4 +95,25 @@ test("app volumes are their own card: up to six apps, and a count of the rest", 
   const idle = helpers.renderAudioWidget(state({ equalizer: connected, sessions: 2, playing: false }));
   assert.equal(count(idle, 'class="audio-session-row"'), 2, "apps show whether or not a track is playing");
   assert.match(idle, /Nothing is playing/);
+});
+
+test("one or two other outputs are quick buttons on Media; more than that is one Change output button", () => {
+  const two = helpers.renderAudioWidget(state({ equalizer: connected, devices: outputs(3) }));
+  assert.equal(count(two, 'data-action="switch-device"'), 2);
+  assert.equal(count(two, 'data-action="outputs-open"'), 0);
+  const seven = helpers.renderAudioWidget(state({ equalizer: connected, devices: outputs(7) }));
+  assert.equal(count(seven, 'data-action="switch-device"'), 0, "six outputs do not fit on the card; they have their own screen");
+  assert.equal(count(seven, 'data-action="outputs-open"'), 1);
+  const one = helpers.renderAudioWidget(state({ equalizer: connected, devices: outputs(1) }));
+  assert.equal(count(one, 'data-action="switch-device"') + count(one, 'data-action="outputs-open"'), 0, "nothing to choose with a single output");
+});
+
+test("the output screen lists every other output, marks the current one, and replaces Media while open", () => {
+  const html = helpers.renderAudioWidget(state({ equalizer: connected, devices: outputs(7), outputsOpen: true }));
+  assert.match(html, /audio-outputs-screen/);
+  assert.equal(count(html, 'data-action="switch-device"'), 6, "all six other outputs can be chosen, not only the first four");
+  assert.equal(count(html, 'class="audio-output-current"'), 1);
+  assert.match(html, /Playing here/);
+  assert.equal(count(html, 'data-action="outputs-close"'), 1);
+  assert.doesNotMatch(html, /audio-master-card|audio-playback-card|audio-apps-card/);
 });
