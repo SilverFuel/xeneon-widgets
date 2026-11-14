@@ -451,6 +451,112 @@ public sealed class SceneServiceTests
         Assert.That(Snapshot(service.GetSnapshot()).Profiles, Has.Count.EqualTo(beforeFilling + created));
     }
 
+    private static readonly SceneEvaluationRequest NothingRunning = new();
+
+    private static SceneEvaluationRequest Battlefield() => new() { ActiveGame = "Battlefield 6", ActiveGameKey = "steam:2807960" };
+
+    private static int RememberedRules(SceneSnapshot snapshot) =>
+        snapshot.Profiles.SelectMany(scene => scene.Rules).Count(rule => rule.Id.StartsWith("remember-", StringComparison.Ordinal));
+
+    [Test]
+    public void Remember_DuringAGame_KeepsThatProfileForThatGameAndLeavesSwitchingOn()
+    {
+        var service = CreateService();
+        Assert.That(Snapshot(service.Evaluate(Battlefield())).ActiveSceneId, Is.EqualTo("scene-battlefield"));
+
+        var picked = Snapshot(service.Remember(new SceneRememberRequest { SceneId = "scene-media", ActiveGame = "Battlefield 6", ActiveGameKey = "steam:2807960" }));
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(picked.ActiveSceneId, Is.EqualTo("scene-media"));
+            Assert.That(picked.ManualOverrideActive, Is.False);
+            Assert.That(picked.AutomaticSwitchingActive, Is.True);
+            Assert.That(RememberedRules(picked), Is.EqualTo(1));
+        }));
+        Assert.That(Snapshot(service.Evaluate(Battlefield())).ActiveSceneId, Is.EqualTo("scene-media"), "the choice holds on the next evaluation");
+        Assert.That(Snapshot(service.Evaluate(NothingRunning)).ActiveSceneId, Is.EqualTo("scene-work"), "closing the game returns to the everyday Profile");
+        Assert.That(Snapshot(service.Evaluate(Battlefield())).ActiveSceneId, Is.EqualTo("scene-media"), "the choice is still there when the game starts again");
+        Assert.That(Snapshot(service.Evaluate(new SceneEvaluationRequest { ActiveGame = "World of Warcraft", ActiveGameKey = "wow-forever" })).ActiveSceneId,
+            Is.EqualTo("scene-wow-forever"), "another game keeps its own Profile");
+    }
+
+    [Test]
+    public void Remember_ReplacesAnEarlierChoiceForTheSameGame()
+    {
+        var service = CreateService();
+        service.Remember(new SceneRememberRequest { SceneId = "scene-media", ActiveGame = "Battlefield 6", ActiveGameKey = "steam:2807960" });
+
+        var second = Snapshot(service.Remember(new SceneRememberRequest { SceneId = "scene-gaming", ActiveGame = "Battlefield 6", ActiveGameKey = "steam:2807960" }));
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(second.ActiveSceneId, Is.EqualTo("scene-gaming"));
+            Assert.That(RememberedRules(second), Is.EqualTo(1), "one choice per game, not a pile of them");
+        }));
+        Assert.That(Snapshot(service.Evaluate(Battlefield())).ActiveSceneId, Is.EqualTo("scene-gaming"));
+
+        // Choosing the Profile the game would get anyway leaves nothing extra behind.
+        var back = Snapshot(service.Remember(new SceneRememberRequest { SceneId = "scene-battlefield", ActiveGame = "Battlefield 6", ActiveGameKey = "steam:2807960" }));
+        Assert.That(RememberedRules(back), Is.EqualTo(0));
+        Assert.That(Snapshot(service.Evaluate(Battlefield())).ActiveSceneId, Is.EqualTo("scene-battlefield"));
+    }
+
+    [Test]
+    public void Remember_WithNothingDecidingTheProfile_MakesItTheEverydayProfile()
+    {
+        var service = CreateService();
+
+        var picked = Snapshot(service.Remember(new SceneRememberRequest { SceneId = "scene-gaming" }));
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(picked.ActiveSceneId, Is.EqualTo("scene-gaming"));
+            Assert.That(picked.DefaultSceneId, Is.EqualTo("scene-gaming"));
+            Assert.That(RememberedRules(picked), Is.EqualTo(0));
+            Assert.That(picked.AutomaticSwitchingActive, Is.True);
+        }));
+        Assert.That(Snapshot(service.Evaluate(NothingRunning)).ActiveSceneId, Is.EqualTo("scene-gaming"));
+        Assert.That(Snapshot(service.Evaluate(Battlefield())).ActiveSceneId, Is.EqualTo("scene-battlefield"), "a game still gets its own Profile");
+        Assert.That(Snapshot(service.Evaluate(NothingRunning)).ActiveSceneId, Is.EqualTo("scene-gaming"), "and the everyday Profile comes back after it");
+    }
+
+    [Test]
+    public void Remember_WhileMusicIsDecidingTheProfile_IsRememberedForMusic()
+    {
+        var service = CreateService();
+        var music = new SceneEvaluationRequest { MediaPlaying = true };
+        Assert.That(Snapshot(service.Evaluate(music)).ActiveSceneId, Is.EqualTo("scene-media"));
+
+        var picked = Snapshot(service.Remember(new SceneRememberRequest { SceneId = "scene-work", MediaPlaying = true }));
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(picked.ActiveSceneId, Is.EqualTo("scene-work"));
+            Assert.That(picked.DefaultSceneId, Is.EqualTo("scene-work"));
+            Assert.That(RememberedRules(picked), Is.EqualTo(1));
+        }));
+        Assert.That(Snapshot(service.Evaluate(music)).ActiveSceneId, Is.EqualTo("scene-work"), "the choice must not be undone by the next evaluation");
+        Assert.That(Snapshot(service.Evaluate(Battlefield())).ActiveSceneId, Is.EqualTo("scene-battlefield"));
+    }
+
+    [Test]
+    public void Remember_EndsATimedHoldAndRefusesAProfileThatCannotBeChosen()
+    {
+        var service = CreateService();
+        service.Activate(new SceneActivationRequest { SceneId = "scene-gaming", ManualOverrideMinutes = -1 });
+
+        var picked = Snapshot(service.Remember(new SceneRememberRequest { SceneId = "scene-media" }));
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(picked.ActiveSceneId, Is.EqualTo("scene-media"));
+            Assert.That(picked.ManualOverrideActive, Is.False);
+            Assert.That(picked.AutomaticSwitchingActive, Is.True);
+        }));
+        Assert.Throws<InvalidOperationException>((Action)(() => service.Remember(new SceneRememberRequest { SceneId = "scene-missing" })));
+        Assert.Throws<InvalidOperationException>((Action)(() => service.Remember(new SceneRememberRequest { SceneId = "scene-night" })));
+        Assert.That(Snapshot(service.GetSnapshot()).ActiveSceneId, Is.EqualTo("scene-media"), "a refused choice changes nothing");
+    }
+
     private SceneService CreateService()
     {
         return new SceneService(new ConfigStore(_logger!, Path.Combine(_tempDirectory, "config")));
@@ -468,6 +574,8 @@ public sealed class SceneServiceTests
     private sealed class SceneSnapshot
     {
         public string ActiveSceneId { get; set; } = "";
+
+        public string DefaultSceneId { get; set; } = "";
 
         public string LastActivationReason { get; set; } = "";
 

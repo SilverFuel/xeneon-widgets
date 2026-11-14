@@ -476,6 +476,23 @@ public sealed class SceneEvaluationRequest
 
 // Asks for a Profile of its own for one game, named by its routing key
 // (GameActivityPayload.GameKey), never by a path.
+// A hand-picked Profile, with what the PC is doing at that moment so the choice can be remembered for it.
+public sealed class SceneRememberRequest
+{
+    public string? SceneId { get; set; }
+
+    public string? ForegroundProcess { get; set; }
+
+    public string? ActiveGame { get; set; }
+
+    // Stable game identity from GameActivityPayload.GameKey; never an install path.
+    public string? ActiveGameKey { get; set; }
+
+    public bool MediaPlaying { get; set; }
+
+    public string? SampledAt { get; set; }
+}
+
 public sealed class SceneGameProfileRequest
 {
     public string? GameKey { get; set; }
