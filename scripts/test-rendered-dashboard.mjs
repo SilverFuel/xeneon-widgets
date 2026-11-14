@@ -3669,7 +3669,7 @@ async function validateGameProfileSwitching(cdp) {
       const arrival = document.getElementById("dashboard-arrival");
       const chip = document.getElementById("dashboard-play-chip");
       const chipName = document.getElementById("dashboard-play-chip-name").textContent;
-      check(chip && !chip.hidden && chipName.length > 0 && /^\d+:\d\d:\d\d$/.test(document.getElementById("dashboard-play-chip-clock").textContent),
+      check(chip && !chip.hidden && chipName.length > 0 && /^\\d+:\\d\\d:\\d\\d$/.test(document.getElementById("dashboard-play-chip-clock").textContent),
         "no session chip while the game runs: " + (chip ? chip.textContent : "missing"));
       check(document.getElementById("dashboard-arrival-name").textContent === chipName
         && document.getElementById("dashboard-arrival-line").textContent === "The road is waiting."
@@ -3677,7 +3677,7 @@ async function validateGameProfileSwitching(cdp) {
         "the welcome did not name the game with its Profile's line: " + arrival.textContent);
       check(getComputedStyle(arrival).pointerEvents === "none", "the welcome can take a tap");
       const playLogText = localStorage.getItem("auxora-play-log-v1") || "";
-      check(playLogText.includes("wow-forever") && !/[A-Za-z]:\\\\|\.exe/i.test(playLogText), "the play log is missing the game or holds a path: " + playLogText.slice(0, 200));
+      check(playLogText.includes("wow-forever") && !/[A-Za-z]:\\\\|\\.exe/i.test(playLogText), "the play log is missing the game or holds a path: " + playLogText.slice(0, 200));
 
       // 2. The user moves on: later polls must not pull them back.
       window.__auxoraTestOpenWidget("audio");
