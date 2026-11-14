@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Gaming no longer shows a "Telemetry readiness" card when no game is running. It repeated the line under FPS and two empty readings. The card now appears only when the frame rate counter has something to report (starting, measuring, or needing administrator access), is titled **Frame rate counter**, and its messages are in plain words: "Shows once a game is running." instead of "Start a game to capture main-display FPS."
 - The output card on Media is no longer a small scrolling strip. It shows the current output, its volume and Mute, with room to spare. With more than two other outputs, **Change output** opens a screen that lists every output as a large button and marks the one playing; picking one switches and closes it. With one or two others, they stay on the card as quick buttons. Auxora used to list only four other outputs; it now lists up to twelve.
 - Picking a Profile no longer starts a two-hour manual hold. Auxora remembers the choice for what the PC is doing at that moment: the game that is running, the music that is playing, or, with neither, as the everyday Profile. Automatic switching never turns off, so there is no Automatic choice in the picker and nothing to switch back. The line under "Profile" says what the current one is for.
 - Less work in the background.
