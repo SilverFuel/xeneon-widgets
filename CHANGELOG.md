@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Smart Home > Lights is rebuilt. Before a Hue bridge is linked it is one card that says how to connect. Once linked, rooms come first as tiles with an On/Off button and a brightness slider, then single lights the same way; the bridge's own settings fold away at the bottom. The three counters (bridge address, number of lights, number of groups) are gone.
-- Media on the EDGE: when no equalizer is installed, its setup card is a short strip under the output card instead of a third of the panel. The playing track gets the width, and app volumes sit in two columns so four apps show instead of two. Outputs are a short list. With an equalizer installed, the panel is as it was.
+- Media is laid out again. The equalizer is its own screen: **Equalizer** on the Media screen opens it over the panel and **Done** closes it. The eight sound presets stay on the Media screen, one tap each. What is left is three cards that use the width: output and presets, what is playing, and app volumes as their own card with one line per app, up to six.
 - Fixed a Profile changing without its theme. When a game started or closed at the same moment as Auxora's routine settings refresh, the Profile switched but the colours of the previous one stayed until the next switch.
 - Quick controls open ready to use: Auxora starts reading sound and playback the moment the button is pressed, not after the drawer has opened. The drawer gains **Previous** and **Next**, each offered only when the player allows it.
 - The Profile picker in the header opens as a panel of large tiles instead of a small system list, with Automatic first. It is the same control, so the keyboard works as before.

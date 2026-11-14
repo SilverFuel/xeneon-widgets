@@ -373,6 +373,39 @@
     return "Overall level is lowered " + reduction + " dB to prevent distortion.";
   }
 
+  // The preset buttons. Shown on the Media screen as shortcuts and again on the Equalizer screen.
+  function renderEqualizerPresets(equalizer, busy) {
+    return equalizer.presets.map(function (preset) {
+      return '<button class="audio-preset-button' + (equalizer.preset === preset && !equalizer.bypassed ? " is-active" : "") + '" type="button" data-action="equalizer-preset" data-preset="' + escapeHtml(preset) + '" title="' + escapeHtml(getEqualizerPresetSummary(preset)) + '"' + (busy ? " disabled" : "") + '>' + escapeHtml(getEqualizerPresetLabel(preset)) + '</button>';
+    }).join("");
+  }
+
+  // What the Media screen shows of the equalizer: the presets and a way in. The rest is its own screen.
+  function renderSoundShortcuts(state) {
+    var equalizer = state.equalizer;
+    if (!equalizer.installed || !equalizer.connected) {
+      return '<div class="audio-sound-shortcuts is-setup">' +
+        '<div class="audio-card-subhead">' +
+          '<div>' +
+            '<div class="metric-label">Equalizer</div>' +
+            '<div class="router-inline-copy">' + (equalizer.installed ? "Installed. Connect it once to use presets." : "Not installed.") + '</div>' +
+          '</div>' +
+          '<button class="inline-button" type="button" data-action="equalizer-open">Set up</button>' +
+        '</div>' +
+      '</div>';
+    }
+    return '<div class="audio-sound-shortcuts">' +
+      '<div class="audio-card-subhead">' +
+        '<div>' +
+          '<div class="metric-label">Sound preset</div>' +
+          '<div class="router-inline-copy">' + escapeHtml(equalizer.bypassed ? "Equalizer is off." : getEqualizerPresetLabel(equalizer.preset) + " sound") + '</div>' +
+        '</div>' +
+        '<button class="inline-button" type="button" data-action="equalizer-open">Equalizer</button>' +
+      '</div>' +
+      '<div class="audio-preset-strip" role="group" aria-label="Sound presets">' + renderEqualizerPresets(equalizer, state.busy) + '</div>' +
+    '</div>';
+  }
+
   function renderEqualizerCard(state) {
     var equalizer = state.equalizer;
     var statusLabel = equalizer.status === "live"
@@ -421,14 +454,12 @@
         '</div>' +
         '<div class="inline-actions audio-equalizer-setup__actions">' +
           '<button class="inline-button is-primary" type="button" data-action="equalizer-connect">Connect Auxora</button>' +
-          '<button class="inline-button" type="button" data-action="refresh">Not now</button>' +
+          '<button class="inline-button" type="button" data-action="equalizer-close">Not now</button>' +
         '</div>' +
       '</article>';
     }
 
-    var presets = equalizer.presets.map(function (preset) {
-      return '<button class="audio-preset-button' + (equalizer.preset === preset && !equalizer.bypassed ? " is-active" : "") + '" type="button" data-action="equalizer-preset" data-preset="' + escapeHtml(preset) + '" title="' + escapeHtml(getEqualizerPresetSummary(preset)) + '"' + (state.busy ? " disabled" : "") + '>' + escapeHtml(getEqualizerPresetLabel(preset)) + '</button>';
-    }).join("");
+    var presets = renderEqualizerPresets(equalizer, state.busy);
     var presetLabel = equalizer.bypassed ? "EQ off" : getEqualizerPresetLabel(equalizer.preset);
     var presetSummary = equalizer.bypassed ? "Sound is unchanged until you turn the equalizer back on." : getEqualizerPresetSummary(equalizer.preset);
     var tones = getEqualizerToneGroups().map(function (tone) {
@@ -486,11 +517,7 @@
     }).slice(0, 4);
     var activeSessions = data.sessions.filter(isUsefulAudioSession);
     var hasMediaSession = hasLiveMediaSession(media);
-    // On an EDGE-size screen with no equalizer installed, app volumes get two columns, so four fit.
-    var wideMixer = !(state.equalizer && state.equalizer.installed) && typeof document !== "undefined" && !!document.body
-      && document.body.classList.contains("dashboard-native-page--layout-ultrawide")
-      && typeof window !== "undefined" && window.innerWidth >= 2000 && window.innerHeight >= 663 && window.innerHeight <= 760;
-    var visibleSessions = activeSessions.slice(0, wideMixer ? 4 : 2);
+    var visibleSessions = activeSessions.slice(0, 6);
     var playbackLabel = getMediaPlaybackLabel(media);
     var progressPercent = getMediaProgressPercent(media);
     var primaryAction = getMediaPrimaryAction(media);
@@ -527,10 +554,6 @@
             '<button class="inline-button" type="button" title="Forward 15 seconds" data-action="media-control" data-media-action="seek-forward"' + (state.busy || !canSeek ? " disabled" : "") + '>+15s</button>' +
             '<button class="inline-button" type="button" title="Next track" data-action="media-control" data-media-action="next"' + (state.busy || !media.canGoNext ? " disabled" : "") + '>Next</button>' +
           '</div>' +
-          '<div class="audio-now-apps">' +
-            '<div class="metric-label">App volume' + (hasPrivateSessionLabels ? " · Names private" : "") + '</div>' +
-            '<div class="audio-session-stack">__AUXORA_ACTIVE_SESSIONS__</div>' +
-          '</div>' +
         '</div>' +
       '</div>'
     ) : "";
@@ -555,7 +578,20 @@
     if (hiddenSessionCount > 0) {
       sessionRowsHtml += '<div class="audio-session-more">+' + hiddenSessionCount + ' more app' + (hiddenSessionCount === 1 ? "" : "s") + ' playing sound</div>';
     }
-    mediaControlsHtml = mediaControlsHtml.replace("__AUXORA_ACTIVE_SESSIONS__", sessionRowsHtml);
+
+    // The equalizer is its own screen: it takes the panel while open and is gone when closed.
+    if (state.equalizerOpen) {
+      return '' +
+        '<div class="inline-widget-shell inline-widget-shell--audio">' +
+          '<div class="audio-equalizer-screen">' +
+            '<div class="audio-equalizer-screen__bar">' +
+              '<div class="audio-equalizer-screen__title">Equalizer</div>' +
+              '<button class="inline-button is-primary" type="button" data-action="equalizer-close">Done</button>' +
+            '</div>' +
+            renderEqualizerCard(state) +
+          '</div>' +
+        '</div>';
+    }
 
     return '' +
       '<div class="inline-widget-shell inline-widget-shell--audio">' +
@@ -587,8 +623,8 @@
                   '<span>' + escapeHtml(getFriendlyAudioDeviceName(device.name)) + '</span>' +
                 '</button>';
             }).join("") : emptyState("No other outputs", defaultDevice ? "The current output is the only active route." : "No playback devices were returned by Windows.")) + '</div>' +
+            renderSoundShortcuts(state) +
           '</article>' +
-          renderEqualizerCard(state) +
           '<article class="list-card inline-card audio-playback-card">' +
             '<div class="metric-label audio-playback-heading">' + (hasMediaSession ? "Playing now" : "Sound activity") + '</div>' +
             '<div class="audio-playback-grid' + (hasMediaSession ? "" : " audio-playback-grid--mixer-only") + '">' +
@@ -609,15 +645,17 @@
                     '<span>Start music, a video, or a game. Album art and playback controls will appear here.</span>' +
                   '</div>' +
                 '</div>' +
-                '<div class="audio-card-subhead">' +
-                  '<div>' +
-                    '<div class="metric-label">App volumes</div>' +
-                  '</div>' +
-                  statusPill(activeSessions.length ? String(activeSessions.length) + " active" : "Quiet", activeSessions.length ? "good" : "muted") +
-                '</div>' +
-                '<div class="audio-session-stack">' + sessionRowsHtml + '</div>' +
               '</section>' : '') +
             '</div>' +
+          '</article>' +
+          '<article class="list-card inline-card audio-apps-card">' +
+            '<div class="audio-card-subhead">' +
+              '<div>' +
+                '<div class="metric-label">App volumes' + (hasPrivateSessionLabels ? " · Names private" : "") + '</div>' +
+              '</div>' +
+              statusPill(activeSessions.length ? String(activeSessions.length) + " active" : "Quiet", activeSessions.length ? "good" : "muted") +
+            '</div>' +
+            '<div class="audio-session-stack">' + sessionRowsHtml + '</div>' +
           '</article>' +
         '</div>' +
       '</div>';
@@ -636,6 +674,7 @@
       busy: false,
       interacting: false,
       equalizerFineTuneOpen: false,
+      equalizerOpen: false,
       observedAlbums: [],
       dismissedAlbumKeys: [],
       carouselIndex: 0,
@@ -760,6 +799,14 @@
 
       if (action === "refresh") {
         refresh();
+        return;
+      }
+
+      if (action === "equalizer-open" || action === "equalizer-close") {
+        state.equalizerOpen = action === "equalizer-open";
+        // The Equalizer screen has room for the ten bands, so it opens with them showing.
+        if (state.equalizerOpen) { state.equalizerFineTuneOpen = true; }
+        redraw();
         return;
       }
 
@@ -1045,7 +1092,8 @@
     rememberDismissedAlbum: rememberDismissedAlbum,
     rememberObservedAlbum: rememberObservedAlbum,
     normalizeEqualizerPayload: normalizeEqualizerPayload,
-    normalizeAudioPayload: normalizeAudioPayload
+    normalizeAudioPayload: normalizeAudioPayload,
+    renderAudioWidget: renderAudioWidget
   });
   runtime.registerRenderer("audio", mountAudioWidget);
 }());
