@@ -174,33 +174,13 @@
     };
   }
 
+  // Lights. Not linked: one card that says how to connect, and nothing else.
+  // Linked: rooms first, because a room is what you reach for; then single lights;
+  // the bridge's own settings are folded away at the bottom.
   function renderHueWidget(state) {
     var data = state.data;
     var controlsEnabled = data.configured && data.linked && !state.busy;
-    return '' +
-      '<div class="inline-widget-shell">' +
-        '<div class="inline-grid inline-grid--3">' +
-          metricCard("Bridge", data.bridgeIp || "--", state.statusText || data.bridgeName || "Philips Hue") +
-          metricCard("Lights", String(data.lights.length), data.linked ? "Writable bulbs" : "Setup required") +
-          metricCard("Groups", String(data.groups.length), data.linked ? "Writable rooms" : "Link pending") +
-        '</div>' +
-        '<div class="inline-grid inline-grid--2">' +
-          '<article class="list-card inline-card">' +
-            '<div class="inline-card-header"><div><div class="metric-label">Lights</div><div class="router-inline-copy">Tap and drag brightness.</div></div></div>' +
-            '<div class="inline-list">' + (data.lights.length ? data.lights.slice(0, 8).map(function (light) {
-              return '' +
-                '<div class="inline-list-item">' +
-                  '<div class="inline-list-item--split">' +
-                    '<div><div class="inline-list-title">' + escapeHtml(text(light.name, "Light")) + '</div><div class="inline-list-copy">' + escapeHtml(text(light.type, light.on ? "On" : "Off")) + '</div></div>' +
-                    '<button class="inline-button' + (light.on ? " is-primary" : "") + '" type="button" data-action="toggle-light" data-id="' + escapeHtml(text(light.id, "")) + '" aria-label="' + escapeHtml((light.on ? "Turn off " : "Turn on ") + text(light.name, "light")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '>' + (light.on ? "On" : "Off") + '</button>' +
-                  '</div>' +
-                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(light.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(light.name, "light")) + '" value="' + Math.round(optionalNumber(light.brightness) || 0) + '" data-action="brightness-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '></div>' +
-                '</div>';
-            }).join("") : emptyState("No Hue lights", data.configured ? "No Hue lights were returned by the bridge." : "Enter the bridge IP and try linking again.")) + '</div>' +
-          '</article>' +
-          '<article class="list-card inline-card">' +
-            '<div class="inline-card-header"><div><div class="metric-label">Diagnostics</div><div class="router-inline-copy">Press the hardware bridge button, then link here.</div></div></div>' +
-            '<form class="inline-form" data-form="hue-link">' +
+    var formHtml = '<form class="inline-form" data-form="hue-link">' +
               '<div class="inline-form-grid">' +
                 '<label class="inline-field"><span>Bridge IP</span><input class="inline-input" type="text" name="bridgeIp" value="' + escapeHtml(data.bridgeIp) + '" placeholder="Local bridge IP"></label>' +
               '</div>' +
@@ -210,19 +190,56 @@
                   '<label class="inline-field"><span><input type="checkbox" name="trustCertificate" value="1"> I verified this fingerprint and trust this Hue bridge.</span></label>'
                 : '') +
               '<div class="inline-actions"><button class="inline-button is-primary" type="submit">' + (data.linked ? "Relink bridge" : "Link bridge") + '</button></div>' +
-            '</form>' +
-            '<div class="inline-list">' + (data.groups.length ? data.groups.slice(0, 6).map(function (group) {
+            '</form>';
+    if (!data.linked) {
+      return '' +
+        '<div class="inline-widget-shell hue-shell hue-shell--setup">' +
+          '<article class="list-card inline-card hue-connect">' +
+            '<div class="metric-label">Lights</div>' +
+            '<div class="hue-connect__title">Connect your Hue bridge</div>' +
+            '<ol class="hue-connect__steps">' +
+              '<li>Press the round button on top of the bridge.</li>' +
+              '<li>Enter the bridge address below and tap Link bridge.</li>' +
+            '</ol>' +
+            formHtml +
+            (state.statusTone === "danger" ? '<div class="router-inline-copy hue-connect__status" role="status">' + escapeHtml(state.statusText) + '</div>' : '') +
+          '</article>' +
+        '</div>';
+    }
+    var groupsHtml = (data.groups.length ? data.groups.slice(0, 8).map(function (group) {
               return '' +
                 '<div class="inline-list-item">' +
                   '<div class="inline-list-item--split">' +
-                    '<div><div class="inline-list-title">' + escapeHtml(text(group.name, "Room")) + '</div><div class="inline-list-copy">' + escapeHtml(text(group.type, "Group")) + '</div></div>' +
+                    '<div><div class="inline-list-title">' + escapeHtml(text(group.name, "Room")) + '</div></div>' +
                     '<button class="inline-button' + (group.on ? " is-primary" : "") + '" type="button" data-action="toggle-group" data-id="' + escapeHtml(text(group.id, "")) + '" aria-label="' + escapeHtml((group.on ? "Turn off " : "Turn on ") + text(group.name, "group")) + '"' + (controlsEnabled ? "" : " disabled") + '>' + (group.on ? "On" : "Off") + '</button>' +
                   '</div>' +
                   '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(group.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(group.name, "group")) + '" value="' + Math.round(optionalNumber(group.brightness) || 0) + '" data-action="brightness-group" data-id="' + escapeHtml(text(group.id, "")) + '"' + (controlsEnabled ? "" : " disabled") + '></div>' +
                 '</div>';
-            }).join("") : emptyState("No groups", "Rooms and zones appear here after the bridge is linked.")) + '</div>' +
-          '</article>' +
-        '</div>' +
+            }).join("") : emptyState("No rooms", "The bridge has no rooms or zones yet."));
+    var lightsHtml = (data.lights.length ? data.lights.slice(0, 8).map(function (light) {
+              return '' +
+                '<div class="inline-list-item">' +
+                  '<div class="inline-list-item--split">' +
+                    '<div><div class="inline-list-title">' + escapeHtml(text(light.name, "Light")) + '</div>' + (light.reachable === false ? '<div class="inline-list-copy">Not reachable</div>' : '') + '</div>' +
+                    '<button class="inline-button' + (light.on ? " is-primary" : "") + '" type="button" data-action="toggle-light" data-id="' + escapeHtml(text(light.id, "")) + '" aria-label="' + escapeHtml((light.on ? "Turn off " : "Turn on ") + text(light.name, "light")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '>' + (light.on ? "On" : "Off") + '</button>' +
+                  '</div>' +
+                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(light.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(light.name, "light")) + '" value="' + Math.round(optionalNumber(light.brightness) || 0) + '" data-action="brightness-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '></div>' +
+                '</div>';
+            }).join("") : emptyState("No Hue lights", "The bridge returned no lights."));
+    return '' +
+      '<div class="inline-widget-shell hue-shell">' +
+        '<section class="hue-section" aria-label="Rooms">' +
+          '<div class="metric-label">Rooms</div>' +
+          '<div class="hue-tiles">' + groupsHtml + '</div>' +
+        '</section>' +
+        '<section class="hue-section" aria-label="Lights">' +
+          '<div class="metric-label">Lights</div>' +
+          '<div class="hue-tiles">' + lightsHtml + '</div>' +
+        '</section>' +
+        '<details class="hue-bridge" data-preserve-open>' +
+          '<summary>Bridge: ' + escapeHtml(data.bridgeName) + (data.bridgeIp ? " at " + escapeHtml(data.bridgeIp) : "") + '</summary>' +
+          formHtml +
+        '</details>' +
       '</div>';
   }
 
