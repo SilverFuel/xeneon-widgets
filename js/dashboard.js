@@ -3304,7 +3304,7 @@
     var available = bridgeReachable === true && profiles.length > 0;
     var selected = automatic ? "automatic" : active ? active.id : "";
     if (modeActivationPending) { selected = node.getAttribute("data-pending-mode") || selected; }
-    var html = '<option value="automatic" data-ui-key="mode-automatic">Automatic' + (automatic && active ? ' (' + escapeHtml(active.name) + ')' : '') + '</option>';
+    var html = '<option value="automatic" data-ui-key="mode-automatic">Automatic' + (automatic && active ? ' (' + escapeHtml(active.name) + ')' : ': follows your games') + '</option>';
     if (!available || !selected) { html = '<option value="">' + (bridgeReachable === true ? 'Choose a Profile' : 'Profiles unavailable') + '</option>' + html; }
     html += profiles.map(function (profile) {
       return '<option value="' + escapeHtml(profile.id) + '" data-ui-key="mode-' + escapeHtml(profile.id) + '">' + escapeHtml(profile.name || profile.id) + '</option>';
@@ -4714,6 +4714,10 @@
 
       if (quickToggleNode) {
         quickToggleNode.addEventListener("click", function () { setQuickDrawerOpen(true); });
+        // Start reading sound and playback on the press, so the drawer opens with its controls ready.
+        quickToggleNode.addEventListener("pointerdown", function () {
+          if (quickControls && !isTouchLockEnabled()) { quickControls.prime(); }
+        });
       }
 
       [pickerNode, settingsCategoriesNode].forEach(function (node) {

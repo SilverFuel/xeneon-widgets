@@ -9,6 +9,10 @@
     var volumeValue = root.querySelector("#dashboard-quick-volume-value");
     var mute = root.querySelector("#dashboard-quick-mute");
     var playback = root.querySelector("#dashboard-quick-playback");
+    var previous = root.querySelector("#dashboard-quick-previous");
+    var next = root.querySelector("#dashboard-quick-next");
+    // A read started when the Quick controls button is pressed, so the drawer can open ready.
+    var primed = null;
     var opened = false;
     var timer = 0;
     var editingVolume = false;
@@ -50,6 +54,8 @@
         value.playback = payload.playbackStatus;
         value.action = payload.playbackStatus === "playing" && payload.canPause === true ? "pause"
           : ["paused", "stopped"].indexOf(payload.playbackStatus) !== -1 && payload.canPlay === true ? "play" : "";
+        value.previous = payload.canGoPrevious === true;
+        value.next = payload.canGoNext === true;
       }
       return value;
     }
@@ -78,6 +84,8 @@
       setEnabled(volume, audioReady);
       setEnabled(mute, audioReady);
       setEnabled(playback, mediaReady && !!media.action);
+      if (previous) { setEnabled(previous, mediaReady && media.previous === true); }
+      if (next) { setEnabled(next, mediaReady && media.next === true); }
       if (!editingVolume) {
         if (audioReady) { volume.value = String(audio.volume); }
         setText(volumeValue, audioReady ? audio.volume + "%" : "—");
@@ -110,7 +118,9 @@
       channel.request = controller;
       Promise.resolve().then(function () {
         if (controller.signal.aborted) { return null; }
-        return options.get("/api/" + kind, controller.signal);
+        var early = primed && Date.now() - primed.at < 1500 ? primed[kind] : null;
+        if (primed) { primed[kind] = null; }
+        return early || options.get("/api/" + kind, controller.signal);
       }).then(function (payload) {
         if (version !== channel.version || !available(kind)) { return; }
         channel.value = parse(kind, payload);
@@ -213,6 +223,15 @@
       });
     });
 
+    // Skipping a track has no end state to confirm; any fresh reading after it is accepted.
+    [[previous, "previous"], [next, "next"]].forEach(function (pair) {
+      if (!pair[0]) { return; }
+      pair[0].addEventListener("click", function () {
+        if (!usable("media") || channels.media.value[pair[1]] !== true) { render(); return; }
+        commit("media", "/api/media/" + pair[1], {}, function () { return true; });
+      });
+    });
+
     function suspend() {
       window.clearInterval(timer);
       timer = 0;
@@ -237,6 +256,18 @@
     window.addEventListener("pagehide", suspend);
     window.addEventListener("pageshow", resume);
     return {
+      // Called when the Quick controls button is pressed, before the click that opens the drawer.
+      // It only reads; nothing is shown or enabled until the drawer is open.
+      prime: function () {
+        if (opened || document.hidden || (primed && Date.now() - primed.at < 1500)) { return; }
+        primed = { at: Date.now(), audio: null, media: null };
+        ["audio", "media"].forEach(function (kind) {
+          if (!options.available(kind)) { return; }
+          primed[kind] = Promise.resolve().then(function () { return options.get("/api/" + kind); });
+          // The drawer may never open; an unused failure must not surface as an unhandled rejection.
+          primed[kind].catch(function () {});
+        });
+      },
       open: function () { if (opened) { return; } opened = true; suspend(); resume(); },
       close: function () { opened = false; suspend(); }
     };
