@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed a Profile changing without its theme. When a game started or closed at the same moment as Auxora's routine settings refresh, the Profile switched but the colours of the previous one stayed until the next switch.
 - Quick controls open ready to use: Auxora starts reading sound and playback the moment the button is pressed, not after the drawer has opened. The drawer gains **Previous** and **Next**, each offered only when the player allows it.
 - The Profile picker in the header opens as a panel of large tiles instead of a small system list, with Automatic first. It is the same control, so the keyboard works as before.
 - The header no longer shows a pill saying "Available" or "Ready". It appears only when something needs attention, such as Needs Setup or Unavailable.

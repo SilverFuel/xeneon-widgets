@@ -4250,6 +4250,8 @@
       document.body.dataset.bridgeHydrated = "true";
     }
     bridgeCapabilities = Object.assign({}, bridgeCapabilities, (health && health.capabilities) || {});
+    var sceneIdBeforeRefresh = bridgeConfig.scenes && bridgeConfig.scenes.activeSceneId;
+    var refreshedAfterFirstLoad = initialScenePresentationApplied;
     bridgeConfig = Object.assign({}, bridgeConfig, configSnapshot || {});
 
     if (!bridgeConfig.weather) {
@@ -4346,6 +4348,10 @@
     syncSettingsFromBridgeConfig();
     if (!initialScenePresentationApplied && activeScene && !hadExplicitStoredThemeSelection) {
       initialScenePresentationApplied = true;
+      applyScenePresentation(activeScene);
+    } else if (refreshedAfterFirstLoad && activeScene && sceneIdBeforeRefresh && activeScene.id !== sceneIdBeforeRefresh) {
+      // The host changed Profile and this refresh saw it before the evaluation's own reply was handled.
+      // That reply will find the Profile already current and apply nothing, so the theme is applied here.
       applyScenePresentation(activeScene);
     } else {
       initialScenePresentationApplied = true;
