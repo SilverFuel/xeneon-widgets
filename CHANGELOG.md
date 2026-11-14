@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed a game with anti-cheat protection, such as Battlefield 6, dropping back to the normal Profile while it was still running. Auxora could read such a game's details only now and then, and treated each miss as the game closing. It now reads them the way Windows allows for protected programs, and a game is not treated as closed while its process is still there.
 - Auxora now greets a game when it starts: a welcome card with the game's name, a line for its Profile, and your history with it ("Session 4 this week, 3 h played, 3-day streak"). While you play, a chip in the header shows the game and a running session clock; tap it to jump to the game's panel. Play time is kept on this device as a game's name and minutes per day.
 - New **Text size** setting in Settings > Appearance: Normal, Large or Extra large. It scales the text in every panel, the side menu, the tabs and the header controls, for screens read from a distance such as the EDGE. The WoW Forever journal keeps its own sizes.
 - The Quick controls drawer keeps keyboard focus inside it while it is open. Focus that is taken elsewhere, or dropped, returns to the drawer.
