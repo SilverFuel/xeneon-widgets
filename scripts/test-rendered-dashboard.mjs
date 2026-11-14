@@ -2085,7 +2085,7 @@ function installQuickControlsFixture() {
   const originalFetch = window.fetch;
   const fixture = window.__quickControlsFixture = {
     audio: { supported: true, configured: true, status: "live", stale: false, masterVolume: 42, muted: false, defaultDeviceId: "fixture-speakers", devices: [], sessions: [] },
-    media: { supported: true, configured: true, status: "live", stale: false, playbackStatus: "playing", canPlay: true, canPause: true, title: "Local fixture track", appId: "fixture-player" },
+    media: { supported: true, configured: true, status: "live", stale: false, playbackStatus: "playing", canPlay: true, canPause: true, canGoNext: true, canGoPrevious: false, title: "Local fixture track", appId: "fixture-player" },
     reads: { audio: 0, media: 0 },
     panelReads: { equalizer: 0 },
     writes: [],
@@ -2148,6 +2148,7 @@ function installQuickControlsFixture() {
         else if (url.pathname === "/api/audio/master-mute") fixture.audio.muted = body?.muted;
         else if (url.pathname === "/api/media/pause") fixture.media.playbackStatus = "paused";
         else if (url.pathname === "/api/media/play") fixture.media.playbackStatus = "playing";
+        else if (url.pathname === "/api/media/next") fixture.media.title = "Next fixture track";
         else { fixture.unexpected.push({ path: url.pathname, method }); resolveWrite(response({ message: "Blocked unexpected fixture action" }, 400)); return; }
         resolveWrite(response(snapshot(kind)));
       }, fixture.writeDelay));
@@ -2349,6 +2350,29 @@ async function checkQuickControlsInPage(deep) {
     await openDrawer();
     await until(() => !volume.disabled && !playback.disabled, "Quick controls did not recover after Touch Lock");
   }
+  // Track skipping: offered only when the player allows it, and one tap sends one command.
+  const previous = query("#dashboard-quick-previous"), next = query("#dashboard-quick-next");
+  check(previous && next, "Quick controls have no Previous and Next");
+  await until(() => !next.disabled && !playback.disabled, "Next was not offered for a player that allows it");
+  check(previous.disabled, "Previous was offered for a player that does not allow it");
+  const writesBeforeSkip = fixture.writes.length;
+  next.click(); previous.click(); next.click();
+  await until(() => fixture.writes.length > writesBeforeSkip && drawer.getAttribute("aria-busy") === "false", "Next did not send a command");
+  check(fixture.writes.length === writesBeforeSkip + 1 && fixture.writes.at(-1).path === "/api/media/next",
+    "Skipping did not send exactly one Next: " + JSON.stringify(fixture.writes.slice(writesBeforeSkip)));
+
+  // Pressing the opener starts the reads, and the drawer then opens on that same reading.
+  await closeDrawer();
+  const readsBeforePress = { ...fixture.reads };
+  opener.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  await wait(60);
+  check(fixture.reads.audio === readsBeforePress.audio + 1 && fixture.reads.media === readsBeforePress.media + 1,
+    "Pressing Quick controls did not start one reading of each kind: " + JSON.stringify(fixture.reads));
+  check(volume.disabled && mute.disabled && playback.disabled && next.disabled, "A press enabled Quick controls before the drawer opened");
+  await openDrawer();
+  await until(() => !volume.disabled && !playback.disabled, "Quick controls did not open on the early reading");
+  check(fixture.reads.audio === readsBeforePress.audio + 1 && fixture.reads.media === readsBeforePress.media + 1,
+    "Opening after a press read again instead of using the early reading: " + JSON.stringify(fixture.reads));
   check(document.body?.dataset.activeWidgetId === selectedBefore, "Direct controls navigated away from the selected panel");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames();
   check(drawer.classList.contains("is-hidden") && document.activeElement === opener, "Escape did not close Quick and restore its opener");
