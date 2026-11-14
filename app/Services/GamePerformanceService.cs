@@ -82,7 +82,7 @@ public sealed class GamePerformanceService : IDisposable
                     processId.Value,
                     game.ProcessName,
                     source,
-                    "Start a Game Mode performance session to capture main-display FPS.");
+                    "The frame rate is not being measured for this game yet.");
             }
 
             return ReadCaptureSnapshot(processId.Value, game.ProcessName);
@@ -149,7 +149,7 @@ public sealed class GamePerformanceService : IDisposable
 
         if (_captureNeedsAdminRestart && !IsRunningElevated())
         {
-            _lastCaptureFailureMessage = "FPS capture needs administrator capture access. Click Fix FPS (admin) to restart Auxora with capture access.";
+            _lastCaptureFailureMessage = "The frame rate counter needs administrator access. Tap Fix FPS (admin) to restart Auxora with it.";
             return;
         }
 
@@ -283,7 +283,7 @@ public sealed class GamePerformanceService : IDisposable
                         Readiness = "live",
                         FpsSource = source,
                         SampledAt = DateTimeOffset.UtcNow,
-                        Message = "Main-display frame pacing is live from PresentMon."
+                        Message = "Measuring this game's frame rate."
                     };
                 }
 
@@ -543,7 +543,7 @@ public sealed class GamePerformanceService : IDisposable
         if (exitCode != 0 && !IsRunningElevated())
         {
             _captureNeedsAdminRestart = true;
-            _lastCaptureFailureMessage = "PresentMon stopped before reporting frames. Click Fix FPS (admin) to enable main-display FPS capture.";
+            _lastCaptureFailureMessage = "PresentMon stopped before reporting frames. Click Fix FPS (admin) to turn the frame rate counter on.";
             return _lastCaptureFailureMessage;
         }
 
@@ -839,7 +839,7 @@ public sealed class GamePerformanceSnapshot
             FpsSource = "NVIDIA PresentMon",
             Readiness = "idle",
             SampledAt = DateTimeOffset.UtcNow,
-            Message = "Start a game to capture main-display FPS."
+            Message = "Shows once a game is running."
         };
     }
 

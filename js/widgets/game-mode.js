@@ -195,7 +195,7 @@
       canRestartAsAdmin: Boolean(payload.canRestartAsAdmin),
       restartAsAdminEndpoint: text(payload.restartAsAdminEndpoint, "/api/system/restart-admin"),
       sampledAt: text(payload.sampledAt, ""),
-      message: text(payload.message, "Start a game to capture main-display FPS.")
+      message: text(payload.message, "Shows once a game is running.")
     };
   }
 
@@ -605,6 +605,34 @@
       || message.indexOf("approve") !== -1;
   }
 
+  // The frame rate counter's own card. With no game running it has nothing to say that
+  // the FPS card above it does not already say, so it is left out.
+  function renderFrameRateCard(performance, restarting) {
+    var readiness = text(text(performance && performance.readiness, performance && performance.status), "").toLowerCase();
+    var needsAdmin = Boolean(performance && performance.needsAdmin);
+    var tone = needsAdmin ? "warn" : readiness === "live" ? "good" : readiness === "starting" ? "warn" : "muted";
+    var label = needsAdmin ? "Needs admin" : readiness === "live" ? "Live" : readiness === "starting" ? "Starting" : "Not measuring";
+    var action = gameFocusCanFixFps(performance)
+      ? '<button class="inline-button is-primary" type="button" data-action="restart-game-admin">' + gameFocusFpsAdminLabel(restarting) + '</button>'
+      : '';
+    if (!performance || (!action && (readiness === "idle" || readiness === ""))) {
+      return "";
+    }
+    return '' +
+      '<article class="list-card inline-card game-mode-telemetry-card" data-tone="' + escapeHtml(tone) + '">' +
+        '<div class="inline-card-header">' +
+          '<div><div class="metric-label">Frame rate counter</div><div class="router-inline-copy">' + escapeHtml(text(performance.message, "Shows once a game is running.")) + '</div></div>' +
+          statusPill(label, tone) +
+        '</div>' +
+        '<div class="game-mode-telemetry-grid">' +
+          '<div><span>Measured by</span><strong>' + escapeHtml(text(performance.fpsSource, performance.source)) + '</strong></div>' +
+          '<div><span>Frame rate</span><strong>' + escapeHtml(formatFps(performance.fps)) + '</strong></div>' +
+          '<div><span>Frame time</span><strong>' + escapeHtml(formatMs(performance.frameTimeMs)) + '</strong></div>' +
+        '</div>' +
+        (action ? '<div class="inline-actions game-mode-telemetry-actions">' + action + '</div>' : '') +
+      '</article>';
+  }
+
   function renderGameFocusScene(game, theme, system, performance, audio, network, env, introActive, performanceRestarting) {
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
@@ -920,28 +948,6 @@
       return parsed == null ? null : clamp((parsed / (ceiling || 240)) * 100, 0, 100);
     }
 
-    function renderTelemetryReadiness(performance) {
-      var readiness = text(performance.readiness, performance.status);
-      var needsAdmin = Boolean(performance.needsAdmin);
-      var tone = needsAdmin ? "warn" : readiness === "live" ? "good" : readiness === "starting" ? "warn" : "muted";
-      var action = gameFocusCanFixFps(performance)
-        ? '<button class="inline-button is-primary" type="button" data-action="restart-game-admin">' + gameFocusFpsAdminLabel(state.performanceRestarting) + '</button>'
-        : '';
-      return '' +
-        '<article class="list-card inline-card game-mode-telemetry-card" data-tone="' + escapeHtml(tone) + '">' +
-          '<div class="inline-card-header">' +
-            '<div><div class="metric-label">Telemetry readiness</div><div class="router-inline-copy">' + escapeHtml(text(performance.message, "Start a game to capture main-display FPS.")) + '</div></div>' +
-            statusPill(needsAdmin ? "Needs admin" : readiness === "live" ? "Live" : text(performance.status, "Ready"), tone) +
-          '</div>' +
-          '<div class="game-mode-telemetry-grid">' +
-            '<div><span>FPS source</span><strong>' + escapeHtml(text(performance.fpsSource, performance.source)) + '</strong></div>' +
-            '<div><span>Presented FPS</span><strong>' + escapeHtml(formatFps(performance.fps)) + '</strong></div>' +
-            '<div><span>Frame time</span><strong>' + escapeHtml(formatMs(performance.frameTimeMs)) + '</strong></div>' +
-          '</div>' +
-          (action ? '<div class="inline-actions game-mode-telemetry-actions">' + action + '</div>' : '') +
-        '</article>';
-    }
-
     function shouldContinuePerformanceSession() {
       var status = text(state.performance && state.performance.status, "").toLowerCase();
       return status === "live" || status === "starting";
@@ -1023,6 +1029,7 @@
       var focusRenderId = activeGameId || text(activeGame && activeGame.name, "active-game");
       var introActive;
       var idleStatusPanels = renderGameModeEndedPanel(state.activity) + renderGameModeCandidatesPanel(state.activity);
+      var frameRateCard = renderFrameRateCard(state.performance, state.performanceRestarting);
       syncGameFocusIntro(activeGame);
       introActive = Boolean(activeGameId && state.focusIntroGameId === activeGameId);
 
@@ -1058,15 +1065,13 @@
           '<div class="game-mode-idle-grid">' +
             '<section class="game-mode-idle-top">' +
               '<div class="inline-grid inline-grid--4 game-mode-performance">' +
-                metricCard("FPS", formatFps(state.performance.fps), text(state.performance.message, "Starts when a game is active"), fpsProgress(state.performance.fps, 240), "game-mode-metric--primary") +
+                metricCard("FPS", formatFps(state.performance.fps), text(state.performance.message, "Shows once a game is running."), fpsProgress(state.performance.fps, 240), "game-mode-metric--primary") +
                 metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system.gpu) +
                 metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
                 metricCard("RAM", formatPercent(system.ram), "Memory", system.ram) +
               '</div>' +
             '</section>' +
-            '<section class="game-mode-idle-telemetry">' +
-              renderTelemetryReadiness(state.performance) +
-            '</section>' +
+            (frameRateCard ? '<section class="game-mode-idle-telemetry">' + frameRateCard + '</section>' : '') +
             (idleStatusPanels ? '<section class="game-mode-idle-notices">' + idleStatusPanels + '</section>' : '') +
             '<section class="game-mode-idle-launch">' +
               renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
@@ -1438,6 +1443,10 @@
     };
   }
 
+
+  if (typeof runtime.registerHelpers === "function") {
+    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard });
+  }
 
   runtime.registerRenderer("game-mode", mountGameModeWidget);
 }());
