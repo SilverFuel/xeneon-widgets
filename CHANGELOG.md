@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Auxora now greets a game when it starts: a welcome card with the game's name, a line for its Profile, and your history with it ("Session 4 this week, 3 h played, 3-day streak"). While you play, a chip in the header shows the game and a running session clock; tap it to jump to the game's panel. Play time is kept on this device as a game's name and minutes per day.
 - New **Text size** setting in Settings > Appearance: Normal, Large or Extra large. It scales the text in every panel, the side menu, the tabs and the header controls, for screens read from a distance such as the EDGE. The WoW Forever journal keeps its own sizes.
 - The Quick controls drawer keeps keyboard focus inside it while it is open. Focus that is taken elsewhere, or dropped, returns to the drawer.
 - Battlefield and Fable each have a built-in Profile that Auxora switches to when the game runs, with two new themes: Frontline (slate with amber) and Albion (woodland green with gold). They are matched by the game's name, so any Battlefield title and any store's copy are covered. Existing installs gain both Profiles on the next start.

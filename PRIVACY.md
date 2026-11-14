@@ -31,6 +31,8 @@ Media titles, artist/album details, artwork, source application IDs, and audio-s
 
 Game performance capture may create short-lived local PresentMon CSV files while a game session is active. They are deleted when no longer needed unless the user explicitly enables diagnostic retention; retained files are still age- and size-limited. Reset all app data deletes retained PresentMon files.
 
+Auxora keeps a play log on this device: for each game it has seen running, the game's name, a short key such as a store id, and the minutes played per day for the last 60 days. It is used for the welcome shown when a game starts and the session clock in the header. It is not sent anywhere, holds no file paths, and is removed when you reset local data.
+
 If the optional Auxora Companion add-on is installed in World of Warcraft Forever, Auxora reads the one file that add-on saves (character name, realm, level, experience, location, coin, quest log, professions, gear durability and bag space) to show it in the WoW Forever journal. Auxora does not write to the game's folders, keeps no copy of that file, and does not send it anywhere. The add-on itself has no network access.
 
 ## Local Files
