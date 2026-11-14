@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Media on the EDGE: when no equalizer is installed, its setup card is a short strip under the output card instead of a third of the panel. The playing track gets the width, and app volumes sit in two columns so four apps show instead of two. Outputs are a short list. With an equalizer installed, the panel is as it was.
 - Quick controls open ready to use: Auxora starts reading sound and playback the moment the button is pressed, not after the drawer has opened. The drawer gains **Previous** and **Next**, each offered only when the player allows it.
 - The Profile picker in the header opens as a panel of large tiles instead of a small system list, with Automatic first. It is the same control, so the keyboard works as before.
 - The header no longer shows a pill saying "Available" or "Ready". It appears only when something needs attention, such as Needs Setup or Unavailable.
