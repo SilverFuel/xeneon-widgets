@@ -353,8 +353,13 @@ function createAmbientHarness(reducedMotion) {
     setTransform() {},
     stroke() {}
   };
+  let canvasShown = true;
+  let canvasOpacity = 0.4;
+  let gameRunning = false;
+  let presentationChanged = null;
   const canvas = {
     dataset: {},
+    getClientRects() { return canvasShown ? [{}] : []; },
     getContext() { return drawingContext; },
     style: {}
   };
@@ -364,6 +369,8 @@ function createAmbientHarness(reducedMotion) {
     }
   };
   const documentObject = {
+    body: { hasAttribute(name) { return name === "data-game-running" && gameRunning; } },
+    documentElement: {},
     get hidden() { return hidden; },
     addEventListener(type, handler) { documentListeners.set(type, handler); },
     getElementById(id) {
@@ -377,6 +384,7 @@ function createAmbientHarness(reducedMotion) {
     cancelAnimationFrame: cancelTimer,
     clearTimeout: cancelTimer,
     devicePixelRatio: 1,
+    getComputedStyle() { return { opacity: String(canvasOpacity) }; },
     matchMedia() { return { matches: reducedMotion }; },
     requestAnimationFrame(callback) {
       return scheduleTimer(() => callback(clock), 1);
@@ -385,6 +393,9 @@ function createAmbientHarness(reducedMotion) {
   };
   const context = {
     ambientCanvasPalette: ["#ffffff"],
+    // The page's own clock, so the "rest after a minute" rule follows the test's time.
+    Date: { now: () => clock },
+    MutationObserver: function (callback) { presentationChanged = callback; this.observe = () => {}; },
     document: documentObject,
     getAnimationIntensityPercent() { return 100; },
     getPerformanceBudget() { return "balanced"; },
@@ -401,6 +412,10 @@ function createAmbientHarness(reducedMotion) {
     dispatchWindow(type) { windowListeners.get(type)?.(); },
     drawCount() { return draws; },
     init: context.initAmbientGraphicsUnderTest,
+    // What the page's observer would report: a class, theme or game-state change.
+    setCanvasShown(value) { canvasShown = value; presentationChanged?.(); },
+    setCanvasOpacity(value) { canvasOpacity = value; presentationChanged?.(); },
+    setGameRunning(value) { gameRunning = value; presentationChanged?.(); },
     setHidden(value) { hidden = value; }
   };
 }
@@ -431,6 +446,28 @@ ambient.dispatchWindow("pagehide");
 const pageHiddenDraws = ambient.drawCount();
 ambient.advance(120);
 assert.equal(ambient.drawCount(), pageHiddenDraws, "ambient canvas must stop after pagehide");
+
+// The background is drawn only when it can be seen, no game is running, and someone used the
+// dashboard within the last minute.
+function expectStopsAndResumes(label, stop, resume) {
+  const harness = createAmbientHarness(false);
+  harness.init();
+  harness.advance(300);
+  assert(harness.drawCount() >= 2, `${label}: ambient canvas never started`);
+  stop(harness);
+  harness.advance(80);
+  const stopped = harness.drawCount();
+  harness.advance(2000);
+  assert.equal(harness.drawCount(), stopped, `ambient canvas must stop drawing ${label}`);
+  resume(harness);
+  harness.advance(300);
+  assert(harness.drawCount() > stopped, `ambient canvas must resume after ${label}`);
+}
+expectStopsAndResumes("while a game is running", h => h.setGameRunning(true), h => h.setGameRunning(false));
+expectStopsAndResumes("while its canvas is not displayed", h => h.setCanvasShown(false), h => h.setCanvasShown(true));
+expectStopsAndResumes("while its canvas is fully transparent", h => h.setCanvasOpacity(0), h => h.setCanvasOpacity(0.4));
+expectStopsAndResumes("a minute after the last touch", h => h.advance(60000), h => h.dispatchDocument("pointerdown"));
+expectStopsAndResumes("a minute after the last key", h => h.advance(60000), h => h.dispatchDocument("keydown"));
 
 const reducedMotionAmbient = createAmbientHarness(true);
 reducedMotionAmbient.init();

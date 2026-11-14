@@ -447,15 +447,47 @@
       canvas.dataset.ambientMotion = "paused";
     }
 
+    // The background is drawn only when it can be seen and no game is running.
+    // A game gets the machine to itself; a hidden canvas (Night, the game and battery budgets,
+    // motion off, clean readability) is not worth fifteen frames a second.
+    // Whether the canvas is showing is read from layout and style, which is not free, so it is worked
+    // out when something changes (see the observer below) and remembered, not asked every frame.
+    var drawable = false;
+
+    function refreshDrawable() {
+      drawable = !document.body.hasAttribute("data-game-running")
+        && canvas.getClientRects().length > 0
+        && parseFloat(window.getComputedStyle(canvas).opacity) > 0.01;
+    }
+
+    // The motion is for someone using the dashboard. A minute after the last touch or key it rests on
+    // its last frame, so a dashboard that is only being glanced at costs nothing to keep on screen.
+    var restAfterMs = 60000;
+    var lastTouchAt = Date.now();
+
+    function canDraw() {
+      return !document.hidden && !reducedMotion && drawable && Date.now() - lastTouchAt < restAfterMs;
+    }
+
+    function noteTouch() {
+      lastTouchAt = Date.now();
+      scheduleFrame(true);
+    }
+
     function scheduleFrame(immediate) {
-      if (document.hidden || reducedMotion || frameTimerId || rafId) {
+      if (frameTimerId || rafId) {
+        return;
+      }
+      if (!canDraw()) {
+        pauseAnimation();
         return;
       }
 
       canvas.dataset.ambientMotion = "running";
       frameTimerId = window.setTimeout(function () {
         frameTimerId = 0;
-        if (document.hidden || reducedMotion) {
+        if (!canDraw()) {
+          pauseAnimation();
           return;
         }
         rafId = window.requestAnimationFrame(function (timestamp) {
@@ -466,7 +498,7 @@
     }
 
     function draw(timestamp) {
-      if (document.hidden || reducedMotion) {
+      if (!canDraw()) {
         pauseAnimation();
         return;
       }
@@ -539,6 +571,7 @@
     }
 
     resizeCanvas();
+    refreshDrawable();
     if (reducedMotion) {
       pauseAnimation();
     } else {
@@ -563,6 +596,15 @@
     window.addEventListener("pagehide", function () {
       pauseAnimation();
     });
+    document.addEventListener("pointerdown", noteTouch, { capture: true, passive: true });
+    document.addEventListener("keydown", noteTouch, true);
+    // While paused nothing runs. A change of theme, Profile, setting or game state is what can make
+    // the canvas drawable again, and each of those changes an attribute on the page or its root.
+    if (typeof MutationObserver === "function") {
+      var presentationObserver = new MutationObserver(function () { refreshDrawable(); scheduleFrame(true); });
+      presentationObserver.observe(document.body, { attributes: true, attributeFilter: ["class", "data-scene", "data-game-running"] });
+      presentationObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme", "data-theme-variant"] });
+    }
     window.addEventListener("pageshow", function () {
       if (!document.hidden && !reducedMotion) {
         scheduleFrame(true);
@@ -1664,6 +1706,11 @@
   // The play log (js/play-log.js): which game is running and for how long, kept on this device.
   // It feeds the session chip in the header and the welcome shown when a game starts.
   var playLog = window.AuxoraPlayLog ? window.AuxoraPlayLog.load(window.localStorage) : null;
+  var playLogSavedAt = 0;
+  // Whatever was counted since the last write is kept when the page goes away.
+  window.addEventListener("pagehide", function () {
+    if (playLog && playLog.current && window.AuxoraPlayLog) { window.AuxoraPlayLog.save(window.localStorage, playLog); }
+  });
   var playChipTimer = 0;
   var arrivalTimer = 0;
   var arrivalLines = {
@@ -1678,17 +1725,24 @@
     if (!chip) {
       return;
     }
+    // The page says when a game is running, so background drawing can stop for it.
+    document.body.toggleAttribute("data-game-running", !!stats);
     chip.hidden = !stats;
     if (!stats) {
       window.clearInterval(playChipTimer);
       playChipTimer = 0;
       return;
     }
-    var clock = window.AuxoraPlayLog.formatClock(stats.sessionMs);
-    document.getElementById("dashboard-play-chip-name").textContent = stats.name;
-    document.getElementById("dashboard-play-chip-clock").textContent = clock;
-    chip.setAttribute("aria-label", stats.name + ", this session " + window.AuxoraPlayLog.formatDuration(stats.sessionMs)
-      + ", today " + window.AuxoraPlayLog.formatDuration(stats.todayMs) + ". Open its panel.");
+    if (document.hidden) {
+      return;
+    }
+    var nameNode = document.getElementById("dashboard-play-chip-name");
+    var label = stats.name + ", this session " + window.AuxoraPlayLog.formatDuration(stats.sessionMs)
+      + ", today " + window.AuxoraPlayLog.formatDuration(stats.todayMs) + ". Open its panel.";
+    if (nameNode.textContent !== stats.name) { nameNode.textContent = stats.name; }
+    document.getElementById("dashboard-play-chip-clock").textContent = window.AuxoraPlayLog.formatClock(stats.sessionMs);
+    // The label changes once a minute; writing it every second would be work for nothing.
+    if (chip.getAttribute("aria-label") !== label) { chip.setAttribute("aria-label", label); }
     if (!playChipTimer) {
       playChipTimer = window.setInterval(renderPlayChip, 1000);
     }
@@ -1726,7 +1780,11 @@
     var key = game ? String(game.gameKey || game.id || game.name || "") : "";
     if (key) {
       var began = api.seen(playLog, { key: key, name: game.name || "Game" }, now);
-      api.save(window.localStorage, playLog);
+      // Written when a session starts and then at most once a minute, not on every reading.
+      if (began || now - playLogSavedAt >= 60000) {
+        api.save(window.localStorage, playLog);
+        playLogSavedAt = now;
+      }
       if (began) {
         showArrival(game, api.summary(playLog, key, now));
       }
@@ -1735,6 +1793,7 @@
       // Only a clear "no game" ends the session; a failed read does not.
       api.end(playLog, now);
       api.save(window.localStorage, playLog);
+      playLogSavedAt = now;
     }
     renderPlayChip();
   }
