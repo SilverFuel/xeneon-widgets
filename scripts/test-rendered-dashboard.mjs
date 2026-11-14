@@ -3665,9 +3665,28 @@ async function validateGameProfileSwitching(cdp) {
       const toast = document.getElementById("dashboard-touch-feedback")?.textContent || "";
       check(fixture.evaluations.some(request => request.activeGameKey === "wow-forever"), "the game key was not sent for Profile evaluation");
 
+      // The game is greeted by name with its Profile's line, and the header shows a running session.
+      const arrival = document.getElementById("dashboard-arrival");
+      const chip = document.getElementById("dashboard-play-chip");
+      const chipName = document.getElementById("dashboard-play-chip-name").textContent;
+      check(chip && !chip.hidden && chipName.length > 0 && /^\\d+:\\d\\d:\\d\\d$/.test(document.getElementById("dashboard-play-chip-clock").textContent),
+        "no session chip while the game runs: " + (chip ? chip.textContent : "missing"));
+      check(document.getElementById("dashboard-arrival-name").textContent === chipName
+        && document.getElementById("dashboard-arrival-line").textContent === "The road is waiting."
+        && document.getElementById("dashboard-arrival-history").textContent.length > 0,
+        "the welcome did not name the game with its Profile's line: " + arrival.textContent);
+      check(getComputedStyle(arrival).pointerEvents === "none", "the welcome can take a tap");
+      const playLogText = localStorage.getItem("auxora-play-log-v1") || "";
+      check(playLogText.includes("wow-forever") && !/[A-Za-z]:\\\\|\\.exe/i.test(playLogText), "the play log is missing the game or holds a path: " + playLogText.slice(0, 200));
+
       // 2. The user moves on: later polls must not pull them back.
       window.__auxoraTestOpenWidget("audio");
       await until(current => current.panel === "audio", "the user could not leave the game panel");
+      // The chip is the way back to the game's panel.
+      chip.click();
+      await until(current => current.panel === "wow-forever", "the session chip did not open the game's panel");
+      window.__auxoraTestOpenWidget("audio");
+      await until(current => current.panel === "audio", "the user could not leave the game panel a second time");
       const readsAfterLeaving = fixture.reads;
       await until(() => fixture.reads >= readsAfterLeaving + 2, "the game was not polled again after the user left", 60000);
       const afterPolls = state();
@@ -3678,6 +3697,7 @@ async function validateGameProfileSwitching(cdp) {
       fixture.activity = ended;
       const exited = await until(current => current.scene === defaultId && current.theme === before.theme, "the default Profile did not return when the game exited");
       check(exited.panel === "audio", "exiting the game replaced the panel the user chose: " + JSON.stringify(exited));
+      check(chip.hidden, "the session chip stayed after the game exited");
 
       // 4. A new session where the user stays on the game panel: the previous panel returns on exit.
       fixture.activity = forever();
