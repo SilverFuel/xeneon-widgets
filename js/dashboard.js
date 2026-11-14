@@ -474,6 +474,12 @@
       scheduleFrame(true);
     }
 
+    // The page coming back, or motion being allowed again, counts as use: check the canvas afresh.
+    function wake() {
+      refreshDrawable();
+      noteTouch();
+    }
+
     function scheduleFrame(immediate) {
       if (frameTimerId || rafId) {
         return;
@@ -565,8 +571,9 @@
         return;
       }
       if (!document.hidden) {
+        // Turning motion back on is someone asking to see it: look again and start the minute over.
         resizeCanvas();
-        scheduleFrame(true);
+        wake();
       }
     }
 
@@ -591,7 +598,7 @@
         return;
       }
       resizeCanvas();
-      scheduleFrame(true);
+      wake();
     });
     window.addEventListener("pagehide", function () {
       pauseAnimation();
@@ -607,7 +614,7 @@
     }
     window.addEventListener("pageshow", function () {
       if (!document.hidden && !reducedMotion) {
-        scheduleFrame(true);
+        wake();
       }
     });
   }
