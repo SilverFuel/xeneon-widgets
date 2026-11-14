@@ -415,6 +415,7 @@ body:is(.dashboard-native-page--motion-off, .dashboard-native-page--motion-low) 
   .auxora-mode-select option::checkmark { display: none; }
 }
 
+/* In Windows high contrast the system colours the tiles; the chosen one is marked with an outline. */
 @media (forced-colors: active) {
-  .auxora-mode-select option:checked { background: Highlight; color: HighlightText; border-color: Highlight; forced-color-adjust: none; }
+  .auxora-mode-select option:checked { outline: 3px solid Highlight; outline-offset: -3px; box-shadow: none; }
 }
