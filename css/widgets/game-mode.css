@@ -1817,3 +1817,91 @@
 .dashboard-native-page--motion-off .game-focus-shell.is-intro .game-focus-wake::before {
   animation: none;
 }
+
+/* In-game screen: each reading appears once. FPS is the large tile; the mic, the sound
+   and each app's volume are the right column, which is the only place they are shown. */
+@media (min-width: 1281px) {
+  .game-focus-metrics {
+    grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .game-focus-metric[data-game-focus-metric="main-fps"] {
+    grid-row: 1 / span 2;
+  }
+
+  .game-focus-metric[data-game-focus-metric="main-fps"] strong {
+    font-size: clamp(5rem, 8.5vw, 9.5rem);
+    line-height: 0.9;
+  }
+
+  .game-focus-metric[data-game-focus-metric="main-fps"] small {
+    font-size: 1.15rem;
+    line-height: 1.3;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 1280px) {
+  .game-focus-metric[data-game-focus-metric="main-fps"] {
+    grid-column: 1 / -1;
+  }
+}
+
+.game-focus-card--utility {
+  grid-template-rows: max-content max-content minmax(0, 1fr) max-content;
+}
+
+.game-focus-mic-panel {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.game-focus-mic-panel > div,
+.game-focus-audio {
+  min-width: 0;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--game-accent) 18%, var(--theme-border));
+  border-radius: 8px;
+  background: rgba(var(--theme-surface-secondary-rgb), 0.9);
+}
+
+.game-focus-audio strong,
+.game-focus-mic-panel strong {
+  margin-top: 4px;
+  font-size: 2rem;
+}
+
+.game-focus-audio small,
+.game-focus-mic-panel small {
+  margin-top: 4px;
+}
+
+.game-focus-session span {
+  color: var(--theme-accent-text);
+}
+
+.game-focus-mic-toggle,
+.game-focus-mute {
+  align-self: stretch;
+  width: 132px;
+  min-width: 132px;
+  min-height: 64px;
+  color: var(--theme-text);
+  font-size: 1.08rem;
+  font-weight: 850;
+}
+
+.game-focus-audio-list {
+  grid-auto-rows: max-content;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.game-focus-audio-row strong {
+  color: var(--theme-text);
+}
