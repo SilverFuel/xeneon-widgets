@@ -87,6 +87,108 @@ public sealed class MediaService
         return await GetSnapshotAsync(cancellationToken);
     }
 
+    // Which of Windows' media sessions belongs to the app a panel asked for by name.
+    // Returns -1 when the name is not one this host knows or no session is from that app.
+    public static int IndexOfApp(IReadOnlyList<string> appIds, string app)
+    {
+        var marker = app switch
+        {
+            "apple-music" => "AppleMusic",
+            _ => ""
+        };
+        if (marker.Length == 0)
+        {
+            return -1;
+        }
+
+        for (var index = 0; index < appIds.Count; index += 1)
+        {
+            if ((appIds[index] ?? "").Contains(marker, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    // One named app's playback, whichever app Windows currently treats as the main media session.
+    public async Task<MediaSnapshot> GetAppSnapshotAsync(string app, CancellationToken cancellationToken)
+    {
+        return await WithAppSessionAsync(app, null, cancellationToken);
+    }
+
+    public async Task<MediaSnapshot> ExecuteForAppAsync(string app, string action, CancellationToken cancellationToken)
+    {
+        return await WithAppSessionAsync(app, action, cancellationToken);
+    }
+
+    private async Task<MediaSnapshot> WithAppSessionAsync(string app, string? action, CancellationToken cancellationToken)
+    {
+        if (action is not null && action != "play-pause")
+        {
+            throw new InvalidOperationException("Unknown media action.");
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(4));
+        try
+        {
+            var manager = await GlobalSystemMediaTransportControlsSessionManager
+                .RequestAsync()
+                .AsTask(timeout.Token);
+            var sessions = manager.GetSessions();
+            var index = IndexOfApp(sessions.Select(candidate => candidate.SourceAppUserModelId ?? "").ToList(), app);
+            if (index < 0)
+            {
+                var closed = MediaSnapshot.CreateIdle();
+                closed.Message = "That app has no Windows media session. It may not be open.";
+                return closed;
+            }
+
+            var session = sessions[index];
+            if (action == "play-pause")
+            {
+                await session.TryTogglePlayPauseAsync().AsTask(timeout.Token);
+            }
+
+            var playback = session.GetPlaybackInfo();
+            var properties = await session
+                .TryGetMediaPropertiesAsync()
+                .AsTask(timeout.Token);
+            var playbackStatus = playback.PlaybackStatus.ToString().ToLowerInvariant();
+            var exposeMetadata = _configStore.Snapshot().Dashboard.MediaMetadataVisible;
+            return new MediaSnapshot
+            {
+                Supported = true,
+                Configured = true,
+                Status = "live",
+                SampledAt = DateTimeOffset.UtcNow,
+                Stale = false,
+                Message = "",
+                Source = "windows media session",
+                AppId = exposeMetadata ? session.SourceAppUserModelId ?? "" : "",
+                Title = exposeMetadata ? properties.Title ?? "" : "",
+                Artist = exposeMetadata ? properties.Artist ?? "" : "",
+                AlbumTitle = exposeMetadata ? properties.AlbumTitle ?? "" : "",
+                AlbumArtist = exposeMetadata ? properties.AlbumArtist ?? "" : "",
+                PlaybackStatus = playbackStatus,
+                CanPlay = playback.Controls?.IsPlayEnabled ?? false,
+                CanPause = playback.Controls?.IsPauseEnabled ?? false,
+                CanGoNext = playback.Controls?.IsNextEnabled ?? false,
+                CanGoPrevious = playback.Controls?.IsPreviousEnabled ?? false
+            };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return MediaSnapshot.CreateError("Windows did not answer about its media sessions in time.");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return MediaSnapshot.CreateError("Windows media sessions are not available: " + exception.GetType().Name);
+        }
+    }
+
     private async Task RefreshWithTimeoutAsync(CancellationToken cancellationToken)
     {
         Task refreshTask;

@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -616,4 +616,16 @@ test("the mic button shows muted or live, and is left out when there is no micro
   assert.equal(micStatus({ defaultInputDeviceId: "mic", inputMuted: null }), null, "the host did not say; the button must not guess");
   assert.equal(micStatus({ defaultInputDeviceId: "mic" }), null);
   for (const value of [null, undefined, "muted", 5]) assert.equal(micStatus(value), null);
+});
+
+test("the Apple Music button offers Pause while it plays and Play while it does not, and is left out when the app is not open", () => {
+  assert.deepEqual(musicStatus({ status: "live", playbackStatus: "playing", title: "Invincible", artist: "Russell Brower" }),
+    { playing: true, label: "Pause", track: "Invincible - Russell Brower", hint: "Pause Apple Music: Invincible" });
+  assert.deepEqual(musicStatus({ status: "live", playbackStatus: "paused", title: "Invincible", artist: "" }),
+    { playing: false, label: "Play", track: "Invincible", hint: "Play Apple Music: Invincible" });
+  assert.deepEqual(musicStatus({ status: "live", playbackStatus: "stopped" }), { playing: false, label: "Play", track: "Apple Music", hint: "Play Apple Music" },
+    "with track details switched off in Privacy the button still works");
+  assert.equal(musicStatus({ status: "idle", playbackStatus: "idle" }), null, "Apple Music is not open");
+  assert.equal(musicStatus({ status: "error", message: "Windows did not answer" }), null);
+  for (const value of [null, undefined, "playing", 3]) assert.equal(musicStatus(value), null);
 });
