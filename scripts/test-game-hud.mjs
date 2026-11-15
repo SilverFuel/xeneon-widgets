@@ -71,3 +71,13 @@ test("app volumes: one row each with its own mute, up to six", () => {
   assert.equal(count(scene(live, 9), 'data-action="game-session-mute"'), 6);
   assert.match(scene(live, 0), /No active app audio/);
 });
+
+test("the mic button shows the microphone's state; its label for screen readers is the action", () => {
+  const shown = scene();
+  assert.match(shown, /data-action="game-mic-mute" data-mic="live" aria-pressed="false" aria-label="Mute mic">Mic live</);
+  const mutedAudio = { ...audio(1), inputMuted: true };
+  const muted = helpers.renderGameFocusScene(game, theme, system, live, mutedAudio, { ping: 14, type: "ethernet" }, {}, false, false);
+  assert.match(muted, /data-mic="muted" aria-pressed="true" aria-label="Unmute mic">Mic muted</);
+  const none = helpers.renderGameFocusScene(game, theme, system, live, { masterVolume: 50, devices: [], inputDevices: [], sessions: [] }, {}, {}, false, false);
+  assert.match(none, /data-mic="none" aria-pressed="false" aria-label="No mic" disabled>No mic</);
+});
