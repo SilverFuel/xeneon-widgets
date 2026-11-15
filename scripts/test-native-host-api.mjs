@@ -1274,6 +1274,15 @@ try {
   assert(["idle", "live", "error"].includes(appleMusic.status) && typeof appleMusic.playbackStatus === "string" && typeof appleMusic.message === "string",
     `/api/media/apple-music returned an unexpected shape: ${JSON.stringify(appleMusic)}`);
 
+  // The game and music balance: the route answers whether or not there is anything to balance.
+  const blendResponse = await fetchWithTimeout("/api/audio/blend");
+  assert(blendResponse.status === 200, `/api/audio/blend must answer; received HTTP ${blendResponse.status}`);
+  const blendReply = await blendResponse.json();
+  assert(typeof blendReply.available === "boolean" && typeof blendReply.gameFound === "boolean" && typeof blendReply.musicFound === "boolean"
+    && Number.isInteger(blendReply.position) && blendReply.position >= 0 && blendReply.position <= 100,
+    `/api/audio/blend returned an unexpected shape: ${JSON.stringify(blendReply)}`);
+  assert(!/[A-Za-z]:\\\\|\.exe/i.test(JSON.stringify(blendReply)), "/api/audio/blend must not name a process or a path");
+
   const unconfiguredSnapshotResponse = await fetchWithTimeout("/api/frigate/snapshot?id=current-event");
   assert(unconfiguredSnapshotResponse.status === 404, `unconfigured Camera Detection snapshot must return HTTP 404; received ${unconfiguredSnapshotResponse.status}`);
   assert(/not configured/i.test((await unconfiguredSnapshotResponse.json()).error || ""), "unconfigured Camera Detection snapshot must explain that Frigate is not configured");

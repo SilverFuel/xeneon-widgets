@@ -3824,6 +3824,8 @@ function installWowQuestLogFixture() {
   }), { status: 200, headers: { "Content-Type": "application/json" } });
   // Apple Music, open and playing.
   let musicPlaying = true;
+  let blendPosition = 50;
+  window.__wowBlendPosts = [];
   const musicReply = () => new Response(JSON.stringify({
     supported: true, configured: true, status: "live", playbackStatus: musicPlaying ? "playing" : "paused",
     title: "Fixture song", artist: "Fixture artist", canPlay: true, canPause: true, message: ""
@@ -3832,6 +3834,18 @@ function installWowQuestLogFixture() {
     const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
     if (url.origin === location.origin && url.pathname === "/api/audio") {
       return Promise.resolve(audioReply());
+    }
+    if (url.origin === location.origin && url.pathname === "/api/audio/blend") {
+      // The host's sums: both full in the middle, the other one fading toward each end.
+      if (options && options.method === "POST") {
+        try { blendPosition = Number(JSON.parse(options.body).position); } catch { blendPosition = 50; }
+        window.__wowBlendPosts.push(blendPosition);
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        available: true, gameFound: true, musicFound: true, position: blendPosition,
+        gameVolume: blendPosition <= 50 ? 100 : Math.round((100 - blendPosition) * 2),
+        musicVolume: blendPosition >= 50 ? 100 : Math.round(blendPosition * 2), message: ""
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
     }
     if (url.origin === location.origin && url.pathname === "/api/media/apple-music") {
       return Promise.resolve(musicReply());
@@ -3989,6 +4003,33 @@ async function checkWowQuestLogInPage() {
   await wait(1800);
   check(musicLabel() === "Play" && musicButton.dataset.state === "paused", size + ": Apple Music did not stay paused after the host was asked again: " + musicButton.outerHTML);
   check(pageFits() || !oneScreen, size + ": the panel runs off the screen with the mic and music buttons showing");
+  // The balance slider: game at one end, Apple Music at the other, both full in the middle.
+  const blendBox = panel().querySelector(".wow-blend");
+  const blendRange = blendBox.querySelector("[data-wow-blend]");
+  const blendNumbers = () => blendBox.querySelector("[data-wow-blend-game]").textContent + "/" + blendBox.querySelector("[data-wow-blend-music]").textContent;
+  const blendDeadline = Date.now() + 8000;
+  while (blendBox.hidden && Date.now() < blendDeadline) await wait(100);
+  check(shown(blendBox) && blendRange.value === "50" && blendNumbers() === "100/100"
+    && blendRange.getBoundingClientRect().height >= 54 && blendRange.getBoundingClientRect().width >= 140,
+    size + ": the game and music balance is not showing both at full: " + blendBox.outerHTML);
+  blendRange.value = "25";
+  blendRange.dispatchEvent(new Event("input", { bubbles: true }));
+  check(blendNumbers() === "100/50" && blendRange.getAttribute("aria-valuetext") === "Game 100 percent, music 50 percent",
+    size + ": sliding toward Game did not fade the music at once: " + blendBox.outerHTML);
+  blendRange.dispatchEvent(new Event("change", { bubbles: true }));
+  await wait(400);
+  check(window.__wowBlendPosts.at(-1) === 25, size + ": the host was not told the new balance: " + JSON.stringify(window.__wowBlendPosts));
+  blendRange.value = "80";
+  blendRange.dispatchEvent(new Event("input", { bubbles: true }));
+  blendRange.dispatchEvent(new Event("change", { bubbles: true }));
+  await wait(400);
+  check(blendNumbers() === "40/100" && window.__wowBlendPosts.at(-1) === 80 && blendRange.value === "80",
+    size + ": sliding toward Music did not fade the game: " + blendBox.outerHTML + " " + JSON.stringify(window.__wowBlendPosts));
+  const footerParts = [...panel().querySelectorAll(".wow-footer > *")].filter(node => shown(node) && getComputedStyle(node).position !== "absolute").map(node => node.getBoundingClientRect());
+  check(footerParts.every((a, i) => footerParts.every((b, k) => k <= i
+    || Math.min(a.right, b.right) - Math.max(a.left, b.left) <= 1 || Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) <= 1)),
+    size + ": the balance slider overlaps another part of the bottom row");
+  check(pageFits() || !oneScreen, size + ": the panel runs off the screen with the balance slider showing");
   if (largeText) {
     check(Number.parseFloat(getComputedStyle(list.querySelector("strong")).fontSize) >= 26, size + ": quest titles are not large");
     check(shown(panel().querySelector(".wow-character")) && shown(panel().querySelector(".wow-quests")) && !shown(panel().querySelector(".wow-camp"))

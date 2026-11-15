@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus, blendVolumes, blendStatus } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -628,4 +628,24 @@ test("the Apple Music button offers Pause while it plays and Play while it does 
   assert.equal(musicStatus({ status: "idle", playbackStatus: "idle" }), null, "Apple Music is not open");
   assert.equal(musicStatus({ status: "error", message: "Windows did not answer" }), null);
   for (const value of [null, undefined, "playing", 3]) assert.equal(musicStatus(value), null);
+});
+
+test("the balance keeps both at full in the middle and fades the other toward each end", () => {
+  assert.deepEqual(blendVolumes(50), { game: 100, music: 100 });
+  assert.deepEqual(blendVolumes(0), { game: 100, music: 0 });
+  assert.deepEqual(blendVolumes(100), { game: 0, music: 100 });
+  assert.deepEqual(blendVolumes(20), { game: 100, music: 40 });
+  assert.deepEqual(blendVolumes(75), { game: 50, music: 100 });
+  assert.deepEqual(blendVolumes("35"), { game: 100, music: 70 }, "a slider hands over its value as text");
+  assert.deepEqual(blendVolumes(-20), { game: 100, music: 0 });
+  assert.deepEqual(blendVolumes(900), { game: 0, music: 100 });
+  for (const value of [NaN, undefined, "loud"]) assert.deepEqual(blendVolumes(value), { game: 100, music: 100 });
+});
+
+test("the balance slider is shown only when the host has both a game and Apple Music to balance", () => {
+  assert.deepEqual(blendStatus({ available: true, position: 25, gameVolume: 80, musicVolume: 40 }), { position: 25, game: 100, music: 50 });
+  assert.deepEqual(blendStatus({ available: true, position: 50 }), { position: 50, game: 100, music: 100 });
+  assert.deepEqual(blendStatus({ available: true, position: "odd" }), { position: 50, game: 100, music: 100 });
+  assert.equal(blendStatus({ available: false, gameFound: true, musicFound: false, position: 50 }), null);
+  for (const value of [null, undefined, "50", 50, {}]) assert.equal(blendStatus(value), null);
 });

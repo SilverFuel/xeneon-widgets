@@ -9,6 +9,8 @@ public sealed class AudioService
     private readonly ConfigStore _configStore;
     private readonly object _sync = new();
     private AudioSnapshotPayload _snapshot = AudioSnapshotPayload.CreateStarting();
+    // The last raw reading, kept so the game and music balance can be read without asking Windows again.
+    private AudioSnapshotRecord? _raw;
     private DateTimeOffset _lastRefresh = DateTimeOffset.MinValue;
 
     public AudioService(HostLogger logger, ConfigStore configStore)
@@ -130,6 +132,120 @@ public sealed class AudioService
         return GetSnapshotAsync(cancellationToken);
     }
 
+    // The running game's volume and Apple Music's volume as one balance. See AudioBlend.
+    public AudioBlendPayload GetBlend(int? gameProcessId, string? gameProcessName)
+    {
+        return ApplyBlend(gameProcessId, gameProcessName, null);
+    }
+
+    public AudioBlendPayload SetBlend(int? gameProcessId, string? gameProcessName, double position)
+    {
+        return ApplyBlend(gameProcessId, gameProcessName, position);
+    }
+
+    private AudioBlendPayload ApplyBlend(int? gameProcessId, string? gameProcessName, double? position)
+    {
+        try
+        {
+            // Setting needs a fresh reading; a plain look can use one up to two seconds old.
+            RefreshSnapshot(force: position.HasValue);
+            AudioSnapshotRecord? raw;
+            lock (_sync)
+            {
+                raw = _raw;
+            }
+
+            var game = new List<AudioSessionRecord>();
+            var music = new List<AudioSessionRecord>();
+            foreach (var session in raw?.Sessions ?? Array.Empty<AudioSessionRecord>())
+            {
+                if (session.IsSystemSounds || session.ProcessId == 0 || string.IsNullOrEmpty(session.Identifier))
+                {
+                    continue;
+                }
+
+                var role = AudioBlend.RoleOf(
+                    ReadProcessName(session.ProcessId),
+                    session.DisplayName,
+                    unchecked((int)session.ProcessId),
+                    gameProcessId,
+                    gameProcessName);
+                if (role == AudioBlend.Game)
+                {
+                    game.Add(session);
+                }
+                else if (role == AudioBlend.Music)
+                {
+                    music.Add(session);
+                }
+            }
+
+            if (raw is null || game.Count == 0 || music.Count == 0)
+            {
+                return new AudioBlendPayload
+                {
+                    Available = false,
+                    GameFound = game.Count > 0,
+                    MusicFound = music.Count > 0,
+                    Message = "The balance needs a running game and Apple Music both making sound."
+                };
+            }
+
+            var gameVolume = game.Max(session => session.Volume);
+            var musicVolume = music.Max(session => session.Volume);
+            if (position is double wanted)
+            {
+                var volumes = AudioBlend.VolumesAt(wanted);
+                foreach (var session in game)
+                {
+                    AudioBridge.SetSessionVolume(raw.DefaultDeviceId, session.Identifier, volumes.Game / 100f);
+                }
+
+                foreach (var session in music)
+                {
+                    AudioBridge.SetSessionVolume(raw.DefaultDeviceId, session.Identifier, volumes.Music / 100f);
+                }
+
+                gameVolume = volumes.Game;
+                musicVolume = volumes.Music;
+                RefreshSnapshot(force: true);
+            }
+
+            return new AudioBlendPayload
+            {
+                Available = true,
+                GameFound = true,
+                MusicFound = true,
+                GameVolume = Clamp(gameVolume, 0, 100),
+                MusicVolume = Clamp(musicVolume, 0, 100),
+                Position = AudioBlend.PositionOf(gameVolume, musicVolume)
+            };
+        }
+        catch (Exception error)
+        {
+            _logger.Error("Failed to read or set the game and music balance.", error);
+            return new AudioBlendPayload
+            {
+                Available = false,
+                Message = "The game and music volumes could not be read."
+            };
+        }
+    }
+
+    // A process's name without opening it, so protected games answer too.
+    private static string ReadProcessName(uint processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(unchecked((int)processId));
+            return process.ProcessName ?? "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
     private AudioSnapshotPayload GetSnapshotSync(bool force)
     {
         if (force || DateTimeOffset.UtcNow - _lastRefresh > TimeSpan.FromSeconds(2))
@@ -229,6 +345,7 @@ public sealed class AudioService
             lock (_sync)
             {
                 _snapshot = snapshot;
+                _raw = raw;
                 _lastRefresh = DateTimeOffset.UtcNow;
             }
         }
