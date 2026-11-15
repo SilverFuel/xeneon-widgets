@@ -3865,6 +3865,10 @@ async function checkWowQuestLogInPage() {
   check(label(views()[1]) === "Ready to turn in 2" && label(views()[views().length - 1]) === "All 28", size + ": views are wrong: " + views().map(label).join(", "));
   check(list.children.length === 13 && !overlappingRows(), size + ": the zone view shows " + list.children.length + " quests, or rows overlap");
   check(panel().querySelector(".wow-quest-form").hidden, size + ": the game's read-only log still shows the add form");
+  // Each objective is its own line with its count, and the quest shows how far along it is.
+  const firstQuest = list.children[0];
+  check(firstQuest.querySelectorAll(".wow-objective").length === 2 && firstQuest.querySelector(".wow-objective b")?.textContent === "0/10"
+    && firstQuest.querySelector(".wow-quest-progress")?.getBoundingClientRect().width > 1, size + ": objectives are not listed one by one with their counts: " + firstQuest.textContent);
   // The character card: professions, gear and bags from the game, and no editor for the hand-kept character.
   const rows = Object.fromEntries(Array.from(panel().querySelectorAll(".wow-profile-summary > div")).map(row => [label(row.querySelector("dt")), row]));
   const value = name => rows[name] ? label(rows[name].querySelector("dd")) : "(missing)";
