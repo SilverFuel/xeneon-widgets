@@ -3816,8 +3816,21 @@ function installWowQuestLogFixture() {
       });
     }
   });
+  // A microphone the panel can mute and unmute.
+  let micMuted = false;
+  const audioReply = () => new Response(JSON.stringify({
+    supported: true, status: "live", defaultInputDeviceId: "fixture-mic", inputMuted: micMuted,
+    inputDevices: [{ id: "fixture-mic", name: "Fixture microphone", isDefault: true }], devices: [], sessions: []
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
   window.fetch = function (input, options) {
     const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
+    if (url.origin === location.origin && url.pathname === "/api/audio") {
+      return Promise.resolve(audioReply());
+    }
+    if (url.origin === location.origin && url.pathname === "/api/audio/input-mute") {
+      try { micMuted = JSON.parse(options && options.body).muted === true; } catch { micMuted = !micMuted; }
+      return Promise.resolve(audioReply());
+    }
     if (url.origin === location.origin && url.pathname === "/api/wow/companion") {
       return Promise.resolve(new Response(JSON.stringify({
         gameFound: true, installed: true, available: true, addonVersion: "0.1.1", message: "Type /auxora in game to update.",
@@ -3911,6 +3924,26 @@ async function checkWowQuestLogInPage() {
   // Large text does not fit four cards, so the panel is two pages there, and only there.
   const pageSwitch = panel().querySelector(".wow-pages");
   check(shown(pageSwitch) === largeText, size + ": the page switch is " + (shown(pageSwitch) ? "shown" : "missing"));
+  // The mic button: live to start with, muted after a tap, live again after the next.
+  const micButton = panel().querySelector(".wow-mic");
+  const micBox = () => micButton.getBoundingClientRect();
+  const micDeadline = Date.now() + 8000;
+  while (micButton.hidden && Date.now() < micDeadline) await wait(100);
+  check(shown(micButton) && micButton.dataset.state === "live" && micButton.textContent === "Mic live" && micBox().height >= 54 && micBox().width >= 200,
+    size + ": the mic button does not show a live microphone: " + micButton.outerHTML);
+  if (largeText) {
+    check(micBox().height >= 300 && [...panel().querySelectorAll(".wow-card")].every(card => {
+      const box = card.getBoundingClientRect();
+      return box.width < 1 || box.right <= micBox().left + 1;
+    }), size + ": the mic tile is not a tall tile clear of the cards: " + Math.round(micBox().width) + "x" + Math.round(micBox().height));
+  }
+  micButton.click();
+  await wait(400);
+  check(micButton.dataset.state === "muted" && micButton.getAttribute("aria-pressed") === "true" && micButton.textContent === "Mic muted",
+    size + ": a tap did not mute the microphone: " + micButton.outerHTML);
+  micButton.click();
+  await wait(400);
+  check(micButton.dataset.state === "live" && micButton.getAttribute("aria-pressed") === "false", size + ": a second tap did not unmute the microphone: " + micButton.outerHTML);
   if (largeText) {
     check(Number.parseFloat(getComputedStyle(list.querySelector("strong")).fontSize) >= 26, size + ": quest titles are not large");
     check(shown(panel().querySelector(".wow-character")) && shown(panel().querySelector(".wow-quests")) && !shown(panel().querySelector(".wow-camp"))

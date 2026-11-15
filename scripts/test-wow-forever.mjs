@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -607,4 +607,13 @@ test("time played reads as today and in total, and is left out until there is a 
   assert.equal(playedSummary({ todayMs: 30000, totalMs: 30000 }, format), "");
   assert.equal(playedSummary(null, format), "");
   assert.equal(playedSummary({ todayMs: 60000, totalMs: 60000 }, null), "");
+});
+
+test("the mic button shows muted or live, and is left out when there is no microphone or no answer", () => {
+  assert.deepEqual(micStatus({ defaultInputDeviceId: "mic", inputMuted: true }), { muted: true, label: "Mic muted", hint: "Microphone muted. Tap to unmute." });
+  assert.deepEqual(micStatus({ defaultInputDeviceId: "mic", inputMuted: false }), { muted: false, label: "Mic live", hint: "Microphone live. Tap to mute." });
+  assert.equal(micStatus({ defaultInputDeviceId: "", inputMuted: false }), null, "no microphone, nothing to mute");
+  assert.equal(micStatus({ defaultInputDeviceId: "mic", inputMuted: null }), null, "the host did not say; the button must not guess");
+  assert.equal(micStatus({ defaultInputDeviceId: "mic" }), null);
+  for (const value of [null, undefined, "muted", 5]) assert.equal(micStatus(value), null);
 });

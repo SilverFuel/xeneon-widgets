@@ -395,6 +395,45 @@
 .wow-footer-actions { margin-left: auto; }
 /* The page switch only exists where the panel is split in two pages. */
 .wow-pages { display: none; }
+/* The mic button: one glance tells whether the microphone is open. Green and steady while
+   live; red and flashing once a second while muted. The words say the same as the colour. */
+.wow-adventure .wow-footer .wow-mic {
+  flex: 0 0 auto;
+  min-width: 250px;
+  min-height: 54px;
+  padding: 6px 28px;
+  border: 2px solid #0b7a33;
+  border-radius: 6px;
+  color: #04210d;
+  background: #25e06a;
+  font-family: inherit;
+  font-size: max(22px, var(--wow-fs-strong));
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.wow-adventure .wow-footer .wow-mic[hidden] { display: none; }
+.wow-adventure .wow-footer .wow-mic[data-state="muted"] {
+  border-color: #ffd0d0;
+  color: #fff;
+  background: #e0141f;
+  box-shadow: 0 0 0 4px rgba(255, 60, 60, .45);
+  animation: wow-mic-flash 1s steps(1, end) infinite;
+}
+.wow-adventure .wow-footer .wow-mic:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+@keyframes wow-mic-flash {
+  0% { background: #e0141f; box-shadow: 0 0 0 4px rgba(255, 60, 60, .45); }
+  50% { background: #7c0a11; box-shadow: 0 0 0 4px rgba(255, 60, 60, 0); }
+}
+/* Where the panel scrolls, the button sits in the title's corner so it stays at the top
+   and not at the foot of a long page. Narrow screens keep it in the bottom row. */
+@media (min-width: 761px) {
+  .wow-adventure .wow-footer .wow-mic { position: absolute; top: 22px; right: 22px; }
+}
+/* Motion set to Off stops the flash; the button stays red. Low keeps it: it is a warning, not decoration. */
+body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { animation: none; }
 .wow-save-status::before { content: ""; flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: #9eaf80; }
 .wow-save-status[data-state="error"] { color: #f6b7a7; }
 .wow-save-status[data-state="error"]::before { background: #f6b7a7; }
@@ -561,7 +600,12 @@
     .wow-resource-links small { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
     .wow-notice { flex: 0 0 auto; margin-bottom: 10px; padding-block: 0; }
-    .wow-footer { flex: 0 0 auto; padding-top: 10px; }
+    .wow-footer { flex: 0 0 auto; flex-wrap: nowrap; padding-top: 10px; }
+    /* One screen, no title: the mic button is the first thing in the bottom row. */
+    .wow-adventure .wow-footer .wow-mic { position: static; }
+    .wow-footer > .wow-save-status { flex: 0 0 auto; }
+    .wow-footer > .wow-game-status { flex: 1 1 0; }
+    .wow-footer-actions { flex: 0 0 auto; }
   }
   /* The EDGE at full resolution packs more pixels into the same glass, so the text is larger there. */
   /* The EDGE at full resolution packs 183 pixels into an inch and sits behind the keyboard, so
@@ -583,6 +627,43 @@
 
     .wow-pages { display: inline-flex; gap: 8px; margin-right: 8px; }
     .wow-pages button[aria-pressed="true"] { border-color: #d8b879; color: #201c16; background: linear-gradient(#e6c98f, #b89354); }
+
+    /* The mic button is a tall tile down the right side, on both pages, so it can be read
+       from the seat without looking for it. The cards give up that strip while it is shown.
+       Its foot stops at the bottom row: 22px of frame plus the row's 64px. */
+    .wow-adventure:has(.wow-mic:not([hidden])) > :is(.wow-editor, .wow-notice, .wow-recovery, .wow-grid) { margin-right: 256px; }
+    /* Three quests across still fit beside the tile. */
+    .wow-adventure:has(.wow-mic:not([hidden])) :is(.wow-quest-list, .wow-quest-list--game) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 390px), 1fr)); column-gap: 28px; }
+    .wow-adventure .wow-footer .wow-mic {
+      position: absolute;
+      top: 22px;
+      right: 22px;
+      bottom: 86px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      width: 240px;
+      min-width: 0;
+      padding: 12px;
+      border-width: 3px;
+      border-radius: 10px;
+      font-size: 50px;
+      line-height: 1.05;
+      white-space: normal;
+      word-spacing: 240px;
+      text-align: center;
+    }
+    .wow-adventure .wow-footer .wow-mic::after {
+      content: attr(data-hint);
+      font-size: var(--wow-fs-small);
+      font-weight: 600;
+      letter-spacing: 0;
+      line-height: 1.2;
+      word-spacing: normal;
+      text-transform: none;
+    }
 
     /* Page one: the character and the quests. */
     .wow-grid { grid-template-columns: 560px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
