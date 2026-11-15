@@ -319,6 +319,18 @@
   line-clamp: 2;
 }
 .wow-quest--game.is-ready .wow-quest-objectives { color: #2a5530; font-weight: 600; }
+/* One objective per line: its words on the left, its count on the right, a tick once it is finished. */
+.wow-quest--game:not(.is-ready) .wow-quest-objectives { display: grid; gap: 0; overflow: visible; }
+.wow-objective { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.wow-objective > span { min-width: 0; overflow-wrap: anywhere; }
+.wow-objective > b { flex: 0 0 auto; color: #2e251a; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wow-objective.is-done { color: #2a5530; }
+.wow-objective.is-done > span::before { content: "\2713\00a0"; font-weight: 700; }
+.wow-quest-progress { display: block; height: 5px; margin: 5px 0 2px; overflow: hidden; border-radius: 3px; background: rgba(105, 80, 42, .2); }
+.wow-quest-progress > i { display: block; height: 100%; min-width: 0; border-radius: 3px; background: #8a6a2c; }
+.wow-quest-level[data-difficulty="hard"] { border-width: 2px; border-color: #8a1f17; color: #8a1f17; font-weight: 700; }
+.wow-quest-level[data-difficulty="tough"] { border-color: #8f4a05; color: #8f4a05; font-weight: 700; }
+.wow-quest-level[data-difficulty="easy"] { border-style: dashed; color: #6f6149; }
 .wow-quest-level {
   flex: 0 0 auto;
   min-width: 30px;
