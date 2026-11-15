@@ -464,6 +464,27 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
 .wow-adventure .wow-footer .wow-music[data-state="playing"] .wow-music-state::before { width: .62em; height: .76em; border-width: 0 .2em; border-color: transparent currentColor; }
 .wow-adventure .wow-footer .wow-music .wow-music-track { max-width: 100%; overflow: hidden; color: #c0c8bb; font-size: var(--wow-fs-small); line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .wow-adventure .wow-footer .wow-music[data-state="playing"] .wow-music-track { color: #3a2f1c; }
+/* The balance slider: game volume at one end, Apple Music's at the other. It exists only
+   while a running game and Apple Music are both making sound. */
+.wow-adventure .wow-footer .wow-blend {
+  flex: 0 1 600px;
+  display: grid;
+  grid-template-columns: max-content minmax(140px, 1fr) max-content;
+  align-items: center;
+  gap: 14px;
+  min-width: 320px;
+  min-height: 54px;
+  padding: 0 16px;
+  border: 1px solid #66583c;
+  border-radius: 6px;
+  color: #e8d7b3;
+  background: rgba(16, 27, 32, .6);
+}
+.wow-adventure .wow-footer .wow-blend[hidden] { display: none; }
+.wow-adventure .wow-footer .wow-blend .wow-blend-side { font-size: var(--wow-fs-sub); font-weight: 700; white-space: nowrap; }
+.wow-adventure .wow-footer .wow-blend .wow-blend-side b { display: inline-block; min-width: 2.2em; color: #f0d79a; font-size: inherit; font-variant-numeric: tabular-nums; text-align: right; }
+/* The middle of the track is marked: that is where both are at full volume. */
+.wow-adventure .wow-footer .wow-blend .wow-blend-range { width: 100%; min-height: 54px; margin: 0; background: linear-gradient(#c9a961, #c9a961) center / 2px 22px no-repeat; accent-color: #c9a961; }
 /* Where the panel scrolls and is wide enough, it sits in the title's corner beside the mic button. */
 @media (min-width: 1101px) {
   .wow-adventure .wow-footer .wow-music { position: absolute; top: 22px; right: 22px; }
@@ -651,6 +672,10 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
     .wow-footer > .wow-save-status { flex: 0 0 auto; }
     .wow-footer > .wow-game-status { flex: 1 1 0; }
     .wow-footer-actions { flex: 0 0 auto; }
+    /* With the slider in the row, the words give way: two lines at most, and the plain
+       "saved" note steps aside unless it is reporting a problem. */
+    .wow-footer > .wow-game-status { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+    .wow-footer:has(.wow-blend:not([hidden])) > .wow-save-status:not([data-state="error"]) { display: none; }
   }
   /* The EDGE at full resolution packs more pixels into the same glass, so the text is larger there. */
   /* The EDGE at full resolution packs 183 pixels into an inch and sits behind the keyboard, so

@@ -289,6 +289,20 @@ public sealed class ApiRouter
             case "/api/audio/input-mute" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _telemetryController.SetAudioInputMuteAsync(await ReadJsonAsync<AudioMuteRequest>(request, cancellationToken), cancellationToken), cancellationToken);
                 return;
+            case "/api/audio/blend" when request.HttpMethod == "GET":
+            {
+                // The running game's process stays in the host; the reply carries volumes only.
+                var blendGame = _gameController.GetActivity().ActiveGame;
+                await WriteJsonAsync(response, 200, _telemetryController.GetAudioBlend(blendGame?.ProcessId, blendGame?.ProcessName), cancellationToken);
+                return;
+            }
+            case "/api/audio/blend" when request.HttpMethod == "POST":
+            {
+                var blendRequest = await ReadJsonAsync<AudioBlendRequest>(request, cancellationToken);
+                var blendTarget = _gameController.GetActivity().ActiveGame;
+                await WriteJsonAsync(response, 200, _telemetryController.SetAudioBlend(blendTarget?.ProcessId, blendTarget?.ProcessName, blendRequest), cancellationToken);
+                return;
+            }
             case "/api/audio/session-volume" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _telemetryController.SetAudioSessionVolumeAsync(await ReadJsonAsync<AudioSessionVolumeRequest>(request, cancellationToken), cancellationToken), cancellationToken);
                 return;
