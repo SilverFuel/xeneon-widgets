@@ -9,13 +9,10 @@
   var clamp = runtime.clamp;
   var createTimerLoop = runtime.createTimerLoop;
   var escapeHtml = runtime.escapeHtml;
-  var formatPercent = runtime.formatPercent;
-  var formatTemp = runtime.formatTemp;
   var optionalNumber = runtime.optionalNumber;
   var patchStableDom = runtime.patchStableDom;
   var requestJson = runtime.requestJson;
   var runCleanups = runtime.runCleanups;
-  var statusPill = runtime.statusPill;
   var statusTextFromPayload = runtime.statusTextFromPayload;
   var statusToneFromPayload = runtime.statusToneFromPayload;
   var text = runtime.text;
@@ -54,10 +51,6 @@
     return parsed == null ? "--" : Math.round(parsed) + " Hz";
   }
 
-  function primaryDisplayFromSystem(data) {
-    return (data && (data.primaryDisplay || data.display)) || {};
-  }
-
   function displayRefreshRate(display) {
     return runtime.nullableNumber(display && (display.refreshRate != null ? display.refreshRate : display.fps));
   }
@@ -93,6 +86,7 @@
       && Boolean(selectedDisplayFromDiagnostics(displayDiagnostics));
   }
 
+  // One plain line on how the PC is doing, and what to look at if it is not fine.
   function buildSystemHealth(data, gpuPower, displayDiagnostics) {
     var alerts = [];
     var warnings = [];
@@ -102,165 +96,187 @@
     var cpuTemp = optionalNumber(data && data.cpuTemp);
     var gpuTemp = optionalNumber(data && data.gpuTemp);
 
+    if (cpu == null && gpu == null && ram == null) {
+      return { label: "No readings yet", tone: "warn", detail: "Waiting for this PC's readings." };
+    }
     if (data && data.stale) {
-      warnings.push("Telemetry is stale");
+      warnings.push("Readings are out of date");
     }
     if (cpu != null && cpu >= 92) {
-      alerts.push("CPU pressure");
+      alerts.push("CPU is maxed out");
     } else if (cpu != null && cpu >= 78) {
-      warnings.push("CPU climbing");
+      warnings.push("CPU is busy");
     }
     if (gpu != null && gpu >= 92) {
-      alerts.push("GPU pressure");
+      alerts.push("GPU is maxed out");
     } else if (gpu != null && gpu >= 82) {
-      warnings.push("GPU climbing");
+      warnings.push("GPU is busy");
     }
     if (ram != null && ram >= 90) {
-      alerts.push("Memory pressure");
+      alerts.push("Memory is nearly full");
     } else if (ram != null && ram >= 78) {
-      warnings.push("Memory climbing");
+      warnings.push("Memory is filling up");
     }
     if (cpuTemp != null && cpuTemp >= 90) {
-      alerts.push("CPU heat");
+      alerts.push("CPU is hot");
     }
     if (gpuTemp != null && gpuTemp >= 86) {
-      alerts.push("GPU heat");
+      alerts.push("GPU is hot");
     }
     if (gpuPower && gpuPower.alerts && gpuPower.alerts.length) {
-      alerts.push("GPU power alert");
+      alerts.push("GPU power problem");
     }
     if (displayDiagnostics && !displayTargetReady(displayDiagnostics)) {
-      warnings.push("Display selection needed");
+      warnings.push("Second screen not found");
     }
 
     if (alerts.length) {
-      return { label: "Needs Attention", tone: "danger", detail: alerts.slice(0, 2).join(" / ") };
+      return { label: "Needs attention", tone: "danger", detail: alerts.slice(0, 2).join(". ") + "." };
     }
     if (warnings.length) {
-      return { label: "Watch", tone: "warn", detail: warnings.slice(0, 2).join(" / ") };
+      return { label: "Keep an eye on it", tone: "warn", detail: warnings.slice(0, 2).join(". ") + "." };
     }
-    return { label: "Healthy", tone: "good", detail: "No active pressure detected" };
+    return { label: "All good", tone: "good", detail: "Nothing is running hot or full." };
   }
 
+  // "61°C", or nothing when the PC does not report it.
+  function temperatureLabel(value) {
+    var parsed = runtime.nullableNumber(value);
+    return parsed == null || parsed <= 0 ? "" : Math.round(parsed) + "°C";
+  }
+
+  // "18.4 of 64 GB", or nothing when the host did not send both figures.
+  function memoryLabel(usedBytes, totalBytes) {
+    var used = runtime.nullableNumber(usedBytes);
+    var total = runtime.nullableNumber(totalBytes);
+    if (used == null || total == null || total <= 0 || used < 0) {
+      return "";
+    }
+    var gigabyte = 1024 * 1024 * 1024;
+    var totalGb = total / gigabyte;
+    return (used / gigabyte).toFixed(1) + " of " + (totalGb >= 10 ? String(Math.round(totalGb)) : totalGb.toFixed(1)) + " GB";
+  }
+
+  // "Reading 12 MB/s, writing 3 MB/s", "Idle", or nothing when the host sent neither figure.
+  function diskLabel(readBytesPerSecond, writeBytesPerSecond) {
+    var read = runtime.nullableNumber(readBytesPerSecond);
+    var write = runtime.nullableNumber(writeBytesPerSecond);
+    if (read == null && write == null) {
+      return "";
+    }
+    var megabyte = 1024 * 1024;
+    var rate = function (value) {
+      var megabytes = Math.max(0, value || 0) / megabyte;
+      return megabytes >= 10 ? String(Math.round(megabytes)) : megabytes.toFixed(1);
+    };
+    var parts = [];
+    if (read != null && read / megabyte >= 0.05) {
+      parts.push("reading " + rate(read) + " MB/s");
+    }
+    if (write != null && write / megabyte >= 0.05) {
+      parts.push("writing " + rate(write) + " MB/s");
+    }
+    if (!parts.length) {
+      return "Idle";
+    }
+    var line = parts.join(", ");
+    return line.charAt(0).toUpperCase() + line.slice(1);
+  }
+
+  // Thirty slots, four seconds apart: the last two minutes, newest on the right.
   function renderSystemTrend(values, tone) {
     var samples = Array.isArray(values) ? values.slice(-30) : [];
-    if (!samples.length) {
-      return '<div class="system-trend is-empty"><span></span></div>';
+    var bars = "";
+    for (var slot = 0; slot < 30; slot += 1) {
+      var index = slot - (30 - samples.length);
+      if (index < 0) {
+        bars += '<span class="is-empty"></span>';
+      } else {
+        bars += '<span style="height:' + Math.max(2, clamp(optionalNumber(samples[index]) || 0, 0, 100)).toFixed(0) + '%"></span>';
+      }
     }
-
-    return '<div class="system-trend" data-tone="' + escapeHtml(tone || "muted") + '">' + samples.map(function (value) {
-      var height = 5 + clamp(optionalNumber(value) || 0, 0, 100) * 0.16;
-      return '<span style="height:' + height.toFixed(1) + 'px"></span>';
-    }).join("") + '</div>';
+    return '<div class="system-trend" data-tone="' + escapeHtml(tone || "muted") + '" aria-hidden="true">' + bars + '</div>';
   }
 
-  function renderSystemStatCard(label, value, detail, percent, tone, trend) {
-    var progress = optionalNumber(percent);
+  function renderSystemStatCard(label, percent, side, tone, trend) {
+    var parsed = optionalNumber(percent);
     return '' +
       '<article class="system-stat-card" data-ui-key="system-stat-' + escapeHtml(String(label || "metric").toLowerCase()) + '" data-tone="' + escapeHtml(tone || "muted") + '">' +
-        '<div class="metric-label">' + escapeHtml(label) + '</div>' +
-        '<div class="system-stat-value">' + escapeHtml(value) + '</div>' +
-        (progress == null ? "" : '<div class="inline-progress"><span class="inline-progress__bar" style="width:' + clamp(progress, 0, 100) + '%"></span></div>') +
-        '<div class="router-inline-copy">' + escapeHtml(detail) + '</div>' +
+        '<div class="system-stat-head">' +
+          '<span class="system-stat-label">' + escapeHtml(label) + '</span>' +
+          (side ? '<span class="system-stat-side">' + escapeHtml(side) + '</span>' : "") +
+        '</div>' +
+        '<div class="system-stat-value">' + (parsed == null ? "--" : escapeHtml(String(Math.round(clamp(parsed, 0, 100)))) + '<small>%</small>') + '</div>' +
         renderSystemTrend(trend, tone) +
+        '<div class="system-trend-caption">Last 2 minutes</div>' +
       '</article>';
   }
 
-  function renderSystemToolsPanel(busy) {
-    return '' +
-      '<article class="system-panel system-tools-panel">' +
-        '<div class="system-panel-head">' +
-          '<div><div class="metric-label">System tools</div><strong>Privacy-safe telemetry</strong></div>' +
-          '<div class="system-panel-actions">' +
-            '<button class="inline-button" type="button" data-action="system-refresh"' + (busy ? " disabled" : "") + '>Refresh</button>' +
-            '<button class="inline-button" type="button" data-action="system-task-manager"' + (busy ? " disabled" : "") + '>Task Manager</button>' +
-          '</div>' +
-        '</div>' +
-        '<p class="router-inline-copy">Auxora reports overall CPU, GPU, and memory pressure without listing running applications or process IDs. Open Task Manager when you need app-level detail.</p>' +
-      '</article>';
-  }
-
-  function renderSystemDisplayPanel(data, displayDiagnostics) {
-    var primaryDisplay = primaryDisplayFromSystem(data || {});
+  // The second screen Auxora draws on, in one line. Never the Windows primary display.
+  function companionScreenLabel(displayDiagnostics) {
     var selected = selectedDisplayFromDiagnostics(displayDiagnostics);
-    var edgeReady = displayTargetReady(displayDiagnostics);
-    var selectedLabel = selected
-      ? text(displayDiagnostics && displayDiagnostics.selectedDisplayName, text(selected.label, "Companion display"))
-      : "No active companion display";
-    var primaryLabel = text(primaryDisplay.name || primaryDisplay.deviceName, "Primary display");
-    var selectedHz = selected && selected.refreshRate != null ? formatHz(selected.refreshRate) : "--";
-    var selectedSize = selected && selected.boundsWidth && selected.boundsHeight
-      ? selected.boundsWidth + "x" + selected.boundsHeight
-      : "--";
-
-    return '' +
-      '<article class="system-panel system-display-panel">' +
-        '<div class="system-panel-head">' +
-          '<div><div class="metric-label">Companion Display Health</div><strong>' + escapeHtml(edgeReady ? "Companion display ready" : "Waiting for companion display") + '</strong></div>' +
-          statusPill(edgeReady ? "Ready" : "Check", edgeReady ? "good" : "warn") +
-        '</div>' +
-        '<div class="system-display-grid">' +
-          '<div><span>Target</span><strong>' + escapeHtml(selectedLabel) + '</strong></div>' +
-          '<div><span>Refresh</span><strong>' + escapeHtml(selectedHz) + '</strong></div>' +
-          '<div><span>Size</span><strong>' + escapeHtml(selectedSize) + '</strong></div>' +
-          '<div><span>Reserved primary</span><strong>' + escapeHtml(primaryLabel) + '</strong></div>' +
-        '</div>' +
-      '</article>';
+    if (!selected || !displayTargetReady(displayDiagnostics)) {
+      return "Not found";
+    }
+    var parts = [text(displayDiagnostics && displayDiagnostics.selectedDisplayName, text(selected.label, text(selected.name, "Second screen")))];
+    var refresh = selected.refreshRate != null ? selected.refreshRate : displayRefreshRate(selected);
+    if (runtime.nullableNumber(refresh) != null) {
+      parts.push(formatHz(refresh));
+    }
+    return parts.join(", ");
   }
 
-  function renderSystemSensorPanel(data, gpuPower) {
-    var hasTemps = data && (data.cpuTemp != null || data.gpuTemp != null);
-    var hasGpuPower = gpuPower && (gpuPower.totalPower || gpuPower.pins.length || gpuPower.rails.length || gpuPower.power.length);
-    var sensorTone = gpuPower && gpuPower.alerts.length ? "danger" : (hasTemps || hasGpuPower ? "good" : "warn");
-    var sensorLabel = gpuPower && gpuPower.alerts.length ? "Power alert" : (hasTemps || hasGpuPower ? "Live" : "Limited");
-    var powerValue = sensorValue(gpuPower && gpuPower.totalPower, "Unavailable");
+  function renderSystemFact(label, value) {
+    return value ? '<div class="system-fact"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>' : "";
+  }
 
+  function renderSystemSide(data, gpuPower, displayDiagnostics, busy) {
+    var health = buildSystemHealth(data || {}, gpuPower, displayDiagnostics);
+    var hasTemps = Boolean(temperatureLabel(data && data.cpuTemp) || temperatureLabel(data && data.gpuTemp));
     return '' +
-      '<article class="system-panel system-sensor-panel">' +
-        '<div class="system-panel-head">' +
-          '<div><div class="metric-label">Thermal / Power</div><strong>' + escapeHtml(sensorLabel) + '</strong></div>' +
-          statusPill(sensorLabel, sensorTone) +
+      '<aside class="system-side">' +
+        '<article class="system-health-card" data-tone="' + escapeHtml(health.tone) + '">' +
+          '<strong>' + escapeHtml(health.label) + '</strong>' +
+          '<span>' + escapeHtml(health.detail) + '</span>' +
+        '</article>' +
+        '<div class="system-facts">' +
+          renderSystemFact("GPU power", gpuPower && gpuPower.totalPower ? sensorValue(gpuPower.totalPower, "") : "") +
+          renderSystemFact("Disk", diskLabel(data && data.diskReadBytesPerSecond, data && data.diskWriteBytesPerSecond)) +
+          renderSystemFact("Second screen", displayDiagnostics ? companionScreenLabel(displayDiagnostics) : "") +
+          renderSystemFact("Temperatures", hasTemps ? "" : "Not reported by this PC") +
         '</div>' +
-        '<div class="system-sensor-grid">' +
-          '<div><span>CPU temp</span><strong>' + escapeHtml(formatTemp(data && data.cpuTemp)) + '</strong></div>' +
-          '<div><span>GPU temp</span><strong>' + escapeHtml(formatTemp(data && data.gpuTemp)) + '</strong></div>' +
-          '<div><span>GPU power</span><strong>' + escapeHtml(powerValue) + '</strong></div>' +
-          '<div><span>Sensor source</span><strong>' + escapeHtml(text(gpuPower && gpuPower.source, hasTemps ? "Hardware monitor" : "Not linked")) + '</strong></div>' +
+        '<div class="system-side-foot">' +
+          '<button class="inline-button" type="button" data-action="system-task-manager"' + (busy ? " disabled" : "") + '>Task Manager</button>' +
+          '<p>Auxora shows totals only, without listing running applications or process IDs.</p>' +
         '</div>' +
-      '</article>';
+      '</aside>';
   }
 
   function renderSystemWidget(data, statusText, statusTone, history, displayDiagnostics, busy) {
+    data = data || {};
+    history = history || {};
     var gpuPower = data.gpuPower || normalizeGpuPowerPayload({});
-    var display = selectedDisplayFromDiagnostics(displayDiagnostics);
-    var displayHz = display && display.refreshRate != null ? display.refreshRate : displayRefreshRate(display);
-    var health = buildSystemHealth(data || {}, gpuPower, displayDiagnostics);
-    var selectedDisplayLabel = display
-      ? text(displayDiagnostics && displayDiagnostics.selectedDisplayName, text(display.label, text(display.name, "Companion display")))
-      : "No active companion display";
 
     return '' +
       '<div class="inline-widget-shell inline-widget-shell--system">' +
         '<div class="system-monitor-cockpit">' +
           '<section class="system-health-strip">' +
-            '<article class="system-health-card" data-tone="' + escapeHtml(health.tone) + '">' +
-              '<div class="metric-label">Overall</div>' +
-              '<strong>' + escapeHtml(health.label) + '</strong>' +
-              '<span>' + escapeHtml(health.detail) + '</span>' +
-            '</article>' +
-            renderSystemStatCard("CPU", formatPercent(data.cpu), data.cpuTemp != null ? formatTemp(data.cpuTemp) : "System load", data.cpu, systemMetricTone(data.cpu, 78, 92), history.cpu) +
-            renderSystemStatCard("GPU", formatPercent(data.gpu), data.gpuTemp != null ? formatTemp(data.gpuTemp) : "GPU load", data.gpu, systemMetricTone(data.gpu, 82, 92), history.gpu) +
-            renderSystemStatCard("RAM", formatPercent(data.ram), "Memory used", data.ram, systemMetricTone(data.ram, 78, 90), history.ram) +
-            renderSystemStatCard("Display", formatHz(displayHz), selectedDisplayLabel, displayHz == null ? null : Math.min(displayHz, 240) / 240 * 100, displayTargetReady(displayDiagnostics) ? "good" : "warn", []) +
+            renderSystemStatCard("CPU", data.cpu, temperatureLabel(data.cpuTemp), systemMetricTone(data.cpu, 78, 92), history.cpu) +
+            renderSystemStatCard("GPU", data.gpu, temperatureLabel(data.gpuTemp), systemMetricTone(data.gpu, 82, 92), history.gpu) +
+            renderSystemStatCard("Memory", data.ram, memoryLabel(data.memoryUsedBytes, data.memoryTotalBytes), systemMetricTone(data.ram, 78, 90), history.ram) +
           '</section>' +
-          '<section class="system-detail-grid">' +
-            renderSystemToolsPanel(busy) +
-            renderSystemDisplayPanel(data, displayDiagnostics) +
-            renderSystemSensorPanel(data, gpuPower) +
-          '</section>' +
+          renderSystemSide(data, gpuPower, displayDiagnostics, busy) +
         '</div>' +
       '</div>';
   }
+
+  runtime.registerHelpers({
+    buildSystemHealth: buildSystemHealth,
+    renderSystemWidget: renderSystemWidget,
+    systemDiskLabel: diskLabel,
+    systemMemoryLabel: memoryLabel,
+    systemTemperatureLabel: temperatureLabel
+  });
 
   function mountSystemWidget(widget, container, env) {
     var cleanups = [];
@@ -346,9 +362,7 @@
         return;
       }
 
-      if (action === "system-refresh") {
-        loop.refresh();
-      } else if (action === "system-task-manager") {
+      if (action === "system-task-manager") {
         state.busy = true;
         redraw();
         requestJson(buildBridgeUrl(env, "/api/quick-actions/open-task-manager"), {

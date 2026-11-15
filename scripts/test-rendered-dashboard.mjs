@@ -1531,7 +1531,7 @@ async function validateProductSurfaceSemantics(cdp) {
     };
   })()`);
   assert(systemPrivacy.exposesTopProcesses === false, `System API exposed process identity: ${JSON.stringify(systemPrivacy)}`);
-  assert(/Privacy-safe telemetry/i.test(systemPrivacy.frameCopy || "") && /without listing running applications or process IDs/i.test(systemPrivacy.frameCopy || ""), `System Monitor did not explain its privacy-safe telemetry boundary: ${JSON.stringify(systemPrivacy)}`);
+  assert(/totals only/i.test(systemPrivacy.frameCopy || "") && /without listing running applications or process IDs/i.test(systemPrivacy.frameCopy || ""), `System Monitor did not say that it shows totals only: ${JSON.stringify(systemPrivacy)}`);
   assert(!/Top apps right now|PID \d+/i.test(systemPrivacy.frameCopy || "") && systemPrivacy.taskManagerVisible, `System Monitor still exposed process identity or lost the Task Manager handoff: ${JSON.stringify(systemPrivacy)}`);
 
   await cdp.send("Runtime.evaluate", {
