@@ -1905,3 +1905,45 @@
 .game-focus-audio-row strong {
   color: var(--theme-text);
 }
+
+/* The mic button shows what the microphone is doing, in the colours of the WoW Forever mic
+   tile: bright green while it is live, red and flashing once a second while it is muted. */
+.game-focus-shell .game-focus-card--utility .game-focus-mic-toggle {
+  width: 190px;
+  min-width: 190px;
+  border-width: 2px;
+  font-size: max(22px, 1.375rem);
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.game-focus-shell .game-focus-card--utility .game-focus-mic-toggle[data-mic="live"] {
+  border-color: #0b7a33;
+  background: #25e06a;
+  color: #04210d;
+}
+
+.game-focus-shell .game-focus-card--utility .game-focus-mic-toggle[data-mic="muted"] {
+  border-color: #ffd0d0;
+  background: #e0141f;
+  color: #fff;
+  animation: game-focus-mic-flash 1s steps(1, end) infinite;
+}
+
+@keyframes game-focus-mic-flash {
+  0% { background: #e0141f; }
+  50% { background: #7c0a11; }
+}
+
+/* Motion set to Off, or Windows set to reduce motion, stops the flash; the button stays red. */
+.dashboard-native-page--motion-off .game-focus-shell .game-focus-card--utility .game-focus-mic-toggle {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-focus-shell .game-focus-card--utility .game-focus-mic-toggle {
+    animation: none;
+  }
+}
