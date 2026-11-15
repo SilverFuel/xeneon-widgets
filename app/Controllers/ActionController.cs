@@ -164,6 +164,16 @@ public sealed class ActionController
         return _mediaService.ExecuteAsync(action, cancellationToken);
     }
 
+    public Task<MediaSnapshot> GetAppMediaAsync(string app, CancellationToken cancellationToken)
+    {
+        return _mediaService.GetAppSnapshotAsync(app, cancellationToken);
+    }
+
+    public Task<MediaSnapshot> ExecuteAppMediaAsync(string app, string action, CancellationToken cancellationToken)
+    {
+        return _mediaService.ExecuteForAppAsync(app, action, cancellationToken);
+    }
+
     public Task<HueSnapshot> GetHueAsync(CancellationToken cancellationToken)
     {
         return _hueService.GetSnapshotAsync(_configStore.Snapshot(), cancellationToken);

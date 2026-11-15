@@ -436,6 +436,39 @@
 }
 /* Motion set to Off stops the flash; the button stays red. Low keeps it: it is a warning, not decoration. */
 body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { animation: none; }
+/* The Apple Music button: Play or Pause, with what is playing under it. It exists only
+   while Apple Music is open. Gold while music plays, dark while it is paused. */
+.wow-adventure .wow-footer .wow-music {
+  flex: 0 0 auto;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  width: 250px;
+  min-height: 54px;
+  padding: 4px 16px;
+  border: 2px solid #c9a961;
+  border-radius: 6px;
+  color: #f3e3bd;
+  background: #1d2a26;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.wow-adventure .wow-footer .wow-music[hidden] { display: none; }
+.wow-adventure .wow-footer .wow-music[data-state="playing"] { border-color: #f0dba8; color: #201c16; background: linear-gradient(#e6c98f, #b89354); }
+.wow-adventure .wow-footer .wow-music:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.wow-adventure .wow-footer .wow-music .wow-music-state { font-size: max(20px, var(--wow-fs-strong)); font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
+/* A play triangle, or two pause bars, drawn with borders so they take the text's colour. */
+.wow-adventure .wow-footer .wow-music .wow-music-state::before { content: ""; display: inline-block; box-sizing: border-box; width: 0; height: 0; margin-right: .4em; border-style: solid; border-width: .38em 0 .38em .62em; border-color: transparent transparent transparent currentColor; }
+.wow-adventure .wow-footer .wow-music[data-state="playing"] .wow-music-state::before { width: .62em; height: .76em; border-width: 0 .2em; border-color: transparent currentColor; }
+.wow-adventure .wow-footer .wow-music .wow-music-track { max-width: 100%; overflow: hidden; color: #c0c8bb; font-size: var(--wow-fs-small); line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.wow-adventure .wow-footer .wow-music[data-state="playing"] .wow-music-track { color: #3a2f1c; }
+/* Where the panel scrolls and is wide enough, it sits in the title's corner beside the mic button. */
+@media (min-width: 1101px) {
+  .wow-adventure .wow-footer .wow-music { position: absolute; top: 22px; right: 22px; }
+  .wow-adventure:has(.wow-mic:not([hidden])) .wow-footer .wow-music { right: 284px; }
+}
 .wow-save-status::before { content: ""; flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: #9eaf80; }
 .wow-save-status[data-state="error"] { color: #f6b7a7; }
 .wow-save-status[data-state="error"]::before { background: #f6b7a7; }
@@ -614,7 +647,7 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
     .wow-notice { flex: 0 0 auto; margin-bottom: 10px; padding-block: 0; }
     .wow-footer { flex: 0 0 auto; flex-wrap: nowrap; padding-top: 10px; }
     /* One screen, no title: the mic button is the first thing in the bottom row. */
-    .wow-adventure .wow-footer .wow-mic { position: static; }
+    .wow-adventure .wow-footer :is(.wow-mic, .wow-music) { position: static; }
     .wow-footer > .wow-save-status { flex: 0 0 auto; }
     .wow-footer > .wow-game-status { flex: 1 1 0; }
     .wow-footer-actions { flex: 0 0 auto; }
@@ -643,9 +676,9 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
     /* The mic button is a tall tile down the right side, on both pages, so it can be read
        from the seat without looking for it. The cards give up that strip while it is shown.
        Its foot stops at the bottom row: 22px of frame plus the row's 64px. */
-    .wow-adventure:has(.wow-mic:not([hidden])) > :is(.wow-editor, .wow-notice, .wow-recovery, .wow-grid) { margin-right: 256px; }
+    .wow-adventure:has(.wow-mic:not([hidden]), .wow-music:not([hidden])) > :is(.wow-editor, .wow-notice, .wow-recovery, .wow-grid) { margin-right: 256px; }
     /* Three quests across still fit beside the tile. */
-    .wow-adventure:has(.wow-mic:not([hidden])) :is(.wow-quest-list, .wow-quest-list--game) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 390px), 1fr)); column-gap: 28px; }
+    .wow-adventure:has(.wow-mic:not([hidden]), .wow-music:not([hidden])) :is(.wow-quest-list, .wow-quest-list--game) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 390px), 1fr)); column-gap: 28px; }
     .wow-adventure .wow-footer .wow-mic {
       position: absolute;
       top: 22px;
@@ -676,6 +709,25 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
       word-spacing: normal;
       text-transform: none;
     }
+    /* The Apple Music tile sits under the mic tile in the same strip: 150px tall, and the
+       mic tile stops 12px above it (86px + 150px + 12px). Alone, it takes the whole strip. */
+    .wow-adventure .wow-footer .wow-music {
+      position: absolute;
+      top: auto;
+      right: 22px;
+      bottom: 86px;
+      gap: 10px;
+      width: 240px;
+      height: 150px;
+      padding: 12px;
+      border-width: 3px;
+      border-radius: 10px;
+    }
+    .wow-adventure:has(.wow-mic:not([hidden])) .wow-footer .wow-music { right: 22px; }
+    .wow-adventure:not(:has(.wow-mic:not([hidden]))) .wow-footer .wow-music { top: 22px; height: auto; }
+    .wow-adventure:has(.wow-music:not([hidden])) .wow-footer .wow-mic { bottom: 248px; }
+    .wow-adventure .wow-footer .wow-music .wow-music-state { font-size: 40px; }
+    .wow-adventure .wow-footer .wow-music .wow-music-track { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
 
     /* Page one: the character and the quests. */
     .wow-grid { grid-template-columns: 560px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
