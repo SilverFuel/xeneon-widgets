@@ -525,10 +525,14 @@
 
     function renderQuests() {
       var done = journal.quests.filter(function (quest) { return quest.done; }).length;
-      var gameTab = query('[data-wow-filter="game"]');
-      gameTab.hidden = !game;
       if (!game && activeFilter === "game") activeFilter = "active";
-      container.querySelectorAll("[data-wow-filter]").forEach(function (tab) { tab.setAttribute("aria-pressed", String(tab.dataset.wowFilter === activeFilter)); });
+      query('[data-wow-filter="game"]').hidden = !game;
+      // The one-screen layout reads this: while the game's log shows, the hand-kept list is
+      // one button away ("My list") and its tabs step aside for the zone views.
+      query(".wow-quest-tabs").dataset.mode = activeFilter === "game" ? "game" : "list";
+      container.querySelectorAll("[data-wow-filter]").forEach(function (tab) {
+        tab.setAttribute("aria-pressed", String(!tab.classList.contains("wow-own-list") && tab.dataset.wowFilter === activeFilter));
+      });
       var list = query(".wow-quest-list");
       var views = query(".wow-quest-views");
       // The game's log is read-only: no add form, and one view of it at a time.
@@ -666,7 +670,7 @@
         '<div class="wow-notice" role="status" hidden></div>' +
         (originalUnreadable !== null ? '<div class="wow-recovery wow-card"><p>Your existing saved data is protected until you choose how to recover it.</p>' + button("export-recovery", "Export recovery copy") + button("new-journal", "Start new journal", "quiet") + '</div>' : '') +
         '<div class="wow-grid"><article class="wow-card wow-character"><div class="wow-card-heading"><span class="wow-eyebrow">The adventurer</span><span class="wow-eyebrow">Chapter I</span></div><div class="wow-character-content"></div>' + button("profile", "Edit character") + '</article>' +
-        '<article class="wow-card wow-quests"><div class="wow-card-heading"><h3>Quest ledger</h3><small class="wow-quest-count"></small></div><div class="wow-quest-tabs" role="group" aria-label="Filter quest ledger"><button type="button" data-wow-filter="game" aria-pressed="false" hidden>In game</button><button type="button" data-wow-filter="active" aria-pressed="true">Active</button><button type="button" data-wow-filter="completed" aria-pressed="false">Completed</button><button type="button" data-wow-filter="all" aria-pressed="false">All entries</button></div>' +
+        '<article class="wow-card wow-quests"><div class="wow-card-heading"><h3>Quest ledger</h3><small class="wow-quest-count"></small></div><div class="wow-quest-tabs" role="group" aria-label="Filter quest ledger"><button type="button" data-wow-filter="game" aria-pressed="false" hidden>In game</button><button type="button" data-wow-filter="active" aria-pressed="true">Active</button><button type="button" data-wow-filter="completed" aria-pressed="false">Completed</button><button type="button" data-wow-filter="all" aria-pressed="false">All entries</button><button type="button" class="wow-own-list" data-wow-filter="active" aria-pressed="false">My list</button></div>' +
         '<form class="wow-quest-form" aria-label="Add adventure entry"><label class="wow-sr-only" for="wow-quest-title">Your next objective</label><input id="wow-quest-title" name="title" placeholder="What will you pursue next?" maxlength="180" required autocomplete="off"><label class="wow-sr-only" for="wow-quest-category">Entry type</label><select id="wow-quest-category" name="category">' + options(CATEGORIES, "Quest") + '</select><button class="wow-button wow-button--primary" type="submit">Add entry</button></form><div class="wow-quest-views" role="group" aria-label="Quest log views" hidden></div><ul class="wow-quest-list"></ul><div class="wow-empty"></div></article>' +
         '<aside class="wow-card wow-camp"><div class="wow-card-heading"><h3>At the campfire</h3></div><p class="wow-timer-label"></p><div class="wow-timer-value" role="timer" aria-label="Session elapsed time">00:00:00</div><div class="wow-timer-actions">' + button("toggle-session", "Begin session", "primary") + button("reset-session", "Reset", "quiet") + '</div><p class="wow-timer-help">Keeps running when you leave this tab.</p><div class="wow-card-heading"><h3>Before you set out</h3></div><div class="wow-prep-list">' + PREPARATIONS.map(function (label, index) { return '<label><input type="checkbox" data-wow-prep="' + index + '"' + (journal.preparations[index] ? ' checked' : '') + '><span>' + label + '</span></label>'; }).join("") + '</div></aside>' +
         '<article class="wow-card wow-journal"><div class="wow-card-heading"><h3>Field notes</h3><small>Saved as you write</small></div><label class="wow-sr-only" for="wow-field-notes">Field notes</label><textarea id="wow-field-notes" maxlength="20000" placeholder="A hidden path. A helpful stranger. The materials you still need. Leave a note for your next session.">' + escapeHtml(journal.notes) + '</textarea></article>' +
@@ -808,6 +812,13 @@
         activeFilter = target.dataset.wowFilter;
         filterChosen = true;
         renderQuests();
+        // The button just tapped may have stepped aside; keep keyboard focus on what replaced it.
+        if (!target.getClientRects().length) {
+          var next = activeFilter === "game"
+            ? query('.wow-quest-views [aria-pressed="true"]') || query(".wow-own-list")
+            : query('[data-wow-filter="' + activeFilter + '"]');
+          if (next) next.focus();
+        }
         return;
       }
       if (target.hasAttribute("data-wow-remove")) {

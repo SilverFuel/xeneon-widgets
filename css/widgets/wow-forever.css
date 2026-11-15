@@ -282,6 +282,8 @@
 .wow-quest-copy small { color: #5f4d32; font-size: var(--wow-fs-small); }
 .wow-quest.is-complete .wow-quest-copy strong { color: #76664d; text-decoration: line-through; text-decoration-color: #9d8a67; }
 .wow-quest-tabs button[hidden], .wow-quest-form[hidden], .wow-quest-views[hidden] { display: none; }
+/* "My list" only exists where the tabs step aside: the one-screen layout, in game mode. */
+.wow-quest-tabs .wow-own-list { display: none; flex: 0 0 auto; padding-inline: 18px; }
 
 /* The game's quest log: one short view at a time, in as many columns as fit. */
 .wow-quest-views { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -565,6 +567,16 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
     .wow-quest-views { flex-wrap: nowrap; margin: -6px -8px 4px; padding: 6px 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: #8e7650 transparent; }
     .wow-quest-views button { flex: 0 0 auto; white-space: nowrap; }
     .wow-quest-list, .wow-empty { grid-row: 3; }
+    /* While the game's log shows, the card is two rows: the zone views with "My list" at the
+       end, then the quests. The title steps aside (the views carry the same counts) and is
+       clipped, not removed, so screen readers still get it. */
+    .wow-quests:has(.wow-quest-tabs[data-mode="game"]) { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr); }
+    .wow-quests:has(.wow-quest-tabs[data-mode="game"]) .wow-card-heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+    .wow-quests:has(.wow-quest-tabs[data-mode="game"]) .wow-quest-views { grid-column: 1; grid-row: 1; margin: -6px 0 4px -8px; }
+    .wow-quests:has(.wow-quest-tabs[data-mode="game"]) .wow-quest-tabs { grid-column: 2; grid-row: 1; align-self: start; }
+    .wow-quest-tabs[data-mode="game"] > button { display: none; }
+    .wow-quest-tabs[data-mode="game"] > .wow-own-list { display: inline-flex; align-items: center; }
+    .wow-quests:has(.wow-quest-tabs[data-mode="game"]) :is(.wow-quest-list, .wow-empty) { grid-row: 2; }
     .wow-quest-list {
       grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
       column-gap: 22px;
