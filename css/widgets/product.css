@@ -65,9 +65,90 @@
   background: linear-gradient(135deg, var(--dashboard-accent-glow), rgba(255, 255, 255, 0.025));
 }
 
-.auxora-glance-hero > div:first-child {
+.auxora-glance-now,
+.auxora-glance-profile {
   display: grid;
   gap: 5px;
+  min-width: 0;
+}
+
+.auxora-glance-profile {
+  justify-items: end;
+  text-align: right;
+}
+
+.auxora-glance-date {
+  color: var(--color-text);
+  font-size: max(18px, 1.125rem);
+  font-weight: 600;
+}
+
+/* Home's cards, the games played lately and the one-tap setups: everything beside the clock. */
+.auxora-home-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.auxora-home-played {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.auxora-home-played__title {
+  color: var(--color-text-dim);
+  font-size: max(15px, 0.9375rem);
+  font-weight: 700;
+}
+
+.auxora-home-played__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.product-shell .auxora-home-played .auxora-home-game {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-muted);
+  color: var(--theme-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.auxora-home-game strong {
+  font-size: max(16px, 1rem);
+  overflow-wrap: anywhere;
+}
+
+.auxora-home-game span {
+  color: var(--color-text-dim);
+  font-size: max(14px, 0.875rem);
+}
+
+.product-shell .auxora-home-played .auxora-home-game:hover {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-hover-surface);
+}
+
+.auxora-home-game:focus-visible {
+  outline: 3px solid var(--theme-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .product-shell .auxora-home-played .auxora-home-game {
+    color: ButtonText;
+  }
 }
 
 .auxora-glance-hero span,
@@ -84,6 +165,7 @@
   font-size: clamp(2rem, 5vw, 4.8rem);
   font-weight: 800;
   letter-spacing: -0.05em;
+  line-height: 1.2;
 }
 
 .product-shell:has(> .auxora-glance-hero) > .inline-actions {
@@ -115,7 +197,7 @@
     gap: 8px;
   }
 
-  body[data-active-widget-id="home"] .product-shell > .inline-grid--3 {
+  body[data-active-widget-id="home"] .auxora-home-main > .inline-grid--3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -917,4 +999,133 @@
   border-color: var(--theme-accent-border);
   background: var(--theme-selected-surface);
   box-shadow: 0 0 0 1px var(--theme-accent-soft);
+}
+
+/* Home on the EDGE and other wide screens: the clock and the Profile down the left, the three
+   readings large beside them, then the games played lately. Sized to be read from a seat. */
+@media (min-width: 1800px) and (min-height: 600px) {
+  body[data-active-widget-id="home"] .product-shell:has(> .auxora-glance-hero) {
+    grid-template-columns: minmax(540px, 0.34fr) minmax(0, 1fr);
+    grid-template-rows: minmax(max-content, 1fr);
+    gap: 12px;
+    min-height: 100%;
+    align-content: stretch;
+  }
+
+  body[data-active-widget-id="home"] .product-shell > .auxora-glance-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 26px 30px;
+  }
+
+  body[data-active-widget-id="home"] .auxora-glance-clock {
+    font-size: clamp(112px, 7.5rem, 136px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-glance-date {
+    font-size: clamp(28px, 1.75rem, 34px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-glance-profile {
+    justify-items: start;
+    text-align: left;
+  }
+
+  body[data-active-widget-id="home"] .auxora-glance-profile span,
+  body[data-active-widget-id="home"] .auxora-glance-profile small {
+    font-size: clamp(20px, 1.25rem, 25px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-glance-profile strong {
+    font-size: clamp(44px, 2.75rem, 52px);
+    line-height: 1.2;
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-main {
+    grid-template-rows: minmax(max-content, 1fr);
+    grid-auto-rows: max-content;
+    gap: 12px;
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-main > .inline-grid--3 {
+    gap: 12px;
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-main .auxora-home-link {
+    gap: 10px;
+    padding: 20px 22px;
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-link .metric-label {
+    color: var(--theme-text);
+    font-size: clamp(22px, 1.375rem, 27px);
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-link .metric-value {
+    font-size: clamp(88px, 5.5rem, 100px);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+
+  /* An event's name is words, not a figure: smaller, and two lines at most. */
+  body[data-active-widget-id="home"] .auxora-home-link[data-home-open="calendar"] .metric-value {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: clamp(44px, 2.75rem, 50px);
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-link .router-inline-copy {
+    font-size: clamp(20px, 1.25rem, 25px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-link .auxora-home-link__action {
+    font-size: clamp(19px, 1.1875rem, 23px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-played__title {
+    font-size: clamp(20px, 1.25rem, 24px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-played__list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  body[data-active-widget-id="home"] .product-shell .auxora-home-played .auxora-home-game {
+    min-height: 92px;
+    padding: 14px 22px;
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-game strong {
+    font-size: clamp(24px, 1.5rem, 29px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-game span {
+    font-size: clamp(19px, 1.1875rem, 23px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-glance-chains summary {
+    min-height: 54px;
+    font-size: clamp(20px, 1.25rem, 24px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-home-feedback {
+    font-size: clamp(20px, 1.25rem, 24px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-glance-chains > .router-inline-copy,
+  body[data-active-widget-id="home"] .auxora-glance-chains .inline-button small {
+    font-size: clamp(19px, 1.1875rem, 23px);
+  }
+
+  body[data-active-widget-id="home"] .auxora-glance-chains .inline-button strong {
+    font-size: clamp(22px, 1.375rem, 26px);
+  }
 }
