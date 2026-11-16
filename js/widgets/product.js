@@ -106,11 +106,12 @@
               '<option value="high-contrast"' + (readability === "high-contrast" ? " selected" : "") + '>High contrast</option>' +
               '<option value="visor"' + (readability === "visor" ? " selected" : "") + '>Visor</option>' +
             '</select></label>' +
-            '<label class="inline-field"><span>Text size</span><select class="inline-select" name="textSize">' +
-              '<option value="normal"' + (textSize === "normal" ? " selected" : "") + '>Normal</option>' +
-              '<option value="large"' + (textSize === "large" ? " selected" : "") + '>Large</option>' +
-              '<option value="larger"' + (textSize === "larger" ? " selected" : "") + '>Extra large</option>' +
-            '</select></label>' +
+            // Three choices, so three buttons: one tap, where a dropdown takes two.
+            '<div class="inline-field product-segmented" role="radiogroup" aria-label="Text size"><span>Text size</span><div class="product-segments">' +
+              [["normal", "Normal"], ["large", "Large"], ["larger", "Extra large"]].map(function (choice) {
+                return '<label class="product-segment"><input type="radio" name="textSize" value="' + choice[0] + '"' + (textSize === choice[0] || (choice[0] === "normal" && textSize !== "large" && textSize !== "larger") ? " checked" : "") + '><span>' + choice[1] + '</span></label>';
+              }).join("") +
+            '</div></div>' +
             '<label class="inline-field"><span>Performance</span><select class="inline-select" name="performanceBudget">' +
               '<option value="balanced"' + (performanceBudget === "balanced" ? " selected" : "") + '>Balanced</option>' +
               '<option value="battery"' + (performanceBudget === "battery" ? " selected" : "") + '>Quiet</option>' +
