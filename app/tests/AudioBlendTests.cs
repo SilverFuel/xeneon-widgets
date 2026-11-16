@@ -62,9 +62,34 @@ public sealed class AudioBlendTests
     [Test]
     public void RoleOf_LeavesEverythingElseOut()
     {
-        Assert.That(AudioBlend.RoleOf("Discord", "", 3000, 7200, "Wow"), Is.EqualTo(""));
+        Assert.That(AudioBlend.RoleOf("Teams", "", 3000, 7200, "Wow"), Is.EqualTo(""));
         Assert.That(AudioBlend.RoleOf("Spotify", "Spotify", 3000, null, ""), Is.EqualTo(""));
         Assert.That(AudioBlend.RoleOf("", "", 0, 0, ""), Is.EqualTo(""));
         Assert.That(AudioBlend.RoleOf(null, null, 3000, null, null), Is.EqualTo(""));
+    }
+
+    [Test]
+    public void RoleOf_FindsDiscordInItsThreeBuilds()
+    {
+        Assert.That(AudioBlend.RoleOf("Discord", "", 3000, 7200, "Wow"), Is.EqualTo(AudioBlend.Chat));
+        Assert.That(AudioBlend.RoleOf("discord.exe", "", 3000, null, ""), Is.EqualTo(AudioBlend.Chat));
+        Assert.That(AudioBlend.RoleOf("DiscordPTB", "", 3000, null, ""), Is.EqualTo(AudioBlend.Chat));
+        Assert.That(AudioBlend.RoleOf("DiscordCanary", "", 3000, null, ""), Is.EqualTo(AudioBlend.Chat));
+    }
+
+    [Test]
+    public void IsDiscordProcess_IsFalseForOtherApps()
+    {
+        Assert.That(AudioBlend.IsDiscordProcess("Discord"), Is.True);
+        Assert.That(AudioBlend.IsDiscordProcess("Wow"), Is.False);
+        Assert.That(AudioBlend.IsDiscordProcess("NotDiscord"), Is.False);
+        Assert.That(AudioBlend.IsDiscordProcess(""), Is.False);
+        Assert.That(AudioBlend.IsDiscordProcess(null), Is.False);
+    }
+
+    [Test]
+    public void DiscordLauncher_OpensDiscordsOwnLinkAndNothingElse()
+    {
+        Assert.That(DiscordLauncher.Target, Is.EqualTo("discord://-/"));
     }
 }

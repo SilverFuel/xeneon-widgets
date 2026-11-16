@@ -114,3 +114,31 @@ test("the This week card says so when nothing was played, and is absent until a 
   assert.equal(helpers.renderPlayWeekCard({ everPlayed: false, totalMs: 0, bestDay: null, days, games: [] }, minutes), "");
   assert.equal(helpers.renderPlayWeekCard(null, minutes), "");
 });
+
+test("Discord beside the game: a balance when both make sound, otherwise whether it is open", () => {
+  const state = payload => { const value = helpers.discordChatState(payload); return value ? { ...value } : null; };
+  assert.deepEqual(state({ other: "chat", available: true, position: 50 }), { kind: "blend", position: 50, game: 100, chat: 100 });
+  assert.deepEqual(state({ other: "chat", available: true, position: 20 }), { kind: "blend", position: 20, game: 100, chat: 40 });
+  assert.deepEqual(state({ other: "chat", available: true, position: 75 }), { kind: "blend", position: 75, game: 50, chat: 100 });
+  assert.deepEqual(state({ other: "chat", available: true, position: "odd" }), { kind: "blend", position: 50, game: 100, chat: 100 });
+  assert.deepEqual(state({ other: "chat", available: false, otherRunning: true }), { kind: "quiet" });
+  assert.deepEqual(state({ other: "chat", available: false, otherRunning: false }), { kind: "closed" });
+  assert.equal(state({ other: "music", available: true, position: 50 }), null, "the Apple Music balance is not Discord's");
+  for (const value of [null, undefined, "chat", {}]) assert.equal(state(value), null);
+});
+
+test("the Discord row is a slider with both volumes, or a line and a button that opens Discord", () => {
+  const blend = helpers.renderDiscordRow({ kind: "blend", position: 20, game: 100, chat: 40 });
+  assert.match(blend, /Game <b data-game-chat-game>100<\/b>/);
+  assert.match(blend, /Discord <b data-game-chat-chat>40<\/b>/);
+  assert.match(blend, /<input class="inline-range" type="range" min="0" max="100" step="5" value="20" data-game-chat-blend[^>]*aria-valuetext="Game 100 percent, Discord 40 percent">/);
+  assert.doesNotMatch(blend, /<button/);
+  const quiet = helpers.renderDiscordRow({ kind: "quiet" });
+  assert.match(quiet, /<strong>Discord<\/strong><small>Open, not making sound<\/small>/);
+  assert.match(quiet, /data-action="discord-open">Show Discord<\/button>/);
+  const closed = helpers.renderDiscordRow({ kind: "closed" });
+  assert.match(closed, /<small>Not open<\/small>/);
+  assert.match(closed, /data-action="discord-open">Open Discord<\/button>/);
+  assert.doesNotMatch(closed, /type="range"/);
+  assert.equal(helpers.renderDiscordRow(null), "");
+});

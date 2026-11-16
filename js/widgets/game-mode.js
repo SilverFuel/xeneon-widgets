@@ -611,6 +611,39 @@
 
   // The frame rate counter's own card. With no game running it has nothing to say that
   // the FPS card above it does not already say, so it is left out.
+  // What the host says about Discord beside the running game: a balance to show, or whether
+  // Discord is open at all. The sums match AudioBlend.VolumesAt in the host.
+  function discordChatState(payload) {
+    if (!payload || typeof payload !== "object" || payload.other !== "chat") {
+      return null;
+    }
+    if (payload.available === true) {
+      var position = Number(payload.position);
+      position = isFinite(position) ? Math.min(100, Math.max(0, Math.round(position))) : 50;
+      return { kind: "blend", position: position, game: position <= 50 ? 100 : Math.round((100 - position) * 2), chat: position >= 50 ? 100 : Math.round(position * 2) };
+    }
+    return { kind: payload.otherRunning === true ? "quiet" : "closed" };
+  }
+
+  // The Discord row of the in-game screen. Both making sound: one slider, the game at one end
+  // and Discord at the other, both full in the middle. Otherwise: what Discord is doing, and a
+  // button that brings it up.
+  function renderDiscordRow(chat) {
+    if (!chat) {
+      return "";
+    }
+    if (chat.kind === "blend") {
+      return '' +
+        '<span class="game-focus-discord-side">Game <b data-game-chat-game>' + chat.game + '</b></span>' +
+        '<input class="inline-range" type="range" min="0" max="100" step="5" value="' + chat.position + '" data-game-chat-blend' +
+          ' aria-label="Balance between game volume and Discord volume" aria-valuetext="Game ' + chat.game + ' percent, Discord ' + chat.chat + ' percent">' +
+        '<span class="game-focus-discord-side">Discord <b data-game-chat-chat>' + chat.chat + '</b></span>';
+    }
+    return '' +
+      '<div class="game-focus-discord-copy"><strong>Discord</strong><small>' + (chat.kind === "quiet" ? "Open, not making sound" : "Not open") + '</small></div>' +
+      '<button class="inline-button" type="button" data-action="discord-open">' + (chat.kind === "quiet" ? "Show Discord" : "Open Discord") + '</button>';
+  }
+
   // "This week": time played over the last seven days as seven bars, one line on the week,
   // and the games it went on. Nothing at all until a game has been played with Auxora open.
   function renderPlayWeekCard(week, formatDuration) {
@@ -924,6 +957,9 @@
   function mountGameModeWidget(widget, container, env) {
     var cleanups = [];
     var playWeek = { at: 0, html: "" };
+    // Discord beside the running game: the last reading, when it was asked for, a hold while
+    // the slider is moving, and the timer that spaces out what the host is told.
+    var discord = { chat: null, askedAt: 0, holdUntil: 0, requestId: 0, sendTimer: 0, notice: "" };
     var state = {
       system: {},
       audio: normalizeAudioPayload({}),
@@ -1070,6 +1106,7 @@
           container.setAttribute("data-game-focus-intro", introActive ? "1" : "0");
         }
         startGameSessionClock();
+        syncDiscordRow();
         return;
       }
 
@@ -1113,6 +1150,103 @@
         }
       }
       return playWeek.html;
+    }
+
+    // The Discord row lives in the in-game screen's sound column and is kept by this function
+    // alone, so the screen's own drawing and patching do not need to know about it.
+    function syncDiscordRow() {
+      var column = container.querySelector(".game-focus-card--utility");
+      if (!column) {
+        return;
+      }
+      var now = Date.now();
+      if (now - discord.askedAt >= 4000 && now >= discord.holdUntil && env && env.bridgeOrigin) {
+        discord.askedAt = now;
+        var requestId = ++discord.requestId;
+        requestJson(buildBridgeUrl(env, "/api/audio/chat-blend"), {}, 4000).then(function (payload) {
+          if (requestId !== discord.requestId || Date.now() < discord.holdUntil) {
+            return;
+          }
+          discord.chat = discordChatState(payload);
+          syncDiscordRow();
+        }, function () {});
+      }
+
+      var row = column.querySelector(".game-focus-discord");
+      var chat = discord.chat;
+      if (!chat) {
+        if (row) {
+          row.remove();
+        }
+        return;
+      }
+      if (!row) {
+        row = document.createElement("div");
+        row.className = "game-focus-discord";
+        column.insertBefore(row, column.querySelector(".game-focus-audio-list"));
+      }
+      var kind = chat.kind + (discord.notice ? ":" + discord.notice : "");
+      if (row.getAttribute("data-kind") !== kind) {
+        row.setAttribute("data-kind", kind);
+        row.setAttribute("data-state", chat.kind);
+        row.innerHTML = renderDiscordRow(chat);
+        if (discord.notice) {
+          row.querySelector("small").textContent = discord.notice;
+        }
+        return;
+      }
+      if (chat.kind === "blend" && now >= discord.holdUntil) {
+        var range = row.querySelector("[data-game-chat-blend]");
+        if (Number(range.value) !== chat.position) {
+          range.value = String(chat.position);
+        }
+        paintDiscordBlend(row, chat);
+      }
+    }
+
+    function paintDiscordBlend(row, chat) {
+      row.querySelector("[data-game-chat-game]").textContent = String(chat.game);
+      row.querySelector("[data-game-chat-chat]").textContent = String(chat.chat);
+      row.querySelector("[data-game-chat-blend]").setAttribute("aria-valuetext", "Game " + chat.game + " percent, Discord " + chat.chat + " percent");
+    }
+
+    // The numbers follow the thumb at once; the host is told at most every 150 ms while it
+    // moves and once more when it is let go. Its readings are set aside for three seconds.
+    function moveDiscordBlend(value, final) {
+      var row = container.querySelector(".game-focus-discord");
+      if (!row || !discord.chat || discord.chat.kind !== "blend") {
+        return;
+      }
+      discord.chat = discordChatState({ other: "chat", available: true, position: Number(value) });
+      discord.holdUntil = Date.now() + 3000;
+      discord.requestId += 1;
+      paintDiscordBlend(row, discord.chat);
+      var send = function () {
+        discord.sendTimer = 0;
+        if (discord.chat && discord.chat.kind === "blend" && env && env.bridgeOrigin) {
+          requestJson(buildBridgeUrl(env, "/api/audio/chat-blend"), { method: "POST", body: { position: discord.chat.position } }, 5000).then(function () {}, function () {});
+        }
+      };
+      if (final) {
+        window.clearTimeout(discord.sendTimer);
+        send();
+      } else if (!discord.sendTimer) {
+        discord.sendTimer = window.setTimeout(send, 150);
+      }
+    }
+
+    function openDiscord() {
+      if (!env || !env.bridgeOrigin) {
+        return;
+      }
+      requestJson(buildBridgeUrl(env, "/api/discord/open"), { method: "POST", body: {} }, 6000).then(function (payload) {
+        discord.notice = payload && payload.opened === false ? text(payload.message, "Discord could not be opened.") : "";
+        discord.askedAt = 0;
+        syncDiscordRow();
+      }, function () {
+        discord.notice = "Discord could not be opened.";
+        syncDiscordRow();
+      });
     }
 
     function refreshGameModeSession(options) {
@@ -1449,6 +1583,8 @@
         toggleGameMicMute();
       } else if (action === "game-session-mute") {
         toggleGameSessionMute(String(target.getAttribute("data-session-id") || ""));
+      } else if (action === "discord-open") {
+        openDiscord();
       } else if (action === "game-pin-candidate") {
         pinGameCandidate(target);
       } else if (action === "restart-game-admin") {
@@ -1462,6 +1598,17 @@
           return;
         }
         launchSteamGame(appId);
+      }
+    });
+
+    addListener(cleanups, container, "input", function (event) {
+      if (event.target && event.target.hasAttribute && event.target.hasAttribute("data-game-chat-blend")) {
+        moveDiscordBlend(event.target.value, false);
+      }
+    });
+    addListener(cleanups, container, "change", function (event) {
+      if (event.target && event.target.hasAttribute && event.target.hasAttribute("data-game-chat-blend")) {
+        moveDiscordBlend(event.target.value, true);
       }
     });
 
@@ -1489,7 +1636,7 @@
 
 
   if (typeof runtime.registerHelpers === "function") {
-    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard, renderGameFocusScene: renderGameFocusScene, renderPlayWeekCard: renderPlayWeekCard });
+    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard, renderGameFocusScene: renderGameFocusScene, renderPlayWeekCard: renderPlayWeekCard, discordChatState: discordChatState, renderDiscordRow: renderDiscordRow });
   }
 
   runtime.registerRenderer("game-mode", mountGameModeWidget);

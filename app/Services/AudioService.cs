@@ -135,16 +135,29 @@ public sealed class AudioService
     // The running game's volume and Apple Music's volume as one balance. See AudioBlend.
     public AudioBlendPayload GetBlend(int? gameProcessId, string? gameProcessName)
     {
-        return ApplyBlend(gameProcessId, gameProcessName, null);
+        return ApplyBlend(gameProcessId, gameProcessName, null, AudioBlend.Music);
     }
 
     public AudioBlendPayload SetBlend(int? gameProcessId, string? gameProcessName, double position)
     {
-        return ApplyBlend(gameProcessId, gameProcessName, position);
+        return ApplyBlend(gameProcessId, gameProcessName, position, AudioBlend.Music);
     }
 
-    private AudioBlendPayload ApplyBlend(int? gameProcessId, string? gameProcessName, double? position)
+    // The same balance between the running game and Discord: the game/chat mix of a headset.
+    public AudioBlendPayload GetChatBlend(int? gameProcessId, string? gameProcessName)
     {
+        return ApplyBlend(gameProcessId, gameProcessName, null, AudioBlend.Chat);
+    }
+
+    public AudioBlendPayload SetChatBlend(int? gameProcessId, string? gameProcessName, double position)
+    {
+        return ApplyBlend(gameProcessId, gameProcessName, position, AudioBlend.Chat);
+    }
+
+    private AudioBlendPayload ApplyBlend(int? gameProcessId, string? gameProcessName, double? position, string otherRole)
+    {
+        var isChat = otherRole == AudioBlend.Chat;
+        var otherRunning = !isChat || IsDiscordRunning();
         try
         {
             // Setting needs a fresh reading; a plain look can use one up to two seconds old.
@@ -156,7 +169,7 @@ public sealed class AudioService
             }
 
             var game = new List<AudioSessionRecord>();
-            var music = new List<AudioSessionRecord>();
+            var other = new List<AudioSessionRecord>();
             foreach (var session in raw?.Sessions ?? Array.Empty<AudioSessionRecord>())
             {
                 if (session.IsSystemSounds || session.ProcessId == 0 || string.IsNullOrEmpty(session.Identifier))
@@ -174,25 +187,30 @@ public sealed class AudioService
                 {
                     game.Add(session);
                 }
-                else if (role == AudioBlend.Music)
+                else if (role == otherRole)
                 {
-                    music.Add(session);
+                    other.Add(session);
                 }
             }
 
-            if (raw is null || game.Count == 0 || music.Count == 0)
+            if (raw is null || game.Count == 0 || other.Count == 0)
             {
                 return new AudioBlendPayload
                 {
                     Available = false,
+                    Other = otherRole,
                     GameFound = game.Count > 0,
-                    MusicFound = music.Count > 0,
-                    Message = "The balance needs a running game and Apple Music both making sound."
+                    OtherFound = other.Count > 0,
+                    MusicFound = !isChat && other.Count > 0,
+                    OtherRunning = otherRunning || other.Count > 0,
+                    Message = isChat
+                        ? "The balance needs a running game and Discord both making sound."
+                        : "The balance needs a running game and Apple Music both making sound."
                 };
             }
 
             var gameVolume = game.Max(session => session.Volume);
-            var musicVolume = music.Max(session => session.Volume);
+            var otherVolume = other.Max(session => session.Volume);
             if (position is double wanted)
             {
                 var volumes = AudioBlend.VolumesAt(wanted);
@@ -201,35 +219,67 @@ public sealed class AudioService
                     AudioBridge.SetSessionVolume(raw.DefaultDeviceId, session.Identifier, volumes.Game / 100f);
                 }
 
-                foreach (var session in music)
+                foreach (var session in other)
                 {
                     AudioBridge.SetSessionVolume(raw.DefaultDeviceId, session.Identifier, volumes.Music / 100f);
                 }
 
                 gameVolume = volumes.Game;
-                musicVolume = volumes.Music;
+                otherVolume = volumes.Music;
                 RefreshSnapshot(force: true);
             }
 
             return new AudioBlendPayload
             {
                 Available = true,
+                Other = otherRole,
                 GameFound = true,
-                MusicFound = true,
+                OtherFound = true,
+                MusicFound = !isChat,
+                OtherRunning = true,
                 GameVolume = Clamp(gameVolume, 0, 100),
-                MusicVolume = Clamp(musicVolume, 0, 100),
-                Position = AudioBlend.PositionOf(gameVolume, musicVolume)
+                OtherVolume = Clamp(otherVolume, 0, 100),
+                MusicVolume = isChat ? 0 : Clamp(otherVolume, 0, 100),
+                Position = AudioBlend.PositionOf(gameVolume, otherVolume)
             };
         }
         catch (Exception error)
         {
-            _logger.Error("Failed to read or set the game and music balance.", error);
+            _logger.Error("Failed to read or set a volume balance.", error);
             return new AudioBlendPayload
             {
                 Available = false,
-                Message = "The game and music volumes could not be read."
+                Other = otherRole,
+                OtherRunning = otherRunning,
+                Message = "The volumes could not be read."
             };
         }
+    }
+
+    private static bool IsDiscordRunning()
+    {
+        try
+        {
+            foreach (var name in new[] { "Discord", "DiscordPTB", "DiscordCanary" })
+            {
+                var found = Process.GetProcessesByName(name);
+                foreach (var process in found)
+                {
+                    process.Dispose();
+                }
+
+                if (found.Length > 0)
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // Treated as not running: the row then offers to open it.
+        }
+
+        return false;
     }
 
     // A process's name without opening it, so protected games answer too.
