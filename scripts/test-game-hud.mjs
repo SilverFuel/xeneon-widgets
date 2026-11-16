@@ -81,3 +81,36 @@ test("the mic button shows the microphone's state; its label for screen readers 
   const none = helpers.renderGameFocusScene(game, theme, system, live, { masterVolume: 50, devices: [], inputDevices: [], sessions: [] }, {}, {}, false, false);
   assert.match(none, /data-mic="none" aria-pressed="false" aria-label="No mic" disabled>No mic</);
 });
+
+test("the This week card shows seven bars, the week in one line and the games it went on", () => {
+  const minutes = value => `${Math.round(value / 60000)} min`;
+  const day = (label, ms, today = false) => ({ id: label, label, name: today ? "today" : label + "day", today, ms });
+  const week = {
+    everPlayed: true, totalMs: 292 * 60000, bestDay: { name: "Saturday", ms: 225 * 60000 },
+    days: [day("Mon", 20 * 60000), day("Tue", 0), day("Wed", 0), day("Thu", 0), day("Fri", 0), day("Sat", 225 * 60000), day("Sun", 47 * 60000, true)],
+    games: [{ key: "steam:2807960", name: "Battlefield 6", ms: 150 * 60000 }, { key: "wow-forever", name: "World of Warcraft Forever", ms: 142 * 60000 }]
+  };
+  const html = helpers.renderPlayWeekCard(week, minutes);
+  const copy = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  assert.match(copy, /^This week 292 min Most on Saturday: 225 min\. Mon Tue Wed Thu Fri Sat Sun Battlefield 6 150 min World of Warcraft Forever 142 min$/);
+  const bars = html.match(/<div class="game-week-day[^>]*><i style="height:\d+%"><\/i>/g);
+  assert.equal(bars.length, 7);
+  assert.match(bars[5], /height:100%/);
+  assert.match(bars[0], /height:9%/);
+  assert.match(bars[1], /height:0%/);
+  assert.match(bars[6], /is-today/);
+  assert.match(html, /Battlefield 6<\/span><b>150 min<\/b><i style="width:100%">/);
+  assert.match(html, /World of Warcraft Forever<\/span><b>142 min<\/b><i style="width:95%">/);
+});
+
+test("the This week card says so when nothing was played, and is absent until a game has ever been played", () => {
+  const minutes = value => `${Math.round(value / 60000)} min`;
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label, index) => ({ id: label, label, name: label, today: index === 6, ms: 0 }));
+  const quiet = helpers.renderPlayWeekCard({ everPlayed: true, totalMs: 0, bestDay: null, days, games: [] }, minutes);
+  assert.match(quiet, /Nothing played in the last seven days\./);
+  assert.doesNotMatch(quiet, /game-week-games/);
+  const oneDay = helpers.renderPlayWeekCard({ everPlayed: true, totalMs: 47 * 60000, bestDay: { name: "today", ms: 47 * 60000 }, days: days.map((entry, index) => ({ ...entry, ms: index === 6 ? 47 * 60000 : 0 })), games: [{ key: "wow-forever", name: "WoW", ms: 47 * 60000 }] }, minutes);
+  assert.match(oneDay, /All of it today\./);
+  assert.equal(helpers.renderPlayWeekCard({ everPlayed: false, totalMs: 0, bestDay: null, days, games: [] }, minutes), "");
+  assert.equal(helpers.renderPlayWeekCard(null, minutes), "");
+});

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const playLog = require("../js/play-log.js");
-const { fresh, validate, seen, touch, end, summary, formatDuration, formatClock, historyLine, dayId, load, save, STORAGE_KEY, MAX_GAP_MS } = playLog;
+const { fresh, validate, seen, touch, end, summary, formatDuration, formatClock, historyLine, dayId, week, load, save, STORAGE_KEY, MAX_GAP_MS } = playLog;
 
 const MINUTE = 60000;
 const HOUR = 60 * MINUTE;
@@ -142,4 +142,40 @@ test("only the 40 most recent games and 60 most recent days are kept", () => {
   for (let day = 0; day < 70; day += 1) seen(long, battlefield, noon + day * DAY);
   assert.equal(Object.keys(long.games[battlefield.key].days).length, 60);
   assert.equal(long.games[battlefield.key].sessions, 70, "the total still counts every session");
+});
+
+test("the week is seven days ending today, with the day that had the most and the games it went on", () => {
+  const now = new Date(2026, 10, 15, 12).getTime();
+  const at = daysAgo => dayId(new Date(2026, 10, 15 - daysAgo, 12).getTime());
+  const log = { version: 1, current: null, games: {
+    "wow-forever": { name: "World of Warcraft Forever", totalMs: 900 * MINUTE, sessions: 9, lastPlayed: now, days: { [at(0)]: { ms: 47 * MINUTE, sessions: 1 }, [at(1)]: { ms: 95 * MINUTE, sessions: 2 }, [at(9)]: { ms: 300 * MINUTE, sessions: 1 } } },
+    "steam:2807960": { name: "Battlefield 6", totalMs: 500 * MINUTE, sessions: 4, lastPlayed: now - DAY, days: { [at(1)]: { ms: 130 * MINUTE, sessions: 1 }, [at(6)]: { ms: 20 * MINUTE, sessions: 1 } } },
+    "steam:1": { name: "Blink", totalMs: 30000, sessions: 1, lastPlayed: now - 2 * DAY, days: { [at(2)]: { ms: 30000, sessions: 1 } } }
+  } };
+  const result = week(log, now);
+  assert.deepEqual(result.days.map(day => day.label), ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+  assert.deepEqual(result.days.map(day => Math.round(day.ms / MINUTE * 10) / 10), [20, 0, 0, 0, 0.5, 225, 47]);
+  assert.deepEqual(result.days.map(day => day.today), [false, false, false, false, false, false, true]);
+  assert.equal(result.totalMs, (20 + 225 + 47) * MINUTE + 30000);
+  assert.deepEqual(result.bestDay, { name: "Saturday", ms: 225 * MINUTE });
+  assert.deepEqual(result.games, [
+    { key: "wow-forever", name: "World of Warcraft Forever", ms: 142 * MINUTE },
+    { key: "steam:2807960", name: "Battlefield 6", ms: 150 * MINUTE }
+  ].sort((a, b) => b.ms - a.ms), "time from nine days ago is not this week; under a minute is left out");
+  assert.equal(result.everPlayed, true);
+});
+
+test("an empty or old log gives an empty week", () => {
+  const now = new Date(2026, 10, 15, 12).getTime();
+  const empty = week(fresh(), now);
+  assert.equal(empty.totalMs, 0);
+  assert.equal(empty.bestDay, null);
+  assert.deepEqual(empty.games, []);
+  assert.equal(empty.everPlayed, false);
+  assert.equal(empty.days.length, 7);
+  assert.equal(empty.days[6].name, "today");
+  const old = week({ version: 1, current: null, games: { "steam:1": { name: "Old", totalMs: HOUR, sessions: 1, lastPlayed: now - 30 * DAY, days: {} } } }, now);
+  assert.equal(old.totalMs, 0);
+  assert.equal(old.everPlayed, true);
+  assert.equal(week(null, now).everPlayed, false);
 });
