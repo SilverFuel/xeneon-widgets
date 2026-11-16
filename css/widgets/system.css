@@ -138,9 +138,30 @@
   color: var(--status-danger-text);
 }
 
+/* The chart and, beside it, what its top, middle and bottom stand for. */
+.system-trend-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.system-trend-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--color-text-dim);
+  font-size: var(--system-fs-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  text-align: right;
+}
+
 /* The last two minutes as thirty bars, newest on the right. The faint line is 50%. */
 .system-trend {
   display: flex;
+  border-top: 1px solid var(--theme-border);
   align-items: flex-end;
   gap: 3px;
   min-width: 0;

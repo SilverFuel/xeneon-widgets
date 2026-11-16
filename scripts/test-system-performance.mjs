@@ -65,6 +65,7 @@ test("the history is thirty slots with the newest reading on the right", () => {
   const bars = first.match(/<span[^>]*><\/span>/g);
   assert.equal(bars.length, 30);
   assert.equal(bars.filter(bar => bar.includes("is-empty")).length, 27);
+  assert.equal((words(html).match(/100% 50% 0%/g) || []).length, 3, "each chart says what its top, middle and bottom are");
   assert.deepEqual(bars.slice(-3), ['<span style="height:10%"></span>', '<span style="height:20%"></span>', '<span style="height:56%"></span>']);
   const long = render(busyPc, edge, { cpu: Array.from({ length: 45 }, (_, index) => index), gpu: [], ram: [] });
   const longBars = long.slice(long.indexOf('<div class="system-trend"'), long.indexOf("Last 2 minutes")).match(/<span[^>]*><\/span>/g);

@@ -325,11 +325,12 @@
 .wow-quest--game:not(.is-ready) .wow-quest-objectives { display: grid; gap: 0; overflow: visible; }
 .wow-objective { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
 .wow-objective > span { min-width: 0; overflow-wrap: anywhere; }
-.wow-objective > b { flex: 0 0 auto; color: #2e251a; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* An objective's count sits inside its own bar: "4/15" over how far along it is. */
+.wow-objective-bar { position: relative; flex: 0 0 auto; display: grid; place-items: center; min-width: 5.2em; padding: 1px 8px; overflow: hidden; border-radius: 4px; background: rgba(105, 80, 42, .2); }
+.wow-objective-bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 4px 0 0 4px; background: #d9b45f; }
+.wow-objective-bar > b { position: relative; color: #2e251a; font-weight: 700; font-variant-numeric: tabular-nums; }
 .wow-objective.is-done { color: #2a5530; }
 .wow-objective.is-done > span::before { content: "\2713\00a0"; font-weight: 700; }
-.wow-quest-progress { display: block; height: 5px; margin: 5px 0 2px; overflow: hidden; border-radius: 3px; background: rgba(105, 80, 42, .2); }
-.wow-quest-progress > i { display: block; height: 100%; min-width: 0; border-radius: 3px; background: #8a6a2c; }
 .wow-quest-level[data-difficulty="hard"] { border-width: 2px; border-color: #8a1f17; color: #8a1f17; font-weight: 700; }
 .wow-quest-level[data-difficulty="tough"] { border-color: #8f4a05; color: #8f4a05; font-weight: 700; }
 .wow-quest-level[data-difficulty="easy"] { border-style: dashed; color: #6f6149; }
@@ -417,6 +418,24 @@
   cursor: pointer;
 }
 .wow-adventure .wow-footer .wow-mic[hidden] { display: none; }
+/* A microphone beside the word, struck through while muted, so the state does not rest on
+   colour and one word alone. It is drawn in the button's own text colour. */
+.wow-adventure .wow-footer .wow-mic::before {
+  content: "";
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: .3em;
+  vertical-align: -.2em;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.wow-adventure .wow-footer .wow-mic[data-state="muted"]::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z'/%3E%3Cpath d='M3.3 2 22 20.7 20.7 22 2 3.3Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z'/%3E%3Cpath d='M3.3 2 22 20.7 20.7 22 2 3.3Z'/%3E%3C/svg%3E");
+}
 .wow-adventure .wow-footer .wow-mic[data-state="muted"] {
   border-color: #ffd0d0;
   color: #fff;
