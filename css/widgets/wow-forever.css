@@ -475,6 +475,36 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
   cursor: pointer;
 }
 .wow-adventure .wow-footer .wow-music[hidden] { display: none; }
+/* With a cover from Apple Music, the cover sits on the left and the words beside it. */
+.wow-adventure .wow-footer .wow-music.has-art { grid-template-columns: auto minmax(0, 1fr); justify-items: start; column-gap: 10px; text-align: left; }
+.wow-adventure .wow-footer .wow-music .wow-music-art { grid-row: 1 / span 2; width: 42px; height: 42px; border-radius: 4px; object-fit: cover; }
+.wow-adventure .wow-footer .wow-music .wow-music-art[hidden] { display: none; }
+/* Previous and next track, beside the play button. */
+.wow-adventure .wow-footer .wow-skip { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, 58px); gap: 6px; }
+.wow-adventure .wow-footer .wow-skip[hidden] { display: none; }
+.wow-adventure .wow-footer .wow-skip > button {
+  display: grid;
+  place-items: center;
+  min-width: 54px;
+  min-height: 54px;
+  padding: 0;
+  border: 2px solid #c9a961;
+  border-radius: 6px;
+  color: #f3e3bd;
+  background: #1d2a26;
+  cursor: pointer;
+}
+.wow-adventure .wow-footer .wow-skip > button:disabled { opacity: .45; cursor: default; }
+.wow-adventure .wow-footer .wow-skip > button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+/* The skip marks are drawn, like the play mark: two triangles and a bar. */
+.wow-adventure .wow-footer .wow-skip > button::before {
+  content: "";
+  width: 26px;
+  height: 22px;
+  background: currentColor;
+  clip-path: polygon(0 0, 46% 50%, 46% 0, 86% 50%, 86% 0, 100% 0, 100% 100%, 86% 100%, 86% 50%, 46% 100%, 46% 50%, 0 100%);
+}
+.wow-adventure .wow-footer .wow-skip > button[data-wow-action="music-previous"]::before { transform: scaleX(-1); }
 .wow-adventure .wow-footer .wow-music[data-state="playing"] { border-color: #f0dba8; color: #201c16; background: linear-gradient(#e6c98f, #b89354); }
 .wow-adventure .wow-footer .wow-music:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .wow-adventure .wow-footer .wow-music .wow-music-state { font-size: max(20px, var(--wow-fs-strong)); font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
@@ -508,6 +538,9 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
 @media (min-width: 1101px) {
   .wow-adventure .wow-footer .wow-music { position: absolute; top: 22px; right: 22px; }
   .wow-adventure:has(.wow-mic:not([hidden])) .wow-footer .wow-music { right: 284px; }
+  /* The skip buttons sit to the left of the play button (250px wide, plus a 12px gap). */
+  .wow-adventure .wow-footer .wow-skip { position: absolute; top: 22px; right: 284px; }
+  .wow-adventure:has(.wow-mic:not([hidden])) .wow-footer .wow-skip { right: 546px; }
 }
 .wow-save-status::before { content: ""; flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: #9eaf80; }
 .wow-save-status[data-state="error"] { color: #f6b7a7; }
@@ -687,7 +720,7 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
     .wow-notice { flex: 0 0 auto; margin-bottom: 10px; padding-block: 0; }
     .wow-footer { flex: 0 0 auto; flex-wrap: nowrap; padding-top: 10px; }
     /* One screen, no title: the mic button is the first thing in the bottom row. */
-    .wow-adventure .wow-footer :is(.wow-mic, .wow-music) { position: static; }
+    .wow-adventure .wow-footer :is(.wow-mic, .wow-music, .wow-skip) { position: static; }
     .wow-footer > .wow-save-status { flex: 0 0 auto; }
     .wow-footer > .wow-game-status { flex: 1 1 0; }
     .wow-footer-actions { flex: 0 0 auto; }
@@ -759,18 +792,28 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
       position: absolute;
       top: auto;
       right: 22px;
-      bottom: 86px;
-      gap: 10px;
+      bottom: 152px;
+      gap: 4px 10px;
       width: 240px;
-      height: 150px;
-      padding: 12px;
+      height: 96px;
+      padding: 8px 12px;
       border-width: 3px;
       border-radius: 10px;
     }
+    /* Previous and next fill the strip's last 54px (86px up from the frame, then a 12px gap). */
+    .wow-adventure .wow-footer .wow-skip,
+    .wow-adventure:has(.wow-mic:not([hidden])) .wow-footer .wow-skip { position: absolute; top: auto; right: 22px; bottom: 86px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 240px; height: 54px; }
+    .wow-adventure .wow-footer .wow-skip > button { border-width: 3px; border-radius: 10px; }
+    .wow-adventure:not(:has(.wow-skip:not([hidden]))) .wow-footer .wow-music { bottom: 86px; height: 150px; }
+    .wow-adventure .wow-footer .wow-music .wow-music-art { width: 60px; height: 60px; border-radius: 6px; }
     .wow-adventure:has(.wow-mic:not([hidden])) .wow-footer .wow-music { right: 22px; }
     .wow-adventure:not(:has(.wow-mic:not([hidden]))) .wow-footer .wow-music { top: 22px; height: auto; }
     .wow-adventure:has(.wow-music:not([hidden])) .wow-footer .wow-mic { bottom: 248px; }
+    /* With previous and next showing: 86px, the 54px row, the 96px tile and two 12px gaps. */
+    .wow-adventure:has(.wow-skip:not([hidden])) .wow-footer .wow-mic { bottom: 260px; }
     .wow-adventure .wow-footer .wow-music .wow-music-state { font-size: 40px; }
+    .wow-adventure .wow-footer .wow-music.has-art .wow-music-state,
+    .wow-adventure:has(.wow-skip:not([hidden])) .wow-footer .wow-music .wow-music-state { font-size: 30px; }
     .wow-adventure .wow-footer .wow-music .wow-music-track { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
 
     /* Page one: the character and the quests. */

@@ -3825,10 +3825,15 @@ function installWowQuestLogFixture() {
   // Apple Music, open and playing.
   let musicPlaying = true;
   let blendPosition = 50;
+  window.__wowMusicSkips = [];
+  window.__wowMusicCoverAsks = 0;
   window.__wowBlendPosts = [];
-  const musicReply = () => new Response(JSON.stringify({
+  // A one-pixel PNG stands in for the cover; it is sent only when the panel asks for it.
+  const musicCover = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  const musicReply = withCover => new Response(JSON.stringify({
     supported: true, configured: true, status: "live", playbackStatus: musicPlaying ? "playing" : "paused",
-    title: "Fixture song", artist: "Fixture artist", canPlay: true, canPause: true, message: ""
+    title: "Fixture song", artist: "Fixture artist", canPlay: true, canPause: true, canGoNext: true, canGoPrevious: true,
+    thumbnailDataUrl: withCover ? musicCover : "", message: ""
   }), { status: 200, headers: { "Content-Type": "application/json" } });
   window.fetch = function (input, options) {
     const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
@@ -3848,6 +3853,11 @@ function installWowQuestLogFixture() {
       }), { status: 200, headers: { "Content-Type": "application/json" } }));
     }
     if (url.origin === location.origin && url.pathname === "/api/media/apple-music") {
+      if (url.searchParams.get("art") === "1") window.__wowMusicCoverAsks += 1;
+      return Promise.resolve(musicReply(url.searchParams.get("art") === "1"));
+    }
+    if (url.origin === location.origin && /^\/api\/media\/apple-music\/(next|previous)$/.test(url.pathname)) {
+      window.__wowMusicSkips.push(url.pathname.split("/").pop());
       return Promise.resolve(musicReply());
     }
     if (url.origin === location.origin && url.pathname === "/api/media/apple-music/play-pause") {
@@ -4002,6 +4012,19 @@ async function checkWowQuestLogInPage() {
   check(musicLabel() === "Play" && musicButton.dataset.state === "paused", size + ": a tap did not pause Apple Music at once: " + musicButton.outerHTML);
   await wait(1800);
   check(musicLabel() === "Play" && musicButton.dataset.state === "paused", size + ": Apple Music did not stay paused after the host was asked again: " + musicButton.outerHTML);
+  // Previous and next beside it, and the cover from Apple Music, asked for once per track.
+  const skipGroup = panel().querySelector(".wow-skip");
+  const skipButtons = [...skipGroup.querySelectorAll("button")];
+  check(shown(skipGroup) && skipButtons.length === 2 && skipButtons.every(button => !button.disabled
+    && button.getBoundingClientRect().width >= 54 && button.getBoundingClientRect().height >= 54),
+    size + ": previous and next are not both offered at a touchable size: " + skipGroup.outerHTML);
+  skipButtons[1].click();
+  await wait(300);
+  check(window.__wowMusicSkips.join() === "next", size + ": a tap on next did not ask the host to skip: " + JSON.stringify(window.__wowMusicSkips));
+  const musicCoverImage = musicButton.querySelector(".wow-music-art");
+  check(!musicCoverImage.hidden && musicCoverImage.naturalWidth > 0 && musicCoverImage.getBoundingClientRect().width >= 40 && window.__wowMusicCoverAsks === 1,
+    size + ": the cover is not showing, or was asked for more than once: " + window.__wowMusicCoverAsks + " " + musicButton.outerHTML.slice(0, 200));
+  await wait(1500);
   check(pageFits() || !oneScreen, size + ": the panel runs off the screen with the mic and music buttons showing");
   // The balance slider: game at one end, Apple Music at the other, both full in the middle.
   const blendBox = panel().querySelector(".wow-blend");

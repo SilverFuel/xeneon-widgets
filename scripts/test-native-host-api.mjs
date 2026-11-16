@@ -1268,6 +1268,13 @@ try {
   assert(!/[A-Za-z]:\\\\|\\\\WTF|_forever_/i.test(JSON.stringify(companion)), "/api/wow/companion must not expose a file or folder path");
 
   // Apple Music's own playback: the route answers whether or not the app is open.
+  // Asking for the cover art must not change the answer's shape, with or without a player open.
+  const appleMusicArtResponse = await fetchWithTimeout("/api/media/apple-music?art=1");
+  assert(appleMusicArtResponse.status === 200, `/api/media/apple-music?art=1 must answer; received HTTP ${appleMusicArtResponse.status}`);
+  const appleMusicArt = await appleMusicArtResponse.json();
+  assert(typeof appleMusicArt.status === "string" && typeof appleMusicArt.thumbnailDataUrl === "string"
+    && (appleMusicArt.thumbnailDataUrl === "" || appleMusicArt.thumbnailDataUrl.startsWith("data:image/")),
+    `/api/media/apple-music?art=1 returned an unexpected shape: ${JSON.stringify(appleMusicArt).slice(0, 300)}`);
   const appleMusicResponse = await fetchWithTimeout("/api/media/apple-music");
   assert(appleMusicResponse.status === 200, `/api/media/apple-music must answer; received HTTP ${appleMusicResponse.status}`);
   const appleMusic = await appleMusicResponse.json();

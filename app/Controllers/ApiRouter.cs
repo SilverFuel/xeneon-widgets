@@ -328,10 +328,16 @@ public sealed class ApiRouter
                 await WriteJsonAsync(response, 200, await _actionController.GetMediaAsync(cancellationToken), cancellationToken);
                 return;
             case "/api/media/apple-music" when request.HttpMethod == "GET":
-                await WriteJsonAsync(response, 200, await _actionController.GetAppMediaAsync("apple-music", cancellationToken), cancellationToken);
+                await WriteJsonAsync(response, 200, await _actionController.GetAppMediaAsync("apple-music", GetQueryValue(request, "art") == "1", cancellationToken), cancellationToken);
                 return;
             case "/api/media/apple-music/play-pause" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _actionController.ExecuteAppMediaAsync("apple-music", "play-pause", cancellationToken), cancellationToken);
+                return;
+            case "/api/media/apple-music/next" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, await _actionController.ExecuteAppMediaAsync("apple-music", "next", cancellationToken), cancellationToken);
+                return;
+            case "/api/media/apple-music/previous" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, await _actionController.ExecuteAppMediaAsync("apple-music", "previous", cancellationToken), cancellationToken);
                 return;
             case "/api/media/play" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _actionController.ExecuteMediaAsync("play", cancellationToken), cancellationToken);
