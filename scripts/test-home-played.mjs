@@ -18,7 +18,9 @@ const game = (name, totalMinutes, lastPlayed, todayMinutes = 0) => ({
   days: todayMinutes ? { [playLog.dayId(now)]: { ms: todayMinutes * minute, sessions: 1 } } : {}
 });
 // Through JSON: the panel's objects come from another realm, which deepEqual treats as a different type.
-const recent = log => JSON.parse(JSON.stringify(helpers.homeRecentGames(log, playLog, now)));
+const all = log => JSON.parse(JSON.stringify(helpers.homeRecentGames(log, playLog, now)));
+// The cover has its own test below; the others compare the words.
+const recent = log => all(log).map(({ cover, ...entry }) => entry);
 
 test("lists the three most recent games, newest first, each with when and how long", () => {
   const log = { version: 1, current: null, games: {
@@ -59,9 +61,19 @@ test("leaves out games with under a minute counted, and copes with no log", () =
   assert.deepEqual(recent(null), []);
 });
 
-test("never carries anything but the key, the name, the line and the panel to open", () => {
+test("each game has a cover: Steam's own picture by its Steam id, or its initials", () => {
+  const log = { version: 1, current: null, games: {
+    "steam:2807960": game("Battlefield 6", 1310, now - 26 * hour),
+    "wow-forever": game("World of Warcraft Forever", 372, now - 3 * hour, 47)
+  } };
+  const [wow, battlefield] = all(log);
+  assert.equal(wow.cover, '<span class="game-cover" aria-hidden="true"><b>WW</b></span>');
+  assert.equal(battlefield.cover, '<span class="game-cover" aria-hidden="true"><b>B6</b><img src="/api/steam/games/art?id=2807960" alt="" loading="lazy" decoding="async" data-game-cover></span>');
+});
+
+test("never carries anything but the key, the name, the line, the cover and the panel to open", () => {
   const log = { version: 1, current: null, games: { "steam:3": { ...game("Pathy", 90, now - hour), path: "C:\\Games\\pathy.exe" } } };
-  const [entry] = recent(log);
-  assert.deepEqual(Object.keys(entry).sort(), ["destination", "key", "line", "name"]);
+  const [entry] = all(log);
+  assert.deepEqual(Object.keys(entry).sort(), ["cover", "destination", "key", "line", "name"]);
   assert.doesNotMatch(JSON.stringify(entry), /C:|exe/);
 });

@@ -846,7 +846,8 @@
         key: entry.key,
         name: stats.name,
         line: total ? when + " · " + total : when,
-        destination: entry.key === "wow-forever" ? "wow-forever" : "game-mode"
+        destination: entry.key === "wow-forever" ? "wow-forever" : "game-mode",
+        cover: typeof api.coverMarkup === "function" ? api.coverMarkup(entry.key, stats.name) : ""
       };
     });
   }
@@ -983,7 +984,7 @@
           homeCard("Next event", calendarReading, calendarDetail, "calendar", "Open Calendar") +
         '</div>' +
         (games.length ? '<section class="auxora-home-played" data-ui-key="home-played" aria-label="Recently played"><div class="auxora-home-played__title">Recently played</div><div class="auxora-home-played__list">' + games.map(function (game) {
-          return '<button type="button" class="auxora-home-game" data-ui-key="home-game-' + escapeHtml(game.key) + '" data-home-open="' + escapeHtml(game.destination) + '"><strong>' + escapeHtml(game.name) + '</strong><span>' + escapeHtml(game.line) + '</span></button>';
+          return '<button type="button" class="auxora-home-game" data-ui-key="home-game-' + escapeHtml(game.key) + '" data-home-open="' + escapeHtml(game.destination) + '">' + (game.cover || "") + '<strong>' + escapeHtml(game.name) + '</strong><span class="auxora-home-game__line">' + escapeHtml(game.line) + '</span></button>';
         }).join("") + '</div></section>' : '') +
         (state.message && !state.loading && state.message !== "Loading your quick look" ? '<p class="auxora-home-feedback" role="status">' + escapeHtml(state.message) + '</p>' : '') +
         (chains.length ? '<details class="list-card inline-card auxora-glance-chains" data-ui-key="home-setups"><summary>One-tap setups</summary><p class="router-inline-copy">Apply a Profile and Windows settings together.</p><div class="inline-actions">' + chains.map(function (chain) {

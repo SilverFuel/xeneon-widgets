@@ -1756,13 +1756,42 @@
     }
   }
 
+  // The game's cover beside the welcome, when Steam keeps one on this PC. The card widens for it
+  // only once the picture has loaded; a game without one gets the card as it was.
+  function showArrivalCover(banner, url) {
+    var cover = document.getElementById("dashboard-arrival-cover");
+    if (!cover) {
+      return;
+    }
+    banner.classList.remove("has-cover");
+    if (!cover.dataset.ready) {
+      cover.dataset.ready = "true";
+      cover.addEventListener("load", function () {
+        if (cover.getAttribute("src")) { banner.classList.add("has-cover"); }
+      });
+      cover.addEventListener("error", function () {
+        window.AuxoraPlayLog.coverMissing(cover.getAttribute("src"));
+        banner.classList.remove("has-cover");
+      });
+    }
+    if (url && cover.getAttribute("src") === url && cover.complete && cover.naturalWidth > 0) {
+      // The same game again: the picture is already there.
+      banner.classList.add("has-cover");
+    } else if (url) {
+      cover.setAttribute("src", url);
+    } else {
+      cover.removeAttribute("src");
+    }
+  }
+
   // A short welcome when a game starts: its name, a line for its Profile, and the player's history with it.
-  function showArrival(game, stats) {
+  function showArrival(game, stats, key) {
     var banner = document.getElementById("dashboard-arrival");
     var profile = profileForGame(game);
     if (!banner) {
       return;
     }
+    showArrivalCover(banner, window.AuxoraPlayLog.coverUrl(key));
     document.getElementById("dashboard-arrival-name").textContent = stats ? stats.name : "Game";
     document.getElementById("dashboard-arrival-line").textContent = (profile && arrivalLines[profile.id]) || "Game on.";
     document.getElementById("dashboard-arrival-history").textContent = window.AuxoraPlayLog.historyLine(stats);
@@ -1794,7 +1823,7 @@
         playLogSavedAt = now;
       }
       if (began) {
-        showArrival(game, api.summary(playLog, key, now));
+        showArrival(game, api.summary(playLog, key, now), key);
       }
     } else if (playLog.current && payload && payload.active === false && payload.supported !== false && !payload.stale
       && (payload.status === "idle" || payload.status === "ended")) {

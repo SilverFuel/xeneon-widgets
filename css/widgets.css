@@ -5577,3 +5577,37 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
   font-weight: 650;
   cursor: pointer;
 }
+
+/* A game's cover: the picture Steam keeps on this PC when there is one, the game's initials
+   when there is not. Its height is --game-cover-size; the shape is Steam's two-by-three. */
+.game-cover {
+  --game-cover-size: 44px;
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  inline-size: calc(var(--game-cover-size) * 2 / 3);
+  block-size: var(--game-cover-size);
+  overflow: hidden;
+  border: 1px solid var(--theme-border);
+  border-radius: 5px;
+  background: var(--theme-accent-soft);
+  color: var(--theme-text);
+}
+
+.game-cover > b {
+  font-size: max(14px, calc(var(--game-cover-size) * 0.3));
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.game-cover > img {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  background: var(--theme-surface-primary);
+}
