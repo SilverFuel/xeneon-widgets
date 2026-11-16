@@ -3910,7 +3910,7 @@ async function checkWowQuestLogInPage() {
   // Each objective is its own line with its count, and the quest shows how far along it is.
   const firstQuest = list.children[0];
   check(firstQuest.querySelectorAll(".wow-objective").length === 2 && firstQuest.querySelector(".wow-objective b")?.textContent === "0/10"
-    && firstQuest.querySelector(".wow-quest-progress")?.getBoundingClientRect().width > 1, size + ": objectives are not listed one by one with their counts: " + firstQuest.textContent);
+    && firstQuest.querySelector(".wow-objective-bar")?.getBoundingClientRect().width > 1 && !firstQuest.querySelector(".wow-quest-progress"), size + ": objectives are not listed one by one with their counts in a bar: " + firstQuest.textContent);
   // The character card: professions, gear and bags from the game, and no editor for the hand-kept character.
   const rows = Object.fromEntries(Array.from(panel().querySelectorAll(".wow-profile-summary > div")).map(row => [label(row.querySelector("dt")), row]));
   const value = name => rows[name] ? label(rows[name].querySelector("dd")) : "(missing)";

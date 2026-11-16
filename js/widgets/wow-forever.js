@@ -541,8 +541,6 @@
       var showZone = viewId === "ready" || viewId === "all";
       var difficultyNotes = { hard: ", well above your level", tough: ", above your level", easy: ", far below your level" };
       return questsInView(game, viewId).map(function (quest) {
-        var progress = questProgress(quest);
-        var percent = progress == null ? 0 : Math.round(progress * 100);
         var difficulty = questDifficulty(quest.level, game.level);
         var objectives = quest.complete
           ? '<span class="wow-quest-objectives">Ready to turn in</span>'
@@ -550,12 +548,11 @@
             ? '<span class="wow-quest-objectives">' + quest.objectives.map(function (objective) {
               var parts = objectiveParts(objective);
               return '<span class="wow-objective' + (parts.done ? ' is-done' : '') + '"><span>' + escapeHtml(parts.label) + '</span>' +
-                (parts.need && !parts.done ? '<b>' + parts.have + '/' + parts.need + '</b>' : '') + '</span>';
+                (parts.need && !parts.done ? '<span class="wow-objective-bar"><i style="width:' + Math.round(100 * Math.min(1, parts.have / parts.need)) + '%"></i><b>' + parts.have + '/' + parts.need + '</b></span>' : '') + '</span>';
             }).join("") + '</span>'
             : '';
         return '<li class="wow-quest wow-quest--game' + (quest.complete ? ' is-ready' : '') + '"><span class="wow-quest-copy"><strong>' + escapeHtml(quest.title) + '</strong>' +
           objectives +
-          (!quest.complete && progress != null ? '<span class="wow-quest-progress" role="img" aria-label="' + percent + '% done"><i style="width:' + percent + '%"></i></span>' : '') +
           (showZone && quest.zone ? '<small>' + escapeHtml(quest.zone) + '</small>' : '') + '</span>' +
           (quest.level ? '<span class="wow-quest-level"' + (difficulty ? ' data-difficulty="' + difficulty + '"' : '') +
             ' aria-label="Level ' + quest.level + (difficultyNotes[difficulty] || '') + '">' + quest.level + '</span>' : '') + '</li>';
