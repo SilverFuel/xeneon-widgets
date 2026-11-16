@@ -183,6 +183,46 @@
     };
   }
 
+  // The last seven days, oldest first and ending today: time per day across every game,
+  // the day with the most, and the games played in that week, most played first.
+  function week(log, now) {
+    var games = log && log.games ? log.games : {};
+    var short = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    var long = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    var today = new Date(now);
+    var days = [];
+    var index;
+    for (index = 6; index >= 0; index -= 1) {
+      // By calendar day, so a clock change does not skip or repeat one.
+      var date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - index, 12);
+      days.push({ id: dayId(date.getTime()), label: short[date.getDay()], name: index === 0 ? "today" : long[date.getDay()], today: index === 0, ms: 0 });
+    }
+    var perGame = [];
+    Object.keys(games).forEach(function (key) {
+      var game = games[key];
+      var total = 0;
+      days.forEach(function (day) {
+        var entry = game && game.days ? game.days[day.id] : null;
+        var ms = entry ? whole(entry.ms, 1e15) : 0;
+        day.ms += ms;
+        total += ms;
+      });
+      if (total >= 60000) {
+        perGame.push({ key: key, name: cleanText(game.name, 80) || key, ms: total });
+      }
+    });
+    perGame.sort(function (a, b) { return b.ms - a.ms; });
+    var best = null;
+    var totalMs = 0;
+    days.forEach(function (day) {
+      totalMs += day.ms;
+      if (day.ms >= 60000 && (!best || day.ms > best.ms)) {
+        best = day;
+      }
+    });
+    return { days: days, totalMs: totalMs, bestDay: best ? { name: best.name, ms: best.ms } : null, games: perGame.slice(0, 3), everPlayed: Object.keys(games).length > 0 };
+  }
+
   // "42 min", "1 h 5 min", "12 h". Under a minute is "under a minute".
   function formatDuration(ms) {
     var minutes = Math.floor(whole(ms, 1e15) / 60000);
@@ -240,7 +280,7 @@
   return {
     STORAGE_KEY: STORAGE_KEY, MAX_GAP_MS: MAX_GAP_MS,
     fresh: fresh, validate: validate, seen: seen, touch: touch, end: end, summary: summary,
-    formatDuration: formatDuration, formatClock: formatClock, historyLine: historyLine, dayId: dayId,
+    formatDuration: formatDuration, formatClock: formatClock, historyLine: historyLine, dayId: dayId, week: week,
     load: load, save: save
   };
 });
