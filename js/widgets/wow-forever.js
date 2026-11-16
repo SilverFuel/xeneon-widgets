@@ -266,6 +266,15 @@
     return { position: position, game: volumes.game, music: volumes.music };
   }
 
+  // Which balance the one slider shows: the one asked for when the host offers it, else the
+  // other one, else none. `both` says whether there is a choice to offer.
+  function blendChoice(wanted, music, chat) {
+    var both = Boolean(music && chat);
+    if (wanted === "chat" && chat) return { key: "chat", both: both };
+    if (music) return { key: "music", both: both };
+    return { key: chat ? "chat" : "", both: both };
+  }
+
   // What the music button shows, from the host's reading of Apple Music's own playback.
   // Null when Apple Music has no media session (it is not open) or the host did not say:
   // then there is no button.
@@ -353,7 +362,7 @@
       formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter,
       questViews: questViews, questViewId: questViewId, questsInView: questsInView,
       formatProfessions: formatProfessions, gearSummary: gearSummary, bagSummary: bagSummary,
-      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary, micStatus: micStatus, musicStatus: musicStatus, musicArtUrl: musicArtUrl, blendVolumes: blendVolumes, blendStatus: blendStatus
+      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary, micStatus: micStatus, musicStatus: musicStatus, musicArtUrl: musicArtUrl, blendVolumes: blendVolumes, blendStatus: blendStatus, blendChoice: blendChoice
     };
     return;
   }
@@ -408,10 +417,14 @@
     var musicMisses = 0;
     // The cover for the track named by `key`. `tries` stops a track with no cover being asked about forever.
     var musicArt = { key: "", url: "", tries: 0 };
-    // The game and music balance, read from the host. Null hides the slider.
-    var blend = null;
+    // The game's balance against Apple Music and against Discord, read from the host. The
+    // one slider shows the wanted one; with neither it is hidden.
+    var blends = { music: null, chat: null };
+    var blendWanted = "music";
+    var blendRoutes = { music: "/api/audio/blend", chat: "/api/audio/chat-blend" };
+    var blendNames = { music: "Music", chat: "Discord" };
     var blendRequestId = 0;
-    var blendMisses = 0;
+    var blendMisses = { music: 0, chat: 0 };
     var blendHoldUntil = 0;
     var blendSendTimer = 0;
     var downloadUrls = [];
@@ -798,43 +811,62 @@
     function renderBlend(keepThumb) {
       var node = query(".wow-blend");
       if (!node) return;
+      var choice = blendChoice(blendWanted, blends.music, blends.chat);
+      var blend = choice.key ? blends[choice.key] : null;
       node.hidden = !blend;
       if (!blend) return;
+      var name = blendNames[choice.key];
       var range = node.querySelector("[data-wow-blend]");
       if (!keepThumb && Number(range.value) !== blend.position) range.value = String(blend.position);
-      range.setAttribute("aria-valuetext", "Game " + blend.game + " percent, music " + blend.music + " percent");
+      range.setAttribute("aria-label", "Balance between game volume and " + (choice.key === "chat" ? "Discord" : "Apple Music") + " volume");
+      range.setAttribute("aria-valuetext", "Game " + blend.game + " percent, " + name.toLowerCase() + " " + blend.music + " percent");
       node.querySelector("[data-wow-blend-game]").textContent = String(blend.game);
       node.querySelector("[data-wow-blend-music]").textContent = String(blend.music);
+      node.querySelector("[data-wow-blend-name]").textContent = name;
+      // With both Apple Music and Discord making sound, two buttons choose which one the slider balances.
+      var pick = node.querySelector(".wow-blend-pick");
+      pick.hidden = !choice.both;
+      Array.prototype.forEach.call(pick.querySelectorAll("button"), function (button) {
+        button.setAttribute("aria-pressed", button.getAttribute("data-wow-action") === "blend-" + choice.key ? "true" : "false");
+      });
     }
 
     // Read with the mic, so the host answers both from one look at Windows.
     function loadBlend() {
       if (!canReachHost() || Date.now() < blendHoldUntil) return;
       var requestId = ++blendRequestId;
-      runtime.requestJson(runtime.buildBridgeUrl(env, "/api/audio/blend"), undefined, 4000).then(function (payload) {
-        if (disposed || requestId !== blendRequestId || Date.now() < blendHoldUntil) return;
-        blendMisses = 0;
-        blend = blendStatus(payload);
-        renderBlend();
-      }, function () {
-        blendMisses += 1;
-        if (!disposed && requestId === blendRequestId && blendMisses >= 2) { blend = null; renderBlend(); }
+      ["music", "chat"].forEach(function (key) {
+        runtime.requestJson(runtime.buildBridgeUrl(env, blendRoutes[key]), undefined, 4000).then(function (payload) {
+          if (disposed || requestId !== blendRequestId || Date.now() < blendHoldUntil) return;
+          blendMisses[key] = 0;
+          blends[key] = blendStatus(payload);
+          renderBlend();
+        }, function () {
+          blendMisses[key] += 1;
+          if (!disposed && requestId === blendRequestId && blendMisses[key] >= 2) { blends[key] = null; renderBlend(); }
+        });
       });
+    }
+
+    function pickBlend(key) {
+      blendWanted = key;
+      renderBlend();
     }
 
     // While the slider is moving the numbers follow at once and the host is told at most
     // every 150 ms; readings from the host are set aside until three seconds after the last move.
     function moveBlend(position, final) {
-      if (!blend) return;
+      var key = blendChoice(blendWanted, blends.music, blends.chat).key;
+      if (!key) return;
       var volumes = blendVolumes(position);
-      blend = { position: Math.round(Number(position)) || 0, game: volumes.game, music: volumes.music };
+      blends[key] = { position: Math.round(Number(position)) || 0, game: volumes.game, music: volumes.music };
       blendHoldUntil = Date.now() + 3000;
       blendRequestId += 1;
       renderBlend(true);
       var send = function () {
         blendSendTimer = 0;
-        if (disposed || !blend || !canReachHost()) return;
-        runtime.requestJson(runtime.buildBridgeUrl(env, "/api/audio/blend"), { method: "POST", body: { position: blend.position } }, 5000).then(function () {}, function () {});
+        if (disposed || !blends[key] || !canReachHost()) return;
+        runtime.requestJson(runtime.buildBridgeUrl(env, blendRoutes[key]), { method: "POST", body: { position: blends[key].position } }, 5000).then(function () {}, function () {});
       };
       if (final) {
         if (blendSendTimer) { window.clearTimeout(blendSendTimer); }
@@ -850,7 +882,7 @@
       if (gameTicks % 15 === 0) loadGame();
       if (document.hidden) return;
       if (gameTicks % 4 === 0) loadMic();
-      if (gameTicks % (blend ? 4 : 12) === 0) loadBlend();
+      if (gameTicks % (blends.music || blends.chat ? 4 : 12) === 0) loadBlend();
       if (gameTicks % (music ? 4 : 12) === 2) loadMusic();
     }
 
@@ -873,7 +905,7 @@
         '<aside class="wow-card wow-camp"><div class="wow-card-heading"><h3>At the campfire</h3></div><p class="wow-timer-label"></p><div class="wow-timer-value" role="timer" aria-label="Session elapsed time">00:00:00</div><div class="wow-timer-actions">' + button("toggle-session", "Begin session", "primary") + button("reset-session", "Reset", "quiet") + '</div><p class="wow-timer-help">Keeps running when you leave this tab.</p><div class="wow-card-heading"><h3>Before you set out</h3></div><div class="wow-prep-list">' + PREPARATIONS.map(function (label, index) { return '<label><input type="checkbox" data-wow-prep="' + index + '"' + (journal.preparations[index] ? ' checked' : '') + '><span>' + label + '</span></label>'; }).join("") + '</div></aside>' +
         '<article class="wow-card wow-journal"><div class="wow-card-heading"><h3>Field notes</h3><small>Saved as you write</small></div><label class="wow-sr-only" for="wow-field-notes">Field notes</label><textarea id="wow-field-notes" maxlength="20000" placeholder="A hidden path. A helpful stranger. The materials you still need. Leave a note for your next session.">' + escapeHtml(journal.notes) + '</textarea></article>' +
         '<aside class="wow-card wow-resources"><div class="wow-card-heading"><h3>The wayfinder</h3><small>Official field guides</small></div><div class="wow-resource-links">' + resources.map(function (resource) { return '<a href="' + resource.url + '" target="_blank" rel="noopener noreferrer"><strong>' + resource.label + '</strong><small>' + resource.detail + '</small></a>'; }).join("") + '</div></aside></div>' +
-        '<footer class="wow-footer"><button type="button" class="wow-mic" data-wow-action="mic" hidden></button><button type="button" class="wow-music" data-wow-action="music" hidden><img class="wow-music-art" alt="" hidden><span class="wow-music-state"></span><span class="wow-music-track"></span></button><span class="wow-skip" role="group" aria-label="Apple Music track" hidden><button type="button" data-wow-action="music-previous" aria-label="Previous track"></button><button type="button" data-wow-action="music-next" aria-label="Next track"></button></span><span class="wow-pages" role="group" aria-label="Panel page"><button type="button" class="wow-button" data-wow-page="quests" aria-pressed="true">Quests</button><button type="button" class="wow-button" data-wow-page="camp" aria-pressed="false">Camp and notes</button></span><div class="wow-blend" role="group" aria-label="Game and music volume" hidden><span class="wow-blend-side">Game <b data-wow-blend-game>100</b></span><input class="inline-range wow-blend-range" type="range" min="0" max="100" step="5" value="50" data-wow-blend aria-label="Balance between game volume and Apple Music volume"><span class="wow-blend-side">Music <b data-wow-blend-music>100</b></span></div><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
+        '<footer class="wow-footer"><button type="button" class="wow-mic" data-wow-action="mic" hidden></button><button type="button" class="wow-music" data-wow-action="music" hidden><img class="wow-music-art" alt="" hidden><span class="wow-music-state"></span><span class="wow-music-track"></span></button><span class="wow-skip" role="group" aria-label="Apple Music track" hidden><button type="button" data-wow-action="music-previous" aria-label="Previous track"></button><button type="button" data-wow-action="music-next" aria-label="Next track"></button></span><span class="wow-pages" role="group" aria-label="Panel page"><button type="button" class="wow-button" data-wow-page="quests" aria-pressed="true">Quests</button><button type="button" class="wow-button" data-wow-page="camp" aria-pressed="false">Camp and notes</button></span><div class="wow-blend" role="group" aria-label="Game volume balance" hidden><span class="wow-blend-pick" role="group" aria-label="Balance the game against" hidden><button type="button" data-wow-action="blend-music" aria-pressed="true">Music</button><button type="button" data-wow-action="blend-chat" aria-pressed="false">Discord</button></span><span class="wow-blend-side">Game <b data-wow-blend-game>100</b></span><input class="inline-range wow-blend-range" type="range" min="0" max="100" step="5" value="50" data-wow-blend aria-label="Balance between game volume and Apple Music volume"><span class="wow-blend-side"><span data-wow-blend-name>Music</span> <b data-wow-blend-music>100</b></span></div><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
       query('[data-wow-action="profile"]').setAttribute("aria-expanded", "false");
       renderProfile();
       renderQuests();
@@ -1038,6 +1070,8 @@
         case "mic": toggleMic(); break;
         case "music": toggleMusic(); break;
         case "music-next": skipMusic("next"); break;
+        case "blend-music": pickBlend("music"); break;
+        case "blend-chat": pickBlend("chat"); break;
         case "music-previous": skipMusic("previous"); break;
         case "profile":
           var editor = query(".wow-editor");

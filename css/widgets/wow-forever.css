@@ -530,6 +530,26 @@ body.dashboard-native-page--motion-off .wow-adventure .wow-footer .wow-mic { ani
   background: rgba(16, 27, 32, .6);
 }
 .wow-adventure .wow-footer .wow-blend[hidden] { display: none; }
+/* With Apple Music and Discord both making sound, two buttons choose which one the slider
+   balances the game against. */
+.wow-adventure .wow-footer .wow-blend:has(.wow-blend-pick:not([hidden])) { flex-basis: 800px; grid-template-columns: max-content max-content minmax(140px, 1fr) max-content; min-width: 520px; padding-left: 0; }
+.wow-adventure .wow-footer .wow-blend .wow-blend-pick { display: grid; grid-template-columns: repeat(2, max-content); }
+.wow-adventure .wow-footer .wow-blend .wow-blend-pick[hidden] { display: none; }
+.wow-adventure .wow-footer .wow-blend .wow-blend-pick > button {
+  min-width: 84px;
+  min-height: 54px;
+  padding: 0 14px;
+  border: 1px solid #66583c;
+  border-width: 0 1px 0 0;
+  color: #e8d7b3;
+  background: transparent;
+  font-size: var(--wow-fs-sub);
+  font-weight: 700;
+  cursor: pointer;
+}
+.wow-adventure .wow-footer .wow-blend .wow-blend-pick > button:first-child { border-radius: 5px 0 0 5px; }
+.wow-adventure .wow-footer .wow-blend .wow-blend-pick > button[aria-pressed="true"] { color: #201c16; background: linear-gradient(#e6c98f, #b89354); }
+.wow-adventure .wow-footer .wow-blend .wow-blend-pick > button:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
 .wow-adventure .wow-footer .wow-blend .wow-blend-side { font-size: var(--wow-fs-sub); font-weight: 700; white-space: nowrap; }
 .wow-adventure .wow-footer .wow-blend .wow-blend-side b { display: inline-block; min-width: 2.2em; color: #f0d79a; font-size: inherit; font-variant-numeric: tabular-nums; text-align: right; }
 /* The middle of the track is marked: that is where both are at full volume. */
