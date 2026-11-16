@@ -4105,12 +4105,15 @@ async function validateWowQuestLog(cdp) {
 async function checkTextSizeInPage(expectedAtLoad) {
   const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
   const check = (condition, message) => { if (!condition) throw new Error(message); };
-  const select = () => document.querySelector('select[name="textSize"]');
+  // Three buttons, each a radio input: the chosen one is the checked one.
+  const choices = () => Array.from(document.querySelectorAll('input[type="radio"][name="textSize"]'));
+  const chosen = () => choices().find(input => input.checked)?.value;
+  const choose = value => choices().find(input => input.value === value).click();
   const deadline = Date.now() + 20000;
-  while (Date.now() < deadline && !select()) await wait(100);
-  check(select(), "Appearance has no Text size control");
+  while (Date.now() < deadline && !choices().length) await wait(100);
+  check(choices().length, "Appearance has no Text size control");
   const rootSize = () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-  const labelSize = () => Number.parseFloat(getComputedStyle(select().closest("label").querySelector("span")).fontSize);
+  const labelSize = () => Number.parseFloat(getComputedStyle(choices()[0].closest(".product-segmented").querySelector("span")).fontSize);
   const sizes = { normal: 16, large: 20, larger: 24 };
   // The side menu, tabs and header controls scale with the panels, and still fit.
   const shown = node => { const rect = node.getBoundingClientRect(); return rect.width > 1 && rect.height > 1; };
@@ -4130,15 +4133,15 @@ async function checkTextSizeInPage(expectedAtLoad) {
     });
     return problems;
   };
-  check(select().value === expectedAtLoad && rootSize() === sizes[expectedAtLoad] && document.documentElement.dataset.textSize === expectedAtLoad,
-    "Text size at load is " + select().value + " with a " + rootSize() + "px root; expected " + expectedAtLoad);
-  check(Array.from(select().options).map(option => option.value).join() === "normal,large,larger", "Text size choices changed");
+  check(chosen() === expectedAtLoad && rootSize() === sizes[expectedAtLoad] && document.documentElement.dataset.textSize === expectedAtLoad,
+    "Text size at load is " + chosen() + " with a " + rootSize() + "px root; expected " + expectedAtLoad);
+  check(choices().map(input => input.value).join() === "normal,large,larger", "Text size choices changed");
+  check(choices().every(input => input.getBoundingClientRect().width >= 54 && input.getBoundingClientRect().height >= 54), "A Text size button is smaller than a fingertip");
   const seen = {};
   for (const choice of ["normal", "large", "larger"]) {
-    select().value = choice;
-    select().dispatchEvent(new Event("change", { bubbles: true }));
+    choose(choice);
     await wait(300);
-    check(select().value === choice && rootSize() === sizes[choice], "Choosing " + choice + " left a " + rootSize() + "px root");
+    check(chosen() === choice && rootSize() === sizes[choice], "Choosing " + choice + " left a " + rootSize() + "px root");
     seen[choice] = labelSize();
     seen[choice + "Menu"] = menuSize();
     check(document.documentElement.scrollWidth <= innerWidth + 1, choice + " text makes the page scroll sideways");
@@ -4150,8 +4153,7 @@ async function checkTextSizeInPage(expectedAtLoad) {
   check(seen.large > seen.normal && seen.larger > seen.large, "Panel text did not grow with the setting: " + JSON.stringify(seen));
   check(seen.largeMenu > seen.normalMenu && seen.largerMenu > seen.largeMenu, "The side menu did not grow with the setting: " + JSON.stringify(seen));
   // Leave Large chosen, for the reload that follows.
-  select().value = "large";
-  select().dispatchEvent(new Event("change", { bubbles: true }));
+  choose("large");
   await wait(300);
   return seen;
 }
