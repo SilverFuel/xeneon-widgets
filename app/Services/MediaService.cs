@@ -113,19 +113,27 @@ public sealed class MediaService
     }
 
     // One named app's playback, whichever app Windows currently treats as the main media session.
-    public async Task<MediaSnapshot> GetAppSnapshotAsync(string app, CancellationToken cancellationToken)
+    // What one app's own session can be told to do.
+    public static bool IsAppAction(string? action)
     {
-        return await WithAppSessionAsync(app, null, cancellationToken);
+        return action is "play-pause" or "next" or "previous";
+    }
+
+    // The cover art is only read when asked for: it is the costly part, and the dashboard
+    // asks once per track, not on every reading.
+    public async Task<MediaSnapshot> GetAppSnapshotAsync(string app, bool includeArtwork, CancellationToken cancellationToken)
+    {
+        return await WithAppSessionAsync(app, null, includeArtwork, cancellationToken);
     }
 
     public async Task<MediaSnapshot> ExecuteForAppAsync(string app, string action, CancellationToken cancellationToken)
     {
-        return await WithAppSessionAsync(app, action, cancellationToken);
+        return await WithAppSessionAsync(app, action, false, cancellationToken);
     }
 
-    private async Task<MediaSnapshot> WithAppSessionAsync(string app, string? action, CancellationToken cancellationToken)
+    private async Task<MediaSnapshot> WithAppSessionAsync(string app, string? action, bool includeArtwork, CancellationToken cancellationToken)
     {
-        if (action is not null && action != "play-pause")
+        if (action is not null && !IsAppAction(action))
         {
             throw new InvalidOperationException("Unknown media action.");
         }
@@ -151,6 +159,14 @@ public sealed class MediaService
             {
                 await session.TryTogglePlayPauseAsync().AsTask(timeout.Token);
             }
+            else if (action == "next")
+            {
+                await session.TrySkipNextAsync().AsTask(timeout.Token);
+            }
+            else if (action == "previous")
+            {
+                await session.TrySkipPreviousAsync().AsTask(timeout.Token);
+            }
 
             var playback = session.GetPlaybackInfo();
             var properties = await session
@@ -158,6 +174,9 @@ public sealed class MediaService
                 .AsTask(timeout.Token);
             var playbackStatus = playback.PlaybackStatus.ToString().ToLowerInvariant();
             var exposeMetadata = _configStore.Snapshot().Dashboard.MediaMetadataVisible;
+            var artwork = includeArtwork && exposeMetadata
+                ? await TryReadArtworkAsync(properties.Thumbnail, timeout.Token)
+                : "";
             return new MediaSnapshot
             {
                 Supported = true,
@@ -167,6 +186,7 @@ public sealed class MediaService
                 Stale = false,
                 Message = "",
                 Source = "windows media session",
+                ThumbnailDataUrl = artwork,
                 AppId = exposeMetadata ? session.SourceAppUserModelId ?? "" : "",
                 Title = exposeMetadata ? properties.Title ?? "" : "",
                 Artist = exposeMetadata ? properties.Artist ?? "" : "",

@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus, blendVolumes, blendStatus } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus, musicArtUrl, blendVolumes, blendStatus } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -620,10 +620,10 @@ test("the mic button shows muted or live, and is left out when there is no micro
 
 test("the Apple Music button offers Pause while it plays and Play while it does not, and is left out when the app is not open", () => {
   assert.deepEqual(musicStatus({ status: "live", playbackStatus: "playing", title: "Invincible", artist: "Russell Brower" }),
-    { playing: true, label: "Pause", track: "Invincible - Russell Brower", hint: "Pause Apple Music: Invincible" });
+    { playing: true, label: "Pause", track: "Invincible - Russell Brower", hint: "Pause Apple Music: Invincible", canNext: false, canPrevious: false, key: "Invincible|Russell Brower|" });
   assert.deepEqual(musicStatus({ status: "live", playbackStatus: "paused", title: "Invincible", artist: "" }),
-    { playing: false, label: "Play", track: "Invincible", hint: "Play Apple Music: Invincible" });
-  assert.deepEqual(musicStatus({ status: "live", playbackStatus: "stopped" }), { playing: false, label: "Play", track: "Apple Music", hint: "Play Apple Music" },
+    { playing: false, label: "Play", track: "Invincible", hint: "Play Apple Music: Invincible", canNext: false, canPrevious: false, key: "Invincible||" });
+  assert.deepEqual(musicStatus({ status: "live", playbackStatus: "stopped" }), { playing: false, label: "Play", track: "Apple Music", hint: "Play Apple Music", canNext: false, canPrevious: false, key: "||" },
     "with track details switched off in Privacy the button still works");
   assert.equal(musicStatus({ status: "idle", playbackStatus: "idle" }), null, "Apple Music is not open");
   assert.equal(musicStatus({ status: "error", message: "Windows did not answer" }), null);
@@ -648,4 +648,23 @@ test("the balance slider is shown only when the host has both a game and Apple M
   assert.deepEqual(blendStatus({ available: true, position: "odd" }), { position: 50, game: 100, music: 100 });
   assert.equal(blendStatus({ available: false, gameFound: true, musicFound: false, position: 50 }), null);
   for (const value of [null, undefined, "50", 50, {}]) assert.equal(blendStatus(value), null);
+});
+
+test("skipping is offered only when Apple Music says it can, and a track is named so its cover is fetched once", () => {
+  const status = musicStatus({ status: "live", playbackStatus: "playing", title: "Invincible", artist: "Russell Brower", albumTitle: "Wrath", canGoNext: true, canGoPrevious: false });
+  assert.equal(status.canNext, true);
+  assert.equal(status.canPrevious, false);
+  assert.equal(status.key, "Invincible|Russell Brower|Wrath");
+  assert.equal(musicStatus({ status: "live", playbackStatus: "playing", canGoNext: "yes", canGoPrevious: 1 }).canNext, false, "only a real true counts");
+});
+
+test("only an image the host read is used as a cover", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+  assert.equal(musicArtUrl({ thumbnailDataUrl: png }), png);
+  assert.equal(musicArtUrl({ thumbnailDataUrl: "data:image/jpeg;base64,/9j/4AAQ" }), "data:image/jpeg;base64,/9j/4AAQ");
+  for (const value of ["", "https://example.com/cover.png", "data:text/html;base64,PHNjcmlwdD4=", "data:image/svg+xml;base64,PHN2Zz4=", "data:image/png;base64,abc\" onerror=\"x", 42, null]) {
+    assert.equal(musicArtUrl({ thumbnailDataUrl: value }), "", String(value));
+  }
+  assert.equal(musicArtUrl({ thumbnailDataUrl: "data:image/png;base64," + "A".repeat(2000001) }), "", "an oversized cover is left out");
+  assert.equal(musicArtUrl(null), "");
 });
