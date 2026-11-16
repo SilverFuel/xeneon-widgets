@@ -174,6 +174,57 @@
     };
   }
 
+  // The two colours a room's or light's tile is painted in, from the colour the lamps are
+  // showing. Null when it is off or cannot be reached: the tile stays plain. The colours are
+  // kept dark enough for white text whatever the hue; a brighter lamp gives a lighter tile.
+  function hueTileColors(item) {
+    if (!item || !item.on || item.reachable === false) {
+      return null;
+    }
+    var hue = optionalNumber(item.hue);
+    var saturation = optionalNumber(item.saturation);
+    var warmth = optionalNumber(item.colorTemperature);
+    var mode = text(item.colorMode, "").toLowerCase();
+    var angle = 40;
+    var strength = 45;
+    if (mode !== "ct" && hue != null && saturation != null) {
+      angle = Math.round(clamp(hue, 0, 65535) / 65535 * 360) % 360;
+      strength = Math.round(Math.min(85, clamp(saturation, 0, 254) / 254 * 100));
+    } else if (warmth != null) {
+      // Mireds: 153 is the coolest white a lamp gives, 500 the warmest.
+      var warm = clamp((warmth - 153) / 347, 0, 1);
+      angle = warm < 0.35 ? 212 : 36;
+      strength = warm < 0.35 ? 30 : Math.round(35 + 50 * warm);
+    }
+    var light = Math.round(16 + 8 * clamp(optionalNumber(item.brightness) || 0, 0, 100) / 100);
+    return {
+      top: "hsl(" + angle + " " + strength + "% " + light + "%)",
+      deep: "hsl(" + angle + " " + strength + "% " + Math.max(10, light - 8) + "%)"
+    };
+  }
+
+  // One room or one light: a tile in the lamps' own colour that holds its switch and its
+  // brightness. The switch stays a plain button; taps are read from the button itself.
+  function renderHueTile(item, kind, controlsEnabled) {
+    var isGroup = kind === "group";
+    var fallback = isGroup ? "Room" : "Light";
+    var name = text(item.name, fallback);
+    var reachable = isGroup || item.reachable !== false;
+    var enabled = controlsEnabled && reachable;
+    var colors = hueTileColors(item);
+    var count = optionalNumber(item.lights);
+    var note = !reachable ? "Not reachable" : isGroup && count ? count + (count === 1 ? " light" : " lights") : "";
+    return '' +
+      '<div class="inline-list-item hue-tile" data-on="' + (colors ? "true" : "false") + '"' +
+        (colors ? ' style="--hue-tile-top:' + colors.top + ';--hue-tile-deep:' + colors.deep + '"' : '') + '>' +
+        '<div class="inline-list-item--split">' +
+          '<div><div class="inline-list-title">' + escapeHtml(name) + '</div>' + (note ? '<div class="inline-list-copy">' + escapeHtml(note) + '</div>' : '') + '</div>' +
+          '<button class="inline-button' + (item.on ? " is-primary" : "") + '" type="button" data-action="toggle-' + kind + '" data-id="' + escapeHtml(text(item.id, "")) + '" aria-label="' + escapeHtml((item.on ? "Turn off " : "Turn on ") + name) + '"' + (enabled ? "" : " disabled") + '>' + (item.on ? "On" : "Off") + '</button>' +
+        '</div>' +
+        '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(item.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(name) + '" value="' + Math.round(optionalNumber(item.brightness) || 0) + '" data-action="brightness-' + kind + '" data-id="' + escapeHtml(text(item.id, "")) + '"' + (enabled ? "" : " disabled") + '></div>' +
+      '</div>';
+  }
+
   // Lights. Not linked: one card that says how to connect, and nothing else.
   // Linked: rooms first, because a room is what you reach for; then single lights;
   // the bridge's own settings are folded away at the bottom.
@@ -206,26 +257,12 @@
           '</article>' +
         '</div>';
     }
-    var groupsHtml = (data.groups.length ? data.groups.slice(0, 8).map(function (group) {
-              return '' +
-                '<div class="inline-list-item">' +
-                  '<div class="inline-list-item--split">' +
-                    '<div><div class="inline-list-title">' + escapeHtml(text(group.name, "Room")) + '</div></div>' +
-                    '<button class="inline-button' + (group.on ? " is-primary" : "") + '" type="button" data-action="toggle-group" data-id="' + escapeHtml(text(group.id, "")) + '" aria-label="' + escapeHtml((group.on ? "Turn off " : "Turn on ") + text(group.name, "group")) + '"' + (controlsEnabled ? "" : " disabled") + '>' + (group.on ? "On" : "Off") + '</button>' +
-                  '</div>' +
-                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(group.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(group.name, "group")) + '" value="' + Math.round(optionalNumber(group.brightness) || 0) + '" data-action="brightness-group" data-id="' + escapeHtml(text(group.id, "")) + '"' + (controlsEnabled ? "" : " disabled") + '></div>' +
-                '</div>';
-            }).join("") : emptyState("No rooms", "The bridge has no rooms or zones yet."));
-    var lightsHtml = (data.lights.length ? data.lights.slice(0, 8).map(function (light) {
-              return '' +
-                '<div class="inline-list-item">' +
-                  '<div class="inline-list-item--split">' +
-                    '<div><div class="inline-list-title">' + escapeHtml(text(light.name, "Light")) + '</div>' + (light.reachable === false ? '<div class="inline-list-copy">Not reachable</div>' : '') + '</div>' +
-                    '<button class="inline-button' + (light.on ? " is-primary" : "") + '" type="button" data-action="toggle-light" data-id="' + escapeHtml(text(light.id, "")) + '" aria-label="' + escapeHtml((light.on ? "Turn off " : "Turn on ") + text(light.name, "light")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '>' + (light.on ? "On" : "Off") + '</button>' +
-                  '</div>' +
-                  '<div class="inline-slider-row"><strong>' + escapeHtml(formatPercent(light.brightness)) + '</strong><input class="inline-range" type="range" min="0" max="100" aria-label="Brightness for ' + escapeHtml(text(light.name, "light")) + '" value="' + Math.round(optionalNumber(light.brightness) || 0) + '" data-action="brightness-light" data-id="' + escapeHtml(text(light.id, "")) + '"' + (controlsEnabled && light.reachable !== false ? "" : " disabled") + '></div>' +
-                '</div>';
-            }).join("") : emptyState("No Hue lights", "The bridge returned no lights."));
+    var groupsHtml = data.groups.length ? data.groups.slice(0, 8).map(function (group) {
+      return renderHueTile(group, "group", controlsEnabled);
+    }).join("") : emptyState("No rooms", "The bridge has no rooms or zones yet.");
+    var lightsHtml = data.lights.length ? data.lights.slice(0, 8).map(function (light) {
+      return renderHueTile(light, "light", controlsEnabled);
+    }).join("") : emptyState("No Hue lights", "The bridge returned no lights.");
     return '' +
       '<div class="inline-widget-shell hue-shell">' +
         '<section class="hue-section" aria-label="Rooms">' +
@@ -722,6 +759,9 @@
     };
   }
 
+  if (typeof runtime.registerHelpers === "function") {
+    runtime.registerHelpers({ hueTileColors: hueTileColors, renderHueWidget: renderHueWidget });
+  }
   runtime.registerRenderer("weather", mountWeatherWidget);
   runtime.registerRenderer("hue", mountHueWidget);
   runtime.registerRenderer("media", mountMediaWidget);
