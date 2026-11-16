@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus, musicArtUrl, blendVolumes, blendStatus } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus, musicArtUrl, blendVolumes, blendStatus, blendChoice } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -667,4 +667,15 @@ test("only an image the host read is used as a cover", () => {
   }
   assert.equal(musicArtUrl({ thumbnailDataUrl: "data:image/png;base64," + "A".repeat(2000001) }), "", "an oversized cover is left out");
   assert.equal(musicArtUrl(null), "");
+});
+
+test("the one balance slider serves Apple Music or Discord, with a choice only when both are there", () => {
+  const music = { position: 50, game: 100, music: 100 };
+  const chat = { position: 20, game: 100, music: 40 };
+  assert.deepEqual(blendChoice("music", music, chat), { key: "music", both: true });
+  assert.deepEqual(blendChoice("chat", music, chat), { key: "chat", both: true });
+  assert.deepEqual(blendChoice("chat", music, null), { key: "music", both: false }, "Discord went quiet: fall back to music");
+  assert.deepEqual(blendChoice("music", null, chat), { key: "chat", both: false }, "no music: the slider is Discord's");
+  assert.deepEqual(blendChoice("music", null, null), { key: "", both: false });
+  assert.deepEqual(blendChoice("anything", music, null), { key: "music", both: false });
 });

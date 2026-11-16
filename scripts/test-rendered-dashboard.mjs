@@ -3826,6 +3826,8 @@ function installWowQuestLogFixture() {
   let musicPlaying = true;
   let blendPosition = 50;
   window.__wowMusicSkips = [];
+  let chatPosition = 40;
+  window.__wowChatPosts = [];
   window.__wowMusicCoverAsks = 0;
   window.__wowBlendPosts = [];
   // A one-pixel PNG stands in for the cover; it is sent only when the panel asks for it.
@@ -3850,6 +3852,16 @@ function installWowQuestLogFixture() {
         available: true, gameFound: true, musicFound: true, position: blendPosition,
         gameVolume: blendPosition <= 50 ? 100 : Math.round((100 - blendPosition) * 2),
         musicVolume: blendPosition >= 50 ? 100 : Math.round(blendPosition * 2), message: ""
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    }
+    if (url.origin === location.origin && url.pathname === "/api/audio/chat-blend") {
+      // The same balance against Discord, kept apart from the music one.
+      if (options && options.method === "POST") {
+        try { chatPosition = Number(JSON.parse(options.body).position); } catch { chatPosition = 50; }
+        window.__wowChatPosts.push(chatPosition);
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        available: true, other: "chat", gameFound: true, otherFound: true, otherRunning: true, position: chatPosition, message: ""
       }), { status: 200, headers: { "Content-Type": "application/json" } }));
     }
     if (url.origin === location.origin && url.pathname === "/api/media/apple-music") {
@@ -4048,6 +4060,27 @@ async function checkWowQuestLogInPage() {
   await wait(400);
   check(blendNumbers() === "40/100" && window.__wowBlendPosts.at(-1) === 80 && blendRange.value === "80",
     size + ": sliding toward Music did not fade the game: " + blendBox.outerHTML + " " + JSON.stringify(window.__wowBlendPosts));
+  // With Discord making sound too, two buttons choose what the one slider balances.
+  const blendPick = blendBox.querySelector(".wow-blend-pick");
+  const blendPickButtons = [...blendPick.querySelectorAll("button")];
+  const blendName = () => blendBox.querySelector("[data-wow-blend-name]").textContent;
+  check(shown(blendPick) && blendPickButtons.map(button => button.textContent + ":" + button.getAttribute("aria-pressed")).join() === "Music:true,Discord:false"
+    && blendPickButtons.every(button => button.getBoundingClientRect().width >= 54 && button.getBoundingClientRect().height >= 54) && blendName() === "Music",
+    size + ": the choice between Music and Discord is not offered: " + blendPick.outerHTML);
+  await wait(3200);
+  blendPickButtons[1].click();
+  await wait(100);
+  check(blendName() === "Discord" && blendRange.value === "40" && blendNumbers() === "100/80" && blendPickButtons[1].getAttribute("aria-pressed") === "true",
+    size + ": choosing Discord did not show Discord's balance: " + blendBox.outerHTML);
+  blendRange.value = "60";
+  blendRange.dispatchEvent(new Event("input", { bubbles: true }));
+  blendRange.dispatchEvent(new Event("change", { bubbles: true }));
+  await wait(400);
+  check(blendNumbers() === "80/100" && window.__wowChatPosts.at(-1) === 60 && window.__wowBlendPosts.at(-1) === 80,
+    size + ": moving the slider on Discord did not tell the host Discord's balance alone: " + JSON.stringify([window.__wowChatPosts, window.__wowBlendPosts]));
+  blendPickButtons[0].click();
+  await wait(100);
+  check(blendName() === "Music" && blendRange.value === "80", size + ": going back to Music lost its balance: " + blendBox.outerHTML);
   const footerParts = [...panel().querySelectorAll(".wow-footer > *")].filter(node => shown(node) && getComputedStyle(node).position !== "absolute").map(node => node.getBoundingClientRect());
   check(footerParts.every((a, i) => footerParts.every((b, k) => k <= i
     || Math.min(a.right, b.right) - Math.max(a.left, b.left) <= 1 || Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) <= 1)),
