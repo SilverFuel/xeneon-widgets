@@ -130,9 +130,20 @@
   overflow-wrap: anywhere;
 }
 
-.auxora-home-game span {
+.auxora-home-game .auxora-home-game__line {
   color: var(--color-text-dim);
   font-size: max(14px, 0.875rem);
+}
+
+/* With a cover, the tile sits to the left of the two lines. */
+.product-shell .auxora-home-played .auxora-home-game:has(> .game-cover) {
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 14px;
+}
+
+.auxora-home-game > .game-cover {
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
 .product-shell .auxora-home-played .auxora-home-game:hover {
@@ -1103,11 +1114,19 @@
     padding: 14px 22px;
   }
 
+  body[data-active-widget-id="home"] .auxora-home-game > .game-cover {
+    --game-cover-size: 64px;
+  }
+
+  body[data-active-widget-id="home"] .product-shell .auxora-home-played .auxora-home-game:has(> .game-cover) {
+    column-gap: 18px;
+  }
+
   body[data-active-widget-id="home"] .auxora-home-game strong {
     font-size: clamp(24px, 1.5rem, 29px);
   }
 
-  body[data-active-widget-id="home"] .auxora-home-game span {
+  body[data-active-widget-id="home"] .auxora-home-game .auxora-home-game__line {
     font-size: clamp(19px, 1.1875rem, 23px);
   }
 

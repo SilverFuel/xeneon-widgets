@@ -277,8 +277,54 @@
     }
   }
 
+  // Covers. A Steam game's key is "steam:" and its Steam id, and the host serves the picture
+  // Steam already keeps on this PC for that id. Nothing is fetched from outside. A game with
+  // no picture shows its initials.
+  var missingCovers = {};
+
+  function coverUrl(key) {
+    var match = /^steam:(\d{1,12})$/.exec(typeof key === "string" ? key : "");
+    return match && !missingCovers[match[1]] ? "/api/steam/games/art?id=" + match[1] : "";
+  }
+
+  // Called when a cover fails to load, so it is not asked for again until the dashboard reloads.
+  function coverMissing(url) {
+    var match = /\/api\/steam\/games\/art\?id=(\d{1,12})$/.exec(typeof url === "string" ? url : "");
+    if (match) {
+      missingCovers[match[1]] = true;
+    }
+    return Boolean(match);
+  }
+
+  // Up to two characters: the first letter or digit of the first two words that count.
+  function initials(name) {
+    var words = cleanText(name, 80).split(/[^A-Za-z0-9\u00c0-\u024f]+/).filter(function (word) {
+      return word && !/^(of|the|a|an|and)$/i.test(word);
+    });
+    return words.slice(0, 2).map(function (word) { return word.charAt(0).toUpperCase(); }).join("") || "?";
+  }
+
+  // The tile's markup. Initials hold only letters and digits and the address only digits, so neither needs escaping.
+  function coverMarkup(key, name) {
+    var url = coverUrl(key);
+    return '<span class="game-cover" aria-hidden="true"><b>' + initials(name) + '</b>'
+      + (url ? '<img src="' + url + '" alt="" loading="lazy" decoding="async" data-game-cover>' : '') + '</span>';
+  }
+
+  // One listener for every cover on the page: a picture that fails is removed, leaving the initials.
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("error", function (event) {
+      var image = event.target;
+      if (image && image.tagName === "IMG" && image.hasAttribute("data-game-cover")) {
+        coverMissing(image.getAttribute("src"));
+        image.remove();
+      }
+    }, true);
+  }
+
   return {
     STORAGE_KEY: STORAGE_KEY, MAX_GAP_MS: MAX_GAP_MS,
+    coverUrl: coverUrl, coverMissing: coverMissing, initials: initials, coverMarkup: coverMarkup,
     fresh: fresh, validate: validate, seen: seen, touch: touch, end: end, summary: summary,
     formatDuration: formatDuration, formatClock: formatClock, historyLine: historyLine, dayId: dayId, week: week,
     load: load, save: save

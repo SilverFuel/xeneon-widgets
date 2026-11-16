@@ -312,6 +312,28 @@ body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; 
 .auxora-arrival__name { max-width: 100%; overflow: hidden; font-size: clamp(34px, 3.2vw, 64px); font-weight: 800; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
 .auxora-arrival__line { font-size: clamp(18px, 1.3vw, 28px); font-weight: 600; }
 .auxora-arrival__history { margin-top: 6px; color: var(--theme-text-muted); font-size: clamp(15px, 1vw, 22px); }
+/* The game's cover, shown only once it has loaded. */
+.auxora-arrival__cover { display: none; }
+@media (min-width: 701px) {
+  .auxora-arrival.has-cover {
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 34px;
+    width: min(900px, calc(100vw - 48px));
+  }
+  .auxora-arrival.has-cover > :not(.auxora-arrival__cover) { grid-column: 2; }
+  .auxora-arrival.has-cover > .auxora-arrival__cover {
+    display: block;
+    grid-column: 1;
+    grid-row: 1 / span 4;
+    align-self: center;
+    block-size: clamp(120px, 24vh, 200px);
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+  }
+}
 /* A band of light crosses the card once. */
 .auxora-arrival::after {
   content: "";
