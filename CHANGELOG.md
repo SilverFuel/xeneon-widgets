@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Gaming has a **Discord** row while a game is running. With the game and Discord both making sound it is a game/chat balance: one slider with the game at one end and Discord at the other, both at full volume in the middle. Otherwise it says whether Discord is open and has a button that opens it or brings it to the front. It needs no Discord account link: it uses Discord's volume in the Windows mixer. Muting yourself inside Discord, and seeing who is in your voice channel, are not part of this.
 - Settings > Appearance fits on one screen on the EDGE: its settings sit four across where they were stacked two across and scrolled. Text size is three buttons (Normal, Large, Extra large), one tap where the dropdown took two.
 - Gaming has a **This week** card when no game is running: time played over the last seven days as seven bars, the total, one line on the busiest day ("Most on Saturday: 3 h 45 min."), and the three games the time went on. It reads the play log Auxora already keeps and appears once a game has been played.
 - WoW Forever's Apple Music control now shows the cover art and has **previous** and **next** buttons under the play button. The cover is read from Apple Music itself, once per track. Skip buttons appear only when Apple Music says it can skip.

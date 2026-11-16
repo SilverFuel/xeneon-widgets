@@ -2125,3 +2125,72 @@
     font-size: clamp(18px, 1.125rem, 21px);
   }
 }
+
+/* Discord on the in-game screen. With the game and Discord both making sound it is one
+   slider, the game at one end and Discord at the other; otherwise a line and a button. */
+.game-focus-discord {
+  display: grid;
+  grid-template-columns: max-content minmax(120px, 1fr) max-content;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 6px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-muted);
+  color: var(--theme-text);
+}
+
+/* The column's rows are named one by one, so the extra row has to be named too. */
+.game-focus-card--utility:has(> .game-focus-discord) {
+  grid-template-rows: max-content max-content max-content minmax(0, 1fr) max-content;
+}
+
+.game-focus-discord:not([data-state="blend"]) {
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.game-focus-discord-side {
+  font-size: max(17px, 1.0625rem);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.game-focus-discord-side b {
+  display: inline-block;
+  min-width: 2.2em;
+  color: var(--theme-accent-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* The middle of the track is marked: that is where both are at full volume. */
+.game-focus-discord .inline-range {
+  width: 100%;
+  min-height: 54px;
+  margin: 0;
+  background: linear-gradient(var(--theme-accent), var(--theme-accent)) center / 2px 22px no-repeat;
+}
+
+.game-focus-discord-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.game-focus-discord-copy strong {
+  font-size: max(18px, 1.125rem);
+}
+
+.game-focus-discord-copy small {
+  color: var(--color-text-dim);
+  font-size: max(15px, 0.9375rem);
+}
+
+.game-focus-shell .game-focus-card--utility .game-focus-discord .inline-button {
+  min-width: 150px;
+  min-height: 54px;
+  font-size: max(16px, 1rem);
+  font-weight: 800;
+}

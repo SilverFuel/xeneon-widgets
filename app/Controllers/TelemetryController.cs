@@ -130,6 +130,16 @@ public sealed class TelemetryController
         return _audioService.SetBlend(gameProcessId, gameProcessName, request.Position);
     }
 
+    public AudioBlendPayload GetChatBlend(int? gameProcessId, string? gameProcessName)
+    {
+        return _audioService.GetChatBlend(gameProcessId, gameProcessName);
+    }
+
+    public AudioBlendPayload SetChatBlend(int? gameProcessId, string? gameProcessName, AudioBlendRequest request)
+    {
+        return _audioService.SetChatBlend(gameProcessId, gameProcessName, request.Position);
+    }
+
     public Task<AudioSnapshotPayload> SetAudioSessionVolumeAsync(AudioSessionVolumeRequest request, CancellationToken cancellationToken)
     {
         return _audioService.SetSessionVolumeAsync(request.SessionId, request.Volume, cancellationToken);
