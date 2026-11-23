@@ -1915,19 +1915,40 @@
     min-height: 0;
   }
 
-  /* Output card: the list of other outputs takes what is left and scrolls if it must. */
+  /* Output card: a few blocks, spread over the card's height so none of them is squeezed. */
   .audio-command-grid .audio-master-card {
     display: grid;
-    grid-template-rows: max-content max-content max-content minmax(64px, 1fr) max-content;
-    align-content: stretch;
-    gap: 10px;
+    grid-template-rows: none;
+    grid-auto-rows: max-content;
+    align-content: space-between;
+    gap: 12px;
+  }
+
+  .audio-command-grid .audio-master-card .audio-current-output {
+    font-size: 30px;
+  }
+
+  .audio-command-grid .audio-master-card .audio-master-row strong {
+    font-size: 56px;
   }
 
   .audio-command-grid .audio-route-strip {
     align-content: start;
     grid-auto-rows: minmax(64px, max-content);
+  }
+
+  .audio-sound-shortcuts .audio-preset-button {
+    min-height: 64px;
+    font-size: 18px;
+  }
+
+  .audio-outputs-screen {
+    height: calc(100dvh - 185px);
     min-height: 0;
-    overflow: auto;
+  }
+
+  .audio-outputs-grid {
+    grid-auto-rows: minmax(150px, max-content);
   }
 
   .audio-command-grid .audio-route-button {
@@ -1957,4 +1978,77 @@
   .audio-apps-card .audio-session-row__top .inline-list-copy {
     display: none;
   }
+}
+
+/* Output card header: the current output on the left, the way to change it on the right. */
+.audio-master-card .inline-card-header {
+  align-items: center;
+  gap: 16px;
+}
+
+.audio-output-change {
+  flex: 0 0 auto;
+  min-height: 54px;
+  white-space: nowrap;
+}
+
+/* Choosing an output: its own screen, every output a large button. */
+.audio-outputs-screen {
+  display: grid;
+  grid-template-rows: max-content minmax(0, 1fr);
+  gap: 10px;
+  min-height: calc(100dvh - 185px);
+}
+
+.audio-outputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+  grid-auto-rows: minmax(120px, max-content);
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.audio-outputs-grid .audio-route-button,
+.audio-output-current {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  justify-content: stretch;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 18px;
+  border-radius: 16px;
+  text-align: left;
+  white-space: normal;
+}
+
+.audio-outputs-grid .audio-route-button span,
+.audio-output-current span {
+  font-size: max(22px, 1.375rem);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.audio-output-current {
+  border: 1px solid var(--theme-accent);
+  background: var(--theme-selected-surface);
+  box-shadow: inset 0 -3px 0 var(--theme-accent);
+  color: var(--theme-text);
+}
+
+.audio-output-current strong {
+  color: var(--theme-accent);
+  font-size: max(14px, 0.875rem);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.audio-output-current em {
+  color: var(--theme-text-muted);
+  font-size: max(15px, 0.9375rem);
+  font-style: normal;
 }

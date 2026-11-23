@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The output card on Media is no longer a small scrolling strip. It shows the current output, its volume and Mute, with room to spare. With more than two other outputs, **Change output** opens a screen that lists every output as a large button and marks the one playing; picking one switches and closes it. With one or two others, they stay on the card as quick buttons. Auxora used to list only four other outputs; it now lists up to twelve.
 - Picking a Profile no longer starts a two-hour manual hold. Auxora remembers the choice for what the PC is doing at that moment: the game that is running, the music that is playing, or, with neither, as the everyday Profile. Automatic switching never turns off, so there is no Automatic choice in the picker and nothing to switch back. The line under "Profile" says what the current one is for.
 - Less work in the background.
   - The moving background stops drawing while a game is running, whenever it is hidden (Night, the game and battery budgets, motion off, clean readability), and a minute after the last touch or key. It used to draw fifteen frames a second in all of those cases.

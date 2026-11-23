@@ -406,6 +406,15 @@
     '</div>';
   }
 
+  // One output the sound can be sent to, as a button.
+  function renderOutputButton(device) {
+    return '' +
+      '<button class="inline-button audio-route-button" type="button" title="' + escapeHtml(text(device.name, "Output")) + '" data-ui-key="audio-device-' + escapeHtml(text(device.id, text(device.name, "unknown"))) + '" data-action="switch-device" data-device-id="' + escapeHtml(text(device.id, "")) + '">' +
+        '<strong>' + escapeHtml(text(device.kind, "output")) + '</strong>' +
+        '<span>' + escapeHtml(getFriendlyAudioDeviceName(device.name)) + '</span>' +
+      '</button>';
+  }
+
   function renderEqualizerCard(state) {
     var equalizer = state.equalizer;
     var statusLabel = equalizer.status === "live"
@@ -514,7 +523,7 @@
     })[0] || data.devices[0] || null;
     var routeDevices = data.devices.filter(function (device) {
       return !device.isDefault;
-    }).slice(0, 4);
+    }).slice(0, 12);
     var activeSessions = data.sessions.filter(isUsefulAudioSession);
     var hasMediaSession = hasLiveMediaSession(media);
     var visibleSessions = activeSessions.slice(0, 6);
@@ -579,6 +588,28 @@
       sessionRowsHtml += '<div class="audio-session-more">+' + hiddenSessionCount + ' more app' + (hiddenSessionCount === 1 ? "" : "s") + ' playing sound</div>';
     }
 
+    // With more than two other outputs, choosing one is its own screen too: every output as a large
+    // button, the current one marked. Picking one, or Done, returns to Media.
+    if (state.outputsOpen) {
+      return '' +
+        '<div class="inline-widget-shell inline-widget-shell--audio">' +
+          '<div class="audio-outputs-screen">' +
+            '<div class="audio-equalizer-screen__bar">' +
+              '<div class="audio-equalizer-screen__title">Choose an output</div>' +
+              '<button class="inline-button is-primary" type="button" data-action="outputs-close">Done</button>' +
+            '</div>' +
+            '<div class="audio-outputs-grid">' +
+              (defaultDevice ? '<div class="audio-output-current" title="' + escapeHtml(defaultDevice.name) + '">' +
+                '<strong>' + escapeHtml(text(defaultDevice.kind, "output")) + '</strong>' +
+                '<span>' + escapeHtml(getFriendlyAudioDeviceName(defaultDevice.name)) + '</span>' +
+                '<em>Playing here</em>' +
+              '</div>' : '') +
+              routeDevices.map(renderOutputButton).join("") +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
     // The equalizer is its own screen: it takes the panel while open and is gone when closed.
     if (state.equalizerOpen) {
       return '' +
@@ -599,30 +630,20 @@
           '<article class="list-card inline-card audio-master-card">' +
             '<div class="inline-card-header">' +
               '<div>' +
-                '<div class="metric-label">Current output</div>' +
+                '<div class="metric-label">Output</div>' +
                 '<div class="audio-current-output" title="' + escapeHtml(defaultDevice ? defaultDevice.name : "No default playback device") + '">' + escapeHtml(defaultDevice ? getFriendlyAudioDeviceName(defaultDevice.name) : "No default playback device") + '</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(data.muted ? "Sound is muted." : defaultDevice ? "Windows is sending sound here." : "No output is selected.") + '</div>' +
+                (data.muted || !defaultDevice ? '<div class="router-inline-copy">' + (data.muted ? "Sound is muted." : "No output is selected.") + '</div>' : '') +
               '</div>' +
+              (routeDevices.length > 2 ? '<button class="inline-button audio-output-change" type="button" data-action="outputs-open">Change output</button>' : '') +
             '</div>' +
             '<div class="audio-master-row">' +
               '<strong>' + escapeHtml(Math.round(data.masterVolume) + "%") + '</strong>' +
               '<input class="inline-range" type="range" min="0" max="100" aria-label="Master volume" value="' + Math.round(data.masterVolume) + '" data-action="master-volume">' +
               '<button class="inline-button audio-master-mute" type="button" data-action="master-mute">' + (data.muted ? "Unmute" : "Mute") + '</button>' +
             '</div>' +
-            '<div class="audio-card-subhead">' +
-              '<div>' +
-                '<div class="metric-label">Choose an output</div>' +
-                '<div class="router-inline-copy">' + escapeHtml(routeDevices.length ? "Pick where sound plays." : "Only one output is available.") + '</div>' +
-              '</div>' +
-              statusPill(String(data.devices.length) + " outputs", data.devices.length ? "good" : "warn") +
-            '</div>' +
-            '<div class="audio-route-strip">' + (routeDevices.length ? routeDevices.map(function (device) {
-              return '' +
-                '<button class="inline-button audio-route-button" type="button" title="' + escapeHtml(text(device.name, "Output")) + '" data-ui-key="audio-device-' + escapeHtml(text(device.id, text(device.name, "unknown"))) + '" data-action="switch-device" data-device-id="' + escapeHtml(text(device.id, "")) + '">' +
-                  '<strong>' + escapeHtml(text(device.kind, "output")) + '</strong>' +
-                  '<span>' + escapeHtml(getFriendlyAudioDeviceName(device.name)) + '</span>' +
-                '</button>';
-            }).join("") : emptyState("No other outputs", defaultDevice ? "The current output is the only active route." : "No playback devices were returned by Windows.")) + '</div>' +
+            (routeDevices.length && routeDevices.length <= 2
+              ? '<div class="audio-route-strip" role="group" aria-label="Switch output">' + routeDevices.map(renderOutputButton).join("") + '</div>'
+              : '') +
             renderSoundShortcuts(state) +
           '</article>' +
           '<article class="list-card inline-card audio-playback-card">' +
@@ -675,6 +696,7 @@
       interacting: false,
       equalizerFineTuneOpen: false,
       equalizerOpen: false,
+      outputsOpen: false,
       observedAlbums: [],
       dismissedAlbumKeys: [],
       carouselIndex: 0,
@@ -854,7 +876,15 @@
         return;
       }
 
+      if (action === "outputs-open" || action === "outputs-close") {
+        state.outputsOpen = action === "outputs-open";
+        redraw();
+        return;
+      }
+
       if (action === "switch-device") {
+        // The choice is made, so the list has done its job.
+        state.outputsOpen = false;
         commit("/api/audio/default-device", {
           deviceId: String(target.getAttribute("data-device-id") || "")
         });
