@@ -657,6 +657,11 @@ public sealed class BridgeManager : IAsyncDisposable
             return true;
         }
 
+        if (IsClaudeCodeHookRequest(request.HttpMethod, request.Url?.AbsolutePath, request.Headers["Origin"]))
+        {
+            return true;
+        }
+
         var token = request.Headers[SessionHeaderName];
         var authorized = string.Equals(token, _sessionToken, StringComparison.Ordinal);
         if (!authorized)
@@ -665,6 +670,17 @@ public sealed class BridgeManager : IAsyncDisposable
         }
 
         return authorized;
+    }
+
+    // Claude Code's hooks cannot carry the dashboard's session token, so this one route takes a
+    // POST without it. It only records a status line for the dashboard to show. A web page
+    // cannot use it: a browser names its origin on every cross-site POST, and a request that
+    // names any origin is held to the token like every other change.
+    internal static bool IsClaudeCodeHookRequest(string? method, string? path, string? origin)
+    {
+        return string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(path, "/api/claude-code/event", StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(origin);
     }
 
     private static bool HasSafeMethod(HttpListenerRequest request)

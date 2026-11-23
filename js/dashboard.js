@@ -1756,6 +1756,60 @@
     }
   }
 
+  // Claude Code sessions on this PC, as their own hooks report them to the host. The chip in
+  // the header shows the one that matters most: flashing while a session waits on a decision.
+  var claudeWatch = { payload: null, seenKey: "", shownKey: "", misses: 0, timer: 0 };
+
+  function renderClaudeChip() {
+    var chip = document.getElementById("dashboard-claude-chip");
+    var shown = chip && window.AuxoraClaudeWatch ? window.AuxoraClaudeWatch.view(claudeWatch.payload, claudeWatch.seenKey) : null;
+    if (!chip) {
+      return;
+    }
+    claudeWatch.shownKey = shown ? shown.key : "";
+    chip.hidden = !shown;
+    if (!shown) {
+      chip.removeAttribute("data-state");
+      return;
+    }
+    var title = document.getElementById("dashboard-claude-chip-title");
+    var detail = document.getElementById("dashboard-claude-chip-detail");
+    if (chip.getAttribute("data-state") !== shown.state) { chip.setAttribute("data-state", shown.state); }
+    chip.toggleAttribute("data-flash", shown.flash);
+    if (title.textContent !== shown.title) { title.textContent = shown.title; }
+    if (detail.textContent !== shown.detail) { detail.textContent = shown.detail; }
+    if (chip.getAttribute("aria-label") !== shown.label) { chip.setAttribute("aria-label", shown.label); }
+  }
+
+  // Asked every few seconds while a session is live and seldom otherwise; not at all while the
+  // dashboard is hidden or the host cannot be reached.
+  function pollClaudeWatch() {
+    var again = function () {
+      window.clearTimeout(claudeWatch.timer);
+      claudeWatch.timer = window.setTimeout(pollClaudeWatch, window.AuxoraClaudeWatch.nextPollMs(claudeWatch.payload));
+    };
+    if (!window.AuxoraClaudeWatch) {
+      return;
+    }
+    if (document.hidden || bridgeReachable !== true) {
+      // Nothing to ask yet; look again shortly, so the chip is not late once the host answers.
+      window.clearTimeout(claudeWatch.timer);
+      claudeWatch.timer = window.setTimeout(pollClaudeWatch, 5000);
+      return;
+    }
+    fetchJson(buildUrl(bridgeOrigin, "/api/claude-code"), 4000).then(function (payload) {
+      claudeWatch.misses = 0;
+      claudeWatch.payload = payload;
+      renderClaudeChip();
+    }, function () {
+      claudeWatch.misses += 1;
+      if (claudeWatch.misses >= 2 && claudeWatch.payload) {
+        claudeWatch.payload = null;
+        renderClaudeChip();
+      }
+    }).then(again);
+  }
+
   // The game's cover beside the welcome, when Steam keeps one on this PC. The card widens for it
   // only once the picture has loaded; a game without one gets the card as it was.
   function showArrivalCover(banner, url) {
@@ -4867,6 +4921,16 @@
             window.setTimeout(keepFocusInQuickDrawer, 0);
           }
         });
+      }
+
+      // A tap says "seen": a wait stops flashing, a finished or stopped session is put away.
+      var claudeChipNode = document.getElementById("dashboard-claude-chip");
+      if (claudeChipNode) {
+        claudeChipNode.addEventListener("click", function () {
+          claudeWatch.seenKey = claudeWatch.shownKey;
+          renderClaudeChip();
+        });
+        pollClaudeWatch();
       }
 
       var playChipNode = document.getElementById("dashboard-play-chip");
