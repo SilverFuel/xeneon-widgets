@@ -36,4 +36,22 @@ public sealed class MediaServiceTests
 
         Assert.That(result, Is.EqualTo("image/png"));
     }
+
+    [Test]
+    public void IndexOfApp_FindsAppleMusicAmongOtherSessions()
+    {
+        var sessions = new[] { "MSEdge", "AppleInc.AppleMusicWin_nzyj5cx40ttqa!App", "Spotify.exe" };
+
+        Assert.That(MediaService.IndexOfApp(sessions, "apple-music"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void IndexOfApp_IsMinusOneWhenTheAppHasNoSessionOrTheNameIsUnknown()
+    {
+        var sessions = new[] { "MSEdge", "Spotify.exe", "" };
+
+        Assert.That(MediaService.IndexOfApp(sessions, "apple-music"), Is.EqualTo(-1));
+        Assert.That(MediaService.IndexOfApp(new[] { "AppleInc.AppleMusicWin_nzyj5cx40ttqa!App" }, "spotify"), Is.EqualTo(-1));
+        Assert.That(MediaService.IndexOfApp(Array.Empty<string>(), "apple-music"), Is.EqualTo(-1));
+    }
 }

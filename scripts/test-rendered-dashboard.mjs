@@ -3822,10 +3822,25 @@ function installWowQuestLogFixture() {
     supported: true, status: "live", defaultInputDeviceId: "fixture-mic", inputMuted: micMuted,
     inputDevices: [{ id: "fixture-mic", name: "Fixture microphone", isDefault: true }], devices: [], sessions: []
   }), { status: 200, headers: { "Content-Type": "application/json" } });
+  // Apple Music, open and playing.
+  let musicPlaying = true;
+  const musicReply = () => new Response(JSON.stringify({
+    supported: true, configured: true, status: "live", playbackStatus: musicPlaying ? "playing" : "paused",
+    title: "Fixture song", artist: "Fixture artist", canPlay: true, canPause: true, message: ""
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
   window.fetch = function (input, options) {
     const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
     if (url.origin === location.origin && url.pathname === "/api/audio") {
       return Promise.resolve(audioReply());
+    }
+    if (url.origin === location.origin && url.pathname === "/api/media/apple-music") {
+      return Promise.resolve(musicReply());
+    }
+    if (url.origin === location.origin && url.pathname === "/api/media/apple-music/play-pause") {
+      // Like the real app, the reply still carries the old state; the next reading has the new one.
+      const reply = musicReply();
+      musicPlaying = !musicPlaying;
+      return Promise.resolve(reply);
     }
     if (url.origin === location.origin && url.pathname === "/api/audio/input-mute") {
       try { micMuted = JSON.parse(options && options.body).muted === true; } catch { micMuted = !micMuted; }
@@ -3941,7 +3956,7 @@ async function checkWowQuestLogInPage() {
   check(shown(micButton) && micButton.dataset.state === "live" && micButton.textContent === "Mic live" && micBox().height >= 54 && micBox().width >= 200,
     size + ": the mic button does not show a live microphone: " + micButton.outerHTML);
   if (largeText) {
-    check(micBox().height >= 300 && [...panel().querySelectorAll(".wow-card")].every(card => {
+    check(micBox().height >= 250 && [...panel().querySelectorAll(".wow-card")].every(card => {
       const box = card.getBoundingClientRect();
       return box.width < 1 || box.right <= micBox().left + 1;
     }), size + ": the mic tile is not a tall tile clear of the cards: " + Math.round(micBox().width) + "x" + Math.round(micBox().height));
@@ -3953,6 +3968,27 @@ async function checkWowQuestLogInPage() {
   micButton.click();
   await wait(400);
   check(micButton.dataset.state === "live" && micButton.getAttribute("aria-pressed") === "false", size + ": a second tap did not unmute the microphone: " + micButton.outerHTML);
+  // The Apple Music button: Pause while it plays, Play after a tap, and it stays that way once the host is asked again.
+  const musicButton = panel().querySelector(".wow-music");
+  const musicBox = () => musicButton.getBoundingClientRect();
+  const musicLabel = () => musicButton.querySelector(".wow-music-state").textContent;
+  const musicDeadline = Date.now() + 8000;
+  while (musicButton.hidden && Date.now() < musicDeadline) await wait(100);
+  check(shown(musicButton) && musicButton.dataset.state === "playing" && musicLabel() === "Pause"
+    && musicButton.querySelector(".wow-music-track").textContent === "Fixture song - Fixture artist" && musicBox().height >= 54 && musicBox().width >= 200,
+    size + ": the Apple Music button does not show the playing track: " + musicButton.outerHTML);
+  if (largeText) {
+    check(musicBox().top >= micBox().bottom && Math.abs(musicBox().left - micBox().left) <= 1 && [...panel().querySelectorAll(".wow-card")].every(card => {
+      const box = card.getBoundingClientRect();
+      return box.width < 1 || box.right <= musicBox().left + 1;
+    }), size + ": the Apple Music tile is not under the mic tile and clear of the cards");
+  }
+  musicButton.click();
+  await wait(150);
+  check(musicLabel() === "Play" && musicButton.dataset.state === "paused", size + ": a tap did not pause Apple Music at once: " + musicButton.outerHTML);
+  await wait(1800);
+  check(musicLabel() === "Play" && musicButton.dataset.state === "paused", size + ": Apple Music did not stay paused after the host was asked again: " + musicButton.outerHTML);
+  check(pageFits() || !oneScreen, size + ": the panel runs off the screen with the mic and music buttons showing");
   if (largeText) {
     check(Number.parseFloat(getComputedStyle(list.querySelector("strong")).fontSize) >= 26, size + ": quest titles are not large");
     check(shown(panel().querySelector(".wow-character")) && shown(panel().querySelector(".wow-quests")) && !shown(panel().querySelector(".wow-camp"))

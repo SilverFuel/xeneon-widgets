@@ -1267,6 +1267,13 @@ try {
     `/api/wow/companion character does not match its availability: ${JSON.stringify(companion)}`);
   assert(!/[A-Za-z]:\\\\|\\\\WTF|_forever_/i.test(JSON.stringify(companion)), "/api/wow/companion must not expose a file or folder path");
 
+  // Apple Music's own playback: the route answers whether or not the app is open.
+  const appleMusicResponse = await fetchWithTimeout("/api/media/apple-music");
+  assert(appleMusicResponse.status === 200, `/api/media/apple-music must answer; received HTTP ${appleMusicResponse.status}`);
+  const appleMusic = await appleMusicResponse.json();
+  assert(["idle", "live", "error"].includes(appleMusic.status) && typeof appleMusic.playbackStatus === "string" && typeof appleMusic.message === "string",
+    `/api/media/apple-music returned an unexpected shape: ${JSON.stringify(appleMusic)}`);
+
   const unconfiguredSnapshotResponse = await fetchWithTimeout("/api/frigate/snapshot?id=current-event");
   assert(unconfiguredSnapshotResponse.status === 404, `unconfigured Camera Detection snapshot must return HTTP 404; received ${unconfiguredSnapshotResponse.status}`);
   assert(/not configured/i.test((await unconfiguredSnapshotResponse.json()).error || ""), "unconfigured Camera Detection snapshot must explain that Frigate is not configured");
