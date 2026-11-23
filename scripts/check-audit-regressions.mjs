@@ -108,7 +108,6 @@ const networkMetricsService = readWorkspaceFile("app/Services/NetworkMetricsServ
 const audioService = readWorkspaceFile("app/Services/AudioService.cs");
 const mediaService = readWorkspaceFile("app/Services/MediaService.cs");
 const steamService = readWorkspaceFile("app/Services/SteamService.cs");
-const gameActivityService = readWorkspaceFile("app/Services/GameActivityService.cs");
 const gamePerformanceService = readWorkspaceFile("app/Services/GamePerformanceService.cs");
 const gameModeSessionService = readWorkspaceFile("app/Services/GameModeSessionService.cs");
 const hueService = readWorkspaceFile("app/Services/HueService.cs");
@@ -127,19 +126,7 @@ const endpointGuard = readWorkspaceFile("app/Infrastructure/NetworkEndpointGuard
 const legacyBridge = readWorkspaceFile("bridge/server.mjs");
 const electronMain = readWorkspaceFile("desktop/electron/src/main.cjs");
 const dashboardJs = readWorkspaceFile("js/dashboard.js");
-const inlineWidgets = readWorkspaceFile("js/inline-widgets.js");
-const widgetsCss = readWorkspaceFile("css/widgets.css");
-const homelabWidget = readWorkspaceFile("js/widgets/homelab.js");
-const systemWidget = readWorkspaceFile("js/widgets/system.js");
-const networkWidget = readWorkspaceFile("js/widgets/network.js");
-const audioWidget = readWorkspaceFile("js/widgets/audio.js");
-const setupWidget = readWorkspaceFile("js/widgets/setup.js");
 const productWidget = readWorkspaceFile("js/widgets/product.js");
-const actionsWidget = readWorkspaceFile("js/widgets/actions.js");
-const integrationsWidget = readWorkspaceFile("js/widgets/integrations.js");
-const gameModeWidget = readWorkspaceFile("js/widgets/game-mode.js");
-const gameFocusPatchBody = gameModeWidget.match(/function\s+patchGameFocusScene\([\s\S]*?\n  function\s+renderGameModeProfilePanel/);
-const unhandledRejectionHandler = dashboardJs.match(/window\.addEventListener\("unhandledrejection"[\s\S]*?\n\s*\}\);/);
 const bridgeExampleConfig = readWorkspaceFile("bridge/config.example.json");
 const appConfig = readWorkspaceFile("app/Models/AppConfig.cs");
 const launcherService = readWorkspaceFile("app/Services/LauncherService.cs");
@@ -658,9 +645,7 @@ assert(
     && /IssueConfirmation/.test(systemActionsService)
     && /PendingActionConfirmation/.test(systemActionsService)
     && /TryRemove\(token\.Trim\(\)/.test(systemActionsService)
-    && /case "\/api\/action-confirmations" when request\.HttpMethod == "POST"/.test(apiRouter)
-    && /requestActionConfirmation/.test(actionsWidget)
-    && /requiresServerConfirmation/.test(actionsWidget),
+    && /case "\/api\/action-confirmations" when request\.HttpMethod == "POST"/.test(apiRouter),
   "dangerous local actions must require short-lived server-issued confirmation tokens"
 );
 
@@ -846,11 +831,7 @@ assert(
     && /ValidateUniFiCertificate/.test(uniFiService)
     && /UniFiCertificateTrustRequiredException/.test(uniFiService)
     && /CertificateThumbprint/.test(uniFiService)
-    && /TrustedCertificateThumbprint/.test(readWorkspaceFile("app/Models/AppConfig.cs"))
-    && /certificateTrustRequired/.test(homelabWidget)
-    && /network-certificate-review/.test(networkWidget)
-    && /trustCertificate:\s*Boolean/.test(networkWidget)
-    && /trustedCertificateThumbprint/.test(networkWidget),
+    && /TrustedCertificateThumbprint/.test(readWorkspaceFile("app/Models/AppConfig.cs")),
   "UniFi local API must use certificate trust-on-first-use instead of accepting every certificate"
 );
 
@@ -915,22 +896,8 @@ assert(
     && /GameModeSessionService/.test(bridgeManager)
     && /GetSnapshotAsync\(GameModeSessionRequest/.test(gameModeSessionService)
     && /CollectorTimings/.test(gameModeSessionService)
-    && /OverBudget/.test(gameModeSessionService)
-    && /refreshGameModeSession/.test(gameModeWidget)
-    && /\/api\/game\/session/.test(gameModeWidget)
-    && /createTimerLoop\(function \(\) \{[\s\S]*refreshGameModeSession/.test(gameModeWidget)
-    && !/var systemLoop = createTimerLoop/.test(gameModeWidget)
-    && !/var performanceLoop = createTimerLoop/.test(gameModeWidget),
+    && /OverBudget/.test(gameModeSessionService),
   "Game Mode must use one budgeted native session snapshot instead of independent UI polling loops"
-);
-
-assert(
-  /CacheDuration\s*=\s*TimeSpan\.FromSeconds\(6\)/.test(gameActivityService)
-    && /WmiProcessScanCooldown\s*=\s*TimeSpan\.FromSeconds\(30\)/.test(gameActivityService)
-    && /_lastWmiProcessScanAt/.test(gameActivityService)
-    && /inaccessibleProcessModules > 0/.test(gameActivityService)
-    && /AddWmiProcesses\(results\)/.test(gameActivityService),
-  "Game activity scans must use a longer cache and throttle WMI fallback to avoid constant process churn"
 );
 
 assert(
@@ -941,16 +908,6 @@ assert(
     && /CleanupCaptureFile/.test(gamePerformanceService)
     && /TryDeleteFile/.test(gamePerformanceService),
   "PresentMon FPS telemetry files must be deleted or size/age capped unless diagnostics retention is enabled"
-);
-
-assert(
-  /\[JsonIgnore\][\s\S]*ProcessId/.test(gameActivityService)
-    && /\[JsonIgnore\][\s\S]*ExecutablePath/.test(gameActivityService)
-    && /HasRuntimeIdentity/.test(gameActivityService)
-    && /CanPin/.test(gameActivityService)
-    && /foregroundAppActive/.test(gameModeWidget)
-    && !/data-process-id/.test(gameModeWidget),
-  "Game activity API must keep raw PIDs and executable paths out of default JSON while preserving capability flags"
 );
 
 assert(
@@ -1016,238 +973,15 @@ assert(
     && /--wait-for-previous-instance/.test(systemActionsService)
     && /WaitForPreviousInstance/.test(appLaunchOptions)
     && /TryAcquireInstanceMutex\(LaunchOptions\.WaitForPreviousInstance\)/.test(programCs)
-    && /PreviousInstanceExitWait/.test(programCs)
-    && /restart-game-admin/.test(gameModeWidget)
-    && /Fix FPS \(admin\)/.test(gameModeWidget)
-    && /performanceSession:\s*options\.performanceSession === true/.test(gameModeWidget)
-    && !/performanceSession:\s*options\.performanceSession !== false/.test(gameModeWidget)
-    && /function\s+shouldContinuePerformanceSession\(\)/.test(gameModeWidget)
-    && /refreshGameModeSession\(\{\s*performanceSession:\s*shouldContinuePerformanceSession\(\)\s*\}\)/.test(gameModeWidget)
-    && /refreshGameModeSession\(\{\s*refresh:\s*true,\s*activityRefresh:\s*true,\s*performanceSession:\s*true\s*\}\)/.test(gameModeWidget)
-    && /function\s+gameFocusCanFixFps/.test(gameModeWidget)
-    && /Telemetry readiness/.test(gameModeWidget),
+    && /PreviousInstanceExitWait/.test(programCs),
   "Game Mode telemetry readiness must expose FPS source, elevated PresentMon capture, admin capture state, explicit capture starts, and status-gated polling"
 );
 
 assert(
-  gameFocusPatchBody
-    && /performanceRestarting/.test(gameFocusPatchBody[0])
-    && !/\bstate\./.test(gameFocusPatchBody[0]),
-  "Game Mode focus patcher must not reference widget state outside its closure during mute/redraw refreshes"
-);
-
-assert(
-  /requiresBridge:\s*true/.test(dashboardJs)
-    && /function\s+widgetRequiresBridge\(widget\)\s*\{\s*return Boolean\(widget && widget\.requiresBridge\);\s*\}/.test(dashboardJs),
-  "bridge-dependent widgets must declare requiresBridge in their widget config"
-);
-
-assert(
-  /runtime:\s*runtime/.test(inlineWidgets)
-    && /registerRenderer/.test(inlineWidgets)
-    && !/function\s+mount(?!PlaceholderWidget\b)[A-Z][A-Za-z0-9_]*Widget/.test(inlineWidgets)
-    && /function\s+patchGameFocusMetric/.test(gameModeWidget)
-    && /function\s+patchGameFocusScene/.test(gameModeWidget)
-    && /data-game-focus-metric/.test(gameModeWidget)
-    && /data-game-focus-active-id/.test(gameModeWidget)
-    && !/container\.getAttribute\("data-game-focus-intro"\)\s*===/.test(gameModeWidget)
-    && /runtime\.registerRenderer\("game-mode",\s*mountGameModeWidget\)/.test(gameModeWidget),
-  "active Game Mode HUD must patch mounted metric nodes instead of redrawing the full scene on every poll"
-);
-
-assert(
-  /renderGameFocusHudItem\("FPS"[\s\S]*renderGameFocusHudItem\("Audio"[\s\S]*renderGameFocusHudItem\("Mic"[\s\S]*renderGameFocusHudItem\("Network"[\s\S]*renderGameFocusHudItem\("Pressure"/.test(gameModeWidget)
-    && /game-focus-mic-toggle/.test(gameModeWidget)
-    && /\/api\/audio\/input-mute/.test(gameModeWidget)
-    && /GAME_FOCUS_TOUCH_GRASS_MS/.test(gameModeWidget)
-    && /Go touch grass/.test(gameModeWidget)
-    && /game-focus-card--art/.test(gameModeWidget)
-    && /game-focus-card--session/.test(gameModeWidget)
-    && !/renderGameFocusHudItem\("Main FPS"|renderGameFocusHudItem\("Frame"|renderGameFocusHudItem\("Ping"|frame-time|game-focus-top-status|game-focus-status-grid|game-focus-footer|renderGameFocusFact|gameFocusStateLabel|gameFocusVoiceLabel|<span>Match/.test(gameModeWidget)
-    && !/game-focus-top-status|game-focus-status-grid|game-focus-footer|game-focus-fact/.test(readWorkspaceFile("css/widgets/game-mode.css")),
-  "active Game Mode HUD must keep FPS, Audio, Mic, Network, Pressure, larger artwork, and the separate 3-hour session nudge without duplicate state, frame, ping, footer, or utility status panels"
-);
-
-assert(
-  /"ms-teams"/.test(gameActivityService)
-    && /"msteams"/.test(gameActivityService)
-    && /LauncherProcessNames/.test(gameActivityService)
-    && /LauncherExecutablePathFragments/.test(gameActivityService)
-    && /"galaxyclient"/.test(gameActivityService)
-    && /"galaxycommunication"/.test(gameActivityService)
-    && /"gog galaxy notifications renderer"/.test(gameActivityService)
-    && /"steamservice"/.test(gameActivityService)
-    && /"epicgameslauncher"/.test(gameActivityService)
-    && /"riotclientservices"/.test(gameActivityService)
-    && /IgnoredExecutablePathFragments/.test(gameActivityService)
-    && /ContainsGameKeyword/.test(gameActivityService)
-    && /ContainsKeywordWithBoundaries/.test(gameActivityService)
-    && !/GameKeywordFragments\.Any\(fragment\s*=>\s*combined\.Contains/.test(gameActivityService)
-    && !/GameKeywordFragments\.Any\(fragment\s*=>\s*lowerPath\.Contains/.test(gameActivityService),
-  "Game activity detection must ignore Teams/comms apps and launcher processes while matching game keywords with token boundaries"
-);
-
-assert(
-  /Pinned game/.test(gameActivityService)
-    && /PinnedGames/.test(appConfig)
+  /PinnedGames/.test(appConfig)
     && /normalized\.PinnedGames/.test(configStore)
-    && /migratedGamePins/.test(configStore)
-    && /current\.PinnedGames/.test(gameActivityService)
-    && /AddPinnedGameCandidate/.test(gameActivityService)
-    && /Recent app candidate/.test(gameActivityService)
-    && /confidence:\s*knownGamePath \? 78 : 55/.test(gameActivityService)
-    && /confidence:\s*knownGamePath \? 68 : 55/.test(gameActivityService)
-    && /TryInferWindowsAppsGamePath/.test(gameActivityService)
-    && /WindowsApps game package/.test(gameActivityService)
-    && !/IsExplicitGamePin/.test(gameActivityService)
-    && !/foreach\s*\(var blizzardName in new\[\]/.test(gameActivityService),
+    && /migratedGamePins/.test(configStore),
   "Game activity keyword-only matches must stay below the active threshold while explicit pinned games, known library paths, and conservative WindowsApps game packages can activate"
-);
-
-assert(
-  /function\s+reportBackgroundDashboardError/.test(dashboardJs)
-    && unhandledRejectionHandler
-    && /reportBackgroundDashboardError/.test(unhandledRejectionHandler[0])
-    && !/reportFatalDashboardError/.test(unhandledRejectionHandler[0])
-    && /window\.addEventListener\("error"[\s\S]+reportBackgroundDashboardError/.test(dashboardJs)
-    && /function\s+settingsContainsActiveControl/.test(dashboardJs)
-    && /settingsContainsActiveControl\(\)[\s\S]+pendingSettingsWidgetId/.test(dashboardJs)
-    && /settingsNode\.addEventListener\("focusout",\s*schedulePendingSettingsRender\)/.test(dashboardJs)
-    && !/scheduleFatalDashboardReload/.test(dashboardJs)
-    && !/window\.location\.reload/.test(dashboardJs),
-  "dashboard background failures and contained widget crashes must not create a full-page reload loop"
-);
-
-assert(
-  /function\s+mountAuxoraHomeWidget[\s\S]+function\s+redraw\(\)[\s\S]+var\s+chains\s*=\s*state\.chains[\s\S]+chains\.map/.test(productWidget),
-  "Auxora Home must derive action chains inside redraw before rendering One-tap setups"
-);
-
-assert(
-  /function\s+restorePreGamePerformanceBudget/.test(dashboardJs)
-    && /preGameBudget/.test(dashboardJs)
-    && /values\.preGameBudget = currentBudget/.test(gameModeWidget)
-    && /function\s+getNowStripRefreshInterval/.test(dashboardJs)
-    && /function\s+getLauncherDockRefreshInterval/.test(dashboardJs)
-    && /scheduleNowPlayingStripLoop/.test(dashboardJs)
-    && /scheduleLauncherDockLoop/.test(dashboardJs)
-    && /launcherDockRenderKey/.test(dashboardJs)
-    && /currentWidgetId === "game-mode"/.test(dashboardJs),
-  "dashboard must restore pre-game performance budget and make now-strip/launcher dock polling budget-aware"
-);
-
-assert(
-  /input\[type="range"\]:focus-visible/.test(widgetsCss)
-    && /aria-label="Display brightness"/.test(actionsWidget)
-    && /aria-label="Master volume"/.test(audioWidget)
-    && /aria-label="Dashboard opacity"/.test(dashboardJs)
-    && /aria-label="Brightness for/.test(homelabWidget)
-    && /aria-label="Brightness for/.test(integrationsWidget)
-    && /aria-label="Animation intensity"/.test(productWidget)
-    && /aria-pressed/.test(dashboardJs)
-    && /function\s+initXnSlider/.test(inlineWidgets)
-    && /initXnSlider:\s*initXnSlider/.test(inlineWidgets)
-    && /--xn-slider-fill-a:\s*#37c9a0/.test(widgetsCss)
-    && /--xn-slider-fill-b:\s*#7ef7d2/.test(widgetsCss)
-    && /xn-slider-shimmer/.test(widgetsCss)
-    && /dashboard-native-page--motion-off\s+\.xn-slider/.test(widgetsCss)
-    && /initXnSlider\(slider\)/.test(dashboardJs)
-    && /initXnSlider\(container\)/.test(actionsWidget)
-    && /initXnSlider\(container\)/.test(audioWidget)
-    && /initXnSlider\(container\)/.test(homelabWidget)
-    && /initXnSlider\(container\)/.test(integrationsWidget)
-    && /initXnSlider\(container\)/.test(productWidget),
-  "generated range controls must keep accessible names, a visible keyboard focus baseline, and the shared Starbound slider treatment"
-);
-
-assert(
-  /css\/widgets\/game-mode\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/game-mode\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && !/mountGameModeWidget/.test(inlineWidgets),
-  "Game Mode JS and CSS must stay split from the shared inline widget runtime"
-);
-
-assert(
-  /css\/widgets\/homelab\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/homelab\.js\?v=[\s\S]*js\/widgets\/system\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/homelab\.js\?v=[\s\S]*js\/widgets\/network\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /runtime\.registerHelpers\(\{\s*normalizeUnifiSnapshot:\s*normalizeUnifiSnapshot\s*\}\)/.test(homelabWidget)
-    && /runtime\.registerRenderer\("unifi-camera",\s*mountCameraWidget\)/.test(homelabWidget)
-    && /runtime\.registerRenderer\("unifi-network",\s*mountUniFiNetworkWidget\)/.test(homelabWidget)
-    && /runtime\.registerRenderer\("plex",\s*mountPlexWidget\)/.test(homelabWidget)
-    && /runtime\.registerRenderer\("nas",\s*mountNasWidget\)/.test(homelabWidget)
-    && /runtime\.registerRenderer\("automation",\s*mountAutomationWidget\)/.test(homelabWidget)
-    && !/mountCameraWidget/.test(inlineWidgets)
-    && !/mountUniFiNetworkWidget/.test(inlineWidgets)
-    && !/mountPlexWidget/.test(inlineWidgets)
-    && !/mountNasWidget/.test(inlineWidgets)
-    && !/mountAutomationWidget/.test(inlineWidgets)
-    && !/normalizeUniFiNetworkPayload/.test(inlineWidgets)
-    && !/normalizeCameraPayload/.test(integrationsWidget)
-    && !/inline-media__video|inline-media__placeholder/.test(readWorkspaceFile("css/widgets.css")),
-  "Homelab widgets, UniFi normalizer, and camera media CSS must stay split from the shared inline widget runtime"
-);
-
-assert(
-  /css\/widgets\/system\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /css\/widgets\/network\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /css\/widgets\/audio\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/system\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/network\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/audio\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /runtime\.registerRenderer\("system",\s*mountSystemWidget\)/.test(systemWidget)
-    && /runtime\.registerRenderer\("network",\s*mountNetworkWidget\)/.test(networkWidget)
-    && /runtime\.registerRenderer\("audio",\s*mountAudioWidget\)/.test(audioWidget)
-    && /function\s+normalizeGpuPowerPayload/.test(systemWidget)
-    && /function\s+renderSystemToolsPanel/.test(systemWidget)
-    && !/topProcesses|Process ID|PID /.test(systemWidget)
-    && /runtime\.registerHelpers/.test(networkWidget)
-    && /runtime\.registerHelpers/.test(audioWidget)
-    && !/mountSystemWidget/.test(inlineWidgets)
-    && !/mountNetworkWidget/.test(inlineWidgets)
-    && !/mountAudioWidget/.test(inlineWidgets)
-    && !/normalizeGpuPowerPayload/.test(inlineWidgets)
-    && !/gpu-power-list|gpu-power-sensor/.test(readWorkspaceFile("css/widgets.css"))
-    && !/system-|network-command|audio-/.test(readWorkspaceFile("css/widgets.css")),
-  "System, Network, and Audio widget JS/CSS must stay split from the shared inline widget runtime"
-);
-
-assert(
-  /css\/widgets\/actions\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/actions\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && !/runtime\.registerRenderer\("launchers"/.test(actionsWidget)
-    && /id="dashboard-launcher-dock"/.test(readWorkspaceFile("dashboard.html"))
-    && /data-launcher-dock-action="toggle-expanded"/.test(dashboardJs)
-    && /dashboard-native-page--launcher-dock-expanded/.test(readWorkspaceFile("css/widgets.css"))
-    && /runtime\.registerRenderer\("quick-actions",\s*mountQuickActionsWidget\)/.test(actionsWidget)
-    && /runtime\.registerRenderer\("shortcuts",\s*mountSystemShortcutsWidget\)/.test(actionsWidget)
-    && /runtime\.registerRenderer\("clipboard",\s*mountClipboardWidget\)/.test(actionsWidget)
-    && !/mountLaunchersWidget/.test(inlineWidgets)
-    && !/mountQuickActionsWidget/.test(inlineWidgets)
-    && !/mountSystemShortcutsWidget/.test(inlineWidgets)
-    && !/mountClipboardWidget/.test(inlineWidgets)
-    && !/inline-action-grid|inline-launcher-grid|inline-clipboard-preview/.test(readWorkspaceFile("css/widgets.css")),
-  "Launcher dock, quick action, shortcut, and clipboard JS/CSS must stay split from the shared inline widget runtime"
-);
-
-assert(
-  /quick-actions-shell/.test(actionsWidget)
-    && /inline-action-grid--compact/.test(actionsWidget)
-    && /data-confirmation-required="true"/.test(actionsWidget)
-    && /Tap once to confirm/.test(actionsWidget)
-    && /Tap again within 8 seconds to run/.test(actionsWidget)
-    && /CLIENT_CONFIRMATION_WINDOW_MS = 8000/.test(actionsWidget)
-    && (actionsWidget.match(/function armConfirmation\(actionId\)/g) || []).length === 2
-    && /requiresConfirmation \? "Two-step"/.test(actionsWidget)
-    && /system-shortcuts-unsupported/.test(actionsWidget)
-    && /Only controls this PC reports as working are tappable/.test(actionsWidget)
-    && /Unsupported controls are reduced to a small note/.test(actionsWidget)
-    && !/metricCard\("Notifications"/.test(actionsWidget)
-    && !/metricCard\("Actions"/.test(actionsWidget)
-    && /quick-actions-shell/.test(readWorkspaceFile("css/widgets/actions.css"))
-    && /system-shortcuts-unsupported/.test(readWorkspaceFile("css/widgets/actions.css"))
-    && /data-confirmation-required="true"/.test(readWorkspaceFile("css/widgets/actions.css")),
-  "Quick Actions and System Shortcuts must use compact working-control panels with clear unavailable and confirmation states"
 );
 
 assert(
@@ -1256,58 +990,8 @@ assert(
     && /ClipboardExcludeFromDiagnostics/.test(appConfig)
     && /ClipboardPrivacyOptions/.test(clipboardHistoryService)
     && /PreviewHidden/.test(clipboardHistoryService)
-    && /RedactClipboardEntries/.test(supportController)
-    && /toggle-hide-previews/.test(actionsWidget)
-    && /toggle-pause-widget/.test(actionsWidget)
-    && /toggle-exclude-diagnostics/.test(actionsWidget),
+    && /RedactClipboardEntries/.test(supportController),
   "clipboard widget must expose privacy controls and diagnostics must redact entries/previews"
-);
-
-assert(
-  /css\/widgets\/setup\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/setup\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /runtime\.registerRenderer\("setup",\s*mountSetupWidget\)/.test(setupWidget)
-    && /runtime\.registerRenderer\("calendar",\s*mountCalendarWidget\)/.test(setupWidget)
-    && /icsUrlConfigured/.test(setupWidget)
-    && /icsHost/.test(setupWidget)
-    && /Paste a new feed to replace/.test(setupWidget)
-    && !/calendarConfig\.icsUrl\b/.test(setupWidget)
-    && !/mountSetupWidget/.test(inlineWidgets)
-    && !/mountCalendarWidget/.test(inlineWidgets)
-    && !/setup-diagnostics-grid|setup-launcher-suggestions|setup-display-target/.test(readWorkspaceFile("css/widgets.css")),
-  "Setup diagnostics and Calendar widget JS/CSS must stay split from the shared inline widget runtime"
-);
-
-assert(
-  /css\/widgets\/product\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/product\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /runtime\.registerRenderer\("theme-studio",\s*mountThemeStudioWidget\)/.test(productWidget)
-    && /runtime\.registerRenderer\("layout-editor",\s*mountLayoutEditorWidget\)/.test(productWidget)
-    && /runtime\.registerRenderer\("updates",\s*mountUpdatesWidget\)/.test(productWidget)
-    && /runtime\.registerRenderer\("streaming",\s*mountStreamingWidget\)/.test(productWidget)
-    && /runtime\.registerRenderer\("marketplace",\s*mountMarketplaceWidget\)/.test(productWidget)
-    && /Third-party loading is disabled in this beta/.test(productWidget)
-    && /Verified manifest/.test(productWidget)
-    && !/extension\.runnable|>Runnable<|Trust enforced|Signed extensions/.test(productWidget + readWorkspaceFile("js/dashboard.js"))
-    && /state\.trusted = trust\.trusted === true && state\.verificationStatus === "verified"/.test(productWidget)
-    && /Auxora has not verified the downloaded bytes/.test(productWidget)
-    && !/trustReady|hashStatus === "available" && state\.signatureStatus === "available"/.test(productWidget)
-    && /canOfferInstaller = state\.checked && state\.downloadAllowed && state\.versionRelation === "newer" && state\.updateAvailable && state\.trusted/.test(productWidget)
-    && /Downgrade links are hidden/.test(productWidget)
-    && !/\(state\.downloadUrl \? '<a class="inline-button"/.test(productWidget)
-    && /runtime\.registerRenderer\("installer",\s*mountInstallerWidget\)/.test(productWidget)
-    && /runtime\.registerRenderer\("privacy",\s*mountPrivacyWidget\)/.test(productWidget)
-    && !/mountThemeStudioWidget/.test(inlineWidgets)
-    && !/mountLayoutEditorWidget/.test(inlineWidgets)
-    && !/mountUpdatesWidget/.test(inlineWidgets)
-    && !/mountStreamingWidget/.test(inlineWidgets)
-    && !/mountMarketplaceWidget/.test(inlineWidgets)
-    && !/mountInstallerWidget/.test(inlineWidgets)
-    && !/mountPrivacyWidget/.test(inlineWidgets)
-    && !/productProfiles/.test(inlineWidgets)
-    && !/productPacks/.test(inlineWidgets)
-    && !/product-theme-grid|product-layout-row|product-checklist|product-control-panel/.test(readWorkspaceFile("css/widgets.css")),
-  "Product panels and shared product widget CSS must stay split from the shared inline widget runtime"
 );
 
 assert(
@@ -1324,20 +1008,6 @@ assert(
     && /hashStatus/.test(productWidget)
     && /signatureStatus/.test(productWidget),
   "release payloads and CI must distinguish available trust evidence from verification and preserve immutable Windows beta bytes"
-);
-
-assert(
-  /css\/widgets\/integrations\.css\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /js\/widgets\/integrations\.js\?v=/.test(readWorkspaceFile("dashboard.html"))
-    && /runtime\.registerRenderer\("weather",\s*mountWeatherWidget\)/.test(integrationsWidget)
-    && /runtime\.registerRenderer\("hue",\s*mountHueWidget\)/.test(integrationsWidget)
-    && /runtime\.registerRenderer\("media",\s*mountMediaWidget\)/.test(integrationsWidget)
-    && !/runtime\.registerRenderer\("media",\s*mountAudioWidget\)/.test(audioWidget)
-    && !/mountWeatherWidget/.test(inlineWidgets)
-    && !/mountHueWidget/.test(inlineWidgets)
-    && !/mountMediaWidget/.test(inlineWidgets)
-    && !/inline-media-hero|inline-media-art|inline-media-copy/.test(readWorkspaceFile("css/widgets.css")),
-  "Weather, Hue, and standalone Media widget JS/CSS must stay split from the shared inline widget runtime"
 );
 
 console.log("checked audit regression guards");

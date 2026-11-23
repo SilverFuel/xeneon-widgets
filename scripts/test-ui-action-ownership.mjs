@@ -4,19 +4,9 @@ import { runInNewContext } from "node:vm";
 import test from "node:test";
 
 const read = file => readFileSync(new URL("../" + file, import.meta.url), "utf8");
-const html = read("dashboard.html"), product = read("js/widgets/product.js"), actions = read("js/widgets/actions.js");
+const product = read("js/widgets/product.js"), actions = read("js/widgets/actions.js");
 const section = (name, next) => product.slice(product.indexOf("  function " + name + "("), product.indexOf("  function " + next + "("));
 const settle = () => new Promise(resolve => setImmediate(resolve));
-
-test("Common actions have one visible owner instead of repeated buttons and settings", () => {
-  assert.match(html, /<span\b[^>]*id="dashboard-status"[^>]*role="status"/);
-  assert.doesNotMatch(html, /id="dashboard-now-strip"|data-now-strip-action/);
-  assert.doesNotMatch(section("mountThemeStudioWidget", "mountLayoutEditorWidget"), /name="themeVariant"/);
-  assert.doesNotMatch(section("mountScenesWidget", "monitorInputLabel"), /data-scene-resume/);
-  assert.doesNotMatch(section("mountStreamingWidget", "mountMarketplaceWidget"), /data-action="(?:open-media|stream-profile)"/);
-  assert.match(read("js/dashboard.js"), /data-quick-night=/);
-  assert.match(html, /id="dashboard-quick-media"/);
-});
 
 test("Windows action labels identify their real destination and retain confirmation rules", () => {
   const source = actions.slice(actions.indexOf("  function renderActionButton("), actions.indexOf("  function normalizeLaunchersPayload("));

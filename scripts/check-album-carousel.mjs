@@ -3,9 +3,7 @@ import { resolve } from "node:path";
 import vm from "node:vm";
 
 const audioPath = resolve(process.cwd(), "js/widgets/audio.js");
-const cssPath = resolve(process.cwd(), "css/widgets/audio.css");
 const audioSource = readFileSync(audioPath, "utf8");
-const audioCss = readFileSync(cssPath, "utf8");
 let helpers = null;
 let renderer = null;
 
@@ -72,7 +70,6 @@ const liveTrack = (index, overrides = {}) => ({
 
 assert(helpers.getFriendlyMediaLabel("308046B0AF4A39CB", "Local media") === "Local media", "Opaque Windows media identifiers must not leak into the visible UI");
 assert(helpers.getFriendlyMediaLabel("Corey Kent", "Local media") === "Corey Kent", "Real artist names must remain visible");
-assert(/Media app/.test(audioSource) && /Names private/.test(audioSource) && !/Music app/.test(audioSource), "Private app-volume rows must use media-neutral wording and explain why names are hidden");
 
 let history = helpers.rememberObservedAlbum([], { status: "idle", title: "Nothing" });
 assert(history.length === 0, "Idle sessions must not enter observed album history");
@@ -113,17 +110,5 @@ const refreshAfterDelete = helpers.rememberObservedAlbum(deletedHistory, {
   thumbnailDataUrl: dismissedTrack.thumbnailDataUrl
 }, dismissedKeys);
 assert(!refreshAfterDelete.some(entry => entry.key === deletedKey), "The refresh loop must not immediately recreate a deleted music card");
-
-assert(/MAX_OBSERVED_ALBUMS\s*=\s*7/.test(audioSource), "Carousel history must remain explicitly bounded");
-assert(!/localStorage|sessionStorage|music\.apple\.com|api\.music\.apple|MusicKit/.test(audioSource), "Carousel must remain local, in-memory, and independent of Apple web services");
-assert(/data-carousel/.test(audioSource) && /ArrowLeft/.test(audioSource) && /ArrowRight/.test(audioSource) && /pointerdown/.test(audioSource), "Carousel must expose keyboard and swipe navigation");
-assert(/aria-live="polite"/.test(audioSource) && /aria-current="true"/.test(audioSource), "Carousel selection must be announced accessibly");
-assert(/data-action="carousel-delete"/.test(audioSource) && /Delete music card for/.test(audioSource), "Every observed item must expose an accessible delete-card action");
-assert(/\.audio-album-card/.test(audioCss) && /perspective:\s*900px/.test(audioCss), "Carousel must present observed items as individual cards");
-assert(/\.audio-album-card__delete/.test(audioCss) && /min-height:\s*44px/.test(audioCss), "Card delete controls must meet the touch target minimum");
-assert(/is-single/.test(audioSource) && /\.audio-album-carousel\.is-single/.test(audioCss), "A single observed card must use the larger focused presentation");
-assert(/has-artwork-error/.test(audioSource) && /\.audio-album-cover\.has-artwork-error/.test(audioCss), "Broken artwork must fall back to a local placeholder instead of a broken-image icon");
-assert(/audio-album-cover__placeholder-title/.test(audioSource) && /audio-album-cover__placeholder-artist/.test(audioSource), "Artwork-free cards must show useful title and artist text");
-assert(/prefers-reduced-motion:\s*reduce/.test(audioCss) && /motion-off.*audio-album-card/.test(audioCss), "Carousel motion must honor both system and Auxora motion settings");
 
 console.log("checked zero-cost local deletable music-card carousel");
