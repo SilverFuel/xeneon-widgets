@@ -480,6 +480,8 @@
         label: "No mic",
         detail: "No input device",
         button: "No mic",
+        signal: "No mic",
+        mode: "none",
         progress: null,
         tone: "muted"
       };
@@ -490,6 +492,9 @@
       label: muted ? "Muted" : volume == null ? "Live" : Math.round(volume) + "%",
       detail: compactAudioName(input.name),
       button: muted ? "Unmute mic" : "Mute mic",
+      // What the button shows: the microphone's state, not the action. The action is its label for screen readers.
+      signal: muted ? "Mic muted" : "Mic live",
+      mode: muted ? "muted" : "live",
       progress: volume,
       tone: muted ? "warn" : "good"
     };
@@ -698,7 +703,7 @@
                 '<strong data-game-mic-state>' + escapeHtml(micState.label) + '</strong>' +
                 '<small data-game-mic-detail>' + escapeHtml(micState.detail) + '</small>' +
               '</div>' +
-              '<button class="inline-button game-focus-mic-toggle" type="button" data-action="game-mic-mute" aria-label="' + escapeHtml(micState.button) + '"' + (micState.available ? "" : " disabled") + '>' + escapeHtml(micState.button) + '</button>' +
+              '<button class="inline-button game-focus-mic-toggle" type="button" data-action="game-mic-mute" data-mic="' + micState.mode + '" aria-pressed="' + (micState.mode === "muted") + '" aria-label="' + escapeHtml(micState.button) + '"' + (micState.available ? "" : " disabled") + '>' + escapeHtml(micState.signal) + '</button>' +
             '</div>' +
             '<div class="game-focus-control-row">' +
               '<div class="game-focus-audio' + gameFocusToneClass(audioData.muted ? "warn" : "good") + '">' +
@@ -795,11 +800,13 @@
     setGameFocusToneClass(container.querySelector(".game-focus-mic-panel"), "game-focus-mic-panel", micState.tone);
     setGameFocusText(container, "[data-game-mic-state]", micState.label);
     setGameFocusText(container, "[data-game-mic-detail]", micState.detail);
-    setGameFocusText(container, ".game-focus-mic-toggle", micState.button);
+    setGameFocusText(container, ".game-focus-mic-toggle", micState.signal);
     var micButton = container.querySelector(".game-focus-mic-toggle");
     if (micButton) {
       micButton.disabled = !micState.available;
       micButton.setAttribute("aria-label", micState.button);
+      micButton.setAttribute("aria-pressed", String(micState.mode === "muted"));
+      micButton.setAttribute("data-mic", micState.mode);
     }
 
     var audioList = container.querySelector(".game-focus-audio-list");
@@ -989,6 +996,8 @@
       sessionClockTimerId = window.setInterval(updateGameSessionClock, 1000);
     }
 
+    var micHold = null;
+
     function stopGameSessionClock() {
       if (sessionClockTimerId) {
         window.clearInterval(sessionClockTimerId);
@@ -1073,6 +1082,10 @@
         var session = normalizeGameModeSessionPayload(payload);
         state.system = session.system;
         state.audio = session.audio;
+        // A reading that was already on its way when the mic button was tapped must not undo the tap.
+        if (micHold && Date.now() < micHold.until && state.audio) {
+          state.audio.inputMuted = micHold.muted;
+        }
         state.network = session.network;
         state.steam = session.steam;
         state.activity = session.activity;
@@ -1218,21 +1231,26 @@
       });
     }
 
+    // The button changes at once; the host's next reading confirms or corrects it.
     function toggleGameMicMute() {
       if (!state.audio.defaultInputDeviceId) {
         return;
       }
 
+      var wanted = state.audio.inputMuted !== true;
+      var settle = function () {
+        micHold = null;
+        refreshGameModeSession();
+      };
+      micHold = { muted: wanted, until: Date.now() + 6000 };
+      state.audio.inputMuted = wanted;
+      redraw();
       requestJson(buildBridgeUrl(env, "/api/audio/input-mute"), {
         method: "POST",
         body: {
-          muted: state.audio.inputMuted !== true
+          muted: wanted
         }
-      }, 5000).then(function () {
-        refreshGameModeSession();
-      }, function () {
-        refreshGameModeSession();
-      });
+      }, 5000).then(settle, settle);
     }
 
     function toggleGameSessionMute(sessionId) {
