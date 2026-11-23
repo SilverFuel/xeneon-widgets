@@ -5400,3 +5400,83 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
     color: HighlightText;
   }
 }
+
+/* Lights (Hue). Rooms and lights are tiles; the bridge's settings fold away. */
+.hue-shell {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.hue-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hue-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.hue-tiles > .inline-list-item {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  background: var(--theme-surface-muted);
+}
+
+.hue-tiles .inline-list-title {
+  font-size: max(17px, 1.0625rem);
+}
+
+.hue-tiles .inline-slider-row strong {
+  font-size: max(15px, 0.9375rem);
+}
+
+.hue-tiles > :not(.inline-list-item) {
+  grid-column: 1 / -1;
+}
+
+.hue-connect {
+  max-width: 760px;
+  gap: 12px;
+}
+
+.hue-connect__title {
+  font-size: max(22px, 1.375rem);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.hue-connect__steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.4em;
+  color: var(--theme-text-muted);
+  font-size: max(16px, 1rem);
+  line-height: 1.4;
+}
+
+.hue-bridge {
+  padding: 0 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+}
+
+.hue-bridge[open] {
+  padding-bottom: 14px;
+}
+
+.hue-bridge > summary {
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+  font-size: max(15px, 0.9375rem);
+  font-weight: 650;
+  cursor: pointer;
+}
