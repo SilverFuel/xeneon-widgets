@@ -4,20 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Auxora — Adaptive Touch Dashboard</title>
-    <link rel="stylesheet" href="./css/theme.css?v=20261112-11">
-    <link rel="stylesheet" href="./css\widgets.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/homelab.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/system.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/network.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/audio.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/setup.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/product.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/actions.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/integrations.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/game-mode.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/wow-forever.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/widgets/tmog-companion.css?v=20261112-11">
-    <link rel="stylesheet" href="./css/dashboard-shell.css?v=20261112-11">
+    <link rel="stylesheet" href="./css/theme.css?v=20261112-12">
+    <link rel="stylesheet" href="./css\widgets.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/homelab.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/system.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/network.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/audio.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/setup.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/product.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/actions.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/integrations.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/game-mode.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/wow-forever.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/widgets/tmog-companion.css?v=20261112-12">
+    <link rel="stylesheet" href="./css/dashboard-shell.css?v=20261112-12">
 </head>
 <body class="dashboard-native-page auxora-section-shell">
   <div id="dashboard-stage-shell" class="dashboard-stage-shell">
@@ -32,7 +32,7 @@
       <aside class="router-rail">
         <div class="auxora-shell-head">
           <div class="auxora-brand">
-            <img class="auxora-brand__mark" src="./assets/icons/auxora-mark.svg?v=20261112-11" alt="" aria-hidden="true">
+            <img class="auxora-brand__mark" src="./assets/icons/auxora-mark.svg?v=20261112-12" alt="" aria-hidden="true">
             <span><strong>Auxora</strong><small>Your controls within reach</small></span>
           </div>
           <nav id="dashboard-section-nav" class="auxora-section-nav" aria-label="Sections"></nav>
@@ -100,7 +100,11 @@
             <p id="dashboard-quick-audio-status" class="auxora-quick-media__status" role="status" aria-live="polite">Checking audio controls…</p>
           </div>
           <div class="auxora-quick-media__playback">
-            <button id="dashboard-quick-playback" type="button" aria-describedby="dashboard-quick-media-status" disabled>Play / pause</button>
+            <div class="auxora-quick-media__transport" role="group" aria-label="Playback">
+              <button id="dashboard-quick-previous" type="button" aria-describedby="dashboard-quick-media-status" disabled>Previous</button>
+              <button id="dashboard-quick-playback" type="button" aria-describedby="dashboard-quick-media-status" disabled>Play / pause</button>
+              <button id="dashboard-quick-next" type="button" aria-describedby="dashboard-quick-media-status" disabled>Next</button>
+            </div>
             <p id="dashboard-quick-media-status" class="auxora-quick-media__status" role="status" aria-live="polite">Checking playback controls…</p>
           </div>
         </section>
@@ -113,24 +117,24 @@
     </main>
   </div>
 
-  <script src="./js/themes.js?v=20261112-11"></script>
-  <script src="./js/play-log.js?v=20261112-11"></script>
-  <script src="./js/widget-core.js?v=20261112-11"></script>
-  <script src="./js/layout-profile.js?v=20261112-11"></script>
-    <script src="./js/inline-widgets.js?v=20261112-11"></script>
-    <script src="./js/widgets/homelab.js?v=20261112-11"></script>
-    <script src="./js/widgets/system.js?v=20261112-11"></script>
-    <script src="./js/widgets/network.js?v=20261112-11"></script>
-    <script src="./js/widgets/audio.js?v=20261112-11"></script>
-    <script src="./js/widgets/setup.js?v=20261112-11"></script>
-    <script src="./js/widgets/product.js?v=20261112-11"></script>
-    <script src="./js/widgets/actions.js?v=20261112-11"></script>
-    <script src="./js/widgets/integrations.js?v=20261112-11"></script>
-    <script src="./js/widgets/game-mode.js?v=20261112-11"></script>
-    <script src="./js/widgets/wow-forever.js?v=20261112-11"></script>
-    <script src="./js/widgets/tmog-companion.js?v=20261112-11"></script>
-    <script src="./js/quick-controls.js?v=20261112-11"></script>
-    <script src="./js/dashboard-navigation.js?v=20261112-11"></script>
-    <script src="./js/dashboard.js?v=20261112-11"></script>
+  <script src="./js/themes.js?v=20261112-12"></script>
+  <script src="./js/play-log.js?v=20261112-12"></script>
+  <script src="./js/widget-core.js?v=20261112-12"></script>
+  <script src="./js/layout-profile.js?v=20261112-12"></script>
+    <script src="./js/inline-widgets.js?v=20261112-12"></script>
+    <script src="./js/widgets/homelab.js?v=20261112-12"></script>
+    <script src="./js/widgets/system.js?v=20261112-12"></script>
+    <script src="./js/widgets/network.js?v=20261112-12"></script>
+    <script src="./js/widgets/audio.js?v=20261112-12"></script>
+    <script src="./js/widgets/setup.js?v=20261112-12"></script>
+    <script src="./js/widgets/product.js?v=20261112-12"></script>
+    <script src="./js/widgets/actions.js?v=20261112-12"></script>
+    <script src="./js/widgets/integrations.js?v=20261112-12"></script>
+    <script src="./js/widgets/game-mode.js?v=20261112-12"></script>
+    <script src="./js/widgets/wow-forever.js?v=20261112-12"></script>
+    <script src="./js/widgets/tmog-companion.js?v=20261112-12"></script>
+    <script src="./js/quick-controls.js?v=20261112-12"></script>
+    <script src="./js/dashboard-navigation.js?v=20261112-12"></script>
+    <script src="./js/dashboard.js?v=20261112-12"></script>
 </body>
 </html>

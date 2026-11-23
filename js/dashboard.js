@@ -3304,7 +3304,7 @@
     var available = bridgeReachable === true && profiles.length > 0;
     var selected = automatic ? "automatic" : active ? active.id : "";
     if (modeActivationPending) { selected = node.getAttribute("data-pending-mode") || selected; }
-    var html = '<option value="automatic" data-ui-key="mode-automatic">Automatic' + (automatic && active ? ' (' + escapeHtml(active.name) + ')' : '') + '</option>';
+    var html = '<option value="automatic" data-ui-key="mode-automatic">Automatic' + (automatic && active ? ' (' + escapeHtml(active.name) + ')' : ': follows your games') + '</option>';
     if (!available || !selected) { html = '<option value="">' + (bridgeReachable === true ? 'Choose a Profile' : 'Profiles unavailable') + '</option>' + html; }
     html += profiles.map(function (profile) {
       return '<option value="' + escapeHtml(profile.id) + '" data-ui-key="mode-' + escapeHtml(profile.id) + '">' + escapeHtml(profile.name || profile.id) + '</option>';
@@ -4250,6 +4250,8 @@
       document.body.dataset.bridgeHydrated = "true";
     }
     bridgeCapabilities = Object.assign({}, bridgeCapabilities, (health && health.capabilities) || {});
+    var sceneIdBeforeRefresh = bridgeConfig.scenes && bridgeConfig.scenes.activeSceneId;
+    var refreshedAfterFirstLoad = initialScenePresentationApplied;
     bridgeConfig = Object.assign({}, bridgeConfig, configSnapshot || {});
 
     if (!bridgeConfig.weather) {
@@ -4346,6 +4348,10 @@
     syncSettingsFromBridgeConfig();
     if (!initialScenePresentationApplied && activeScene && !hadExplicitStoredThemeSelection) {
       initialScenePresentationApplied = true;
+      applyScenePresentation(activeScene);
+    } else if (refreshedAfterFirstLoad && activeScene && sceneIdBeforeRefresh && activeScene.id !== sceneIdBeforeRefresh) {
+      // The host changed Profile and this refresh saw it before the evaluation's own reply was handled.
+      // That reply will find the Profile already current and apply nothing, so the theme is applied here.
       applyScenePresentation(activeScene);
     } else {
       initialScenePresentationApplied = true;
@@ -4714,6 +4720,10 @@
 
       if (quickToggleNode) {
         quickToggleNode.addEventListener("click", function () { setQuickDrawerOpen(true); });
+        // Start reading sound and playback on the press, so the drawer opens with its controls ready.
+        quickToggleNode.addEventListener("pointerdown", function () {
+          if (quickControls && !isTouchLockEnabled()) { quickControls.prime(); }
+        });
       }
 
       [pickerNode, settingsCategoriesNode].forEach(function (node) {

@@ -1346,7 +1346,7 @@ a.is-touch-pressing,
 
 .auxora-quick-media {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px 16px;
   min-width: 0;
   padding: 12px;
@@ -1401,7 +1401,20 @@ a.is-touch-pressing,
 }
 
 .auxora-quick-media__playback {
-  padding-top: 20px;
+  padding-top: 4px;
+}
+
+/* Previous, Play or pause, Next: one row, the middle one widest. */
+.auxora-quick-media__transport {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.auxora-quick-media__transport button {
+  min-width: 0;
+  padding-inline: 8px;
 }
 
 .auxora-quick-media__status {
