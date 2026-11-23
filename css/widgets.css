@@ -5441,6 +5441,103 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
   grid-column: 1 / -1;
 }
 
+/* A room or a light is one tile that holds its switch and its brightness. While it is on,
+   the tile is painted in the lamps' own colour, kept dark enough for white text. */
+.hue-tiles > .hue-tile {
+  display: grid;
+  align-content: space-between;
+  gap: 12px;
+}
+
+.hue-tiles > .hue-tile[data-on="true"] {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: linear-gradient(140deg, var(--hue-tile-top), var(--hue-tile-deep));
+  color: #fff;
+}
+
+.hue-tile[data-on="true"] .inline-list-title,
+.hue-tile[data-on="true"] .inline-list-copy,
+.hue-tile[data-on="true"] .inline-slider-row strong {
+  color: #fff;
+}
+
+.hue-tiles .hue-tile[data-on="true"] .inline-button {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.hue-tile .inline-button {
+  min-width: 72px;
+  min-height: 54px;
+}
+
+@media (forced-colors: active) {
+  .hue-tiles > .hue-tile[data-on="true"] {
+    border-color: Highlight;
+  }
+}
+
+/* The EDGE and other wide screens: rooms and lights share the height, and everything on a
+   tile is sized to be read and touched from a seat. */
+@media (min-width: 1800px) and (min-height: 600px) {
+  .hue-shell:not(.hue-shell--setup) {
+    grid-template-rows: minmax(max-content, 1.15fr) minmax(max-content, 1fr) auto;
+    align-content: stretch;
+    min-height: 100%;
+    gap: 12px;
+  }
+
+  .hue-shell:not(.hue-shell--setup) .hue-section {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .hue-shell:not(.hue-shell--setup) .hue-section > .metric-label {
+    color: var(--theme-text);
+    font-size: clamp(20px, 1.25rem, 24px);
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .hue-shell:not(.hue-shell--setup) .hue-tiles {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-auto-rows: minmax(150px, 1fr);
+    gap: 12px;
+  }
+
+  .hue-tiles > .hue-tile {
+    padding: 16px 18px;
+  }
+
+  .hue-tiles .hue-tile .inline-list-title {
+    font-size: clamp(26px, 1.625rem, 31px);
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .hue-tiles .hue-tile .inline-list-copy {
+    font-size: clamp(19px, 1.1875rem, 23px);
+  }
+
+  .hue-tiles .hue-tile .inline-button {
+    min-width: 96px;
+    min-height: 60px;
+    font-size: clamp(22px, 1.375rem, 26px);
+    font-weight: 800;
+  }
+
+  .hue-tiles .hue-tile .inline-slider-row strong {
+    min-width: 3.2em;
+    font-size: clamp(24px, 1.5rem, 28px);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hue-shell .hue-bridge > summary {
+    font-size: clamp(19px, 1.1875rem, 23px);
+  }
+}
+
 .hue-connect {
   max-width: 760px;
   gap: 12px;
