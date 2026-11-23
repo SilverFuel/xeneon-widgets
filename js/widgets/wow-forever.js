@@ -238,6 +238,15 @@
     return quests.slice();
   }
 
+  // What the mic button shows, from the host's audio reading. Null when there is no
+  // microphone to mute or the host did not say whether it is muted: then there is no button.
+  function micStatus(payload) {
+    if (!payload || typeof payload !== "object" || !payload.defaultInputDeviceId || typeof payload.inputMuted !== "boolean") return null;
+    return payload.inputMuted
+      ? { muted: true, label: "Mic muted", hint: "Microphone muted. Tap to unmute." }
+      : { muted: false, label: "Mic live", hint: "Microphone live. Tap to mute." };
+  }
+
   // Time in the game as Auxora has counted it, from the play log's figures:
   // "47 min today, 6 h 12 min in total". Empty until there is a minute to show.
   function playedSummary(stats, formatDuration) {
@@ -298,7 +307,7 @@
       formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter,
       questViews: questViews, questViewId: questViewId, questsInView: questsInView,
       formatProfessions: formatProfessions, gearSummary: gearSummary, bagSummary: bagSummary,
-      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary
+      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary, micStatus: micStatus
     };
     return;
   }
@@ -341,6 +350,11 @@
     var originalUnreadable = null;
     var disposed = false;
     var storageWritable = true;
+    // The Windows microphone: muted or live, read from the host. Null hides the button.
+    var mic = null;
+    var micRequestId = 0;
+    var micBusy = false;
+    var micMisses = 0;
     var downloadUrls = [];
     // The character saved in game by the Auxora Companion add-on, when there is one.
     var game = null;
@@ -583,10 +597,59 @@
       });
     }
 
+    // The mic button: bright green while the microphone is live, flashing red while it is muted.
+    function renderMic() {
+      var node = query(".wow-mic");
+      if (!node) return;
+      node.hidden = !mic;
+      if (!mic) return;
+      node.dataset.state = mic.muted ? "muted" : "live";
+      node.setAttribute("aria-pressed", String(mic.muted));
+      node.setAttribute("aria-label", mic.hint);
+      node.dataset.hint = mic.muted ? "Tap to unmute" : "Tap to mute";
+      if (node.textContent !== mic.label) node.textContent = mic.label;
+    }
+
+    function canReachHost() {
+      return Boolean(env && env.bridgeOrigin && typeof runtime.requestJson === "function" && typeof runtime.buildBridgeUrl === "function");
+    }
+
+    // Asked every few seconds, so a mute made anywhere else in Windows shows here too.
+    function loadMic() {
+      if (!canReachHost() || micBusy) return;
+      var requestId = ++micRequestId;
+      runtime.requestJson(runtime.buildBridgeUrl(env, "/api/audio"), undefined, 4000).then(function (payload) {
+        if (!disposed && requestId === micRequestId) { micMisses = 0; mic = micStatus(payload); renderMic(); }
+      }, function () {
+        // One missed reading keeps what is shown; a second in a row takes the button away,
+        // because it must never say "live" or "muted" on a guess.
+        micMisses += 1;
+        if (!disposed && requestId === micRequestId && micMisses >= 2) { mic = null; renderMic(); }
+      });
+    }
+
+    // The button changes at once; the host's reply then confirms or corrects it.
+    function toggleMic() {
+      if (!mic || micBusy || !canReachHost()) return;
+      var wanted = !mic.muted;
+      var requestId = ++micRequestId;
+      micBusy = true;
+      mic = micStatus({ defaultInputDeviceId: "pending", inputMuted: wanted });
+      renderMic();
+      var settle = function (payload) {
+        micBusy = false;
+        if (disposed || requestId !== micRequestId) return;
+        var confirmed = micStatus(payload);
+        if (confirmed) { mic = confirmed; renderMic(); } else { loadMic(); }
+      };
+      runtime.requestJson(runtime.buildBridgeUrl(env, "/api/audio/input-mute"), { method: "POST", body: { muted: wanted } }, 5000).then(settle, function () { settle(null); });
+    }
+
     function tick() {
       updateTimer();
       gameTicks += 1;
       if (gameTicks % 15 === 0) loadGame();
+      if (gameTicks % 4 === 0 && !document.hidden) loadMic();
     }
 
     function updateTimer() {
@@ -608,11 +671,12 @@
         '<aside class="wow-card wow-camp"><div class="wow-card-heading"><h3>At the campfire</h3></div><p class="wow-timer-label"></p><div class="wow-timer-value" role="timer" aria-label="Session elapsed time">00:00:00</div><div class="wow-timer-actions">' + button("toggle-session", "Begin session", "primary") + button("reset-session", "Reset", "quiet") + '</div><p class="wow-timer-help">Keeps running when you leave this tab.</p><div class="wow-card-heading"><h3>Before you set out</h3></div><div class="wow-prep-list">' + PREPARATIONS.map(function (label, index) { return '<label><input type="checkbox" data-wow-prep="' + index + '"' + (journal.preparations[index] ? ' checked' : '') + '><span>' + label + '</span></label>'; }).join("") + '</div></aside>' +
         '<article class="wow-card wow-journal"><div class="wow-card-heading"><h3>Field notes</h3><small>Saved as you write</small></div><label class="wow-sr-only" for="wow-field-notes">Field notes</label><textarea id="wow-field-notes" maxlength="20000" placeholder="A hidden path. A helpful stranger. The materials you still need. Leave a note for your next session.">' + escapeHtml(journal.notes) + '</textarea></article>' +
         '<aside class="wow-card wow-resources"><div class="wow-card-heading"><h3>The wayfinder</h3><small>Official field guides</small></div><div class="wow-resource-links">' + resources.map(function (resource) { return '<a href="' + resource.url + '" target="_blank" rel="noopener noreferrer"><strong>' + resource.label + '</strong><small>' + resource.detail + '</small></a>'; }).join("") + '</div></aside></div>' +
-        '<footer class="wow-footer"><span class="wow-pages" role="group" aria-label="Panel page"><button type="button" class="wow-button" data-wow-page="quests" aria-pressed="true">Quests</button><button type="button" class="wow-button" data-wow-page="camp" aria-pressed="false">Camp and notes</button></span><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
+        '<footer class="wow-footer"><button type="button" class="wow-mic" data-wow-action="mic" hidden></button><span class="wow-pages" role="group" aria-label="Panel page"><button type="button" class="wow-button" data-wow-page="quests" aria-pressed="true">Quests</button><button type="button" class="wow-button" data-wow-page="camp" aria-pressed="false">Camp and notes</button></span><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
       query('[data-wow-action="profile"]').setAttribute("aria-expanded", "false");
       renderProfile();
       renderQuests();
       renderGameStatus();
+      renderMic();
       updateTimer();
       showNotice();
     }
@@ -757,6 +821,7 @@
         return;
       }
       switch (target.dataset.wowAction) {
+        case "mic": toggleMic(); break;
         case "profile":
           var editor = query(".wow-editor");
           if (!editor.hidden) { closeProfile(); break; }
@@ -821,6 +886,7 @@
     var loop = runtime.createTimerLoop(tick, 1000);
     loop.start();
     loadGame();
+    loadMic();
     return {
       refresh: function () { return loop.refresh(); },
       destroy: function () {
