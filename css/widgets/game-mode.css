@@ -1965,3 +1965,163 @@
     animation: none;
   }
 }
+
+/* "This week" on the idle Gaming screen: seven bars for seven days, the week in one line,
+   and the games it went on. Beside the Steam list on wide screens, under it otherwise. */
+.game-mode-idle-week {
+  min-width: 0;
+  min-height: 0;
+}
+
+.game-week-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(96px, 1fr) auto;
+  gap: 10px;
+  height: 100%;
+  min-width: 0;
+  padding: 14px 16px;
+  color: var(--theme-text);
+}
+
+.game-week-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.game-week-label {
+  font-size: max(16px, 1rem);
+  font-weight: 700;
+}
+
+.game-week-total {
+  color: var(--theme-accent-text);
+  font-size: max(26px, 1.625rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.game-week-line {
+  margin: 0;
+  color: var(--color-text-dim);
+  font-size: max(15px, 0.9375rem);
+  line-height: 1.3;
+}
+
+.game-week-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+}
+
+.game-week-day {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  border-bottom: 0;
+}
+
+.game-week-day > i {
+  display: block;
+  min-height: 3px;
+  border-radius: 5px 5px 0 0;
+  background: var(--status-success-border);
+}
+
+.game-week-day.is-today > i {
+  background: var(--theme-accent);
+}
+
+.game-week-day > span {
+  color: var(--color-text-dim);
+  font-size: max(14px, 0.875rem);
+  text-align: center;
+}
+
+.game-week-day.is-today > span {
+  color: var(--theme-text);
+  font-weight: 700;
+}
+
+.game-week-games {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-week-games > li {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0 7px;
+  font-size: max(15px, 0.9375rem);
+}
+
+.game-week-games > li > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-week-games > li > b {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.game-week-games > li > i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--theme-accent);
+}
+
+@media (forced-colors: active) {
+  .game-week-day > i,
+  .game-week-games > li > i {
+    border: 1px solid CanvasText;
+  }
+}
+
+@media (min-width: 1800px) {
+  .game-mode-idle-grid:has(> .game-mode-idle-week) {
+    grid-template-columns: minmax(0, 1fr) minmax(460px, 0.28fr);
+  }
+
+  .game-mode-idle-grid:has(> .game-mode-idle-week) > :not(.game-mode-idle-launch, .game-mode-idle-week) {
+    grid-column: 1 / -1;
+  }
+
+  .game-week-card {
+    grid-template-rows: auto auto minmax(140px, 1fr) auto;
+  }
+
+  .game-week-label {
+    font-size: clamp(22px, 1.375rem, 26px);
+  }
+
+  .game-week-total {
+    font-size: clamp(40px, 2.5rem, 46px);
+  }
+
+  .game-week-line,
+  .game-week-games > li {
+    font-size: clamp(20px, 1.25rem, 24px);
+  }
+
+  .game-week-day > span {
+    font-size: clamp(18px, 1.125rem, 21px);
+  }
+}

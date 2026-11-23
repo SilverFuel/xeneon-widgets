@@ -611,6 +611,32 @@
 
   // The frame rate counter's own card. With no game running it has nothing to say that
   // the FPS card above it does not already say, so it is left out.
+  // "This week": time played over the last seven days as seven bars, one line on the week,
+  // and the games it went on. Nothing at all until a game has been played with Auxora open.
+  function renderPlayWeekCard(week, formatDuration) {
+    if (!week || !week.everPlayed || typeof formatDuration !== "function") {
+      return "";
+    }
+    var peak = week.days.reduce(function (most, day) { return Math.max(most, day.ms); }, 0);
+    var played = week.totalMs >= 60000;
+    var line = !played ? "Nothing played in the last seven days."
+      : week.bestDay && week.bestDay.ms < week.totalMs ? "Most " + (week.bestDay.name === "today" ? "today" : "on " + week.bestDay.name) + ": " + formatDuration(week.bestDay.ms) + "."
+      : week.bestDay ? "All of it " + (week.bestDay.name === "today" ? "today" : "on " + week.bestDay.name) + "."
+      : "";
+    var topGame = week.games.length ? week.games[0].ms : 0;
+    return '' +
+      '<article class="product-control-panel game-week-card" data-ui-key="game-week">' +
+        '<div class="game-week-head"><span class="game-week-label">This week</span><strong class="game-week-total">' + escapeHtml(played ? formatDuration(week.totalMs) : "0 min") + '</strong></div>' +
+        (line ? '<p class="game-week-line">' + escapeHtml(line) + '</p>' : '') +
+        '<div class="game-week-bars" role="img" aria-label="Time played on each of the last seven days">' + week.days.map(function (day) {
+          return '<div class="game-week-day' + (day.today ? ' is-today' : '') + '"><i style="height:' + (peak > 0 && day.ms > 0 ? Math.max(4, Math.round(day.ms / peak * 100)) : 0) + '%"></i><span>' + escapeHtml(day.label) + '</span></div>';
+        }).join("") + '</div>' +
+        (week.games.length ? '<ol class="game-week-games">' + week.games.map(function (game) {
+          return '<li><span>' + escapeHtml(game.name) + '</span><b>' + escapeHtml(formatDuration(game.ms)) + '</b><i style="width:' + Math.max(4, Math.round(game.ms / topGame * 100)) + '%"></i></li>';
+        }).join("") + '</ol>' : '') +
+      '</article>';
+  }
+
   function renderFrameRateCard(performance, restarting) {
     var readiness = text(text(performance && performance.readiness, performance && performance.status), "").toLowerCase();
     var needsAdmin = Boolean(performance && performance.needsAdmin);
@@ -897,6 +923,7 @@
 
   function mountGameModeWidget(widget, container, env) {
     var cleanups = [];
+    var playWeek = { at: 0, html: "" };
     var state = {
       system: {},
       audio: normalizeAudioPayload({}),
@@ -1018,6 +1045,7 @@
       var introActive;
       var idleStatusPanels = renderGameModeEndedPanel(state.activity) + renderGameModeCandidatesPanel(state.activity);
       var frameRateCard = renderFrameRateCard(state.performance, state.performanceRestarting);
+      var weekCard = activeGame ? "" : playWeekCard();
       syncGameFocusIntro(activeGame);
       introActive = Boolean(activeGameId && state.focusIntroGameId === activeGameId);
 
@@ -1064,8 +1092,27 @@
             '<section class="game-mode-idle-launch">' +
               renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
             '</section>' +
+            (weekCard ? '<section class="game-mode-idle-week">' + weekCard + '</section>' : '') +
           '</div>' +
       '</div>');
+    }
+
+    // The play log is read at most twice a minute; the card it feeds changes by the minute.
+    function playWeekCard() {
+      var now = Date.now();
+      if (now - playWeek.at >= 30000) {
+        playWeek.at = now;
+        playWeek.html = "";
+        try {
+          var api = window.AuxoraPlayLog;
+          if (api && typeof api.week === "function" && window.localStorage) {
+            playWeek.html = renderPlayWeekCard(api.week(api.load(window.localStorage), now), api.formatDuration);
+          }
+        } catch (error) {
+          playWeek.html = "";
+        }
+      }
+      return playWeek.html;
     }
 
     function refreshGameModeSession(options) {
@@ -1442,7 +1489,7 @@
 
 
   if (typeof runtime.registerHelpers === "function") {
-    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard, renderGameFocusScene: renderGameFocusScene });
+    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard, renderGameFocusScene: renderGameFocusScene, renderPlayWeekCard: renderPlayWeekCard });
   }
 
   runtime.registerRenderer("game-mode", mountGameModeWidget);
