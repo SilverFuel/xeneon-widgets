@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus, musicArtUrl, blendVolumes, blendStatus, blendChoice } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary, micStatus, musicStatus, musicArtUrl, blendVolumes, blendStatus, blendChoice, coverDue } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -678,4 +678,12 @@ test("the one balance slider serves Apple Music or Discord, with a choice only w
   assert.deepEqual(blendChoice("music", null, chat), { key: "chat", both: false }, "no music: the slider is Discord's");
   assert.deepEqual(blendChoice("music", null, null), { key: "", both: false });
   assert.deepEqual(blendChoice("anything", music, null), { key: "music", both: false });
+});
+
+test("a track's cover is not asked for while the track is changing", () => {
+  assert.equal(coverDue("", "Song|Artist|Album"), true, "the first track seen is asked for at once");
+  assert.equal(coverDue("Song|Artist|Album", "Next|Artist|Album"), false, "a track that has just changed is left alone");
+  assert.equal(coverDue("Next|Artist|Album", "Next|Artist|Album"), true, "the next reading still shows it: ask");
+  assert.equal(coverDue("", "||"), false, "nothing is playing");
+  assert.equal(coverDue("", ""), false);
 });
