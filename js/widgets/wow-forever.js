@@ -274,12 +274,23 @@
     var playing = payload.playbackStatus === "playing";
     var title = typeof payload.title === "string" ? payload.title.trim().slice(0, 120) : "";
     var artist = typeof payload.artist === "string" ? payload.artist.trim().slice(0, 120) : "";
+    var album = typeof payload.albumTitle === "string" ? payload.albumTitle.trim().slice(0, 120) : "";
     return {
       playing: playing,
       label: playing ? "Pause" : "Play",
       track: [title, artist].filter(Boolean).join(" - ") || "Apple Music",
-      hint: (playing ? "Pause" : "Play") + " Apple Music" + (title ? ": " + title : "")
+      hint: (playing ? "Pause" : "Play") + " Apple Music" + (title ? ": " + title : ""),
+      canNext: payload.canGoNext === true,
+      canPrevious: payload.canGoPrevious === true,
+      // Names the track, so the cover is fetched once per track and not on every reading.
+      key: [title, artist, album].join("|")
     };
+  }
+
+  // A cover the host read from Apple Music, or nothing. Only an image data URL of a sane size is used.
+  function musicArtUrl(payload) {
+    var url = payload && typeof payload.thumbnailDataUrl === "string" ? payload.thumbnailDataUrl : "";
+    return /^data:image\/(png|jpeg|gif|webp|bmp);base64,[A-Za-z0-9+/=]+$/.test(url) && url.length <= 2000000 ? url : "";
   }
 
   // Time in the game as Auxora has counted it, from the play log's figures:
@@ -342,7 +353,7 @@
       formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter,
       questViews: questViews, questViewId: questViewId, questsInView: questsInView,
       formatProfessions: formatProfessions, gearSummary: gearSummary, bagSummary: bagSummary,
-      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary, micStatus: micStatus, musicStatus: musicStatus, blendVolumes: blendVolumes, blendStatus: blendStatus
+      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary, micStatus: micStatus, musicStatus: musicStatus, musicArtUrl: musicArtUrl, blendVolumes: blendVolumes, blendStatus: blendStatus
     };
     return;
   }
@@ -395,6 +406,8 @@
     var musicRequestId = 0;
     var musicBusy = false;
     var musicMisses = 0;
+    // The cover for the track named by `key`. `tries` stops a track with no cover being asked about forever.
+    var musicArt = { key: "", url: "", tries: 0 };
     // The game and music balance, read from the host. Null hides the slider.
     var blend = null;
     var blendRequestId = 0;
@@ -704,6 +717,34 @@
       var track = node.querySelector(".wow-music-track");
       if (state.textContent !== music.label) state.textContent = music.label;
       if (track.textContent !== music.track) track.textContent = music.track;
+      var art = node.querySelector(".wow-music-art");
+      var url = musicArt.key === music.key ? musicArt.url : "";
+      if (art.getAttribute("src") !== url) { if (url) art.setAttribute("src", url); else art.removeAttribute("src"); }
+      art.hidden = !url;
+      node.classList.toggle("has-art", Boolean(url));
+    }
+
+    function renderSkip() {
+      var node = query(".wow-skip");
+      if (!node) return;
+      node.hidden = !music || (!music.canNext && !music.canPrevious);
+      if (!music) return;
+      node.querySelector('[data-wow-action="music-previous"]').disabled = !music.canPrevious;
+      node.querySelector('[data-wow-action="music-next"]').disabled = !music.canNext;
+    }
+
+    // Asked once when the track changes, and once more if Apple Music had no cover ready yet.
+    function loadMusicArt(key) {
+      if (!key || key === "||" || !canReachHost()) return;
+      if (musicArt.key !== key) musicArt = { key: key, url: "", tries: 0 };
+      if (musicArt.url || musicArt.tries >= 2) return;
+      musicArt.tries += 1;
+      runtime.requestJson(runtime.buildBridgeUrl(env, "/api/media/apple-music", { art: 1 }), undefined, 6000).then(function (payload) {
+        var status = musicStatus(payload);
+        if (disposed || !status || status.key !== key || musicArt.key !== key) return;
+        musicArt.url = musicArtUrl(payload);
+        renderMusic();
+      }, function () {});
     }
 
     // Asked every few seconds while Apple Music is open, less often while it is not.
@@ -711,11 +752,25 @@
       if (!canReachHost() || musicBusy) return;
       var requestId = ++musicRequestId;
       runtime.requestJson(runtime.buildBridgeUrl(env, "/api/media/apple-music"), undefined, 5000).then(function (payload) {
-        if (!disposed && requestId === musicRequestId) { musicMisses = 0; music = musicStatus(payload); renderMusic(); }
+        if (!disposed && requestId === musicRequestId) { musicMisses = 0; music = musicStatus(payload); renderMusic(); renderSkip(); if (music) loadMusicArt(music.key); }
       }, function () {
         musicMisses += 1;
-        if (!disposed && requestId === musicRequestId && musicMisses >= 2) { music = null; renderMusic(); }
+        if (!disposed && requestId === musicRequestId && musicMisses >= 2) { music = null; renderMusic(); renderSkip(); }
       });
+    }
+
+    // Apple Music reports the new track a moment after it is told to skip, so the host is asked again a second later.
+    function skipMusic(direction) {
+      if (!music || musicBusy || !canReachHost() || !(direction === "next" ? music.canNext : music.canPrevious)) return;
+      var requestId = ++musicRequestId;
+      musicBusy = true;
+      var settle = function () {
+        window.setTimeout(function () {
+          musicBusy = false;
+          if (!disposed && requestId === musicRequestId) loadMusic();
+        }, 1000);
+      };
+      runtime.requestJson(runtime.buildBridgeUrl(env, "/api/media/apple-music/" + direction), { method: "POST", body: {} }, 5000).then(settle, settle);
     }
 
     // The button changes at once. Apple Music takes a moment to report its new state, so the
@@ -724,7 +779,11 @@
       if (!music || musicBusy || !canReachHost()) return;
       var requestId = ++musicRequestId;
       musicBusy = true;
-      music = musicStatus({ status: "live", playbackStatus: music.playing ? "paused" : "playing", title: music.track === "Apple Music" ? "" : music.track });
+      music = Object.assign({}, music, {
+        playing: !music.playing,
+        label: music.playing ? "Play" : "Pause",
+        hint: music.hint.replace(/^(Pause|Play)/, music.playing ? "Play" : "Pause")
+      });
       renderMusic();
       var settle = function () {
         window.setTimeout(function () {
@@ -814,13 +873,14 @@
         '<aside class="wow-card wow-camp"><div class="wow-card-heading"><h3>At the campfire</h3></div><p class="wow-timer-label"></p><div class="wow-timer-value" role="timer" aria-label="Session elapsed time">00:00:00</div><div class="wow-timer-actions">' + button("toggle-session", "Begin session", "primary") + button("reset-session", "Reset", "quiet") + '</div><p class="wow-timer-help">Keeps running when you leave this tab.</p><div class="wow-card-heading"><h3>Before you set out</h3></div><div class="wow-prep-list">' + PREPARATIONS.map(function (label, index) { return '<label><input type="checkbox" data-wow-prep="' + index + '"' + (journal.preparations[index] ? ' checked' : '') + '><span>' + label + '</span></label>'; }).join("") + '</div></aside>' +
         '<article class="wow-card wow-journal"><div class="wow-card-heading"><h3>Field notes</h3><small>Saved as you write</small></div><label class="wow-sr-only" for="wow-field-notes">Field notes</label><textarea id="wow-field-notes" maxlength="20000" placeholder="A hidden path. A helpful stranger. The materials you still need. Leave a note for your next session.">' + escapeHtml(journal.notes) + '</textarea></article>' +
         '<aside class="wow-card wow-resources"><div class="wow-card-heading"><h3>The wayfinder</h3><small>Official field guides</small></div><div class="wow-resource-links">' + resources.map(function (resource) { return '<a href="' + resource.url + '" target="_blank" rel="noopener noreferrer"><strong>' + resource.label + '</strong><small>' + resource.detail + '</small></a>'; }).join("") + '</div></aside></div>' +
-        '<footer class="wow-footer"><button type="button" class="wow-mic" data-wow-action="mic" hidden></button><button type="button" class="wow-music" data-wow-action="music" hidden><span class="wow-music-state"></span><span class="wow-music-track"></span></button><span class="wow-pages" role="group" aria-label="Panel page"><button type="button" class="wow-button" data-wow-page="quests" aria-pressed="true">Quests</button><button type="button" class="wow-button" data-wow-page="camp" aria-pressed="false">Camp and notes</button></span><div class="wow-blend" role="group" aria-label="Game and music volume" hidden><span class="wow-blend-side">Game <b data-wow-blend-game>100</b></span><input class="inline-range wow-blend-range" type="range" min="0" max="100" step="5" value="50" data-wow-blend aria-label="Balance between game volume and Apple Music volume"><span class="wow-blend-side">Music <b data-wow-blend-music>100</b></span></div><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
+        '<footer class="wow-footer"><button type="button" class="wow-mic" data-wow-action="mic" hidden></button><button type="button" class="wow-music" data-wow-action="music" hidden><img class="wow-music-art" alt="" hidden><span class="wow-music-state"></span><span class="wow-music-track"></span></button><span class="wow-skip" role="group" aria-label="Apple Music track" hidden><button type="button" data-wow-action="music-previous" aria-label="Previous track"></button><button type="button" data-wow-action="music-next" aria-label="Next track"></button></span><span class="wow-pages" role="group" aria-label="Panel page"><button type="button" class="wow-button" data-wow-page="quests" aria-pressed="true">Quests</button><button type="button" class="wow-button" data-wow-page="camp" aria-pressed="false">Camp and notes</button></span><div class="wow-blend" role="group" aria-label="Game and music volume" hidden><span class="wow-blend-side">Game <b data-wow-blend-game>100</b></span><input class="inline-range wow-blend-range" type="range" min="0" max="100" step="5" value="50" data-wow-blend aria-label="Balance between game volume and Apple Music volume"><span class="wow-blend-side">Music <b data-wow-blend-music>100</b></span></div><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span><span class="wow-footer-actions">' + button("export", "Export journal", "quiet") + button("import", "Import backup", "quiet") + '</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
       query('[data-wow-action="profile"]').setAttribute("aria-expanded", "false");
       renderProfile();
       renderQuests();
       renderGameStatus();
       renderMic();
       renderMusic();
+      renderSkip();
       renderBlend();
       updateTimer();
       showNotice();
@@ -977,6 +1037,8 @@
       switch (target.dataset.wowAction) {
         case "mic": toggleMic(); break;
         case "music": toggleMusic(); break;
+        case "music-next": skipMusic("next"); break;
+        case "music-previous": skipMusic("previous"); break;
         case "profile":
           var editor = query(".wow-editor");
           if (!editor.hidden) { closeProfile(); break; }

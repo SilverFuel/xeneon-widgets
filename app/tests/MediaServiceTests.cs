@@ -54,4 +54,16 @@ public sealed class MediaServiceTests
         Assert.That(MediaService.IndexOfApp(new[] { "AppleInc.AppleMusicWin_nzyj5cx40ttqa!App" }, "spotify"), Is.EqualTo(-1));
         Assert.That(MediaService.IndexOfApp(Array.Empty<string>(), "apple-music"), Is.EqualTo(-1));
     }
+
+    [Test]
+    public void IsAppAction_AllowsPlayPauseAndSkippingAndNothingElse()
+    {
+        Assert.That(MediaService.IsAppAction("play-pause"), Is.True);
+        Assert.That(MediaService.IsAppAction("next"), Is.True);
+        Assert.That(MediaService.IsAppAction("previous"), Is.True);
+        Assert.That(MediaService.IsAppAction("stop"), Is.False);
+        Assert.That(MediaService.IsAppAction("Next"), Is.False);
+        Assert.That(MediaService.IsAppAction(""), Is.False);
+        Assert.That(MediaService.IsAppAction(null), Is.False);
+    }
 }
