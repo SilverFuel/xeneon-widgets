@@ -3670,11 +3670,68 @@ async function validateGameProfileSwitching(cdp) {
       fixture.activity = ended;
       const returned = await until(current => current.scene === defaultId && current.panel === "audio" && current.theme === before.theme,
         "the panel from before the game did not return when it exited");
-      return { before, started, toast, exited, returned, evaluations: fixture.evaluations.length };
+      // 5. A game with no Profile of its own: Appearance offers one, creating it switches to it,
+      //    and the theme picked for it comes back with the game and leaves with it.
+      const otherGame = () => ({
+        supported: true, configured: true, status: "active", active: true, candidates: [],
+        activeGame: {
+          id: "steam:900001", name: "Rendered Fixture Game", gameKey: "steam:900001", platform: "Steam",
+          source: "Steam library", confidence: 90, reason: "Rendered fixture", startedAt: new Date().toISOString(), tileLabel: "R"
+        }
+      });
+      const post = async (path, body) => {
+        const response = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Xenon-Session": window.XenonSessionToken || "" },
+          body: JSON.stringify(body)
+        });
+        check(response.ok, path + " failed: " + response.status);
+        return response.json();
+      };
+      const untilNode = async (selector, label) => {
+        const deadline = Date.now() + 20000;
+        while (Date.now() < deadline) {
+          const node = document.querySelector(selector);
+          if (node) return node;
+          await wait(100);
+        }
+        throw new Error(label + ": " + JSON.stringify(state()));
+      };
+      fixture.activity = otherGame();
+      await until(current => current.scene === "scene-gaming", "a game without its own Profile did not get the Gaming Profile");
+      window.__auxoraTestOpenWidget("theme-studio");
+      await until(current => current.panel === "theme-studio", "Appearance did not open during a game");
+      const offer = await untilNode('#dashboard-inline-widget [data-action="create-game-profile"]', "Appearance did not offer a Profile for the running game");
+      const offerText = offer.textContent.trim();
+      offer.click();
+      const createdState = await until(current => current.scene !== "scene-gaming" && current.scene !== defaultId && current.scene !== "scene-wow-forever",
+        "creating the game's Profile did not switch to it");
+      const createdProfile = ((await (await fetch("/api/scenes")).json()).profiles || [])
+        .find(profile => (profile.rules || []).some(rule => rule.type === "game" && rule.value === "steam:900001"));
+      check(createdProfile && createdProfile.id === createdState.scene && !createdProfile.isBuiltIn && createdProfile.name === "Rendered Fixture Game",
+        "the host did not create the game's Profile: " + JSON.stringify(createdProfile));
+      const ownerDeadline = Date.now() + 10000;
+      while (Date.now() < ownerDeadline && document.querySelector("#dashboard-inline-widget .product-theme-owner strong")?.textContent !== "Rendered Fixture Game") await wait(100);
+      const owner = document.querySelector("#dashboard-inline-widget .product-theme-owner strong")?.textContent || "";
+      const offerGone = !document.querySelector('#dashboard-inline-widget [data-action="create-game-profile"]');
+      (await untilNode('#dashboard-inline-widget .product-swatch[data-theme="ember"]', "the Ember theme swatch is missing")).click();
+      await until(current => current.theme === "ember" && current.scene === createdProfile.id, "the theme picked for the game's Profile was not applied");
+      fixture.activity = ended;
+      await until(current => current.scene === defaultId && current.theme === before.theme, "the default Profile did not return after the game with a created Profile");
+      fixture.activity = otherGame();
+      const replayed = await until(current => current.scene === createdProfile.id && current.theme === "ember", "the game's own Profile and theme did not return with the game");
+      fixture.activity = ended;
+      await until(current => current.scene === defaultId && current.theme === before.theme, "the default Profile did not return at the end");
+      const remaining = await post("/api/scenes/delete", { sceneId: createdProfile.id });
+      check(!(remaining.profiles || []).some(profile => profile.id === createdProfile.id), "the fixture Profile could not be removed");
+      return { before, started, toast, exited, returned, evaluations: fixture.evaluations.length, offerText, owner, offerGone, replayed };
     })()`, awaitPromise: true, returnByValue: true });
     assert(!evaluation.exceptionDetails, `Game Profile switching failed: ${evaluation.exceptionDetails?.exception?.description || evaluation.exceptionDetails?.text}`);
     const result = evaluation.result?.value;
     assert(result && /WoW Forever profile/.test(result.toast), `Game start did not announce its Profile: ${JSON.stringify(result)}`);
+    assert(result.offerText === "Create a Profile for Rendered Fixture Game" && result.owner === "Rendered Fixture Game" && result.offerGone && result.replayed?.theme === "ember",
+      `Creating a Profile for a running game did not work end to end: ${JSON.stringify(result)}`);
+    console.log("rendered Create a Profile for a running game: created, themed, returned with the game, left with it: passed");
     console.log(`rendered game Profile switching: ${result.before.scene}/${result.before.theme} -> ${result.started.scene}/${result.started.theme}/${result.started.panel} -> ${result.returned.scene}/${result.returned.panel}; the user was not pulled back: passed`);
   } finally {
     await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier });

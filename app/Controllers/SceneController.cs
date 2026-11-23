@@ -21,6 +21,8 @@ public sealed class SceneController
 
     public object SetTheme(SceneThemeRequest request) => _sceneService.SetTheme(request);
 
+    public object CreateForGame(SceneGameProfileRequest request) => _sceneService.CreateForGame(request);
+
     public object Delete(SceneDeleteRequest request) => _sceneService.Delete(request);
 
     public object Evaluate(SceneEvaluationRequest request) => _sceneService.Evaluate(request);
