@@ -129,6 +129,8 @@ The native host:
 
 ## WoW Forever Adventure Journal
 
+If text is hard to read from where you sit, set **Settings > Appearance > Text size** to Large or Extra large. It scales the text in every panel. The WoW Forever journal sizes its own text for the EDGE and is not affected.
+
 Three games have a Profile of their own out of the box. WoW Forever uses the Horde theme and opens its journal. Any Battlefield title uses the **Frontline** theme, and Fable uses the **Albion** theme; both open the Game HUD. Battlefield and Fable are recognised by the game's name, so a copy from Steam, the EA app or the Xbox app all work. Change a Profile's theme in **Settings > Appearance** while its game is running. Any other game gets the Gaming Profile, and **Settings > Appearance** offers to create one for it.
 
 While Auxora is running, launching WoW Forever automatically opens the Horde adventure journal when **Game Mode auto-open** is enabled (the default). The host recognizes Forever's `_forever_\Wow.exe` client separately from Retail, Classic, and the Battle.net launcher. The journal opens once per detected game session; switching panels afterward keeps your choice. Open drawers, touch lock, and Diagnostics retain their existing protections against automatic navigation.

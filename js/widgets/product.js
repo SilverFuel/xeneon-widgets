@@ -64,6 +64,7 @@
       var opacity = settingValue(env, "dashboardOpacity", "100");
       var dashboard = env.bridgeConfig && env.bridgeConfig.dashboard ? env.bridgeConfig.dashboard : {};
       var readability = settingValue(env, "themeReadability", text(dashboard.themeReadability, "normal"));
+      var textSize = settingValue(env, "textSize", "normal");
       var performanceBudget = settingValue(env, "performanceBudget", text(dashboard.performanceBudget, "balanced"));
       var gameModeAutoTune = settingValue(env, "gameModeAutoTune", dashboard.gameModeAutoTune === false ? "0" : "1");
       var gameModeAutoFace = settingValue(env, "gameModeAutoFace", "1");
@@ -104,6 +105,11 @@
               '<option value="clean"' + (readability === "clean" ? " selected" : "") + '>Clean</option>' +
               '<option value="high-contrast"' + (readability === "high-contrast" ? " selected" : "") + '>High contrast</option>' +
               '<option value="visor"' + (readability === "visor" ? " selected" : "") + '>Visor</option>' +
+            '</select></label>' +
+            '<label class="inline-field"><span>Text size</span><select class="inline-select" name="textSize">' +
+              '<option value="normal"' + (textSize === "normal" ? " selected" : "") + '>Normal</option>' +
+              '<option value="large"' + (textSize === "large" ? " selected" : "") + '>Large</option>' +
+              '<option value="larger"' + (textSize === "larger" ? " selected" : "") + '>Extra large</option>' +
             '</select></label>' +
             '<label class="inline-field"><span>Performance</span><select class="inline-select" name="performanceBudget">' +
               '<option value="balanced"' + (performanceBudget === "balanced" ? " selected" : "") + '>Balanced</option>' +
@@ -210,7 +216,7 @@
         } else {
           saveSettings(env, { accentMode: "preset", customAccentColor: "", accentColor: "" });
         }
-      } else if (name === "themeReadability" || name === "performanceBudget" || name === "gameModeAutoTune" || name === "gameModeAutoFace") {
+      } else if (name === "themeReadability" || name === "textSize" || name === "performanceBudget" || name === "gameModeAutoTune" || name === "gameModeAutoFace") {
         var choiceValues = {};
         choiceValues[name] = String(event.target.value || "");
         saveSettings(env, choiceValues);
@@ -732,7 +738,7 @@
   var portableDashboardSettingKeys = [
     "profileId", "themeSchemaVersion", "themeId", "accentMode", "customAccentColor", "themeVariant",
     "animationIntensity", "dashboardOpacity", "performanceBudget", "gameModeAutoTune", "gameModeAutoFace",
-    "themeReadability", "releaseChannel", "sectionOrder", "hiddenSections", "layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes",
+    "themeReadability", "textSize", "releaseChannel", "sectionOrder", "hiddenSections", "layoutOrder", "pinnedWidgets", "hiddenWidgets", "cardSizes",
     "modeLayouts", "modeLayoutSchemaVersion", "marketplacePack"
   ];
 
