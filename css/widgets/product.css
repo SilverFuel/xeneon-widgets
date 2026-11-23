@@ -1,8 +1,6 @@
 [data-profile],
 [data-theme],
-[data-pack],
 [data-layout-action],
-.product-card--button,
 .product-swatch {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -22,9 +20,7 @@
 
 [data-profile].is-touch-pressing,
 [data-theme].is-touch-pressing,
-[data-pack].is-touch-pressing,
 [data-layout-action].is-touch-pressing,
-.product-card--button.is-touch-pressing,
 .product-swatch.is-touch-pressing {
   transform: scale(0.985);
 }
@@ -41,65 +37,6 @@
 
   body[data-active-widget-id="theme-studio"] .product-shell > .inline-toolbar {
     display: none;
-  }
-
-  body[data-active-widget-id="remote"] .product-shell {
-    grid-template-rows: minmax(0, 1fr);
-  }
-
-  body[data-active-widget-id="remote"] .product-shell > .inline-toolbar {
-    display: none;
-  }
-
-  body[data-active-widget-id="remote"] .product-shell > .inline-empty {
-    display: grid;
-    grid-template-columns: 68px minmax(0, 1fr);
-    align-self: center;
-    justify-self: center;
-    align-items: center;
-    gap: 18px;
-    width: min(100%, 720px);
-    min-height: 168px;
-    padding: 24px 26px;
-    border: 1px dashed var(--dashboard-accent-glow);
-    border-radius: 20px;
-    background:
-      radial-gradient(circle at 8% 50%, var(--dashboard-accent-glow), transparent 42%),
-      rgba(255, 255, 255, 0.035);
-  }
-
-  body[data-active-widget-id="remote"] .product-shell > .inline-empty::before {
-    content: "⌁";
-    display: grid;
-    width: 68px;
-    height: 68px;
-    place-items: center;
-    border: 1px solid var(--dashboard-accent-glow);
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--theme-accent-text);
-    font-size: 2rem;
-    font-weight: 900;
-  }
-
-  body[data-active-widget-id="remote"] .product-shell > .inline-empty strong,
-  body[data-active-widget-id="remote"] .product-shell > .inline-empty span {
-    display: block;
-  }
-
-  body[data-active-widget-id="remote"] .product-shell > .inline-empty strong {
-    grid-column: 2;
-    grid-row: 1;
-    font-size: clamp(1.05rem, 1.4vw, 1.35rem);
-  }
-
-  body[data-active-widget-id="remote"] .product-shell > .inline-empty span {
-    grid-column: 2;
-    grid-row: 2;
-    margin-top: 6px;
-    color: var(--color-text-dim);
-    font-size: 0.92rem;
-    line-height: 1.45;
   }
 }
 
@@ -308,48 +245,6 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
-.auxora-remote-share {
-  display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
-  align-items: center;
-  gap: 18px;
-  padding: 16px;
-  border: 1px solid var(--dashboard-accent-glow);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.auxora-remote-qr {
-  padding: 10px;
-  border-radius: 14px;
-  background: #fff;
-}
-
-.auxora-remote-qr svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.auxora-remote-share code {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--theme-accent-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (max-width: 720px), (orientation: portrait) {
-  .auxora-remote-share {
-    grid-template-columns: 1fr;
-  }
-
-  .auxora-remote-qr {
-    max-width: 220px;
-  }
-}
-
 .product-shell::before {
   content: "";
   position: absolute;
@@ -415,10 +310,6 @@
 
   body[data-active-widget-id="scenes"] .auxora-scene-grid > .product-card:nth-child(3n + 1):last-child {
     grid-column: span 6;
-  }
-
-  .product-profile-grid--packs {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .product-control-panel .inline-form-grid--3 {
@@ -506,12 +397,10 @@
   overflow: hidden;
 }
 
-.product-card--button,
 .product-swatch {
   cursor: pointer;
 }
 
-.product-card--button::after,
 .product-swatch::after,
 .product-layout-row::after {
   content: "";
@@ -525,8 +414,6 @@
   transition: opacity 160ms ease, transform 160ms ease;
 }
 
-.product-card--button:hover::after,
-.product-card--button.is-selected::after,
 .product-swatch:hover::after,
 .product-swatch.is-selected::after {
   opacity: 1;
@@ -534,14 +421,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .product-card--button::after,
   .product-swatch::after,
   .product-layout-row::after {
     transition: none;
   }
 }
 
-.dashboard-native-page--motion-off .product-card--button::after,
 .dashboard-native-page--motion-off .product-swatch::after,
 .dashboard-native-page--motion-off .product-layout-row::after {
   transition: none;

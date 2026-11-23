@@ -232,15 +232,12 @@
   var localProductWidgetIds = ["game-mode", "wow-forever", "tmog"];
   var surfaceContracts = {
     home: { destination: "home", category: "Home", defaultStatus: "Available" },
-    scenes: { destination: "scenes", category: "Modes", defaultStatus: "Available" },
+    scenes: { destination: "scenes", category: "Profiles", defaultStatus: "Available" },
     setup: { destination: "settings", category: "Setup", defaultStatus: "Checking", alwaysVisible: true },
     "theme-studio": { destination: "settings", category: "Personalization", defaultStatus: "Available", alwaysVisible: true },
     updates: { destination: "settings", category: "Maintenance", defaultStatus: "Not checked", alwaysVisible: true },
     "layout-editor": { destination: "settings", category: "Personalization", defaultStatus: "Available", alwaysVisible: true },
-    streaming: { destination: "settings", category: "Creator", defaultStatus: "Preview", alwaysVisible: true },
-    marketplace: { destination: "settings", category: "Widget Packs", defaultStatus: "Available", alwaysVisible: true },
     privacy: { destination: "settings", category: "Privacy", defaultStatus: "Available", alwaysVisible: true },
-    remote: { destination: "settings", category: "Remote", defaultStatus: "Unavailable", alwaysVisible: true },
     installer: { destination: "settings", category: "Recovery", defaultStatus: "Checking", alwaysVisible: true },
     "game-mode": { destination: "library", category: "Gaming", defaultStatus: "Available" },
     "wow-forever": { destination: "library", category: "Gaming", defaultStatus: "Local journal" },
@@ -2743,11 +2740,11 @@
       },
       {
         id: "scenes",
-        title: "Modes & automation",
+        title: "Profiles",
         requiresBridge: true,
         tier: "product",
         kicker: "Adaptive experience",
-        copy: "Edit Modes and automatic switching rules. Choose the active Mode from the header.",
+        copy: "Edit Profiles and automatic switching rules. Choose the active Profile from the header.",
         viewerLabel: "Manual + automatic"
       },
       {
@@ -2821,27 +2818,9 @@
         title: "Layout Editor",
         requiresBridge: false,
         tier: "product",
-        kicker: "Customize mode",
+        kicker: "Customize",
         copy: "Choose where each panel appears, how wide it opens, and the order you see it. Every change saves automatically.",
-        viewerLabel: "Mode layout"
-      },
-      {
-        id: "streaming",
-        title: "Streaming",
-        requiresBridge: false,
-        tier: "product",
-        kicker: "Creator preview",
-        copy: "Local-only OBS reachability, audio and media shortcuts, and a streaming layout preview. This beta does not issue OBS commands.",
-        viewerLabel: "Creator beta"
-      },
-      {
-        id: "marketplace",
-        title: "Widget Packs",
-        requiresBridge: true,
-        tier: "product",
-        kicker: "Local dashboard layouts",
-        copy: "Built-in widget layouts plus inspection-only checks for third-party manifests. Third-party code never runs in this beta.",
-        viewerLabel: "Built-in packs"
+        viewerLabel: "Profile layout"
       },
       {
         id: "privacy",
@@ -2851,15 +2830,6 @@
         kicker: "Trust and portability",
         copy: "Local settings, sanitized diagnostics, backup, reset, and recovery.",
         viewerLabel: "Local-first"
-      },
-      {
-        id: "remote",
-        title: "Phone Remote",
-        requiresBridge: true,
-        tier: "product",
-        kicker: "Unavailable in this beta",
-        copy: "Phone Remote is not included in 0.3.0-beta.1. Auxora does not open a phone-control listener.",
-        viewerLabel: "Unavailable"
       },
       {
         id: "installer",
@@ -3161,7 +3131,7 @@
     }, 7000).then(function (payload) {
       applySceneSnapshot(payload);
       renderQuickDrawer();
-      showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Mode") + " active");
+      showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Profile") + " active");
       return payload;
     });
   }
@@ -3180,7 +3150,7 @@
       bridgeConfig.scenes = payload;
       applyScenePresentation(payload.activeScene);
       renderQuickDrawer();
-      showTouchFeedback("Automatic Modes resumed");
+      showTouchFeedback("Automatic switching resumed");
       return payload;
     });
   }
@@ -3198,7 +3168,7 @@
     var selected = automatic ? "automatic" : active ? active.id : "";
     if (modeActivationPending) { selected = node.getAttribute("data-pending-mode") || selected; }
     var html = '<option value="automatic" data-ui-key="mode-automatic">Automatic' + (automatic && active ? ' (' + escapeHtml(active.name) + ')' : '') + '</option>';
-    if (!available || !selected) { html = '<option value="">' + (bridgeReachable === true ? 'Choose a Mode' : 'Modes unavailable') + '</option>' + html; }
+    if (!available || !selected) { html = '<option value="">' + (bridgeReachable === true ? 'Choose a Profile' : 'Profiles unavailable') + '</option>' + html; }
     html += profiles.map(function (profile) {
       return '<option value="' + escapeHtml(profile.id) + '" data-ui-key="mode-' + escapeHtml(profile.id) + '">' + escapeHtml(profile.name || profile.id) + '</option>';
     }).join("");
@@ -3227,7 +3197,7 @@
       renderHeaderModes();
       var action = id === "automatic" ? resumeSceneAutomation() : activateScene(id);
       action.catch(function (error) {
-        showTouchFeedback(error.message || "Mode failed");
+        showTouchFeedback(error.message || "Profile change failed");
       }).finally(function () { modeActivationPending = false; node.removeAttribute("data-pending-mode"); renderHeaderModes(); markDashboardInteractionIdleSoon(); });
     });
   }

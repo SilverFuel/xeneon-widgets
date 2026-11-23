@@ -18,7 +18,7 @@ function homeHarness() {
     "/api/scenes": { activeScene: { id: "scene-work", name: "Work" } },
     "/api/system": { cpu: null, ram: null }, "/api/network": { ping: null },
     "/api/calendar": { configured: false, entries: [] },
-    "/api/action-chains": { chains: [{ id: "focus", name: "Focus", description: "Work Mode and quiet notifications" }] }
+    "/api/action-chains": { chains: [{ id: "focus", name: "Focus", description: "Work Profile and quiet notifications" }] }
   };
   const context = {
     document, window, Date, Promise, Set,

@@ -40,10 +40,10 @@ Two commands:
 | `test:frigate-standalone-refresh` | `test-frigate-standalone-refresh.mjs` | Behaviour | Standalone camera panel refresh and polling pause. |
 | `check:ui-remediation` | `check-ui-remediation.mjs` | Behaviour, extracted by name | Every panel belongs to exactly one section and is reachable; Home long-press gestures; Display Controls pending states (`check-display-controls.mjs`). |
 | `check:touch-root-press` | `check-touch-root-press.mjs` | Behaviour | Touch press feedback in `js/widget-core.js`. |
-| `test:dashboard-navigation` | `test-dashboard-navigation.mjs` | Behaviour, extracted by name | Section and panel navigation, saved destinations, return from Game Mode. |
-| `test:header-modes` | `test-header-modes.mjs` | Behaviour, extracted by name | Night toggle and Mode activation from the header. |
+| `test:dashboard-navigation` | `test-dashboard-navigation.mjs` | Behaviour, extracted by name | Section and panel navigation, saved destinations, links to removed tabs, return from Game Mode. |
+| `test:header-modes` | `test-header-modes.mjs` | Behaviour, extracted by name | Night toggle and Profile activation from the header. |
 | `test:home-navigation` | `test-home-navigation.mjs` | Behaviour, extracted by name | Home cards open their panels; one-tap setups run once and report failure. |
-| `test:ui-action-ownership` | `test-ui-action-ownership.mjs` | Behaviour, extracted by name | Mode duplicate, save and delete send one request and apply the server's answer. |
+| `test:ui-action-ownership` | `test-ui-action-ownership.mjs` | Behaviour, extracted by name | Profile duplicate, save and delete send one request and apply the server's answer. |
 | `check:adaptive-layouts` | `check-adaptive-layout-matrix.mjs` | Behaviour | Layout class for 40 display size and scaling combinations. |
 | `test:visible-window-guard` | `test-visible-window-guard.mjs` | Behaviour | The test helper that stops rendered tests from flashing windows. |
 | `check:app` | `dotnet build` | Build | The native host compiles. |

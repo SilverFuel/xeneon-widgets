@@ -96,7 +96,7 @@ public static class SceneDefaults
     public static SceneProfile NormalizeProfile(SceneProfile scene)
     {
         scene.Id = NormalizeId(scene.Id);
-        scene.Name = string.IsNullOrWhiteSpace(scene.Name) ? "Custom Mode" : scene.Name.Trim()[..Math.Min(scene.Name.Trim().Length, 40)];
+        scene.Name = string.IsNullOrWhiteSpace(scene.Name) ? "Custom Profile" : scene.Name.Trim()[..Math.Min(scene.Name.Trim().Length, 40)];
         scene.Icon = NormalizeToken(scene.Icon, "spark");
         // Any Profile's theme can be changed, built-in ones included. Create() supplies the fresh-install defaults.
         scene.ThemeId = NormalizeThemeId(scene.ThemeId);

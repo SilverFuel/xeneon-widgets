@@ -20,8 +20,7 @@
       { id: "wow-forever", label: "WoW Forever" }
     ] },
     { id: "media", label: "Media", tabs: [
-      { id: "audio", label: "Audio & Media" },
-      { id: "streaming", label: "Streaming" }
+      { id: "audio", label: "Audio & Media" }
     ] },
     { id: "pc", label: "PC", tabs: [
       { id: "system", label: "Performance" },
@@ -38,14 +37,12 @@
     ] },
     { id: "settings", label: "Settings", tabs: [
       { id: "theme-studio", label: "Appearance" },
+      { id: "scenes", label: "Profiles" },
       { id: "layout-editor", label: "Layout" },
-      { id: "scenes", label: "Modes & automation" },
-      { id: "updates", label: "Updates" },
-      { id: "privacy", label: "Privacy & Backup" },
-      { id: "remote", label: "Phone Remote" },
-      { id: "marketplace", label: "Widget Packs" },
       { id: "setup", label: "Setup & status" },
-      { id: "installer", label: "Repair & recovery" }
+      { id: "installer", label: "Repair & recovery" },
+      { id: "updates", label: "Updates" },
+      { id: "privacy", label: "Privacy & Backup" }
     ] }
   ];
   var sectionById = Object.create(null);
@@ -72,12 +69,24 @@
   });
   Object.freeze(sections);
 
+  // Saved links and remembered panels that point at a tab which no longer exists
+  // land on the nearest tab that does. "media" is the original audio deep link;
+  // Streaming, Widget Packs and Phone Remote were removed from the product.
+  var retiredWidgets = Object.freeze({
+    media: "audio",
+    streaming: "audio",
+    marketplace: "layout-editor",
+    remote: "theme-studio"
+  });
+
   function canonicalWidget(id) {
-    // Keep the existing ?widget=media deep link while exposing one audio tab.
-    if (id === "media") {
-      return "audio";
+    if (typeof id !== "string") {
+      return null;
     }
-    return typeof id === "string" && widgetSections[id] ? id : null;
+    if (Object.prototype.hasOwnProperty.call(retiredWidgets, id)) {
+      id = retiredWidgets[id];
+    }
+    return widgetSections[id] ? id : null;
   }
 
   function sectionForWidget(id) {
@@ -182,6 +191,7 @@
 
   return Object.freeze({
     sections: sections,
+    canonicalWidget: canonicalWidget,
     sectionForWidget: sectionForWidget,
     tabsForSection: tabsForSection,
     normalizeSectionLayout: normalizeSectionLayout,

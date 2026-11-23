@@ -10,7 +10,7 @@ Auxora is the adaptive successor to XENEON Edge Host. Version 0.3.x remains a fr
 - support is handled through GitHub Issues and GitHub Security Advisories for now
 - this is independent software, not an official CORSAIR product
 
-Auxora is a native Windows companion dashboard for landscape, ultrawide, and portrait touch displays. It combines adaptive Modes, system telemetry, network stats, audio routing, media controls, weather, calendar, lighting, recent apps, optional Frigate camera detection, and home-lab panels.
+Auxora is a native Windows companion dashboard for landscape, ultrawide, and portrait touch displays. It combines adaptive Profiles, system telemetry, network stats, audio routing, media controls, weather, calendar, lighting, recent apps, optional Frigate camera detection, and home-lab panels.
 
 The primary product is the native Windows host in `app`. Legacy browser bridge files are isolated in `bridge` for compatibility testing only. A macOS beta host lives in `desktop/electron` because the Windows app uses WinUI 3 and WebView2, which do not run on macOS.
 
@@ -84,35 +84,31 @@ Auxora now includes:
 
 - automatic first-run provisioning with diagnostics and repair
 - normal setup that hides advanced connector plumbing
-- adaptive Work, Gaming, Media, and Home Modes with manual and automatic switching; Night remains a separate display variant
+- adaptive Work, Gaming, Media, Home, and per-game Profiles with manual and automatic switching; Night remains a separate display variant
 - Home, Gaming, Media, PC, and Smart Home sections, plus Settings
-- within-section tabs for all 25 panels, with section order and visibility in Settings > Layout
+- within-section tabs for all 22 panels, with section order and visibility in Settings > Layout
 - responsive compact, standard, ultrawide, and portrait layouts
 - a Home overview with direct Performance, Network, and Calendar links
-- an explicit Phone Remote unavailable state; this beta opens no phone-control listener
 - Companion-only DDC/CI monitor controls when supported; the Windows primary display is excluded from discovery and commands
-- safe one-tap action chains and per-display Mode assignments
-- inspection-only signed manifest checks with declared permissions; third-party loading is disabled
-- credential-free Mode and presentation backup/restore
+- safe one-tap action chains and per-display Profile assignments
+- credential-free Profile and presentation backup/restore
 - privacy-first media controls with optional local titles, artwork, and audio application labels
 - Theme Studio with accent, opacity, and animation controls
 - drag-and-drop layout ordering
 - release channel and local-hosted GitHub release checks
-- local-only OBS reachability checks; this beta sends no OBS commands
 - Game Mode profile and launcher handoff
-- built-in widget packs for local dashboard layouts
 - directly discoverable, optional local Frigate object detections and event snapshots with an in-panel setup path
 - installer readiness panel
 - local-first privacy and trust screen
 - app data reset from setup/privacy and from the uninstall cleanup shortcut
 
-The update and streaming panels remain beta foundations. Streaming accepts only loopback OBS WebSocket addresses and checks reachability; it does not authenticate to OBS or send commands. Signed manifest inspection is implemented, but third-party code loading and execution are disabled in this beta even if a manifest passes inspection. Phone Remote is also not included. Before charging customers, sign the Windows release, complete authenticated OBS commands, and test the installer on clean hardware.
+The update panel remains a beta foundation. Streaming, Widget Packs, and Phone Remote are not part of the dashboard; links saved to those panels open Audio & Media, Layout, and Appearance. Third-party code loading and execution are disabled in this beta. Before charging customers, sign the Windows release and test the installer on clean hardware.
 
-Choose a section, then a panel tab. Settings stays available at the bottom of the section rail. **Settings > Layout** changes section order and visibility; hiding a section does not disable deep links or automatic game navigation. Recent apps appear on Home. The header Mode selector includes custom Modes and Automatic switching. **Settings > Modes & automation** edits profiles and rules. Night display controls are in Quick controls.
+Choose a section, then a panel tab. Settings stays available at the bottom of the section rail. **Settings > Layout** changes section order and visibility; hiding a section does not disable deep links or automatic game navigation. Recent apps appear on Home. The header Profile selector includes custom Profiles and Automatic switching. **Settings > Modes & automation** edits profiles and rules. Night display controls are in Quick controls.
 
 **Quick controls** adjusts system volume, mute, playback, and Night display without leaving the current panel. The volume slider sends a change when released, not on every movement. Audio and playback controls enable independently when the local service reports fresh, supported state; unavailable controls explain why. The drawer reads state only while open and visible, never retries a command automatically, and keeps track titles and app names out of this compact view. Full audio controls are under **Media > Audio & Media**.
 
-Privacy & Backup exports Modes plus portable presentation settings such as theme, readability, layout order, pinned and hidden panels, card sizes, per-Mode layouts, and built-in pack selection. Credentials, integration and OBS endpoints, weather location, launcher paths, display identifiers, and logs remain excluded. Restore validates the browser-side presentation fields before changing native configuration and keeps the newest user-action result visible when diagnostics refresh in the background.
+Privacy & Backup exports Profiles plus portable presentation settings such as theme, readability, layout order, pinned and hidden panels, card sizes, and per-Profile layouts. Credentials, integration endpoints, weather location, launcher paths, display identifiers, and logs remain excluded. Restore validates the browser-side presentation fields before changing native configuration and keeps the newest user-action result visible when diagnostics refresh in the background.
 
 ## Install From Source
 

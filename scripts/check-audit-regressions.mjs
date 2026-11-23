@@ -217,7 +217,7 @@ assert(
     && /after\.cardSize === 'wide' && Math\.abs\(after\.width - after\.available\) <= 1\.5/.test(renderedDashboardTest)
     && /assert\(result\.modeLayouts === expected\.modeLayouts && result\.cardSizes === expected\.cardSizes/.test(renderedDashboardTest)
     && /assert\(!reload\.exceptionDetails && reload\.result\?\.value\?\.modeLayouts === expected\.modeLayouts && reload\.result\?\.value\?\.cardSizes === expected\.cardSizes && reload\.result\?\.value\?\.active === 'network'/.test(renderedDashboardTest),
-  "rendered product-surface checks must cover all 25 surfaces at every representative viewport with early runtime, focus, scroll, wide-only distance gates, and the full Network boundary/state/persistence matrix"
+  "rendered product-surface checks must cover every surface at every representative viewport with early runtime, focus, scroll, wide-only distance gates, and the full Network boundary/state/persistence matrix"
 );
 assert(
   /GetHealthStatus\(\s*ClipboardPrivacyOptions\.FromDashboard\(config\.Dashboard\)\)/.test(readWorkspaceFile("app/Controllers/TelemetryController.cs"))

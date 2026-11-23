@@ -141,7 +141,7 @@
           '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected companion display") : "No active companion display selected") + '</strong>' +
           '<span>' + escapeHtml(selected ? describeDisplay(selected) : companionDisplayCount ? "Choose one of the companion displays below." : "Connect or extend a secondary display, then refresh diagnostics.") + '</span>' +
         '</div>' +
-        '<details class="setup-diagnostics-details">' +
+        '<details class="setup-diagnostics-details" data-preserve-open>' +
           '<summary>Manage companion displays</summary>' +
           '<div class="setup-diagnostics-details__body">' +
           '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
@@ -184,7 +184,7 @@
           '</div>' +
           statusPill(suggestions.length + " found", "warn") +
         '</div>' +
-        '<details class="setup-diagnostics-details">' +
+        '<details class="setup-diagnostics-details" data-preserve-open>' +
           '<summary>Review detected apps</summary>' +
           '<div class="setup-diagnostics-details__body">' +
           '<div class="setup-launcher-suggestions">' + visible.map(function (entry) {
