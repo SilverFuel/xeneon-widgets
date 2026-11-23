@@ -195,7 +195,8 @@
         bars += '<span style="height:' + Math.max(2, clamp(optionalNumber(samples[index]) || 0, 0, 100)).toFixed(0) + '%"></span>';
       }
     }
-    return '<div class="system-trend" data-tone="' + escapeHtml(tone || "muted") + '" aria-hidden="true">' + bars + '</div>';
+    return '<div class="system-trend-wrap"><div class="system-trend" data-tone="' + escapeHtml(tone || "muted") + '" aria-hidden="true">' + bars + '</div>' +
+      '<div class="system-trend-scale" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div></div>';
   }
 
   function renderSystemStatCard(label, percent, side, tone, trend) {
