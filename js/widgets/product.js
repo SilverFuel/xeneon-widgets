@@ -816,6 +816,40 @@
     return settings;
   }
 
+  // Up to three games from the play log, most recent first, each with one line on when and
+  // how long. A tap opens the game's own panel when it has one, Gaming otherwise.
+  function homeRecentGames(log, api, now) {
+    var games = log && log.games ? log.games : {};
+    var day = 24 * 60 * 60 * 1000;
+    var midnight = function (ms) {
+      var date = new Date(ms);
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    };
+    return Object.keys(games).map(function (key) {
+      return { key: key, stats: api.summary(log, key, now) };
+    }).filter(function (entry) {
+      return entry.stats && entry.stats.name && entry.stats.lastPlayed > 0 && entry.stats.totalMs >= 60000;
+    }).sort(function (a, b) {
+      return b.stats.lastPlayed - a.stats.lastPlayed;
+    }).slice(0, 3).map(function (entry) {
+      var stats = entry.stats;
+      var daysAgo = Math.max(0, Math.round((midnight(now) - midnight(stats.lastPlayed)) / day));
+      var when = stats.sessionMs > 0 ? "Playing now"
+        : stats.todayMs >= 60000 ? api.formatDuration(stats.todayMs) + " today"
+        : daysAgo === 0 ? "Played today"
+        : daysAgo === 1 ? "Played yesterday"
+        : daysAgo < 14 ? "Played " + daysAgo + " days ago"
+        : "Played " + Math.round(daysAgo / 7) + " weeks ago";
+      var total = stats.totalMs > stats.todayMs || stats.sessionMs > 0 ? api.formatDuration(stats.totalMs) + " in total" : "";
+      return {
+        key: entry.key,
+        name: stats.name,
+        line: total ? when + " · " + total : when,
+        destination: entry.key === "wow-forever" ? "wow-forever" : "game-mode"
+      };
+    });
+  }
+
   function mountAuxoraHomeWidget(widget, container, env) {
     var cleanups = [];
     var longPressTimer = 0;
@@ -833,6 +867,8 @@
       loading: true,
       message: "Loading your quick look"
     };
+    // Recently played games, read from the play log at most twice a minute.
+    var played = { at: 0, games: [] };
 
     function value(value, suffix) {
       if (value == null || value === "") { return "--"; }
@@ -855,12 +891,31 @@
     function setupReason() {
       var reason = text(state.scenes && state.scenes.lastActivationReason, "").toLowerCase();
       if (reason.indexOf("automatic") !== -1) {
-        return "Changed automatically";
+        return "Chosen automatically";
       }
       if (reason.indexOf("manual") !== -1 || reason.indexOf("remembered") !== -1 || reason.indexOf("everyday") !== -1) {
-        return "Changed by you";
+        return "Chosen by you";
       }
-      return "Your normal setup";
+      return "Your everyday Profile";
+    }
+
+    function recentGames() {
+      var now = Date.now();
+      if (now - played.at < 30000) {
+        return played.games;
+      }
+      played.at = now;
+      played.games = [];
+      try {
+        var api = window.AuxoraPlayLog;
+        // The tests that run this function on its own have no play log and no helper.
+        if (api && typeof api.load === "function" && window.localStorage && typeof homeRecentGames === "function") {
+          played.games = homeRecentGames(api.load(window.localStorage), api, now);
+        }
+      } catch (error) {
+        played.games = [];
+      }
+      return played.games;
     }
 
     function networkProbeKind() {
@@ -906,22 +961,34 @@
       var networkProbe = networkProbeKind();
       var calendarReading = entries.length ? text(entries[0].title, "Event") : !state.calendar ? "Waiting for data" : state.calendar.configured === false ? "Not connected" : !state.calendar.sampledAt ? "Waiting for data" : "Nothing planned";
       var calendarDetail = entries.length ? text(entries[0].time, text(entries[0].detail, "Upcoming")) : state.calendar && state.calendar.configured === false ? "Add a calendar to see events" : "Your upcoming schedule";
+      var now = new Date();
+      var games = recentGames();
+      var temperature = state.system && state.system.cpuTemp != null && Number(state.system.cpuTemp) > 0 ? " · " + value(state.system.cpuTemp, "°C") : "";
       patchStableDom(container, productShell(
         "Quick Look",
-        "Good " + (new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"),
+        "Good " + (now.getHours() < 12 ? "morning" : now.getHours() < 18 ? "afternoon" : "evening"),
         briefing(),
         text(scene.name, state.loading ? "Loading" : "Work"),
         state.loading ? "warn" : "good",
-        '<div class="auxora-glance-hero"><div><span>Current Setup</span><strong>' + escapeHtml(text(scene.name, "Work")) + '</strong><small>' + escapeHtml(setupReason()) + '</small></div><div class="auxora-glance-clock">' + escapeHtml(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })) + '</div></div>' +
-        '<div class="inline-grid inline-grid--3">' +
-          homeCard("PC Activity", value(state.system && state.system.cpu, "%"), "Memory Used " + value(state.system && state.system.ram, "%") + (state.system && state.system.cpuTemp != null ? " · PC temperature " + value(state.system.cpuTemp, "°") : ""), "system", "View performance") +
-          homeCard("Network Response", state.network && state.network.ping != null ? value(state.network.ping, " ms") : "--", state.network && state.network.name ? "Lower is better · " + state.network.name : "Lower is better", "network", "Open Network") +
-          homeCard("Next Event", calendarReading, calendarDetail, "calendar", "Open Calendar") +
+        '<div class="auxora-glance-hero">' +
+          '<div class="auxora-glance-now"><div class="auxora-glance-clock">' + escapeHtml(now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })) + '</div>' +
+          '<div class="auxora-glance-date">' + escapeHtml(now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })) + '</div></div>' +
+          '<div class="auxora-glance-profile"><span>Profile</span><strong>' + escapeHtml(text(scene.name, "Work")) + '</strong><small>' + escapeHtml(setupReason()) + '</small></div>' +
         '</div>' +
+        '<div class="auxora-home-main">' +
+        '<div class="inline-grid inline-grid--3">' +
+          homeCard("CPU", value(state.system && state.system.cpu, "%"), "Memory Used " + value(state.system && state.system.ram, "%") + temperature, "system", "View performance") +
+          homeCard("Network", state.network && state.network.ping != null ? value(state.network.ping, " ms") : "--", state.network && state.network.name ? "Response time · " + state.network.name : "Response time", "network", "Open Network") +
+          homeCard("Next event", calendarReading, calendarDetail, "calendar", "Open Calendar") +
+        '</div>' +
+        (games.length ? '<section class="auxora-home-played" data-ui-key="home-played" aria-label="Recently played"><div class="auxora-home-played__title">Recently played</div><div class="auxora-home-played__list">' + games.map(function (game) {
+          return '<button type="button" class="auxora-home-game" data-ui-key="home-game-' + escapeHtml(game.key) + '" data-home-open="' + escapeHtml(game.destination) + '"><strong>' + escapeHtml(game.name) + '</strong><span>' + escapeHtml(game.line) + '</span></button>';
+        }).join("") + '</div></section>' : '') +
         (state.message && !state.loading && state.message !== "Loading your quick look" ? '<p class="auxora-home-feedback" role="status">' + escapeHtml(state.message) + '</p>' : '') +
         (chains.length ? '<details class="list-card inline-card auxora-glance-chains" data-ui-key="home-setups"><summary>One-tap setups</summary><p class="router-inline-copy">Apply a Profile and Windows settings together.</p><div class="inline-actions">' + chains.map(function (chain) {
           return '<button class="inline-button" type="button" data-action-chain="' + escapeHtml(chain.id) + '"' + (state.executingChainId ? ' disabled' : '') + '><strong>' + escapeHtml(state.executingChainId === chain.id ? "Applying " + chain.name : chain.name) + '</strong><small>' + escapeHtml(chain.description) + '</small></button>';
-        }).join("") + '</div></details>' : '')
+        }).join("") + '</div></details>' : '') +
+        '</div>'
       ));
     }
 
@@ -1966,6 +2033,9 @@
   }
 
 
+  if (typeof runtime.registerHelpers === "function") {
+    runtime.registerHelpers({ homeRecentGames: homeRecentGames });
+  }
   runtime.registerRenderer("home", mountAuxoraHomeWidget);
   runtime.registerRenderer("scenes", mountScenesWidget);
   runtime.registerRenderer("display-controls", mountDisplayControlsWidget);
