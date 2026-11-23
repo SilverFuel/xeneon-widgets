@@ -4041,10 +4041,12 @@ async function checkWowQuestLogInPage() {
     size + ": the cover is not showing, or was asked for more than once: " + window.__wowMusicCoverAsks + " " + musicButton.outerHTML.slice(0, 200));
   await wait(1500);
   check(pageFits() || !oneScreen, size + ": the panel runs off the screen with the mic and music buttons showing");
-  // The skip changed the track. Its cover is not asked for until a later reading still shows the same track.
+  // The skip changed the track. Its cover is not asked for until the track has played for three seconds.
   check(/Fixture song 2/.test(musicButton.textContent) && musicCoverImage.hidden && window.__wowMusicCoverAsks === 1,
     size + ": the new track's cover was asked for while the track was changing: " + window.__wowMusicCoverAsks + " " + musicButton.outerHTML.slice(0, 200));
-  await wait(5200);
+  // It is asked for on the first regular reading three seconds or more after the change.
+  for (let attempt = 0; attempt < 50 && (window.__wowMusicCoverAsks < 2 || musicCoverImage.hidden); attempt += 1) await wait(200);
+  await wait(200);
   check(!musicCoverImage.hidden && musicCoverImage.naturalWidth > 0 && window.__wowMusicCoverAsks === 2,
     size + ": the new track's cover did not arrive once the track had settled: " + window.__wowMusicCoverAsks + " " + musicButton.outerHTML.slice(0, 200));
   // The balance slider: game at one end, Apple Music at the other, both full in the middle.

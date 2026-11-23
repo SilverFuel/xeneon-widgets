@@ -681,9 +681,11 @@ test("the one balance slider serves Apple Music or Discord, with a choice only w
 });
 
 test("a track's cover is not asked for while the track is changing", () => {
-  assert.equal(coverDue("", "Song|Artist|Album"), true, "the first track seen is asked for at once");
-  assert.equal(coverDue("Song|Artist|Album", "Next|Artist|Album"), false, "a track that has just changed is left alone");
-  assert.equal(coverDue("Next|Artist|Album", "Next|Artist|Album"), true, "the next reading still shows it: ask");
-  assert.equal(coverDue("", "||"), false, "nothing is playing");
-  assert.equal(coverDue("", ""), false);
+  const key = "Song|Artist|Album";
+  assert.equal(coverDue(key, true, 0), true, "the first track seen is asked for at once");
+  assert.equal(coverDue(key, false, 0), false, "a track that has just replaced another is left alone");
+  assert.equal(coverDue(key, false, 2999), false, "and still is just short of three seconds");
+  assert.equal(coverDue(key, false, 3000), true, "once it has played for three seconds: ask");
+  assert.equal(coverDue("||", true, 9000), false, "nothing is playing");
+  assert.equal(coverDue("", true, 9000), false);
 });

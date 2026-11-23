@@ -277,9 +277,10 @@
 
   // Whether to ask for a track's cover on this reading. Reading the cover reaches into Apple
   // Music itself, so it is left alone while a track is changing: the first track seen is asked
-  // for at once, a new one only when the next reading still shows it.
-  function coverDue(previousKey, key) {
-    return Boolean(key) && key !== "||" && (!previousKey || previousKey === key);
+  // for at once, a track that replaced another only once it has been playing for three seconds.
+  var COVER_SETTLE_MS = 3000;
+  function coverDue(key, firstTrack, shownForMs) {
+    return Boolean(key) && key !== "||" && (firstTrack === true || shownForMs >= COVER_SETTLE_MS);
   }
 
   // What the music button shows, from the host's reading of Apple Music's own playback.
@@ -424,8 +425,9 @@
     var musicMisses = 0;
     // The cover for the track named by `key`. `tries` stops a track with no cover being asked about forever.
     var musicArt = { key: "", url: "", tries: 0 };
-    // The track on the reading before this one; empty until Apple Music has been read once.
-    var musicSeenKey = "";
+    // The track last read, when it was first seen, and whether it was the first one seen
+    // since the panel opened or Apple Music came back.
+    var musicSeen = { key: "", at: 0, first: true };
     // The game's balance against Apple Music and against Discord, read from the host. The
     // one slider shows the wanted one; with neither it is hidden.
     var blends = { music: null, chat: null };
@@ -779,11 +781,12 @@
         music = musicStatus(payload);
         renderMusic();
         renderSkip();
-        if (music && coverDue(musicSeenKey, music.key)) loadMusicArt(music.key);
-        musicSeenKey = music ? music.key : "";
+        if (!music) { musicSeen = { key: "", at: 0, first: true }; return; }
+        if (music.key !== musicSeen.key) musicSeen = { key: music.key, at: Date.now(), first: !musicSeen.key };
+        if (coverDue(music.key, musicSeen.first, Date.now() - musicSeen.at)) loadMusicArt(music.key);
       }, function () {
         musicMisses += 1;
-        if (!disposed && requestId === musicRequestId && musicMisses >= 2) { music = null; musicSeenKey = ""; renderMusic(); renderSkip(); }
+        if (!disposed && requestId === musicRequestId && musicMisses >= 2) { music = null; musicSeen = { key: "", at: 0, first: true }; renderMusic(); renderSkip(); }
       });
     }
 
