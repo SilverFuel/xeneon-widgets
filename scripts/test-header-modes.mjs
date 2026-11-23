@@ -12,6 +12,7 @@ function between(start, end) {
 }
 const source = between("normalizeThemeVariantPreference", "getProductTheme")
   + between("resolveThemeVariant", "isLiveGameThemeActive")
+  + between("sceneContext", "scheduleGameActivityLoop")
   + between("activateScene", "resumeSceneAutomation");
 
 function harness(preference, nativeVariant) {
@@ -20,6 +21,7 @@ function harness(preference, nativeVariant) {
   const scenes = { activeSceneId: "scene-work", activeScene: { id: "scene-work", name: "Work" }, themeVariant: nativeVariant, automationEnabled: true, automaticSwitchingActive: true, manualOverrideActive: false };
   const context = {
     bridgeOrigin: "http://example.invalid", bridgeConfig: { scenes },
+    gameActivity: null, gameForAutoOpen: payload => payload, lastSceneMediaPlaying: false,
     getSetting: key => settings[key],
     saveDashboardSettings(values) { writes.push({ ...values }); Object.assign(settings, values); },
     renderQuickDrawer() {}, showTouchFeedback: value => feedback.push(value),
@@ -61,10 +63,34 @@ test("Base Mode activation retains the existing native request and presentation 
   const h = harness("auto", "standard");
   await h.context.activateScene("scene-gaming");
   assert.equal(h.requests.length, 1);
-  assert.deepEqual({ ...h.requests[0].body }, { sceneId: "scene-gaming", manualOverrideMinutes: 120 });
+  const { sampledAt, ...sent } = h.requests[0].body;
+  assert.equal(h.requests[0].url.endsWith("/api/scenes/remember"), true, "a hand-picked Profile is remembered, not held on a timer");
+  assert.deepEqual(sent, { activeGame: "", activeGameKey: "", foregroundProcess: "", mediaPlaying: false, sceneId: "scene-gaming" });
+  assert.equal(typeof sampledAt, "string");
   assert.equal(h.context.bridgeConfig.scenes.activeSceneId, "scene-gaming");
   assert.equal(h.presentations.length, 1);
   assert.equal(h.writes.length, 0);
+});
+
+test("A Profile picked during a game is sent with that game, and the toast says what it is remembered for", async () => {
+  const h = harness("auto", "standard");
+  h.context.gameActivity = { name: "Battlefield 6", gameKey: "steam:2807960", processName: "bf6" };
+  h.context.postJson = (url, body) => { h.requests.push({ url, body }); return Promise.resolve({ ...h.scenes, activeSceneId: body.sceneId, activeScene: { id: body.sceneId, name: "Media" }, lastActivationReason: "Remembered for this game" }); };
+  await h.context.activateScene("scene-media");
+  const { sampledAt, ...sent } = h.requests[0].body;
+  assert.deepEqual(sent, { activeGame: "Battlefield 6", activeGameKey: "steam:2807960", foregroundProcess: "bf6", mediaPlaying: false, sceneId: "scene-media" });
+  assert.equal(h.feedback.at(-1), "Media for Battlefield 6 from now on");
+
+  h.context.gameActivity = null;
+  h.context.postJson = (url, body) => Promise.resolve({ ...h.scenes, activeSceneId: body.sceneId, activeScene: { id: body.sceneId, name: "Gaming" }, lastActivationReason: "Everyday Profile chosen" });
+  await h.context.activateScene("scene-gaming");
+  assert.equal(h.feedback.at(-1), "Gaming is now your everyday Profile");
+
+  h.context.lastSceneMediaPlaying = true;
+  h.context.postJson = (url, body) => { h.requests.push({ url, body }); return Promise.resolve({ ...h.scenes, activeSceneId: body.sceneId, activeScene: { id: body.sceneId, name: "Work" }, lastActivationReason: "Remembered for this media rule" }); };
+  await h.context.activateScene("scene-work");
+  assert.equal(h.requests.at(-1).body.mediaPlaying, true);
+  assert.equal(h.feedback.at(-1), "Work while music plays from now on");
 });
 
 test("Mode editing preserves personal appearance when the active profile did not change", () => {
@@ -87,34 +113,42 @@ function pickerHarness() {
     choose(value) { this.value = value; for (const handler of this.handlers) handler(); }
   };
   const calls = [], feedback = [];
-  let resolve, reject;
+  let resolve, reject, stateText = "";
   const pending = new Promise((yes, no) => { resolve = yes; reject = no; });
   const context = {
     document: { getElementById: () => node }, bridgeReachable: true, modeActivationPending: false,
-    bridgeConfig: { scenes: { activeSceneId: "scene-work", automaticSwitchingActive: false,
+    gameActivity: null, gameForAutoOpen: payload => payload,
+    bridgeConfig: { scenes: { activeSceneId: "scene-work", defaultSceneId: "scene-work", automaticSwitchingActive: true,
       profiles: [{ id: "scene-work", name: "Work" }, { id: "scene-gaming", name: "Gaming" }, { id: "custom-focus", name: "My focus" }, { id: "scene-night", name: "Night", themeVariant: "night" }] } },
     escapeHtml: value => String(value), patchDashboardDom: (node, html) => { node.html = html; },
-    setText() {}, markDashboardInteractionIdleSoon() {}, isTouchLockEnabled: () => context.locked,
+    setText(id, value) { if (id === "dashboard-mode-state") stateText = value; }, markDashboardInteractionIdleSoon() {}, isTouchLockEnabled: () => context.locked,
     activateScene(id) { calls.push(id); return pending; },
-    resumeSceneAutomation() { calls.push("automatic"); return pending; },
     showTouchFeedback: text => feedback.push(text)
   };
   runInNewContext(between("renderHeaderModes", "renderQuickDrawer"), context);
   context.renderHeaderModes(); context.bindHeaderModeControl();
-  return { context, node, calls, feedback, resolve, reject };
+  return { context, node, calls, feedback, resolve, reject, state: () => stateText };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-test("One labeled selector exposes custom Modes and automatic switching; Night stays in Quick controls", () => {
+test("One labeled selector lists the Profiles and says what the current one is for; Night stays in Quick controls", () => {
   const h = pickerHarness();
   assert.match(h.node.html, /value="custom-focus"/);
-  assert.match(h.node.html, /value="automatic"/);
+  assert.doesNotMatch(h.node.html, /value="automatic"/, "there is no manual mode to leave, so no Automatic choice");
   assert.doesNotMatch(h.node.html, /value="scene-night"/);
   assert.equal(h.node.value, "scene-work");
-  h.context.bridgeConfig.scenes.automaticSwitchingActive = true;
+  assert.equal(h.state(), "Everyday");
+  h.context.gameActivity = { name: "Battlefield 6", gameKey: "steam:2807960" };
   h.context.renderHeaderModes();
-  assert.equal(h.node.value, "automatic");
-  assert.match(h.node.html, /Automatic \(Work\)/);
+  assert.equal(h.state(), "For Battlefield 6");
+  h.context.gameActivity = null;
+  h.context.bridgeConfig.scenes.lastActivationReason = "Automatic media rule";
+  h.context.renderHeaderModes();
+  assert.equal(h.state(), "While music plays");
+  h.context.bridgeConfig.scenes.lastActivationReason = "";
+  h.context.bridgeConfig.scenes.activeSceneId = "scene-gaming";
+  h.context.renderHeaderModes();
+  assert.equal(h.state(), "Automatic");
 });
 
 test("Mode picker blocks duplicate changes and restores the confirmed value after a failed request", async () => {
@@ -132,14 +166,17 @@ test("Mode picker blocks duplicate changes and restores the confirmed value afte
   assert.deepEqual(h.feedback, ["Mode unavailable"]);
 });
 
-test("Mode picker can resume automation and retains the confirmed active Mode", async () => {
+test("Profile picker shows the confirmed Profile once the choice is remembered", async () => {
   const h = pickerHarness();
-  h.node.choose("automatic");
-  assert.deepEqual(h.calls, ["automatic"]);
-  h.context.bridgeConfig.scenes.automaticSwitchingActive = true;
+  h.node.choose("scene-gaming");
+  assert.deepEqual(h.calls, ["scene-gaming"]);
+  assert.equal(h.state(), "Applying");
+  h.context.bridgeConfig.scenes.activeSceneId = "scene-gaming";
+  h.context.bridgeConfig.scenes.defaultSceneId = "scene-gaming";
   h.resolve(); await settle();
-  assert.equal(h.node.value, "automatic");
+  assert.equal(h.node.value, "scene-gaming");
   assert.equal(h.node.disabled, false);
+  assert.equal(h.state(), "Everyday");
 });
 
 test("Mode picker rejects Night, unknown IDs, locked input, and offline input", () => {

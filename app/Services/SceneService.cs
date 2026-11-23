@@ -44,6 +44,106 @@ public sealed class SceneService
         return GetSnapshot();
     }
 
+    internal const string RememberedRulePrefix = "remember-";
+
+    // A hand-picked Profile is remembered for what the PC is doing at that moment: the game that is
+    // running; failing that, whatever rule is deciding the Profile (music playing, an app in front);
+    // and with nothing deciding it, as the everyday Profile. Nothing is held on a timer, and automatic
+    // switching stays on, so the next game still gets its own Profile.
+    public object Remember(SceneRememberRequest request)
+    {
+        var requestedId = request.SceneId?.Trim() ?? "";
+        var context = new SceneEvaluationRequest
+        {
+            ForegroundProcess = request.ForegroundProcess,
+            ActiveGame = request.ActiveGame,
+            ActiveGameKey = request.ActiveGameKey,
+            MediaPlaying = request.MediaPlaying,
+            SampledAt = request.SampledAt
+        };
+        var sampledAt = DateTimeOffset.TryParse(request.SampledAt, out var parsed) ? parsed : DateTimeOffset.Now;
+        _configStore.Update(config =>
+        {
+            var target = config.Scenes.Profiles.FirstOrDefault(scene =>
+                    string.Equals(scene.Id, requestedId, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Profile not found.");
+            config.Scenes.LastActivationReason = RememberChoice(config.Scenes, target, context, sampledAt);
+            config.Scenes.ActiveSceneId = target.Id;
+            config.Scenes.ManualOverrideUntil = "";
+            config.Scenes.AutomationEnabled = true;
+            return config;
+        });
+        return GetSnapshot();
+    }
+
+    internal static string RememberChoice(SceneCollectionConfig scenes, SceneProfile target, SceneEvaluationRequest context, DateTimeOffset sampledAt)
+    {
+        var gameKey = (context.ActiveGameKey ?? "").Trim().ToLowerInvariant();
+        var gameName = (context.ActiveGame ?? "").Trim();
+        var hasGame = gameKey.Length > 0 || gameName.Length > 0;
+        var winner = WinningRule(scenes, context, sampledAt);
+
+        SceneRule condition;
+        if (hasGame)
+        {
+            condition = new SceneRule { Type = "game", Value = gameKey.Length > 0 ? gameKey : gameName };
+        }
+        else if (winner.Rule is not null)
+        {
+            condition = new SceneRule
+            {
+                Type = winner.Rule.Type,
+                Value = winner.Rule.Value,
+                StartTime = winner.Rule.StartTime,
+                EndTime = winner.Rule.EndTime
+            };
+        }
+        else
+        {
+            scenes.DefaultSceneId = target.Id;
+            return "Everyday Profile chosen";
+        }
+
+        // An earlier choice for the same thing is replaced, not stacked on.
+        foreach (var scene in scenes.Profiles)
+        {
+            scene.Rules.RemoveAll(rule => (rule.Id ?? "").StartsWith(RememberedRulePrefix, StringComparison.OrdinalIgnoreCase)
+                && SameCondition(rule, condition));
+        }
+
+        winner = WinningRule(scenes, context, sampledAt);
+        if (!ReferenceEquals(winner.Scene, target))
+        {
+            condition.Id = RememberedRulePrefix + Guid.NewGuid().ToString("N");
+            condition.Priority = Math.Clamp((winner.Rule?.Priority ?? GameProfilePriority - 10) + 10, 0, 1000);
+            condition.Enabled = true;
+            target.Rules.Insert(0, condition);
+            while (target.Rules.Count > 16)
+            {
+                target.Rules.RemoveAt(target.Rules.Count - 1);
+            }
+        }
+
+        return hasGame ? "Remembered for this game" : $"Remembered for this {condition.Type} rule";
+    }
+
+    private static bool SameCondition(SceneRule left, SceneRule right) =>
+        string.Equals(left.Type, right.Type, StringComparison.OrdinalIgnoreCase)
+        && string.Equals((left.Value ?? "").Trim(), (right.Value ?? "").Trim(), StringComparison.OrdinalIgnoreCase)
+        && string.Equals(left.StartTime ?? "", right.StartTime ?? "", StringComparison.Ordinal)
+        && string.Equals(left.EndTime ?? "", right.EndTime ?? "", StringComparison.Ordinal);
+
+    // The rule that decides the Profile for this context: highest priority first, then Profile name.
+    private static (SceneProfile? Scene, SceneRule? Rule) WinningRule(SceneCollectionConfig scenes, SceneEvaluationRequest context, DateTimeOffset sampledAt) =>
+        scenes.Profiles
+            .Where(scene => !string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(scene => scene.Rules.Where(rule => rule.Enabled).Select(rule => (Scene: (SceneProfile?)scene, Rule: (SceneRule?)rule)))
+            .Where(candidate => RuleMatches(candidate.Rule!, context, sampledAt))
+            .OrderByDescending(candidate => candidate.Rule!.Priority)
+            .ThenBy(candidate => candidate.Scene!.Name)
+            .FirstOrDefault();
+
     public object ResumeAutomation()
     {
         _configStore.Update(config =>
@@ -296,18 +396,12 @@ public sealed class SceneService
 
             if (!HasOverride(config.Scenes.ManualOverrideUntil, sampledAt))
             {
-                var match = config.Scenes.Profiles
-                    .Where(scene => !string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase))
-                    .SelectMany(scene => scene.Rules.Where(rule => rule.Enabled).Select(rule => (Scene: scene, Rule: rule)))
-                    .Where(candidate => RuleMatches(candidate.Rule, request, sampledAt))
-                    .OrderByDescending(candidate => candidate.Rule.Priority)
-                    .ThenBy(candidate => candidate.Scene.Name)
-                    .FirstOrDefault();
+                var match = WinningRule(config.Scenes, request, sampledAt);
                 var next = match.Scene ?? config.Scenes.Profiles.First(scene =>
                     string.Equals(scene.Id, config.Scenes.DefaultSceneId, StringComparison.OrdinalIgnoreCase)
                     && !string.Equals(scene.ThemeVariant, "night", StringComparison.OrdinalIgnoreCase));
                 config.Scenes.ActiveSceneId = next.Id;
-                config.Scenes.LastActivationReason = match.Scene is null ? "Default mode" : $"Automatic {match.Rule.Type} rule";
+                config.Scenes.LastActivationReason = match.Scene is null ? "Default mode" : $"Automatic {match.Rule!.Type} rule";
             }
 
             if (!HasOverride(config.Scenes.VariantOverrideUntil, sampledAt))

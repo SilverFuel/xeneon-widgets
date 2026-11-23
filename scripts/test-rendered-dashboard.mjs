@@ -1473,7 +1473,7 @@ async function validateProductSurfaceSemantics(cdp) {
   })()`);
   assert(modes.expectedIds.length > 0 && modes.buttonCount === modes.expectedIds.length
     && [...modes.duplicateIds].sort().join("|") === [...modes.expectedIds].sort().join("|")
-    && modes.headerOptions.includes("automatic") && modes.expectedIds.every(id => modes.headerOptions.includes(id))
+    && !modes.headerOptions.includes("automatic") && modes.expectedIds.every(id => modes.headerOptions.includes(id))
     && modes.retiredActivationCount === 0, `Mode controls did not render: ${JSON.stringify(modes)}`);
   assert(modes.labels.every(Boolean), `Modes exposed unnamed actions: ${JSON.stringify(modes.labels)}`);
   assert(new Set(modes.labels).size === modes.labels.length, `Mode action names are ambiguous: ${JSON.stringify(modes.labels)}`);
@@ -3540,9 +3540,9 @@ async function validateLegacyLayoutPreservation(cdp) {
     const responseGate = new Promise(resolve => { release = resolve; });
     window.fetch = async (input, init) => {
       const url = new URL(typeof input === 'string' ? input : input.url, location.href);
-      if (url.pathname === '/api/scenes/activate') {
+      if (url.pathname === '/api/scenes/remember') {
         const payload = JSON.parse(init.body);
-        check(payload.manualOverrideMinutes === 120, 'Header Mode override duration changed');
+        check(!('manualOverrideMinutes' in payload) && 'activeGameKey' in payload && 'mediaPlaying' in payload, 'Header Profile choice was not sent to be remembered with what the PC is doing');
         if (payload.sceneId === 'scene-night') {
           nightCalls += 1;
           // This endpoint must not be called by the local display toggle.
@@ -3552,7 +3552,7 @@ async function validateLegacyLayoutPreservation(cdp) {
         check(payload.sceneId === 'scene-gaming', 'Header Mode request changed');
         await responseGate;
         const activeScene = scenes.profiles.find(scene => scene.id === payload.sceneId);
-        scenes = { ...scenes, activeSceneId: payload.sceneId, activeScene, manualOverrideActive: true, automaticSwitchingActive: false };
+        scenes = { ...scenes, activeSceneId: payload.sceneId, activeScene, defaultSceneId: payload.sceneId, manualOverrideActive: false, automaticSwitchingActive: true, lastActivationReason: 'Everyday Profile chosen' };
         authority.scenes = scenes;
         return new Response(JSON.stringify(scenes), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
@@ -3570,7 +3570,7 @@ async function validateLegacyLayoutPreservation(cdp) {
       while (Date.now() < modeDeadline && gaming.getAttribute('aria-disabled') === 'true') await wait(25);
       check(gaming.value === 'scene-gaming' && gaming.isConnected && document.activeElement === gaming, 'Mode activation lost selection or focused control');
       check(document.body.dataset.section === 'pc' && document.body.dataset.activeWidgetId === 'network', 'Mode activation displaced the selected panel');
-      check(/Manual/.test(document.getElementById('dashboard-mode-state').textContent), 'Header Mode did not identify manual activation');
+      check(/Everyday/.test(document.getElementById('dashboard-mode-state').textContent), 'Header Profile did not say what the choice is remembered for: ' + document.getElementById('dashboard-mode-state').textContent);
       const baseModeSnapshot = JSON.stringify(scenes);
       for (const variant of ['night', 'standard']) {
         await frames();

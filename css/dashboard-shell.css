@@ -396,8 +396,6 @@ body:is(.dashboard-native-page--motion-off, .dashboard-native-page--motion-low) 
     cursor: pointer;
   }
 
-  /* Automatic is the way back to hands-off switching, so it leads and spans the panel. */
-  .auxora-mode-select option[value="automatic"] { grid-column: 1 / -1; }
   /* The placeholder shown while Profiles load is not a choice. */
   .auxora-mode-select option[value=""] { display: none; }
 

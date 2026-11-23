@@ -857,7 +857,7 @@
       if (reason.indexOf("automatic") !== -1) {
         return "Changed automatically";
       }
-      if (reason.indexOf("manual") !== -1) {
+      if (reason.indexOf("manual") !== -1 || reason.indexOf("remembered") !== -1 || reason.indexOf("everyday") !== -1) {
         return "Changed by you";
       }
       return "Your normal setup";
@@ -1155,7 +1155,7 @@
             return '<option value="' + escapeHtml(scene.id) + '"' + (assignment && assignment.sceneId === scene.id ? " selected" : "") + '>' + escapeHtml(scene.name) + '</option>';
           }).join("") + '</select></label>';
         }).join("") + '</div></article>' : '') +
-        '<p class="inline-copy">' + (state.payload && state.payload.automaticSwitchingActive ? "Automatic switching is on" : "Choose Automatic in the Profile selector to resume automatic switching.") + '</p>'
+        '<p class="inline-copy">Pick a Profile in the header to use it for what you are doing now. Auxora remembers it: for the game that is running, or as your everyday Profile when none is.</p>'
       ));
       initXnSlider(container);
     }

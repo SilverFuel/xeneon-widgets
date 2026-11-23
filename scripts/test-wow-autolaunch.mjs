@@ -542,14 +542,14 @@ test("creating a game's Profile sends its key, then switches to it at once", asy
   assert.equal(JSON.stringify(requests).includes("\\\\"), false, "no path is sent");
 });
 
-test("a manual Profile choice is respected: the new Profile waits for automatic switching", async () => {
+test("a Profile that does not take over at once says how to use it", async () => {
   const { context, toasts, applied } = gameProfileHarness({ activeSceneId: "scene-work", manualOverride: true });
   context.gameActivity = activity({ name: "Hades", gameKey: "steam:1145360" });
 
   assert.equal(await context.createGameProfile(), "");
   assert.equal(context.bridgeConfig.scenes.activeSceneId, "scene-work");
   assert.deepEqual(applied, []);
-  assert.deepEqual(toasts, ["Profile created. Choose Automatic in the Profile selector to use it."]);
+  assert.deepEqual(toasts, ["Profile created. Pick it in the Profile selector to use it for this game."]);
 });
 
 test("a failed or pointless request creates nothing and says why", async () => {

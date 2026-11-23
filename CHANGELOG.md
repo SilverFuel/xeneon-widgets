@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Picking a Profile no longer starts a two-hour manual hold. Auxora remembers the choice for what the PC is doing at that moment: the game that is running, the music that is playing, or, with neither, as the everyday Profile. Automatic switching never turns off, so there is no Automatic choice in the picker and nothing to switch back. The line under "Profile" says what the current one is for.
 - Less work in the background.
   - The moving background stops drawing while a game is running, whenever it is hidden (Night, the game and battery budgets, motion off, clean readability), and a minute after the last touch or key. It used to draw fifteen frames a second in all of those cases.
   - Game detection reads each program's path with one cheap system call instead of listing all its modules. The slow WMI scan it fell back to every 30 seconds now runs at most every five minutes.

@@ -155,6 +155,7 @@
   var recoveryAvailabilityChecked = false;
   var lastSceneEvaluationAt = 0;
   var lastSceneEvaluationGame = "";
+  var lastSceneMediaPlaying = false;
   var nowStripTimerId = 0;
   var nowStripMode = "auto";
   var nowStripRenderSignature = "";
@@ -1914,13 +1915,8 @@
     lastSceneEvaluationAt = now;
     lastSceneEvaluationGame = evaluatedGame;
     return fetchJson(buildUrl(bridgeOrigin, "/api/media"), 2600).catch(function () { return {}; }).then(function (media) {
-      return postJson(buildUrl(bridgeOrigin, "/api/scenes/evaluate"), {
-        activeGame: activeGame ? (activeGame.name || activeGame.processName || activeGame.id || "Game") : "",
-        activeGameKey: activeGame ? String(activeGame.gameKey || "") : "",
-        foregroundProcess: activeGame ? (activeGame.processName || "") : "",
-        mediaPlaying: Boolean(media && (media.playing || String(media.playbackStatus || media.status || "").toLowerCase() === "playing")),
-        sampledAt: new Date().toISOString()
-      }, 5000);
+      lastSceneMediaPlaying = Boolean(media && (media.playing || String(media.playbackStatus || media.status || "").toLowerCase() === "playing"));
+      return postJson(buildUrl(bridgeOrigin, "/api/scenes/evaluate"), sceneContext(activeGame), 5000);
     }).then(function (payload) {
       var previousId = bridgeConfig.scenes && bridgeConfig.scenes.activeSceneId;
       bridgeConfig.scenes = payload;
@@ -1932,6 +1928,17 @@
     }).catch(function (error) {
       console.warn("Scene evaluation failed", error);
     });
+  }
+
+  // What the PC is doing, as the host's Profile rules see it. Media is as of the last evaluation.
+  function sceneContext(activeGame) {
+    return {
+      activeGame: activeGame ? (activeGame.name || activeGame.processName || activeGame.id || "Game") : "",
+      activeGameKey: activeGame ? String(activeGame.gameKey || "") : "",
+      foregroundProcess: activeGame ? (activeGame.processName || "") : "",
+      mediaPlaying: lastSceneMediaPlaying,
+      sampledAt: new Date().toISOString()
+    };
   }
 
   function scheduleGameActivityLoop() {
@@ -3313,12 +3320,15 @@
       if (created && active && created.id === active.id) {
         return String(active.name || "");
       }
-      showTouchFeedback("Profile created. Choose Automatic in the Profile selector to use it.");
+      showTouchFeedback("Profile created. Pick it in the Profile selector to use it for this game.");
       return "";
     });
   }
 
-  function activateScene(sceneId, manualOverrideMinutes) {
+  // Choosing a Profile by hand does not hold it on a timer. The host remembers the choice for what the
+  // PC is doing right now: this game, or the music that is playing, or, with neither, as the everyday
+  // Profile. Automatic switching stays on throughout.
+  function activateScene(sceneId) {
     if (sceneId === "scene-night") {
       // Toggle the displayed variant, including a local Appearance override.
       // Night layers over the base Mode and leaves its native automation intact.
@@ -3328,13 +3338,18 @@
       showTouchFeedback("Night display " + (variant === "night" ? "on" : "off"));
       return Promise.resolve();
     }
-    return postJson(buildUrl(bridgeOrigin, "/api/scenes/activate"), {
-      sceneId: sceneId,
-      manualOverrideMinutes: manualOverrideMinutes == null ? 120 : manualOverrideMinutes
-    }, 7000).then(function (payload) {
+    var game = gameForAutoOpen(gameActivity);
+    var request = sceneContext(game);
+    request.sceneId = sceneId;
+    return postJson(buildUrl(bridgeOrigin, "/api/scenes/remember"), request, 7000).then(function (payload) {
+      var name = payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Profile";
+      var reason = String(payload.lastActivationReason || "");
       applySceneSnapshot(payload);
       renderQuickDrawer();
-      showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Profile") + " active");
+      showTouchFeedback(/this game/i.test(reason) ? name + " for " + (game && game.name ? game.name : "this game") + " from now on"
+        : /media rule/i.test(reason) ? name + " while music plays from now on"
+        : /everyday/i.test(reason) ? name + " is now your everyday Profile"
+        : name + " active");
       return payload;
     });
   }
@@ -3366,12 +3381,10 @@
       return profile && typeof profile.id === "string" && profile.id !== "scene-night" && profile.themeVariant !== "night";
     });
     var active = profiles.filter(function (scene) { return scene && scene.id === sceneConfig.activeSceneId; })[0];
-    var automatic = sceneConfig.automaticSwitchingActive === true || (sceneConfig.automationEnabled !== false && sceneConfig.manualOverrideActive === false);
     var available = bridgeReachable === true && profiles.length > 0;
-    var selected = automatic ? "automatic" : active ? active.id : "";
+    var selected = active ? active.id : "";
     if (modeActivationPending) { selected = node.getAttribute("data-pending-mode") || selected; }
-    var html = '<option value="automatic" data-ui-key="mode-automatic">Automatic' + (automatic && active ? ' (' + escapeHtml(active.name) + ')' : ': follows your games') + '</option>';
-    if (!available || !selected) { html = '<option value="">' + (bridgeReachable === true ? 'Choose a Profile' : 'Profiles unavailable') + '</option>' + html; }
+    var html = !available || !selected ? '<option value="">' + (bridgeReachable === true ? 'Choose a Profile' : 'Profiles unavailable') + '</option>' : '';
     html += profiles.map(function (profile) {
       return '<option value="' + escapeHtml(profile.id) + '" data-ui-key="mode-' + escapeHtml(profile.id) + '">' + escapeHtml(profile.name || profile.id) + '</option>';
     }).join("");
@@ -3380,7 +3393,12 @@
     node.disabled = !available;
     node.setAttribute("aria-disabled", !available || modeActivationPending ? "true" : "false");
     node.setAttribute("aria-busy", modeActivationPending ? "true" : "false");
-    setText("dashboard-mode-state", modeActivationPending ? "Applying" : !available ? "Unavailable" : automatic ? "Automatic" : "Manual");
+    // The line under "Profile" says what the current one is for, so it is clear what a new choice will change.
+    var game = gameForAutoOpen(gameActivity);
+    setText("dashboard-mode-state", modeActivationPending ? "Applying" : !available ? "Unavailable"
+      : game ? "For " + (game.name || "this game")
+      : /media rule/i.test(String(sceneConfig.lastActivationReason || "")) ? "While music plays"
+      : active && active.id === sceneConfig.defaultSceneId ? "Everyday" : "Automatic");
   }
 
   function bindHeaderModeControl() {
@@ -3391,15 +3409,14 @@
       if (modeActivationPending) { renderHeaderModes(); return; }
       var id = node.value;
       var sceneConfig = bridgeConfig && bridgeConfig.scenes ? bridgeConfig.scenes : {};
-      var valid = id === "automatic" || (sceneConfig.profiles || []).some(function (profile) {
+      var valid = (sceneConfig.profiles || []).some(function (profile) {
         return profile && profile.id === id && profile.id !== "scene-night" && profile.themeVariant !== "night";
       });
       if (!valid) { renderHeaderModes(); return; }
       modeActivationPending = true;
       node.setAttribute("data-pending-mode", id);
       renderHeaderModes();
-      var action = id === "automatic" ? resumeSceneAutomation() : activateScene(id);
-      action.catch(function (error) {
+      activateScene(id).catch(function (error) {
         showTouchFeedback(error.message || "Profile change failed");
       }).finally(function () { modeActivationPending = false; node.removeAttribute("data-pending-mode"); renderHeaderModes(); markDashboardInteractionIdleSoon(); });
     });
