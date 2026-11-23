@@ -1793,3 +1793,58 @@
     0 0 0 4px color-mix(in srgb, var(--audio-accent) 16%, transparent),
     0 4px 12px rgba(0, 0, 0, 0.42);
 }
+
+/* EDGE-size screen with no equalizer installed.
+   The equalizer's setup card took a third of the panel to say "not installed". Here it is a short
+   strip under the output card, and the playing track and app volumes get the width instead. */
+@media (min-width: 2000px) and (min-height: 663px) and (max-height: 760px) {
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) {
+    grid-template-columns: minmax(380px, 0.56fr) minmax(0, 2fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "output playback"
+      "equalizer playback";
+  }
+
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) .audio-equalizer-card.is-setup {
+    align-content: start;
+    gap: 8px;
+  }
+
+  /* The header already says what the equalizer needs; the two buttons do the rest. */
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) :is(.audio-equalizer-setup, .audio-equalizer-safety, .audio-equalizer-title) {
+    display: none;
+  }
+
+  /* Outputs are a short list, not tiles stretched to fill the card. */
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) .audio-route-strip {
+    align-content: start;
+    grid-auto-rows: minmax(64px, max-content);
+  }
+
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) .audio-playback-card .audio-media-now {
+    grid-template-columns: minmax(430px, 0.62fr) minmax(0, 1.38fr);
+  }
+
+  /* Room for four apps: two columns of volume rows. */
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) .audio-playback-card .audio-session-stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) .audio-playback-card .audio-session-more {
+    grid-column: 1 / -1;
+  }
+
+  /* With nothing playing, the notice is one short strip so four apps fit beneath it. */
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) .audio-playback-grid--mixer-only .audio-playback-sessions {
+    grid-template-rows: max-content max-content minmax(0, 1fr);
+  }
+
+  .audio-command-grid:has(.audio-equalizer-card.is-setup) .audio-playback-grid--mixer-only .audio-media-idle {
+    align-self: start;
+    padding-block: 10px;
+  }
+}

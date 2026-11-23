@@ -486,7 +486,11 @@
     }).slice(0, 4);
     var activeSessions = data.sessions.filter(isUsefulAudioSession);
     var hasMediaSession = hasLiveMediaSession(media);
-    var visibleSessions = activeSessions.slice(0, 2);
+    // On an EDGE-size screen with no equalizer installed, app volumes get two columns, so four fit.
+    var wideMixer = !(state.equalizer && state.equalizer.installed) && typeof document !== "undefined" && !!document.body
+      && document.body.classList.contains("dashboard-native-page--layout-ultrawide")
+      && typeof window !== "undefined" && window.innerWidth >= 2000 && window.innerHeight >= 663 && window.innerHeight <= 760;
+    var visibleSessions = activeSessions.slice(0, wideMixer ? 4 : 2);
     var playbackLabel = getMediaPlaybackLabel(media);
     var progressPercent = getMediaProgressPercent(media);
     var primaryAction = getMediaPrimaryAction(media);
