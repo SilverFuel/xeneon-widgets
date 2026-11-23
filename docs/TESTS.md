@@ -27,7 +27,7 @@ Two commands:
 | Step | Script | Kind | What it protects |
 |---|---|---|---|
 | `check:js` | `check-js.mjs` | Syntax | Every file in `js/`, `bridge/` and the Electron host parses. |
-| `test:wow-forever` | `test-wow-forever.mjs` | Behaviour (one test extracted by name) | WoW journal: validation, backup import, session timer, undo. |
+| `test:wow-forever` | `test-wow-forever.mjs` | Behaviour (one test extracted by name) | WoW journal: validation, backup import, session timer, undo, and how a long quest log from the game is split into views. |
 | | `test-wow-autolaunch.mjs` | Behaviour, extracted by name | A game opens its Profile's home panel once per session: the Forever client gets the WoW journal, any other game the Game HUD, and never by name, path or launcher. The panel before the game returns when it exits. Profiles are evaluated at once when the game changes. |
 | `test:tmog` | `test-tmog-companion.mjs` | Behaviour | TMOG telemetry: stale, missing and paused readings are never shown as live. |
 | `test:constellation-theme` | `test-constellation-theme.mjs` | Behaviour, extracted by name | Every theme in `js/themes.js`, in both runtimes: the theme applies its own colours; text, accent text, filled controls and status reach 4.5:1 in standard, Night and high contrast, with preset and custom accents; Focus, Gaming and Warm keep the exact colours they shipped with; adding a theme takes one table entry. |
@@ -52,7 +52,7 @@ Two commands:
 | `test:bridge-api` | `test-bridge-api.mjs` | Behaviour | The legacy bridge's local API. |
 | `test:theme-rendered` | `test-theme-rendered.mjs` | Rendered | Focus, Gaming and Warm in a real browser at four sizes: contrast, focus rings, forced colors, reduced motion, 44px targets, legacy theme migration, the 16-swatch picker. Every other theme once in standard and Night. |
 | `test:standalone-theme-rendered` | `test-standalone-theme-rendered.mjs` | Rendered | The same for the 19 standalone pages, plus every added theme on one widget page. Runs on any OS with Chrome or Edge. |
-| `test:rendered-dashboard` | `test-rendered-dashboard.mjs` | Rendered | The whole dashboard: every panel, geometry at ten sizes, 44px targets, accessible names, Touch Lock, backup and restore, layout migration, repeated cold boots. |
+| `test:rendered-dashboard` | `test-rendered-dashboard.mjs` | Rendered | The whole dashboard: every panel, geometry at ten sizes, 44px targets, accessible names, Touch Lock, backup and restore, layout migration, repeated cold boots. A 28-quest log from the game stays on one screen at 2560x720 and 2048x720 and scrolls inside its card. |
 
 ## Release set: added by `npm run check:release`
 

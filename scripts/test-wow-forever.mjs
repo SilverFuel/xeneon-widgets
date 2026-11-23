@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -237,6 +237,7 @@ function journalHarness({ saved = null, failWrites = false } = {}) {
       if (selector === ".wow-recovery" && !container.innerHTML.includes('class="wow-recovery wow-card"')) return null;
       if (!nodes.has(selector)) nodes.set(selector, {
         innerHTML: "", textContent: "", hidden: true, dataset: {}, value: "",
+        classList: { toggle() {} },
         setAttribute() {}, focus() {}, click() {},
         remove() { container.innerHTML = container.innerHTML.replace('class="wow-recovery wow-card"', 'class="removed-recovery"'); }
       });
@@ -441,4 +442,66 @@ test("a reply with the wrong types cannot break or mislead the panel", () => {
   }));
   assert.equal(many.quests.length, 40);
   assert.equal(many.quests[0].objectives.length, 8);
+});
+
+// A long quest log, as the game saved it for a level 18 character standing in Hillsbrad Foothills.
+function longQuestLog(zone = "Hillsbrad Foothills") {
+  const quest = (title, questZone, complete = false) => ({ title, zone: questZone, level: 20, complete, objectives: [] });
+  return {
+    zone,
+    quests: [
+      quest("The Rescue", "Hillsbrad Foothills"), quest("WANTED: Syndicate Personnel", "Hillsbrad Foothills"),
+      quest("Lost Deathstalkers", "Silverpine Forest", true), quest("The Weaver", "Silverpine Forest"),
+      quest("Plainstrider Menace", "The Barrens"), quest("Samophlange", "The Barrens", true), quest("Raptor Horns", "The Barrens"),
+      quest("A Lesson in Divinity", "", true)
+    ]
+  };
+}
+
+test("a long quest log is offered as short views, starting with the zone the character is in", () => {
+  const views = questViews(longQuestLog());
+  assert.deepEqual(views.map(view => [view.id, view.label, view.count]), [
+    ["zone:Hillsbrad Foothills", "Hillsbrad Foothills", 2],
+    ["ready", "Ready to turn in", 3],
+    ["zone:Silverpine Forest", "Silverpine Forest", 2],
+    ["zone:The Barrens", "The Barrens", 3],
+    ["zone:Other", "Other", 1],
+    ["all", "All", 8]
+  ]);
+  assert.equal(views[0].here, true);
+  assert.equal(views.reduce((sum, view) => sum + (view.id.startsWith("zone:") ? view.count : 0), 0), 8, "every quest is in exactly one zone view");
+});
+
+test("the default view follows the character and a chosen view is kept while it exists", () => {
+  const log = longQuestLog();
+  assert.equal(questViewId(log, ""), "zone:Hillsbrad Foothills");
+  assert.equal(questViewId(log, "zone:The Barrens"), "zone:The Barrens");
+  assert.equal(questViewId(log, "all"), "all");
+  assert.equal(questViewId(log, "zone:Stranglethorn Vale"), "zone:Hillsbrad Foothills", "a zone with no quests left falls back");
+  // Standing somewhere with no quests: the quests ready to hand in come first.
+  const elsewhere = longQuestLog("Orgrimmar");
+  assert.equal(questViews(elsewhere)[0].id, "ready");
+  assert.equal(questViewId(elsewhere, ""), "ready");
+  // Nothing ready either: the first zone in the game's order.
+  const none = { zone: "Orgrimmar", quests: longQuestLog().quests.map(quest => ({ ...quest, complete: false })) };
+  assert.equal(questViewId(none, ""), "zone:Hillsbrad Foothills");
+});
+
+test("each view lists only its own quests", () => {
+  const log = longQuestLog();
+  assert.deepEqual(questsInView(log, "zone:The Barrens").map(quest => quest.title), ["Plainstrider Menace", "Samophlange", "Raptor Horns"]);
+  assert.deepEqual(questsInView(log, "ready").map(quest => quest.title), ["Lost Deathstalkers", "Samophlange", "A Lesson in Divinity"]);
+  assert.deepEqual(questsInView(log, "zone:Other").map(quest => quest.title), ["A Lesson in Divinity"]);
+  assert.equal(questsInView(log, "all").length, 8);
+  assert.deepEqual(questsInView(log, "zone:Nowhere"), []);
+});
+
+test("a short or empty quest log needs no extra views", () => {
+  const oneZone = { zone: "Durotar", quests: [{ title: "Cutting Teeth", zone: "Durotar", complete: false, objectives: [] }] };
+  assert.deepEqual(questViews(oneZone).map(view => view.id), ["zone:Durotar"]);
+  for (const empty of [null, undefined, {}, { quests: [] }, { quests: "many" }]) {
+    assert.deepEqual(questViews(empty), []);
+    assert.equal(questViewId(empty, "zone:The Barrens"), "all");
+    assert.deepEqual(questsInView(empty, "all"), []);
+  }
 });

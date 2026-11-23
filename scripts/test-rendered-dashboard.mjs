@@ -3738,6 +3738,118 @@ async function validateGameProfileSwitching(cdp) {
   }
 }
 
+// A long quest log from the game, as the companion add-on saves it. Only this reply is synthetic.
+function installWowQuestLogFixture() {
+  if (new URL(location.href).searchParams.get("wowQuestLogTest") !== "1") return;
+  const originalFetch = window.fetch;
+  const zones = [["The Barrens", 13], ["Hillsbrad Foothills", 2], ["Silverpine Forest", 4], ["Stonetalon Mountains", 2],
+    ["Shadowfang Keep", 2], ["Ruins of Lordaeron", 1], ["Wailing Caverns", 1], ["Warsong Gulch", 1], ["", 2]];
+  const quests = [];
+  zones.forEach(([zone, count]) => {
+    for (let index = 0; index < count; index += 1) {
+      quests.push({
+        title: (zone || "Class") + " errand number " + (index + 1), zone, level: 12 + index, complete: index % 5 === 4,
+        objectives: [{ text: "0/10 Syndicate Watchman slain", done: false }, { text: "0/8 Razormane Defender slain", done: false }]
+      });
+    }
+  });
+  window.fetch = function (input, options) {
+    const url = new URL(typeof input === "string" ? input : input.url || input, location.href);
+    if (url.origin === location.origin && url.pathname === "/api/wow/companion") {
+      return Promise.resolve(new Response(JSON.stringify({
+        gameFound: true, installed: true, available: true, addonVersion: "0.1.1", message: "Type /auxora in game to update.",
+        character: {
+          name: "Fixture", realm: "Realm", class: "Paladin", classToken: "PALADIN", race: "Undead", faction: "Horde", level: 18,
+          xp: 16733, xpMax: 19400, xpRested: 3000, zone: "The Barrens", subZone: "The Crossroads", home: "The Sepulcher",
+          copper: 25098, savedAt: new Date().toISOString(), questsRead: true, quests
+        }
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    }
+    return originalFetch.apply(this, arguments);
+  };
+}
+
+async function checkWowQuestLogInPage() {
+  const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+  const check = (condition, message) => { if (!condition) throw new Error(message); };
+  const panel = () => document.querySelector(".wow-adventure");
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline && !(panel() && panel().querySelectorAll("[data-wow-view]").length)) await wait(100);
+  check(panel(), "the WoW Forever panel did not render");
+  check(panel().querySelector('[data-wow-filter="game"]')?.getAttribute("aria-pressed") === "true", "the panel did not open on the game's quest log");
+  const page = document.getElementById("dashboard-inline-widget");
+  const list = panel().querySelector(".wow-quest-list");
+  const views = () => Array.from(panel().querySelectorAll("[data-wow-view]"));
+  const label = node => node.textContent.trim().replace(/\s+/g, " ");
+  const pageFits = () => page.scrollHeight <= page.clientHeight + 1;
+  // A row whose text spills out of it is drawn over the row below.
+  const overlappingRows = () => {
+    if (Array.from(list.children).some(row => row.scrollHeight > row.clientHeight + 1)) return true;
+    const rows = Array.from(list.children).map(row => row.getBoundingClientRect());
+    return rows.some((row, index) => rows.some((other, otherIndex) => otherIndex > index
+      && Math.min(row.right, other.right) - Math.max(row.left, other.left) > 1
+      && Math.min(row.bottom, other.bottom) - Math.max(row.top, other.top) > 1));
+  };
+  // The EDGE layout: a wide panel on a short screen.
+  const oneScreen = panel().getBoundingClientRect().width >= 1600 && innerHeight <= 820;
+  const size = innerWidth + "x" + innerHeight;
+
+  check(label(views()[0]) === "The Barrens 13" && views()[0].getAttribute("aria-pressed") === "true",
+    size + ": the first view is not the zone the character is in: " + views().map(label).join(", "));
+  check(label(views()[1]) === "Ready to turn in 2" && label(views()[views().length - 1]) === "All 28", size + ": views are wrong: " + views().map(label).join(", "));
+  check(list.children.length === 13 && !overlappingRows(), size + ": the zone view shows " + list.children.length + " quests, or rows overlap");
+  check(panel().querySelector(".wow-quest-form").hidden, size + ": the game's read-only log still shows the add form");
+  if (oneScreen) {
+    check(pageFits(), size + ": the panel runs off the screen with a zone view: " + page.scrollHeight + " > " + page.clientHeight);
+    const small = views().filter(view => { const rect = view.getBoundingClientRect(); return rect.width < 54 || rect.height < 54; }).map(label);
+    check(small.length === 0, size + ": view buttons below 54x54: " + small.join(", "));
+  }
+
+  views().find(view => view.dataset.wowView === "all").click();
+  await wait(250);
+  check(list.children.length === 28 && !overlappingRows(), size + ": All shows " + list.children.length + " quests, or rows overlap");
+  check(document.activeElement === views().find(view => view.dataset.wowView === "all"), size + ": focus left the chosen view");
+  let listScrolls = false;
+  if (oneScreen) {
+    check(pageFits(), size + ": the panel runs off the screen with all quests: " + page.scrollHeight + " > " + page.clientHeight);
+    listScrolls = list.scrollHeight > list.clientHeight + 1;
+    check(listScrolls, size + ": 28 quests did not need to scroll, so the fixture proves nothing");
+    list.scrollTop = list.scrollHeight;
+    await wait(100);
+    const frame = list.getBoundingClientRect();
+    const last = list.lastElementChild.getBoundingClientRect();
+    check(list.scrollTop > 0 && last.bottom <= frame.bottom + 1 && last.top >= frame.top - 1, size + ": the last quest cannot be scrolled into view inside the card");
+    const outside = Array.from(panel().querySelectorAll(".wow-card, .wow-footer")).filter(node => node.getBoundingClientRect().bottom > innerHeight + 1).map(node => node.className);
+    check(outside.length === 0, size + ": below the screen: " + outside.join(", "));
+  }
+
+  views().find(view => view.dataset.wowView === "ready").click();
+  await wait(250);
+  check(list.children.length === 2 && Array.from(list.children).every(row => row.classList.contains("is-ready")), size + ": Ready to turn in lists the wrong quests");
+  return { size, oneScreen, listScrolls, views: views().length };
+}
+
+// The game's quest log stays short: one view at a time, and on the EDGE the whole panel fits one screen.
+async function validateWowQuestLog(cdp) {
+  const fixture = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(${installWowQuestLogFixture.toString()})()` });
+  try {
+    const seen = [];
+    for (const [width, height] of [[2560, 720], [2048, 720], [1280, 720]]) {
+      await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+      await cdp.send("Page.navigate", { url: `${baseUrl}/dashboard.html?widget=wow-forever&wowQuestLogTest=1&size=${width}` });
+      await waitForCommittedUrl(cdp, `wowQuestLogTest=1&size=${width}`);
+      const evaluation = await cdp.send("Runtime.evaluate", { expression: `(${checkWowQuestLogInPage.toString()})()`, awaitPromise: true, returnByValue: true });
+      assert(!evaluation.exceptionDetails, `WoW quest log failed: ${evaluation.exceptionDetails?.exception?.description || evaluation.exceptionDetails?.text}`);
+      seen.push(evaluation.result.value);
+    }
+    assert(seen[0].oneScreen && seen[1].oneScreen && !seen[2].oneScreen && seen[0].listScrolls && seen[1].listScrolls,
+      `The one-screen layout did not apply where expected: ${JSON.stringify(seen)}`);
+    console.log("rendered WoW quest log: zone views, no overlap, one screen at 2560x720 and 2048x720, list scrolls inside its card: passed");
+  } finally {
+    await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier });
+  }
+}
+
 async function validateForcedColorsProductSurfaces(cdp) {
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 2560,
@@ -4215,6 +4327,7 @@ try {
     assert(surfaceFailures.length === 0, "Product-surface matrix failed:\n" + surfaceFailures.join("\n"));
     await validateLegacyLayoutPreservation(cdp);
     await validateGameProfileSwitching(cdp);
+    await validateWowQuestLog(cdp);
     await validateDeletableMusicCards(cdp);
     await validateForcedColorsProductSurfaces(cdp);
     await validateOptionalSetupHandoffs(cdp);
