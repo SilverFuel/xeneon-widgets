@@ -334,7 +334,7 @@ public sealed class GameActivityService
                 .Where(game => HasExistingInstallPath(game.InstallPath))
                 .ToList();
             var candidates = new List<GameActivityPayload>();
-            var runningProcesses = ReadRunningProcesses();
+            var runningProcesses = ReadRunningProcesses(out var liveProcessNames);
             var foregroundProcess = GetForegroundProcess(runningProcesses);
 
             if (steamSnapshot.ActiveGame is not null)
@@ -370,6 +370,17 @@ public sealed class GameActivityService
                 .Take(8)
                 .ToList();
             var activeGame = orderedCandidates.FirstOrDefault(candidate => candidate.Confidence >= 60);
+            if (activeGame is null && _session.StartedAt.HasValue && IsStillRunning(_lastActiveGame, liveProcessNames))
+            {
+                // The game's process is still there; only its details could not be read on this pass.
+                var held = _lastActiveGame!;
+                activeGame = held;
+                if (!orderedCandidates.Any(candidate => string.Equals(candidate.Id, held.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    orderedCandidates.Insert(0, held);
+                }
+            }
+
             var mode = ResolveMode(activeGame, foregroundProcess, sampledAt);
             var lastGame = mode == "ended" ? _lastActiveGame : null;
 
@@ -459,6 +470,26 @@ public sealed class GameActivityService
             "ended" => "Ended",
             _ => "Idle"
         };
+    }
+
+    // True when the process the last active game ran in still exists under the same name.
+    internal static bool IsStillRunning(GameActivityPayload? lastGame, IReadOnlyDictionary<int, string> liveProcessNames)
+    {
+        if (lastGame?.ProcessId is not int processId
+            || string.IsNullOrWhiteSpace(lastGame.ProcessName)
+            || !liveProcessNames.TryGetValue(processId, out var liveName))
+        {
+            return false;
+        }
+
+        return string.Equals(ProcessBaseName(lastGame.ProcessName), ProcessBaseName(liveName), StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Windows reports a process as "bf6" in one place and "bf6.exe" in another.
+    private static string ProcessBaseName(string? name)
+    {
+        var value = (name ?? "").Trim();
+        return value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? value[..^4] : value;
     }
 
     internal static GameActivityPayload SelectBestCandidate(IEnumerable<GameActivityPayload> candidates)
@@ -806,17 +837,21 @@ public sealed class GameActivityService
                 StringComparison.OrdinalIgnoreCase);
     }
 
-    private List<RunningProcessInfo> ReadRunningProcesses()
+    private List<RunningProcessInfo> ReadRunningProcesses(out Dictionary<int, string> liveProcessNames)
     {
         var results = new Dictionary<int, RunningProcessInfo>();
+        // Every process that exists, including those whose path cannot be read.
+        liveProcessNames = new Dictionary<int, string>();
         var inaccessibleProcessModules = 0;
         foreach (var process in Process.GetProcesses())
         {
             try
             {
-                var executablePath = process.MainModule?.FileName;
+                liveProcessNames[process.Id] = process.ProcessName;
+                var executablePath = ProcessPathReader.Read(process);
                 if (string.IsNullOrWhiteSpace(executablePath))
                 {
+                    inaccessibleProcessModules++;
                     continue;
                 }
 

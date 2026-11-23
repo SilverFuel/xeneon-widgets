@@ -3387,6 +3387,8 @@
     if (open) {
       renderQuickDrawer();
       if (quickControls) { quickControls.open(); }
+      // Move focus in now. A timer alone can run late on a busy machine, which leaves focus on the page.
+      keepFocusInQuickDrawer();
       window.setTimeout(keepFocusInQuickDrawer, 0);
       // Whatever is still starting up can take focus just after the drawer opens.
       window.setTimeout(keepFocusInQuickDrawer, 150);

@@ -511,7 +511,7 @@ public sealed class SteamService
         {
             try
             {
-                var processPath = process.MainModule?.FileName;
+                var processPath = ProcessPathReader.Read(process);
                 if (string.IsNullOrWhiteSpace(processPath))
                 {
                     continue;

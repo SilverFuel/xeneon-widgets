@@ -184,4 +184,34 @@ public sealed class GameActivityAdventureTests
             Assert.That(selected.Name, Is.EqualTo("World of Warcraft"));
         }));
     }
+
+    [Test]
+    public void GameWhoseProcessStillExistsIsStillRunning()
+    {
+        var game = new GameActivityPayload { Id = "steam:2807960", Name = "Battlefield 6", ProcessId = 4321, ProcessName = "bf6" };
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(GameActivityService.IsStillRunning(game, new Dictionary<int, string> { [4321] = "bf6" }), Is.True);
+            // WMI names a process with its extension; the process list does not.
+            Assert.That(GameActivityService.IsStillRunning(game, new Dictionary<int, string> { [4321] = "BF6.exe" }), Is.True);
+        }));
+    }
+
+    [Test]
+    public void GameIsNotStillRunningWhenItsProcessIsGoneOrReused()
+    {
+        var game = new GameActivityPayload { Id = "steam:2807960", Name = "Battlefield 6", ProcessId = 4321, ProcessName = "bf6" };
+        var noProcess = new GameActivityPayload { Id = "steam:2807960", Name = "Battlefield 6" };
+        var noName = new GameActivityPayload { Id = "steam:2807960", Name = "Battlefield 6", ProcessId = 4321 };
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(GameActivityService.IsStillRunning(game, new Dictionary<int, string> { [99] = "bf6" }), Is.False, "process gone");
+            Assert.That(GameActivityService.IsStillRunning(game, new Dictionary<int, string> { [4321] = "notepad" }), Is.False, "id reused by another program");
+            Assert.That(GameActivityService.IsStillRunning(noProcess, new Dictionary<int, string> { [4321] = "bf6" }), Is.False, "no process was ever known");
+            Assert.That(GameActivityService.IsStillRunning(noName, new Dictionary<int, string> { [4321] = "bf6" }), Is.False, "no process name was ever known");
+            Assert.That(GameActivityService.IsStillRunning(null, new Dictionary<int, string> { [4321] = "bf6" }), Is.False, "no game");
+        }));
+    }
 }
