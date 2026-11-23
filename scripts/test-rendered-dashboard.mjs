@@ -3829,12 +3829,14 @@ function installWowQuestLogFixture() {
   let chatPosition = 40;
   window.__wowChatPosts = [];
   window.__wowMusicCoverAsks = 0;
+  // A skip moves Apple Music to another track.
+  let musicTitle = "Fixture song";
   window.__wowBlendPosts = [];
   // A one-pixel PNG stands in for the cover; it is sent only when the panel asks for it.
   const musicCover = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
   const musicReply = withCover => new Response(JSON.stringify({
     supported: true, configured: true, status: "live", playbackStatus: musicPlaying ? "playing" : "paused",
-    title: "Fixture song", artist: "Fixture artist", canPlay: true, canPause: true, canGoNext: true, canGoPrevious: true,
+    title: musicTitle, artist: "Fixture artist", canPlay: true, canPause: true, canGoNext: true, canGoPrevious: true,
     thumbnailDataUrl: withCover ? musicCover : "", message: ""
   }), { status: 200, headers: { "Content-Type": "application/json" } });
   window.fetch = function (input, options) {
@@ -3870,6 +3872,7 @@ function installWowQuestLogFixture() {
     }
     if (url.origin === location.origin && /^\/api\/media\/apple-music\/(next|previous)$/.test(url.pathname)) {
       window.__wowMusicSkips.push(url.pathname.split("/").pop());
+      musicTitle = "Fixture song " + (window.__wowMusicSkips.length + 1);
       return Promise.resolve(musicReply());
     }
     if (url.origin === location.origin && url.pathname === "/api/media/apple-music/play-pause") {
@@ -4038,6 +4041,14 @@ async function checkWowQuestLogInPage() {
     size + ": the cover is not showing, or was asked for more than once: " + window.__wowMusicCoverAsks + " " + musicButton.outerHTML.slice(0, 200));
   await wait(1500);
   check(pageFits() || !oneScreen, size + ": the panel runs off the screen with the mic and music buttons showing");
+  // The skip changed the track. Its cover is not asked for until the track has played for three seconds.
+  check(/Fixture song 2/.test(musicButton.textContent) && musicCoverImage.hidden && window.__wowMusicCoverAsks === 1,
+    size + ": the new track's cover was asked for while the track was changing: " + window.__wowMusicCoverAsks + " " + musicButton.outerHTML.slice(0, 200));
+  // It is asked for on the first regular reading three seconds or more after the change.
+  for (let attempt = 0; attempt < 50 && (window.__wowMusicCoverAsks < 2 || musicCoverImage.hidden); attempt += 1) await wait(200);
+  await wait(200);
+  check(!musicCoverImage.hidden && musicCoverImage.naturalWidth > 0 && window.__wowMusicCoverAsks === 2,
+    size + ": the new track's cover did not arrive once the track had settled: " + window.__wowMusicCoverAsks + " " + musicButton.outerHTML.slice(0, 200));
   // The balance slider: game at one end, Apple Music at the other, both full in the middle.
   const blendBox = panel().querySelector(".wow-blend");
   const blendRange = blendBox.querySelector("[data-wow-blend]");

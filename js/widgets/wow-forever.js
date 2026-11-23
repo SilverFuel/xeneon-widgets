@@ -275,6 +275,14 @@
     return { key: chat ? "chat" : "", both: both };
   }
 
+  // Whether to ask for a track's cover on this reading. Reading the cover reaches into Apple
+  // Music itself, so it is left alone while a track is changing: the first track seen is asked
+  // for at once, a track that replaced another only once it has been playing for three seconds.
+  var COVER_SETTLE_MS = 3000;
+  function coverDue(key, firstTrack, shownForMs) {
+    return Boolean(key) && key !== "||" && (firstTrack === true || shownForMs >= COVER_SETTLE_MS);
+  }
+
   // What the music button shows, from the host's reading of Apple Music's own playback.
   // Null when Apple Music has no media session (it is not open) or the host did not say:
   // then there is no button.
@@ -362,7 +370,7 @@
       formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter,
       questViews: questViews, questViewId: questViewId, questsInView: questsInView,
       formatProfessions: formatProfessions, gearSummary: gearSummary, bagSummary: bagSummary,
-      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary, micStatus: micStatus, musicStatus: musicStatus, musicArtUrl: musicArtUrl, blendVolumes: blendVolumes, blendStatus: blendStatus, blendChoice: blendChoice
+      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary, micStatus: micStatus, musicStatus: musicStatus, musicArtUrl: musicArtUrl, blendVolumes: blendVolumes, blendStatus: blendStatus, blendChoice: blendChoice, coverDue: coverDue
     };
     return;
   }
@@ -417,6 +425,9 @@
     var musicMisses = 0;
     // The cover for the track named by `key`. `tries` stops a track with no cover being asked about forever.
     var musicArt = { key: "", url: "", tries: 0 };
+    // The track last read, when it was first seen, and whether it was the first one seen
+    // since the panel opened or Apple Music came back.
+    var musicSeen = { key: "", at: 0, first: true };
     // The game's balance against Apple Music and against Discord, read from the host. The
     // one slider shows the wanted one; with neither it is hidden.
     var blends = { music: null, chat: null };
@@ -765,10 +776,17 @@
       if (!canReachHost() || musicBusy) return;
       var requestId = ++musicRequestId;
       runtime.requestJson(runtime.buildBridgeUrl(env, "/api/media/apple-music"), undefined, 5000).then(function (payload) {
-        if (!disposed && requestId === musicRequestId) { musicMisses = 0; music = musicStatus(payload); renderMusic(); renderSkip(); if (music) loadMusicArt(music.key); }
+        if (disposed || requestId !== musicRequestId) return;
+        musicMisses = 0;
+        music = musicStatus(payload);
+        renderMusic();
+        renderSkip();
+        if (!music) { musicSeen = { key: "", at: 0, first: true }; return; }
+        if (music.key !== musicSeen.key) musicSeen = { key: music.key, at: Date.now(), first: !musicSeen.key };
+        if (coverDue(music.key, musicSeen.first, Date.now() - musicSeen.at)) loadMusicArt(music.key);
       }, function () {
         musicMisses += 1;
-        if (!disposed && requestId === musicRequestId && musicMisses >= 2) { music = null; renderMusic(); renderSkip(); }
+        if (!disposed && requestId === musicRequestId && musicMisses >= 2) { music = null; musicSeen = { key: "", at: 0, first: true }; renderMusic(); renderSkip(); }
       });
     }
 

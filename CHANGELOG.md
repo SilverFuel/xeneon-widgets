@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- WoW Forever leaves Apple Music alone while a track is changing: after a skip, or when a song ends, the new track's cover is asked for once the track has played for three seconds, not within a second of the change. A precaution after Apple Music showed "Something went wrong" once following a skip from the panel; the cause is not confirmed.
 - Game covers. Home's **Recently played** row shows each game's cover, and the welcome card that appears when a game starts shows it beside the name. The picture is the one Steam already keeps on this PC, served by Auxora itself; nothing is fetched from the internet. A game with no Steam picture shows its initials on Home and the welcome card as it was.
 - WoW Forever's balance slider works for **Discord** too. With Apple Music and Discord both making sound, two buttons beside the slider (Music, Discord) choose which one the game is balanced against; each keeps its own setting. With only one of them making sound the slider is that one's, with no buttons.
 - Gaming has a **Discord** row while a game is running. With the game and Discord both making sound it is a game/chat balance: one slider with the game at one end and Discord at the other, both at full volume in the middle. Otherwise it says whether Discord is open and has a button that opens it or brings it to the front. It needs no Discord account link: it uses Discord's volume in the Windows mixer. Muting yourself inside Discord, and seeing who is in your voice channel, are not part of this.
