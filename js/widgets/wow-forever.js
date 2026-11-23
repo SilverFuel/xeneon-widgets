@@ -238,13 +238,67 @@
     return quests.slice();
   }
 
+  // Time in the game as Auxora has counted it, from the play log's figures:
+  // "47 min today, 6 h 12 min in total". Empty until there is a minute to show.
+  function playedSummary(stats, formatDuration) {
+    if (!stats || typeof formatDuration !== "function" || !(stats.totalMs >= 60000)) return "";
+    var total = formatDuration(stats.totalMs) + " in total";
+    return stats.todayMs >= 60000 ? formatDuration(stats.todayMs) + " today, " + total : total;
+  }
+
+  // One objective as the game words it, split into its label and its count.
+  // The game writes "4/15 Hillsbrad Farmer slain" or "Hillsbrad Farmer slain: 4/15".
+  function objectiveParts(objective) {
+    var value = (objective && typeof objective.text === "string" ? objective.text : "").replace(/\s+/g, " ").trim();
+    var match = /^(\d{1,5})\s*\/\s*(\d{1,5})\s+(.+)$/.exec(value);
+    var label = value;
+    var have = null;
+    var need = null;
+    if (match) {
+      have = Number(match[1]); need = Number(match[2]); label = match[3];
+    } else {
+      match = /^(.+?)\s*:\s*(\d{1,5})\s*\/\s*(\d{1,5})$/.exec(value);
+      if (match) { label = match[1]; have = Number(match[2]); need = Number(match[3]); }
+    }
+    if (!need) { have = null; need = null; }
+    var done = Boolean(objective && objective.done) || (need != null && have >= need);
+    return { label: label, have: have, need: need, done: done };
+  }
+
+  // How far along a quest is, 0 to 1, from its objectives. Null when the game gave none.
+  function questProgress(quest) {
+    if (quest && quest.complete) return 1;
+    var objectives = quest && Array.isArray(quest.objectives) ? quest.objectives : [];
+    if (!objectives.length) return null;
+    var total = 0;
+    objectives.forEach(function (objective) {
+      var parts = objectiveParts(objective);
+      total += parts.done ? 1 : parts.need ? Math.min(1, parts.have / parts.need) : 0;
+    });
+    return total / objectives.length;
+  }
+
+  // How a quest's level sits against the character's: "hard" five or more above,
+  // "tough" three or four above, "easy" once it is far enough below to give little
+  // (the classic rule for grey quests), else "".
+  function questDifficulty(questLevel, characterLevel) {
+    var quest = Math.floor(Number(questLevel));
+    var level = Math.floor(Number(characterLevel));
+    if (!(quest > 0) || !(level > 0)) return "";
+    if (quest >= level + 5) return "hard";
+    if (quest >= level + 3) return "tough";
+    var grey = level <= 5 ? 0 : level <= 39 ? level - Math.floor(level / 10) - 5 : level <= 59 ? level - Math.floor(level / 5) - 1 : level - 9;
+    return quest <= grey ? "easy" : "";
+  }
+
   // Pure state helpers are also available to the Node regression tests.
   if (typeof module === "object" && module.exports) {
     module.exports = {
       freshJournal: freshJournal, validateJournal: validateJournal, elapsedSession: elapsedSession, formatSession: formatSession,
       formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter,
       questViews: questViews, questViewId: questViewId, questsInView: questsInView,
-      formatProfessions: formatProfessions, gearSummary: gearSummary, bagSummary: bagSummary
+      formatProfessions: formatProfessions, gearSummary: gearSummary, bagSummary: bagSummary,
+      objectiveParts: objectiveParts, questProgress: questProgress, questDifficulty: questDifficulty, playedSummary: playedSummary
     };
     return;
   }
@@ -356,6 +410,18 @@
       return summary.text ? '<div' + (summary.low ? ' data-state="low"' : '') + '><dt>' + label + '</dt><dd>' + escapeHtml(summary.text) + '</dd></div>' : '';
     }
 
+    // How long the game has been open, as the dashboard's play log has counted it.
+    function playedRow() {
+      var api = window.AuxoraPlayLog;
+      var value = "";
+      try {
+        value = api ? playedSummary(api.summary(api.load(window.localStorage), "wow-forever", Date.now()), api.formatDuration) : "";
+      } catch (error) {
+        value = "";
+      }
+      return value ? '<div><dt>Played</dt><dd>' + escapeHtml(value) + '</dd></div>' : "";
+    }
+
     function profileMarkup() {
       var p = journal.profile;
       var emblem = '<div class="wow-emblem" aria-hidden="true"><svg viewBox="0 0 100 100" fill="none"><path d="M50 5 83 24v38L50 94 17 62V24Z" stroke="currentColor" stroke-width="2"/><path d="m50 16 23 14v27L50 80 27 57V30Z" stroke="currentColor" opacity=".45"/><path d="m50 24 7 20 19 6-19 7-7 20-7-20-19-7 19-6Z" fill="currentColor"/><path d="M50 5v11M83 24l-10 6M17 24l10 6M50 80v14" stroke="currentColor"/></svg></div>';
@@ -367,7 +433,7 @@
           '<div class="wow-location"><span class="wow-eyebrow">Current location</span><strong>' + escapeHtml([game.subZone, game.zone].filter(Boolean).join(", ") || "Unknown") + '</strong></div>' +
           '<div class="wow-progress-track" role="progressbar" aria-label="Experience this level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(game.xpPercent) + '"><span style="width:' + game.xpPercent.toFixed(2) + '%"></span></div>' +
           '<p class="wow-character-meta">' + (game.xpMax ? game.xp.toLocaleString("en-US") + " / " + game.xpMax.toLocaleString("en-US") + " XP" + (game.rested ? ", rested" : "") : "Experience not reported") + '</p>' +
-          '<dl class="wow-profile-summary"><div><dt>Coin</dt><dd>' + escapeHtml(game.coins) + '</dd></div><div><dt>Hearthstone</dt><dd>' + escapeHtml(game.hearth || "Not set") + '</dd></div><div><dt>Professions</dt><dd>' + escapeHtml(formatProfessions(game) || p.professions || "Choose your crafts") + '</dd></div>' + gameRow("Gear", gearSummary(game)) + gameRow("Bags", bagSummary(game)) + '</dl>';
+          '<dl class="wow-profile-summary"><div><dt>Coin</dt><dd>' + escapeHtml(game.coins) + '</dd></div><div><dt>Hearthstone</dt><dd>' + escapeHtml(game.hearth || "Not set") + '</dd></div><div><dt>Professions</dt><dd>' + escapeHtml(formatProfessions(game) || p.professions || "Choose your crafts") + '</dd></div>' + gameRow("Gear", gearSummary(game)) + gameRow("Bags", bagSummary(game)) + playedRow() + '</dl>';
       }
       return emblem +
         '<div class="wow-level-badge">Level <strong>' + p.level + '</strong></div>' +
@@ -408,15 +474,31 @@
         '</div><div class="wow-timer-actions"><button class="wow-button wow-button--primary" type="submit">Save character</button>' + button("cancel-profile", "Cancel", "quiet") + '</div>';
     }
 
-    // The game's own quest log, read-only and one view at a time.
+    // The game's own quest log, read-only and one view at a time. Each objective is its
+    // own line with its count; finished ones are ticked. A thin bar shows how far along
+    // the quest is, and the level is marked when the quest is well above or below the character.
     function gameQuestsMarkup(viewId) {
       var showZone = viewId === "ready" || viewId === "all";
+      var difficultyNotes = { hard: ", well above your level", tough: ", above your level", easy: ", far below your level" };
       return questsInView(game, viewId).map(function (quest) {
-        var progress = quest.complete ? "Ready to turn in" : quest.objectives.map(function (objective) { return objective.text; }).join(" / ");
+        var progress = questProgress(quest);
+        var percent = progress == null ? 0 : Math.round(progress * 100);
+        var difficulty = questDifficulty(quest.level, game.level);
+        var objectives = quest.complete
+          ? '<span class="wow-quest-objectives">Ready to turn in</span>'
+          : quest.objectives.length
+            ? '<span class="wow-quest-objectives">' + quest.objectives.map(function (objective) {
+              var parts = objectiveParts(objective);
+              return '<span class="wow-objective' + (parts.done ? ' is-done' : '') + '"><span>' + escapeHtml(parts.label) + '</span>' +
+                (parts.need && !parts.done ? '<b>' + parts.have + '/' + parts.need + '</b>' : '') + '</span>';
+            }).join("") + '</span>'
+            : '';
         return '<li class="wow-quest wow-quest--game' + (quest.complete ? ' is-ready' : '') + '"><span class="wow-quest-copy"><strong>' + escapeHtml(quest.title) + '</strong>' +
-          (progress ? '<span class="wow-quest-objectives">' + escapeHtml(progress) + '</span>' : '') +
+          objectives +
+          (!quest.complete && progress != null ? '<span class="wow-quest-progress" role="img" aria-label="' + percent + '% done"><i style="width:' + percent + '%"></i></span>' : '') +
           (showZone && quest.zone ? '<small>' + escapeHtml(quest.zone) + '</small>' : '') + '</span>' +
-          (quest.level ? '<span class="wow-quest-level" aria-label="Level ' + quest.level + '">' + quest.level + '</span>' : '') + '</li>';
+          (quest.level ? '<span class="wow-quest-level"' + (difficulty ? ' data-difficulty="' + difficulty + '"' : '') +
+            ' aria-label="Level ' + quest.level + (difficultyNotes[difficulty] || '') + '">' + quest.level + '</span>' : '') + '</li>';
       }).join("");
     }
 

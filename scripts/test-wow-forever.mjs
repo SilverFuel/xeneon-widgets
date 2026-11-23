@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary, objectiveParts, questProgress, questDifficulty, playedSummary } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -564,4 +564,47 @@ test("gear and bag lines say what the game reported and flag only real trouble",
     assert.deepEqual(gearSummary(none), { text: "", low: false });
     assert.deepEqual(bagSummary(none), { text: "", low: false });
   }
+});
+
+test("an objective is split into its words and its count, however the game orders them", () => {
+  assert.deepEqual(objectiveParts({ text: "4/15 Hillsbrad Farmer slain", done: false }), { label: "Hillsbrad Farmer slain", have: 4, need: 15, done: false });
+  assert.deepEqual(objectiveParts({ text: "Hillsbrad Farmer slain: 4/15", done: false }), { label: "Hillsbrad Farmer slain", have: 4, need: 15, done: false });
+  assert.deepEqual(objectiveParts({ text: "Speak with Lord Grayson Shadowbreaker", done: false }), { label: "Speak with Lord Grayson Shadowbreaker", have: null, need: null, done: false });
+  assert.equal(objectiveParts({ text: "15/15 Hillsbrad Farmer slain", done: false }).done, true, "a full count is finished even when the game has not flagged it");
+  assert.equal(objectiveParts({ text: "0/1 Rescue Drull", done: true }).done, true);
+  assert.deepEqual(objectiveParts({ text: "0/0 Nothing to count" }), { label: "Nothing to count", have: null, need: null, done: false }, "a count out of zero is not a count");
+  for (const value of [null, undefined, {}, { text: 5 }]) assert.deepEqual(objectiveParts(value), { label: "", have: null, need: null, done: false });
+});
+
+test("a quest's progress is the average of its objectives", () => {
+  const quest = objectives => ({ complete: false, objectives });
+  assert.equal(questProgress(quest([{ text: "5/10 Creeper Ichor" }, { text: "0/6 Gray Bear Tongue" }])), 0.25);
+  assert.equal(questProgress(quest([{ text: "Farmer Ray slain", done: true }, { text: "0/1 Farmer Getz slain" }])), 0.5);
+  assert.equal(questProgress(quest([{ text: "40/30 Skull" }])), 1, "an overshoot does not go past the end");
+  assert.equal(questProgress(quest([{ text: "Find the Deathstalkers" }])), 0);
+  assert.equal(questProgress(quest([])), null, "no objectives, nothing to show");
+  assert.equal(questProgress({ complete: true, objectives: [] }), 1);
+  assert.equal(questProgress(null), null);
+});
+
+test("a quest's level is marked only when it is well above or far below the character", () => {
+  assert.equal(questDifficulty(24, 19), "hard");
+  assert.equal(questDifficulty(23, 19), "tough");
+  assert.equal(questDifficulty(22, 19), "tough");
+  assert.equal(questDifficulty(21, 19), "");
+  assert.equal(questDifficulty(14, 19), "");
+  assert.equal(questDifficulty(13, 19), "easy");
+  assert.equal(questDifficulty(3, 5), "", "nothing is trivial for the first five levels");
+  assert.equal(questDifficulty(51, 60), "easy");
+  assert.equal(questDifficulty(52, 60), "");
+  for (const [quest, level] of [[0, 19], [20, 0], [null, 19], ["x", "y"]]) assert.equal(questDifficulty(quest, level), "");
+});
+
+test("time played reads as today and in total, and is left out until there is a minute of it", () => {
+  const format = ms => `${Math.floor(ms / 60000)} min`;
+  assert.equal(playedSummary({ todayMs: 47 * 60000, totalMs: 372 * 60000 }, format), "47 min today, 372 min in total");
+  assert.equal(playedSummary({ todayMs: 0, totalMs: 372 * 60000 }, format), "372 min in total");
+  assert.equal(playedSummary({ todayMs: 30000, totalMs: 30000 }, format), "");
+  assert.equal(playedSummary(null, format), "");
+  assert.equal(playedSummary({ todayMs: 60000, totalMs: 60000 }, null), "");
 });
