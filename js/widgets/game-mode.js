@@ -392,11 +392,18 @@
     return "good";
   }
 
-  function gameFocusPressureValue(system) {
-    var values = [nullableNumber(system && system.gpu), nullableNumber(system && system.cpu), nullableNumber(system && system.ram)].filter(function (value) {
-      return value != null;
-    });
-    return values.length ? Math.max.apply(Math, values) : null;
+  // The FPS tile shows the number alone; its label already says FPS.
+  function gameFocusFpsValue(fps) {
+    var value = nullableNumber(fps);
+    return value == null ? "--" : String(Math.round(value));
+  }
+
+  // Under the number: how long a frame takes, or why there is no number yet.
+  function gameFocusFrameDetail(performance) {
+    if (nullableNumber(performance && performance.fps) == null) {
+      return text(performance && performance.message, "Waiting for the game's first frames");
+    }
+    return nullableNumber(performance.frameTimeMs) == null ? "" : formatMs(performance.frameTimeMs) + " per frame";
   }
 
   function renderGameFocusHudItem(label, value, detail, progress, tone, metricId) {
@@ -562,7 +569,7 @@
   }
 
   function renderGameFocusAudioRows(sessions, game) {
-    var visible = sessions.slice(0, 3);
+    var visible = sessions.slice(0, 6);
     var gameName = text(game && game.name, "").toLowerCase();
     if (!visible.length) {
       return '<div class="game-focus-empty">No active app audio</div>';
@@ -581,14 +588,6 @@
           '<button class="inline-button" type="button" data-action="game-session-mute" data-session-id="' + escapeHtml(text(session.id, "")) + '" aria-label="' + escapeHtml((session.muted ? "Unmute " : "Mute ") + sessionTargetLabel) + '">' + (session.muted ? "Unmute" : "Mute") + '</button>' +
         '</div>';
     }).join("");
-  }
-
-  function gameFocusReasonText(detail, source, activeAudioSessions) {
-    var normalized = text(detail, source + " is active.");
-    if (normalized.toLowerCase().indexOf("background") !== -1) {
-      normalized = source + " reports this game is running.";
-    }
-    return (activeAudioSessions ? activeAudioSessions + " active audio app" + (activeAudioSessions === 1 ? "" : "s") + ". " : "") + normalized;
   }
 
   function gameFocusFpsAdminLabel(restarting) {
@@ -636,7 +635,6 @@
   function renderGameFocusScene(game, theme, system, performance, audio, network, env, introActive, performanceRestarting) {
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
-    var detail = text(game && game.reason, text(game && game.source, "Running now"));
     var sessionDuration = gameFocusSessionDurationMs(game);
     var session = gameFocusSessionText(game);
     var sessionStartedAt = text(game && (game.sessionStartedAt || game.startedAt), "");
@@ -644,7 +642,7 @@
     var artUrl = text(game && (game.artworkUrl || game.iconUrl), "");
     var performanceData = normalizeGamePerformancePayload(performance || {});
     var mainFps = nullableNumber(performanceData.fps);
-    var frameSource = mainFps == null ? text(performanceData.message, "Waiting for game frames") : performanceData.source;
+    var frameDetail = gameFocusFrameDetail(performanceData);
     var adminAction = gameFocusCanFixFps(performanceData)
       ? '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">' + escapeHtml(gameFocusFpsAdminLabel(performanceRestarting)) + '</button>'
       : '';
@@ -655,14 +653,10 @@
     var audioState = audioData.muted ? "Muted" : Math.round(audioData.masterVolume) + "%";
     var micState = gameFocusMicState(audioData);
     var audioSessions = gameFocusAudioSessions(audioData, game);
-    var activeAudioSessions = audioSessions.length;
     var networkData = network || {};
     var networkSummary = gameFocusNetworkSummary(networkData);
     var ping = networkSummary.ping;
     var pingLabel = networkSummary.pingLabel;
-    var pressure = gameFocusPressureValue(system || {});
-    var pressureLabel = pressure == null ? "--" : Math.round(pressure) + "%";
-    var pressureDetail = "GPU " + formatPercent(system && system.gpu) + " / CPU " + formatPercent(system && system.cpu);
     var shellClass = "game-focus-shell" + (introActive ? " is-intro" : "");
     return '' +
       '<section class="' + shellClass + '" style="' + gameModeThemeStyle(theme) + '">' +
@@ -691,14 +685,11 @@
             '</div>' +
           '</section>' +
           '<section class="game-focus-metrics">' +
-            renderGameFocusHudItem("FPS", formatFps(mainFps), frameSource, gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30), "main-fps") +
-            renderGameFocusHudItem("Audio", audioState, audioName, audioData.masterVolume, audioData.muted ? "warn" : "good", "audio") +
-            renderGameFocusHudItem("Mic", micState.label, micState.detail, micState.progress, micState.tone, "mic") +
-            renderGameFocusHudItem("Network", pingLabel, networkSummary.provider + " - " + networkSummary.detail, ping == null ? null : gameFocusProgress(80 - Math.min(ping, 80), 80), networkSummary.tone, "network") +
-            renderGameFocusHudItem("Pressure", pressureLabel, pressureDetail, pressure, gameFocusLoadTone(pressure, 82, 94), "pressure") +
+            renderGameFocusHudItem("FPS", gameFocusFpsValue(mainFps), frameDetail, gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30), "main-fps") +
             renderGameFocusHudItem("GPU", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system && system.gpu, gameFocusLoadTone(system && system.gpu, 88, 96), "gpu") +
             renderGameFocusHudItem("CPU", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu, gameFocusLoadTone(system && system.cpu, 82, 94), "cpu") +
             renderGameFocusHudItem("RAM", formatPercent(system && system.ram), "Memory", system && system.ram, gameFocusLoadTone(system && system.ram, 82, 92), "ram") +
+            renderGameFocusHudItem("Network", pingLabel, networkSummary.provider + " - " + networkSummary.detail, ping == null ? null : gameFocusProgress(80 - Math.min(ping, 80), 80), networkSummary.tone, "network") +
           '</section>' +
           '<aside class="game-focus-card game-focus-card--utility">' +
             '<div class="game-focus-mic-panel' + gameFocusToneClass(micState.tone) + '">' +
@@ -719,7 +710,6 @@
             '</div>' +
             '<div class="game-focus-audio-list">' + renderGameFocusAudioRows(audioSessions, game) + '</div>' +
             adminAction +
-            '<div class="game-focus-reason">' + escapeHtml(gameFocusReasonText(detail, source, activeAudioSessions)) + '</div>' +
           '</aside>' +
         '</main>' +
       '</section>';
@@ -769,22 +759,17 @@
     var gameName = text(game && game.name, "Game");
     var platform = text(game && game.platform, "Game");
     var source = text(game && game.source, platform);
-    var detail = text(game && game.reason, text(game && game.source, "Running now"));
     var performanceData = normalizeGamePerformancePayload(performance || {});
     var mainFps = nullableNumber(performanceData.fps);
-    var frameSource = mainFps == null ? text(performanceData.message, "Waiting for game frames") : performanceData.source;
     var audioData = normalizeAudioPayload(audio || {});
     var audioOutput = gameFocusAudioOutput(audioData);
     var audioName = compactAudioName(audioOutput && audioOutput.name);
     var audioState = audioData.muted ? "Muted" : Math.round(audioData.masterVolume) + "%";
     var micState = gameFocusMicState(audioData);
     var audioSessions = gameFocusAudioSessions(audioData, game);
-    var activeAudioSessions = audioSessions.length;
     var networkSummary = gameFocusNetworkSummary(network || {});
     var ping = networkSummary.ping;
-    var pressure = gameFocusPressureValue(system || {});
-    var pressureLabel = pressure == null ? "--" : Math.round(pressure) + "%";
-    var pressureDetail = "GPU " + formatPercent(system && system.gpu) + " / CPU " + formatPercent(system && system.cpu);
+    var utility = container.querySelector(".game-focus-card--utility");
 
     if (shell) {
       shell.classList.toggle("is-intro", Boolean(introActive));
@@ -794,11 +779,8 @@
     setGameFocusText(container, ".game-focus-wake strong", gameName);
     setGameFocusText(container, ".game-focus-identity strong", gameName);
     setGameFocusText(container, ".game-focus-identity small", platform + " - " + source);
-    patchGameFocusMetric(container, "main-fps", formatFps(mainFps), frameSource, gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30));
-    patchGameFocusMetric(container, "audio", audioState, audioName, audioData.masterVolume, audioData.muted ? "warn" : "good");
-    patchGameFocusMetric(container, "mic", micState.label, micState.detail, micState.progress, micState.tone);
+    patchGameFocusMetric(container, "main-fps", gameFocusFpsValue(mainFps), gameFocusFrameDetail(performanceData), gameFocusProgress(mainFps, 240), gameFocusLowTone(mainFps, 55, 30));
     patchGameFocusMetric(container, "network", networkSummary.pingLabel, networkSummary.provider + " - " + networkSummary.detail, ping == null ? null : gameFocusProgress(80 - Math.min(ping, 80), 80), networkSummary.tone);
-    patchGameFocusMetric(container, "pressure", pressureLabel, pressureDetail, pressure, gameFocusLoadTone(pressure, 82, 94));
     patchGameFocusMetric(container, "gpu", formatPercent(system && system.gpu), system && system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system && system.gpu, gameFocusLoadTone(system && system.gpu, 88, 96));
     patchGameFocusMetric(container, "cpu", formatPercent(system && system.cpu), system && system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System", system && system.cpu, gameFocusLoadTone(system && system.cpu, 82, 94));
     patchGameFocusMetric(container, "ram", formatPercent(system && system.ram), "Memory", system && system.ram, gameFocusLoadTone(system && system.ram, 82, 92));
@@ -826,16 +808,13 @@
     }
 
     var adminButton = container.querySelector(".game-focus-admin");
-    var reasonNode = container.querySelector(".game-focus-reason");
-    if (gameFocusCanFixFps(performanceData) && !adminButton && reasonNode) {
-      reasonNode.insertAdjacentHTML("beforebegin", '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">' + escapeHtml(gameFocusFpsAdminLabel(performanceRestarting)) + '</button>');
+    if (gameFocusCanFixFps(performanceData) && !adminButton && utility) {
+      utility.insertAdjacentHTML("beforeend", '<button class="inline-button game-focus-admin" type="button" data-action="restart-game-admin">' + escapeHtml(gameFocusFpsAdminLabel(performanceRestarting)) + '</button>');
     } else if (!gameFocusCanFixFps(performanceData) && adminButton) {
       adminButton.remove();
     } else if (adminButton) {
       adminButton.textContent = gameFocusFpsAdminLabel(performanceRestarting);
     }
-
-    setGameFocusText(container, ".game-focus-reason", gameFocusReasonText(detail, source, activeAudioSessions));
   }
 
   function renderGameModeProfilePanel(savedGame, game, profile, theme, steam, env) {
@@ -1445,7 +1424,7 @@
 
 
   if (typeof runtime.registerHelpers === "function") {
-    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard });
+    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard, renderGameFocusScene: renderGameFocusScene });
   }
 
   runtime.registerRenderer("game-mode", mountGameModeWidget);
