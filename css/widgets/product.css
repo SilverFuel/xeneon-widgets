@@ -35,7 +35,7 @@
 
 @media (min-width: 961px) {
   body[data-active-widget-id="theme-studio"] .product-shell {
-    grid-template-rows: minmax(132px, 0.42fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     align-content: stretch;
   }
 
@@ -362,11 +362,31 @@
   pointer-events: none;
 }
 
-.product-profile-grid,
-.product-theme-grid {
+.product-profile-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+/* One compact, touch-sized swatch per theme in js/themes.js; they wrap to fit. */
+.product-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.product-theme-grid .product-swatch {
+  min-height: 76px;
+  padding: 10px;
+  gap: 8px;
+}
+
+.product-theme-grid .product-swatch__chip {
+  height: 28px;
+}
+
+.product-theme-grid .product-swatch::after {
+  inset: auto 10px 4px 10px;
 }
 
 @media (min-width: 1680px) {
@@ -389,10 +409,6 @@
 
   .product-profile-grid--packs {
     grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .product-theme-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .product-control-panel .inline-form-grid--3 {
@@ -922,8 +938,7 @@
 }
 
 @media (max-width: 1800px) {
-  .product-profile-grid,
-  .product-theme-grid {
+  .product-profile-grid {
     grid-template-columns: 1fr 1fr;
   }
 

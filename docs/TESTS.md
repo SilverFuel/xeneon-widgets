@@ -30,10 +30,10 @@ Two commands:
 | `test:wow-forever` | `test-wow-forever.mjs` | Behaviour (one test extracted by name) | WoW journal: validation, backup import, session timer, undo. |
 | | `test-wow-autolaunch.mjs` | Behaviour, extracted by name | The WoW Forever panel opens for the Forever client only, once per session, and never for Retail, Classic or the launcher. |
 | `test:tmog` | `test-tmog-companion.mjs` | Behaviour | TMOG telemetry: stale, missing and paused readings are never shown as live. |
-| `test:constellation-theme` | `test-constellation-theme.mjs` | Behaviour, extracted by name | Resolved theme colours and 4.5:1 contrast for Focus, Gaming and Warm in standard, Night and high contrast. It computes from `css/theme.css` tokens, so Phase 2 replaces it with the theme-table contrast test. |
+| `test:constellation-theme` | `test-constellation-theme.mjs` | Behaviour, extracted by name | Every theme in `js/themes.js`, in both runtimes: the theme applies its own colours; text, accent text, filled controls and status reach 4.5:1 in standard, Night and high contrast, with preset and custom accents; Focus, Gaming and Warm keep the exact colours they shipped with; adding a theme takes one table entry. |
 | `test:setup-secrets` | `test-setup-secrets.mjs` | Behaviour | Saved integration passwords are cleared from the form after save, including on failure. |
 | `check:frontend-performance` | `check-frontend-performance.mjs` | Behaviour, extracted by name | Requests time out and cancel cleanly; polling recovers; the ambient canvas respects its frame budget and pauses when hidden. |
-| `check:settings-handlers` | `check-settings-panels.mjs` | Behaviour, extracted by name | Appearance and Privacy panels: one event causes one action, focus is kept, cleanup runs. |
+| `check:settings-handlers` | `check-settings-panels.mjs` | Behaviour, extracted by name | Appearance and Privacy panels: one swatch per theme, one tap applies and saves; one event causes one action, focus is kept, cleanup runs. |
 | `check:quick-controls` | `check-quick-controls.mjs` | Behaviour | Quick controls: serialized writes, no retries of failed commands, stale snapshots cannot enable actions. |
 | `check:album-carousel` | `check-album-carousel.mjs` | Behaviour | Music cards: private media labels, delete, and no re-creation after delete. |
 | `check:camera-detection` | `check-camera-detection.mjs` | Behaviour, extracted by name | Camera Detection deep links land on the right section; setup feedback is escaped and announced as status or alert. |
@@ -50,8 +50,8 @@ Two commands:
 | `test:app` | `dotnet test` | Behaviour (.NET) | Native services: config, scenes, game activity, privacy, recovery, release. |
 | `test:native-host-api` | `test-native-host-api.mjs` | Rendered | Launches the built host: health, session-token bootstrap, private fields kept out of API payloads, display placement. |
 | `test:bridge-api` | `test-bridge-api.mjs` | Behaviour | The legacy bridge's local API. |
-| `test:theme-rendered` | `test-theme-rendered.mjs` | Rendered | Each theme in a real browser: contrast, focus rings, forced colors, reduced motion, 44px targets, legacy theme migration. |
-| `test:standalone-theme-rendered` | `test-standalone-theme-rendered.mjs` | Rendered | The same for the 19 standalone pages. |
+| `test:theme-rendered` | `test-theme-rendered.mjs` | Rendered | Focus, Gaming and Warm in a real browser at four sizes: contrast, focus rings, forced colors, reduced motion, 44px targets, legacy theme migration, the 16-swatch picker. Every other theme once in standard and Night. |
+| `test:standalone-theme-rendered` | `test-standalone-theme-rendered.mjs` | Rendered | The same for the 19 standalone pages, plus every added theme on one widget page. Runs on any OS with Chrome or Edge. |
 | `test:rendered-dashboard` | `test-rendered-dashboard.mjs` | Rendered | The whole dashboard: every panel, geometry at ten sizes, 44px targets, accessible names, Touch Lock, backup and restore, layout migration, repeated cold boots. |
 
 ## Release set: added by `npm run check:release`

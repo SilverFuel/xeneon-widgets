@@ -785,14 +785,8 @@
     };
   }
 
-  var fallbackProductThemes = [
-    { id: "focus", name: "Focus", background: "#f4f5f7", accent: "#2b4d7d", secondary: "#d4ac63", copy: "Lunar light surfaces with Cosmic Blue controls and warm gold details." },
-    { id: "gaming", name: "Gaming", background: "#132238", accent: "#d4ac63", secondary: "#e56335", copy: "Deep Cosmic Blue surfaces with gold highlights and orange details." },
-    { id: "warm", name: "Warm", background: "#f5f1e9", accent: "#e56335", secondary: "#d4ac63", copy: "Warm Lunar surfaces with orange controls and gold details." }
-  ];
-
   function productThemes(env) {
-    return Array.isArray(env.productThemes) && env.productThemes.length ? env.productThemes : fallbackProductThemes;
+    return Array.isArray(env.productThemes) && env.productThemes.length ? env.productThemes : window.AuxoraThemes.list;
   }
 
   function findById(items, id) {

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
+import { createRequire } from "node:module";
+
+const themes = createRequire(import.meta.url)("../js/themes.js");
 
 const read = file => readFileSync(new URL("../" + file, import.meta.url), "utf8");
 const product = read("js/widgets/product.js"), actions = read("js/widgets/actions.js");
@@ -59,6 +62,7 @@ function modesHarness(active = "scene-work") {
     runCleanups: cleanups => cleanups.splice(0).forEach(fn => fn()),
     text: (value, fallback) => value || fallback, escapeHtml: String,
     settingValue: (_env, _key, fallback) => fallback, friendlyChoice: String,
+    productThemes: () => themes.list,
     patchStableDom: (node, markup) => { node.html = markup; }, productShell: (...args) => args.at(-1), initXnSlider() {},
     buildBridgeUrl: (_env, path) => path,
     FormData: class { constructor(form) { this.values = form.values; } get(key) { return this.values[key] ?? null; } },

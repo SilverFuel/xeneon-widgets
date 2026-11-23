@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import {
   existsSync,
   mkdtempSync,
@@ -47,6 +48,8 @@ const viewports = [
   { name: "companion", width: 2560, height: 720 }
 ];
 const themeIds = ["focus", "gaming", "warm"];
+const themeTable = createRequire(import.meta.url)("../js/themes.js");
+const addedThemes = themeTable.list.filter(theme => !themeIds.includes(theme.id));
 const variants = ["standard", "night"];
 const requiredThemeTokens = [
   "--theme-page",
@@ -1235,6 +1238,32 @@ async function runPageMatrix() {
   }
 }
 
+// Focus, Gaming and Warm run on every page above. Each theme added to js/themes.js is
+// rendered on one standalone widget page in standard and Night.
+async function runAddedThemes() {
+  const page = "widgets/system-monitor.html";
+  const viewport = viewports.find(candidate => candidate.name === "companion");
+  await setViewport(viewport);
+  const signatures = new Set();
+  for (const theme of addedThemes) {
+    let standardProbe = null;
+    for (const variant of variants) {
+      const label = `${page} ${theme.id}/${variant}`;
+      await navigateSeeded(page, explicitSettings(theme.id, variant), label);
+      const probe = await probeThemeState(theme.id, variant, label);
+      if (variant === "standard") {
+        standardProbe = probe;
+        signatures.add(probe.signature);
+        assert(probe.rootColorScheme === theme.scheme && probe.signature.toLowerCase().startsWith(theme.page), `${label}: page colour or colour scheme does not match the theme table: ${probe.signature} ${probe.rootColorScheme}`);
+      } else {
+        assertNightThemeContract(probe, standardProbe, label);
+      }
+    }
+  }
+  assert(signatures.size === addedThemes.length, `${page}: added themes are not visually distinct`);
+  console.log(`standalone ${page}: ${addedThemes.length} added themes in standard and Night passed`);
+}
+
 async function runHostedOverflowProbe() {
   const page = "hosted-dashboard.html";
   const viewport = viewports.find(candidate => candidate.width === 2560 && candidate.height === 720);
@@ -1745,6 +1774,7 @@ async function main() {
   }
 
   await runPageMatrix();
+  await runAddedThemes();
   await runCustomAccentChecks();
   await runHighContrastChecks();
   await runStorageEventChecks();

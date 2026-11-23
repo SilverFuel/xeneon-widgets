@@ -115,15 +115,20 @@ public static class SceneDefaults
         return scene;
     }
 
+    // Themes are defined once, in js/themes.js. The host keeps any well-formed id and
+    // the dashboard falls back to Focus for an id it does not know.
     public static string NormalizeThemeId(string? value)
     {
-        return (value?.Trim().ToLowerInvariant() ?? "") switch
+        var id = (value?.Trim().ToLowerInvariant() ?? "") switch
         {
-            "focus" or "edge" or "verdant" => "focus",
-            "gaming" or "deepcore" => "gaming",
-            "warm" or "afterburn" => "warm",
-            _ => "focus"
+            "edge" or "verdant" => "focus",
+            "deepcore" => "gaming",
+            "afterburn" => "warm",
+            var other => other
         };
+        var wellFormed = id.Length is >= 1 and <= 32
+            && id.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-');
+        return wellFormed ? id : "focus";
     }
 
     public static string NormalizeThemeVariant(string? value)

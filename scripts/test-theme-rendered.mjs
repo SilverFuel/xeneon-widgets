@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -17,7 +18,11 @@ const browserExecutable = [
   join(process.env.PROGRAMFILES || "", "Google/Chrome/Application/chrome.exe")
 ].find(candidate => candidate && existsSync(candidate));
 
+const themeTable = createRequire(import.meta.url)("../js/themes.js");
+// Focus, Gaming and Warm get the full matrix. Every other theme in js/themes.js is
+// rendered once in standard and once in Night on the ultrawide companion layout.
 const themes = ["focus", "gaming", "warm"];
+const addedThemes = themeTable.list.filter(theme => !themes.includes(theme.id));
 const viewports = [
   { name: "compact", width: 1280, height: 400, expectedLayout: "ultrawide" },
   { name: "standard", width: 1440, height: 900, expectedLayout: "standard" },
@@ -951,6 +956,36 @@ async function runThemeMatrix(cdp) {
     await assertHighContrastReadability(cdp, theme);
   }
 
+  const addedViewport = viewports.find(entry => entry.name === "ultrawide");
+  await setViewport(cdp, addedViewport);
+  for (const theme of addedThemes) {
+    for (const themeVariant of ["standard", "night"]) {
+      await seedSettings(cdp, {
+        themeSchemaVersion: "2",
+        themeId: theme.id,
+        accentMode: "preset",
+        customAccentColor: "",
+        themeVariant,
+        dashboardOpacity: "100",
+        animationIntensity: "25"
+      });
+      await navigateAndWait(cdp, `${baseUrl}/dashboard.html?widget=home&renderedThemeTest=1`);
+      await waitForRenderedTheme(cdp, theme.id, themeVariant);
+      const probe = await evaluate(cdp, browserProbeExpression);
+      await captureScreenshot(cdp, `${theme.id}${themeVariant === "night" ? "-night" : ""}-${addedViewport.width}x${addedViewport.height}.png`);
+      try {
+        validateProbe(probe, theme.id, themeVariant, addedViewport);
+        if (themeVariant === "standard") {
+          assert(probe.rootTokens["--theme-page"].toLowerCase() === theme.page && probe.rootTokens["--theme-accent"].toLowerCase() === theme.accent,
+            `${theme.id}: rendered page ${probe.rootTokens["--theme-page"]} and accent ${probe.rootTokens["--theme-accent"]} do not match the theme table`);
+        }
+      } catch (error) {
+        matrixFailures.push(error.message);
+      }
+      console.log(`rendered ${theme.id} ${themeVariant} ${addedViewport.width}x${addedViewport.height}: captured`);
+    }
+  }
+
   const structuralTokens = requiredTokens.filter(token => !token.includes("accent") && !token.startsWith("--status-") && !token.includes("night"));
   for (let leftIndex = 0; leftIndex < themes.length; leftIndex++) {
     for (let rightIndex = leftIndex + 1; rightIndex < themes.length; rightIndex++) {
@@ -978,14 +1013,14 @@ async function openThemeStudio(cdp) {
   await evaluate(cdp, "document.querySelector('.auxora-panel-link[data-widget-id=\"theme-studio\"]').click()");
   await waitForCondition(
     cdp,
-    "document.querySelectorAll('.product-swatch[data-theme]').length === 3 && document.querySelector('[name=\"accentMode\"]')",
+    `document.querySelectorAll('.product-swatch[data-theme]').length === ${themeTable.list.length} && document.querySelector('[name="accentMode"]')`,
     "Theme Studio controls"
   );
   const themeControlContract = await evaluate(cdp, `({
     themeCards: document.querySelectorAll('.product-swatch[data-theme][role="radio"]').length,
     redundantThemeSelects: document.querySelectorAll('select[name="themeId"]').length
   })`);
-  assert(themeControlContract.themeCards === 3 && themeControlContract.redundantThemeSelects === 0, `Theme Studio exposed redundant Theme controls: ${JSON.stringify(themeControlContract)}`);
+  assert(themeControlContract.themeCards === themeTable.list.length && themeControlContract.redundantThemeSelects === 0, `Theme Studio exposed redundant Theme controls: ${JSON.stringify(themeControlContract)}`);
 }
 
 async function runLegacyBrowserMigration(cdp) {
@@ -1004,7 +1039,7 @@ async function runLegacyBrowserMigration(cdp) {
     await waitForRenderedTheme(cdp, expectedTheme, "standard");
     await waitForCondition(
       cdp,
-      "document.querySelector('[data-form=\"theme-studio\"]') && document.querySelectorAll('.product-swatch[data-theme]').length === 3",
+      `document.querySelector('[data-form="theme-studio"]') && document.querySelectorAll('.product-swatch[data-theme]').length === ${themeTable.list.length}`,
       `${legacyTheme} Theme Studio readiness`
     );
     const settings = await readPersistedSettings(cdp);
@@ -1234,7 +1269,7 @@ try {
     }
     cdp.close();
   }
-  console.log(`rendered 15 required theme/viewport combinations plus 3 high-contrast variants; screenshots: ${artifactDirectory}`);
+  console.log(`rendered 15 Focus/Gaming/Warm combinations, 3 high-contrast variants, and ${addedThemes.length} added themes in standard and Night; screenshots: ${artifactDirectory}`);
 } finally {
   await stopProcessTree(browser);
   try {

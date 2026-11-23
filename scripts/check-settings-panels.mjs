@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { createRequire } from "node:module";
+const themes = createRequire(import.meta.url)("../js/themes.js");
 const product = readFileSync(new URL("../js/widgets/product.js", import.meta.url), "utf8");
 const dashboard = readFileSync(new URL("../js/dashboard.js", import.meta.url), "utf8");
 function sourceFor(source, name) {
@@ -35,7 +37,7 @@ const context = vm.createContext({
   runCleanups: cleanups => cleanups.splice(0).forEach(remove => remove()),
   patchStableDom(target, html) { target.html = html; target.renders++; },
   productShell(kicker, title, copy, status, tone, html) { return `<output>${status}</output>${html}`; },
-  productThemes: () => [{ id: "focus", name: "Focus", accent: "#2b4d7d", background: "#f4f5f7", copy: "Lunar" }],
+  productThemes: () => themes.list,
   findById: (list, id) => list.find(item => item.id === id) || list[0],
   settingValue: (env, key, fallback) => settings[key] ?? fallback,
   saveSettings(env, values) { saves.push({ ...values }); Object.assign(settings, values); },
@@ -77,6 +79,26 @@ const beforePreset = saves.length;
 appearance.fire("click", preset);
 assert.equal(saves.length, beforePreset + 1, "A real preset remains selectable once");
 assert.equal(settings.accentMode, "preset");
+// The picker is driven by the theme table: one swatch per theme, one tap applies and saves.
+const swatchIds = [...appearance.html.matchAll(/class="product-swatch[^"]*"[^>]*data-theme="([^"]+)"/g)].map(match => match[1]);
+assert.deepEqual(swatchIds, themes.list.map(theme => theme.id), "Appearance shows one swatch per theme, in table order");
+for (const theme of themes.list) {
+  const swatch = { owned: true, getAttribute: key => key === "data-theme" ? theme.id : null };
+  swatch.closest = selector => /data-theme/.test(selector) ? swatch : null;
+  const beforeSwatch = saves.length;
+  appearance.fire("click", swatch);
+  assert.equal(saves.length, beforeSwatch + 1, `${theme.name} applies with one tap`);
+  assert.equal(saves.at(-1).themeId, theme.id);
+  assert.match(appearance.html, new RegExp(`class="product-swatch is-selected"[^>]*data-theme="${theme.id}"`), `${theme.name} shows as selected after the tap`);
+}
+themes.list.push({ id: "example-17", name: "Example", scheme: "dark", page: "#101014", surface: "#1a1a22", text: "#f0f0f5", accent: "#7cc4ff", secondary: "#ffd27c" });
+try {
+  await controller.refresh();
+  assert.match(appearance.html, /data-theme="example-17"/, "A theme added to the table appears in the picker with no other change");
+} finally {
+  themes.list.pop();
+  await controller.refresh();
+}
 assert.match(appearance.html, /data-opacity-reset/, "Reset opacity remains reachable after sidebar removal");
 const resetOpacity = { owned: true, hasAttribute: name => name === "data-opacity-reset", getAttribute: name => name === "data-opacity-reset" ? "" : null };
 resetOpacity.closest = selector => /data-opacity-reset/.test(selector) ? resetOpacity : null;
