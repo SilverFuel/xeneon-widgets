@@ -179,3 +179,28 @@ test("an empty or old log gives an empty week", () => {
   assert.equal(old.everPlayed, true);
   assert.equal(week(null, now).everPlayed, false);
 });
+
+test("a cover address is built only from a Steam key's digits, and a failed one is not asked for again", () => {
+  const { coverUrl, coverMissing, coverMarkup } = playLog;
+  assert.equal(coverUrl("steam:440"), "/api/steam/games/art?id=440");
+  for (const key of ["wow-forever", "game:fable", "steam:", "steam:44a", "steam:440&x=1", "steam:440/../x", " steam:440", "steam:1234567890123", "", null, undefined, 440, {}]) {
+    assert.equal(coverUrl(key), "", JSON.stringify(key));
+  }
+  assert.doesNotMatch(coverMarkup('steam:1"><script>', '<img src=x onerror=1>'), /<script|onerror|<img/);
+  assert.equal(coverMissing("/api/steam/games/art?id=440"), true);
+  assert.equal(coverUrl("steam:440"), "");
+  assert.equal(coverMarkup("steam:440", "Team Fortress 2"), '<span class="game-cover" aria-hidden="true"><b>TF</b></span>');
+  assert.equal(coverUrl("steam:441"), "/api/steam/games/art?id=441", "another game is unaffected");
+  assert.equal(coverMissing("https://example.com/x.jpg"), false);
+});
+
+test("initials come from the first two words that count", () => {
+  const { initials } = playLog;
+  assert.equal(initials("World of Warcraft Forever"), "WW");
+  assert.equal(initials("Battlefield 6"), "B6");
+  assert.equal(initials("Fable"), "F");
+  assert.equal(initials("The Witcher 3: Wild Hunt"), "W3");
+  assert.equal(initials("  <b>halo</b> "), "BH");
+  assert.equal(initials("!!!"), "?");
+  assert.equal(initials(null), "?");
+});
