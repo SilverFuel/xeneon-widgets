@@ -65,7 +65,7 @@ public sealed class SceneServiceTests
         var snapshot = Snapshot(service.GetSnapshot());
 
         Assert.That(snapshot.Profiles.Select(scene => scene.Id), Does.Not.Contain("scene-night"));
-        Assert.That(snapshot.Profiles, Has.Count.EqualTo(5));
+        Assert.That(snapshot.Profiles, Has.Count.EqualTo(7));
         Assert.That(snapshot.ManualOverrideActive, Is.False);
         Assert.That(snapshot.AutomaticSwitchingActive, Is.True);
     }
@@ -108,13 +108,40 @@ public sealed class SceneServiceTests
     }
 
     [Test]
-    public void Defaults_ContainSixDistinctBuiltInScenes()
+    public void Defaults_ContainEightDistinctBuiltInScenes()
     {
         var scenes = SceneDefaults.Create();
 
-        Assert.That(scenes.Profiles, Has.Count.EqualTo(6));
+        Assert.That(scenes.Profiles, Has.Count.EqualTo(8));
         Assert.That(scenes.Profiles.Select(scene => scene.Id), Is.Unique);
         Assert.That(scenes.Profiles, Has.All.Property(nameof(SceneProfile.IsBuiltIn)).True);
+    }
+
+    // Battlefield and Fable are picked by name, so any store's copy and any title in the series is covered.
+    [TestCase("steam:2807960", "Battlefield\u2122 6", "scene-battlefield", "frontline")]
+    [TestCase("game:battlefield-6", "Battlefield 6", "scene-battlefield", "frontline")]
+    [TestCase("game:battlefield-2042", "BATTLEFIELD 2042", "scene-battlefield", "frontline")]
+    [TestCase("game:fable", "Fable", "scene-fable", "albion")]
+    [TestCase("steam:123456", "Fable", "scene-fable", "albion")]
+    [TestCase("steam:570", "Dota 2", "scene-gaming", "gaming")]
+    public void Evaluate_NamedGamesGetTheirOwnProfile(string gameKey, string name, string expectedScene, string expectedTheme)
+    {
+        var service = CreateService();
+
+        var snapshot = Snapshot(service.Evaluate(new SceneEvaluationRequest
+        {
+            ActiveGame = name,
+            ActiveGameKey = gameKey,
+            SampledAt = "2026-07-12T14:00:00-04:00"
+        }));
+        var active = snapshot.Profiles.Single(scene => scene.Id == snapshot.ActiveSceneId);
+
+        Assert.Multiple((Action)(() =>
+        {
+            Assert.That(snapshot.ActiveSceneId, Is.EqualTo(expectedScene));
+            Assert.That(active.ThemeId, Is.EqualTo(expectedTheme));
+            Assert.That(active.HomeWidget, Is.EqualTo("game-mode"));
+        }));
     }
 
     [Test]

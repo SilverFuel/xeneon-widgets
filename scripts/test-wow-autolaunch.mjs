@@ -16,12 +16,15 @@ const source = functionsBetween("activeGameIdFromPayload", "restorePreGamePerfor
   + functionsBetween("handleGameActivity", "refreshGameActivity")
   + functionsBetween("isLiveGameThemeActive", "refreshAmbientCanvasPalette");
 
-// The Profiles the native host ships: any game gets Gaming, the Forever client gets its own.
+// The Profiles the native host ships: any game gets Gaming, the Forever client gets its own,
+// and Battlefield and Fable are picked by name.
 function builtInProfiles() {
   return [
     { id: "scene-work", name: "Work", themeId: "focus", homeWidget: "", rules: [] },
     { id: "scene-gaming", name: "Gaming", themeId: "gaming", homeWidget: "game-mode", rules: [{ type: "game", value: "", priority: 100, enabled: true }] },
-    { id: "scene-wow-forever", name: "WoW Forever", themeId: "horde", homeWidget: "wow-forever", rules: [{ type: "game", value: "wow-forever", priority: 110, enabled: true }] }
+    { id: "scene-wow-forever", name: "WoW Forever", themeId: "horde", homeWidget: "wow-forever", rules: [{ type: "game", value: "wow-forever", priority: 110, enabled: true }] },
+    { id: "scene-battlefield", name: "Battlefield", themeId: "frontline", homeWidget: "game-mode", rules: [{ type: "game", value: "Battlefield", priority: 110, enabled: true }] },
+    { id: "scene-fable", name: "Fable", themeId: "albion", homeWidget: "game-mode", rules: [{ type: "game", value: "Fable", priority: 110, enabled: true }] }
   ];
 }
 
@@ -116,10 +119,10 @@ test("a second game Profile needs no dashboard change: only a Profile with a rul
   assert.deepEqual(selections, [{ id: "system", persist: false }]);
   assert.deepEqual(toasts, ["Diablo profile"]);
   // A disabled rule, or a home panel that does not exist, falls back to the Game HUD.
-  profiles[3].rules[0].enabled = false;
+  profiles[profiles.length - 1].rules[0].enabled = false;
   assert.equal(context.gameHomeWidgetId(activity({ gameKey: "diablo-iv" })), "game-mode");
-  profiles[3].rules[0].enabled = true;
-  profiles[3].homeWidget = "no-such-panel";
+  profiles[profiles.length - 1].rules[0].enabled = true;
+  profiles[profiles.length - 1].homeWidget = "no-such-panel";
   assert.equal(context.gameHomeWidgetId(activity({ gameKey: "diablo-iv" })), "game-mode");
 });
 
@@ -557,4 +560,38 @@ test("a failed or pointless request creates nothing and says why", async () => {
   const idle = gameProfileHarness();
   await assert.rejects(idle.context.createGameProfile(), /No game is running without a Profile/);
   assert.deepEqual(idle.requests, []);
+});
+
+test("Battlefield and Fable get their own Profile by name, from any store", () => {
+  const { context } = harness();
+  for (const game of [
+    { gameKey: "steam:2807960", name: "Battlefield\u2122 6" },
+    { gameKey: "game:battlefield-6", name: "Battlefield 6" },
+    { gameKey: "game:battlefield-2042", name: "BATTLEFIELD 2042" }
+  ]) {
+    assert.equal(context.profileForGame(game).id, "scene-battlefield", JSON.stringify(game));
+    assert.equal(context.gameHasOwnProfile(game), true, "no offer to create a Profile it already has");
+    assert.equal(context.gameHomeWidgetId({ active: true, activeGame: game }), "game-mode");
+  }
+  for (const game of [{ gameKey: "game:fable", name: "Fable" }, { gameKey: "steam:123456", name: "Fable" }]) {
+    assert.equal(context.profileForGame(game).id, "scene-fable", JSON.stringify(game));
+    assert.equal(context.gameHasOwnProfile(game), true);
+  }
+  // Every other game still gets Gaming, and the Forever client keeps its own.
+  const other = { gameKey: "steam:570", name: "Dota 2" };
+  assert.equal(context.profileForGame(other).id, "scene-gaming");
+  assert.equal(context.gameHasOwnProfile(other), false);
+  assert.equal(context.profileForGame({ gameKey: "wow-forever", name: "World of Warcraft" }).id, "scene-wow-forever");
+});
+
+test("a rule holding a fixed key matches that key only, never a game's name", () => {
+  const profiles = [...builtInProfiles(),
+    { id: "scene-cards", name: "Cards", themeId: "ember", homeWidget: "game-mode", rules: [{ type: "game", value: "hearthstone", priority: 110, enabled: true }] }];
+  const { context } = harness("home", true, profiles);
+  const tracker = { gameKey: "game:hearthstone-deck-tracker", name: "Hearthstone Deck Tracker" };
+  assert.equal(context.profileForGame(tracker).id, "scene-gaming");
+  assert.equal(context.gameHasOwnProfile(tracker), false);
+  assert.equal(context.profileForGame({ gameKey: "hearthstone", name: "Hearthstone" }).id, "scene-cards");
+  // A game with neither a key nor a name is not a game any rule can pick.
+  assert.equal(context.profileForGame({}), null);
 });

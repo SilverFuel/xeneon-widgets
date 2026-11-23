@@ -122,6 +122,8 @@
       }
     },
     { id: "horde", name: "Horde", scheme: "dark", page: "#140a0a", surface: "#221010", text: "#f3e6dc", accent: "#e24a3e", secondary: "#d9a441" },
+    { id: "frontline", name: "Frontline", scheme: "dark", page: "#0c1216", surface: "#16212a", text: "#e6edf2", accent: "#f59e3a", secondary: "#6ec1d6" },
+    { id: "albion", name: "Albion", scheme: "dark", page: "#11150c", surface: "#1c2314", text: "#eef2e2", accent: "#e2b84b", secondary: "#8fce6a" },
     { id: "alliance", name: "Alliance", scheme: "dark", page: "#0b1526", surface: "#13233d", text: "#e8eef8", accent: "#4f8fe6", secondary: "#e2b54a" },
     { id: "midnight", name: "Midnight", scheme: "dark", page: "#0a0d12", surface: "#141922", text: "#e6ebf2", accent: "#38bdf8", secondary: "#a78bfa" },
     { id: "ember", name: "Ember", scheme: "dark", page: "#15110e", surface: "#211a15", text: "#f2e9e1", accent: "#ff7a33", secondary: "#ffc857" },

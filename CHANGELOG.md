@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Battlefield and Fable each have a built-in Profile that Auxora switches to when the game runs, with two new themes: Frontline (slate with amber) and Albion (woodland green with gold). They are matched by the game's name, so any Battlefield title and any store's copy are covered. Existing installs gain both Profiles on the next start.
 - On the EDGE at its full 2560x720, the WoW Forever panel's text is now 18 to 26px, close to the size of ordinary text on a desktop monitor when read from a seat. That does not fit four cards, so the panel has two pages there, switched in the bottom row: Quests (your character and the quest log) and Camp and notes (session timer, checklist, field notes, guides).
 - Auxora Companion add-on 0.2.0 also saves your professions and skill, how worn your gear is, and free bag slots. The WoW Forever character card shows them, and marks a piece of gear below 25% or fewer than four free slots. Copy the new add-on folder into the game to get them. Edit character is hidden while the game supplies the character.
 - Larger, plainer text in the WoW Forever panel. Nothing is smaller than 14px, quest titles are 17px, and small all-capitals labels are now ordinary words. At the EDGE's full resolution (2560x720) the text is larger again, 16 to 20px. On the EDGE the zone buttons are one row you swipe through, so the quest list keeps its height.
