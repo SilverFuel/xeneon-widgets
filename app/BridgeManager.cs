@@ -28,9 +28,6 @@ public sealed class BridgeManager : IAsyncDisposable
     private readonly SceneController _sceneController;
     private readonly ActionChainController _actionChainController;
     private readonly MonitorControlController _monitorControlController;
-    private readonly ExtensionController _extensionController;
-    private readonly RemoteSessionController _remoteSessionController;
-    private readonly RemoteSessionService _remoteSessionService;
     private readonly LocalDataResetService _localDataResetService;
     private readonly RecoveryService _recoveryService;
     private readonly ApiRouter _apiRouter;
@@ -117,9 +114,6 @@ public sealed class BridgeManager : IAsyncDisposable
         var actionChainService = new ActionChainService(_sceneService, _systemActionsService);
         _actionChainController = new ActionChainController(actionChainService);
         _monitorControlController = new MonitorControlController(new MonitorControlService(_logger));
-        _extensionController = new ExtensionController(new ExtensionManifestService(_logger));
-        _remoteSessionService = new RemoteSessionService(_sceneService, actionChainService, _logger, _configStore.Current.Port);
-        _remoteSessionController = new RemoteSessionController(_remoteSessionService);
         _clipboardHistoryService = new ClipboardHistoryService(_logger);
         _configController = new ConfigController(
             _configStore,
@@ -188,8 +182,6 @@ public sealed class BridgeManager : IAsyncDisposable
             _sceneController,
             _actionChainController,
             _monitorControlController,
-            _extensionController,
-            _remoteSessionController,
             localDataResetController,
             recoveryController,
             _weatherService,
@@ -364,7 +356,6 @@ public sealed class BridgeManager : IAsyncDisposable
             _uniFiService.Dispose();
             _launcherService.Dispose();
             _gamePerformanceService.Dispose();
-            _remoteSessionService.Dispose();
             _calendarHttpClient.Dispose();
             _frigateHttpClient.Dispose();
             _weatherHttpClient.Dispose();

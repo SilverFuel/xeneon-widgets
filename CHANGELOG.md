@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Removed the host endpoints behind the retired Phone Remote and extension-inspection features (`/api/remote/session`, `/api/extensions`). Nothing in the dashboard used them.
 - Any game can have its own Profile. While a game without one is running, Settings > Appearance offers "Create a Profile for <game>". The new Profile takes over whenever that game runs, and the theme you pick for it stays with it. Other games keep the Gaming Profile.
 - New Auxora Companion add-on for World of Warcraft Forever (`addons/AuxoraCompanion`). With it installed, the WoW Forever journal shows your character, experience, coin, location and quest log as of your last logout or `/auxora`.
 

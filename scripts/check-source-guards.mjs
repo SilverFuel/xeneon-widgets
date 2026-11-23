@@ -26,22 +26,12 @@ function assert(condition, message) {
   const supportController = read("app/Controllers/SupportController.cs");
   const configController = read("app/Controllers/ConfigController.cs");
   const sceneService = read("app/Services/SceneService.cs");
-  const extensionService = read("app/Services/ExtensionManifestService.cs");
-  const remoteService = read("app/Services/RemoteSessionService.cs");
 
   assert(
     /Manual selection/.test(sceneService)
       && /Automatic \{match\.Rule\.Type\} rule/.test(sceneService)
       && /case "\/api\/scenes\/activate"/.test(apiRouter),
     "native Modes must report manual and automatic activation and expose the activate route"
-  );
-
-  assert(
-    /RSA\.Create/.test(extensionService)
-      && /RSASignaturePadding\.Pss/.test(extensionService)
-      && /AllowedPermissions/.test(extensionService)
-      && /EnabledForCurrentBeta\s*=\s*false/.test(remoteService),
-    "extension signatures must retain their trust boundaries and Phone Remote must stay disabled natively for this beta"
   );
 
   assert(

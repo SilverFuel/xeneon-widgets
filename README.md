@@ -102,7 +102,7 @@ Auxora now includes:
 - local-first privacy and trust screen
 - app data reset from setup/privacy and from the uninstall cleanup shortcut
 
-The update panel remains a beta foundation. Streaming, Widget Packs, and Phone Remote are not part of the dashboard; links saved to those panels open Audio & Media, Layout, and Appearance. Third-party code loading and execution are disabled in this beta. Before charging customers, sign the Windows release and test the installer on clean hardware.
+The update panel remains a beta foundation. Streaming, Widget Packs, and Phone Remote are not part of the dashboard; links saved to those panels open Audio & Media, Layout, and Appearance. Auxora does not load third-party code. Before charging customers, sign the Windows release and test the installer on clean hardware.
 
 Choose a section, then a panel tab. Settings stays available at the bottom of the section rail. **Settings > Layout** changes section order and visibility; hiding a section does not disable deep links or automatic game navigation. Recent apps appear on Home. The header Profile selector includes custom Profiles and Automatic switching. A game gets its own Profile from Settings > Appearance while it is running: choose **Create a Profile for <game>**, then pick its theme. That Profile is used whenever the game runs; other games keep Gaming. **Settings > Modes & automation** edits profiles and rules. Night display controls are in Quick controls.
 
