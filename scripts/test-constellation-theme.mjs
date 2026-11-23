@@ -152,6 +152,8 @@ function harness(runtime, initial = {}, pageRules = []) {
     },
     defaultSettings: { themeId: "focus" }, bridgeConfig: null,
     gameFaceLastActiveId: "", ambientCanvasPalette: [],
+    // The per-game tint applies to games without a Profile of their own; this fixture has none.
+    gameActivity: null, gameForAutoOpen: () => null, gameHasOwnProfile: () => false,
     getSetting(name) { return settings[name]; }, renderDashboardChromeState() {}
   };
   if (runtime === "standalone") {

@@ -113,7 +113,20 @@ public sealed class GameActivityAdventureTests
             ExecutablePath = executablePath ?? ""
         };
 
-        Assert.That(game.GameKey, Is.Empty);
+        Assert.That(game.GameKey, Is.Not.EqualTo("wow-forever"));
+    }
+
+    [TestCase("steam:440", "Team Fortress 2", @"D:\Steam\steamapps\common\Team Fortress 2\tf_win64.exe", "steam:440")]
+    [TestCase("battle.net:abc", "Diablo IV", @"D:\Games\Diablo IV\Diablo IV.exe", "diablo-iv")]
+    [TestCase("battle.net:abc", "World of Warcraft", @"C:\Games\World of Warcraft\_retail_\Wow.exe", "world-of-warcraft")]
+    [TestCase("epic:abc", "  Hades II: Early Access!  ", @"D:\Epic\Hades2\Hades2.exe", "game:hades-ii-early-access")]
+    [TestCase("game-1", "wow-forever", @"D:\Tools\notwow.exe", "game:wow-forever")]
+    [TestCase("", "", "", "")]
+    public void EveryGameGetsAStableKeyThatNeverContainsItsPath(string id, string name, string executablePath, string expected)
+    {
+        var game = new GameActivityPayload { Id = id, Name = name, ExecutablePath = executablePath };
+
+        Assert.That(game.GameKey, Is.EqualTo(expected));
     }
 
     [Test]

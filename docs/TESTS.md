@@ -28,7 +28,7 @@ Two commands:
 |---|---|---|---|
 | `check:js` | `check-js.mjs` | Syntax | Every file in `js/`, `bridge/` and the Electron host parses. |
 | `test:wow-forever` | `test-wow-forever.mjs` | Behaviour (one test extracted by name) | WoW journal: validation, backup import, session timer, undo. |
-| | `test-wow-autolaunch.mjs` | Behaviour, extracted by name | The WoW Forever panel opens for the Forever client only, once per session, and never for Retail, Classic or the launcher. |
+| | `test-wow-autolaunch.mjs` | Behaviour, extracted by name | A game opens its Profile's home panel once per session: the Forever client gets the WoW journal, any other game the Game HUD, and never by name, path or launcher. The panel before the game returns when it exits. Profiles are evaluated at once when the game changes. |
 | `test:tmog` | `test-tmog-companion.mjs` | Behaviour | TMOG telemetry: stale, missing and paused readings are never shown as live. |
 | `test:constellation-theme` | `test-constellation-theme.mjs` | Behaviour, extracted by name | Every theme in `js/themes.js`, in both runtimes: the theme applies its own colours; text, accent text, filled controls and status reach 4.5:1 in standard, Night and high contrast, with preset and custom accents; Focus, Gaming and Warm keep the exact colours they shipped with; adding a theme takes one table entry. |
 | `test:setup-secrets` | `test-setup-secrets.mjs` | Behaviour | Saved integration passwords are cleared from the form after save, including on failure. |

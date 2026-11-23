@@ -368,6 +368,16 @@
   gap: 12px;
 }
 
+.product-theme-picker {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.product-theme-owner {
+  margin: 0;
+}
+
 /* One compact, touch-sized swatch per theme in js/themes.js; they wrap to fit. */
 .product-theme-grid {
   display: grid;

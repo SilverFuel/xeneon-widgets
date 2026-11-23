@@ -278,7 +278,7 @@ function checkHomeLongPress() {
 
 function checkAdventurePanelRouting() {
   const gameFaceTarget = dashboard.slice(
-    dashboard.indexOf("  function isWowForeverGame("),
+    dashboard.indexOf("  function gameProfiles("),
     dashboard.indexOf("  function clearPendingGameFaceAutoOpen(")
   );
   const openGameFace = dashboard.slice(
@@ -298,6 +298,12 @@ function checkAdventurePanelRouting() {
         gameFaceAutoOpenedGameId: "",
         pendingGameFaceAutoOpenId: "active-game",
         gameActivity: { active: true },
+        gameFaceOpenedWidgetId: "",
+        bridgeConfig: { scenes: { profiles: [
+          { id: "scene-gaming", name: "Gaming", homeWidget: "game-mode", rules: [{ type: "game", value: "", priority: 100 }] },
+          { id: "scene-wow-forever", name: "WoW Forever", homeWidget: "wow-forever", rules: [{ type: "game", value: "wow-forever", priority: 110 }] }
+        ] } },
+        getWidgetById: id => ({ id }),
         isGameFaceAutoOpenEnabled: () => true,
         activeGameIdFromPayload: () => "active-game",
         isDashboardBusyForGameFaceAutoOpen: () => false,

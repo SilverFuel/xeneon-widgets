@@ -60,6 +60,7 @@
   var gameFaceLastActiveId = "";
   var gameFaceAutoOpenedGameId = "";
   var gameFaceSuppressedGameId = "";
+  var gameFaceOpenedWidgetId = "";
   var pendingGameFaceAutoOpenId = "";
   var pendingGameFaceTimerId = 0;
   var dashboardInteractionActive = false;
@@ -153,6 +154,7 @@
   var updateAvailabilityChecked = false;
   var recoveryAvailabilityChecked = false;
   var lastSceneEvaluationAt = 0;
+  var lastSceneEvaluationGame = "";
   var nowStripTimerId = 0;
   var nowStripMode = "auto";
   var nowStripRenderSignature = "";
@@ -824,7 +826,12 @@
     return hour >= 22 || hour < 7 ? "night" : "standard";
   }
 
+  // Removed with the Game HUD's keyword looks in the next step of Phase 3.
   function isLiveGameThemeActive() {
+    return isLiveGameSessionTinted() && !gameHasOwnProfile(gameForAutoOpen(gameActivity));
+  }
+
+  function isLiveGameSessionTinted() {
     // Keep presentation stable until a reliable poll confirms the session ended.
     return String(getSetting("gameModeAutoTune") || "1") !== "0"
       && Boolean(gameFaceLastActiveId);
@@ -1442,27 +1449,51 @@
     return String(getSetting("gameModeAutoFace") || "1") !== "0";
   }
 
-  function isWowForeverGame(game) {
+  function gameProfiles() {
+    var scenes = bridgeConfig && bridgeConfig.scenes;
+    return (scenes && Array.isArray(scenes.profiles) ? scenes.profiles : []).filter(function (profile) {
+      return profile && profile.themeVariant !== "night";
+    });
+  }
+
+  function gameRuleValues(profile) {
+    return (Array.isArray(profile.rules) ? profile.rules : []).filter(function (rule) {
+      return rule && rule.type === "game" && rule.enabled !== false;
+    }).map(function (rule) {
+      return { value: String(rule.value || "").trim().toLowerCase(), priority: Number(rule.priority) || 0 };
+    });
+  }
+
+  // True when a Profile names this game by its key, so the game is "programmed in".
+  function gameHasOwnProfile(game) {
+    var gameKey = String(game && game.gameKey || "").toLowerCase();
+    return Boolean(gameKey) && gameProfiles().some(function (profile) {
+      return gameRuleValues(profile).some(function (rule) { return rule.value === gameKey; });
+    });
+  }
+
+  // The Profile the native host will activate for this game: a rule naming the game's key,
+  // otherwise the any-game rule. Highest priority wins, then name, as in SceneService.Evaluate.
+  function profileForGame(game) {
+    var gameKey = String(game && game.gameKey || "").toLowerCase();
+    var best = null;
+    var bestPriority = -1;
     if (!game) {
-      return false;
+      return null;
     }
-
-    // The native host identifies the client without exposing its install path.
-    if (Object.prototype.hasOwnProperty.call(game, "gameKey")) {
-      return game.gameKey === "wow-forever";
-    }
-
-    // Older hosts can supply an explicit title. Never infer Forever from Wow alone.
-    var executablePath = String(game.executablePath || "").replace(/\\/g, "/").toLowerCase();
-    if (executablePath) {
-      return /(?:^|\/)_forever_\/wow\.exe$/.test(executablePath);
-    }
-    var processName = String(game.processName || "").toLowerCase();
-    if (processName && processName !== "wow" && processName !== "wow.exe") {
-      return false;
-    }
-    var name = String(game.name || "").toLowerCase().replace(/[:_-]+/g, " ").replace(/\s+/g, " ").trim();
-    return name === "world of warcraft forever" || name === "wow forever";
+    gameProfiles().forEach(function (profile) {
+      gameRuleValues(profile).forEach(function (rule) {
+        if (rule.value && rule.value !== gameKey) {
+          return;
+        }
+        if (rule.priority > bestPriority
+          || (best && rule.priority === bestPriority && String(profile.name || "") < String(best.name || ""))) {
+          best = profile;
+          bestPriority = rule.priority;
+        }
+      });
+    });
+    return best;
   }
 
   function gameForAutoOpen(payload) {
@@ -1471,16 +1502,26 @@
       return null;
     }
     var game = payload && payload.active && payload.activeGame;
-    if (!game || isWowForeverGame(game)) {
+    if (!game || gameHasOwnProfile(game)) {
       return game || null;
     }
-    // A higher-confidence game may remain open while the Forever client starts.
+    // A game with its own Profile wins over a higher-confidence game that is still open.
     var candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
-    return candidates.filter(isWowForeverGame)[0] || game;
+    return candidates.filter(gameHasOwnProfile)[0] || game;
   }
 
-  function gameFaceWidgetIdFromPayload(payload) {
-    return isWowForeverGame(gameForAutoOpen(payload)) ? "wow-forever" : "game-mode";
+  // The panel a game opens: its Profile's home panel, or the Game HUD.
+  function gameHomeWidgetId(payload) {
+    var profile = profileForGame(gameForAutoOpen(payload));
+    var widgetId = profile && profile.homeWidget ? String(profile.homeWidget) : "";
+    return widgetId && getWidgetById(widgetId) ? widgetId : "game-mode";
+  }
+
+  // A panel that belongs to one game's Profile is not replaced when a different game is detected.
+  function isOtherGameHomePanel(widgetId, targetWidgetId) {
+    return widgetId !== targetWidgetId && widgetId !== "game-mode" && gameProfiles().some(function (profile) {
+      return profile.homeWidget === widgetId && gameRuleValues(profile).some(function (rule) { return Boolean(rule.value); });
+    });
   }
 
   function clearPendingGameFaceAutoOpen() {
@@ -1508,13 +1549,14 @@
   }
 
   function openGameFaceForActiveId(activeId) {
-    var targetWidgetId = gameFaceWidgetIdFromPayload(gameActivity);
+    var targetWidgetId = gameHomeWidgetId(gameActivity);
+    var profile = profileForGame(gameForAutoOpen(gameActivity));
     if (!activeId
       || !isGameFaceAutoOpenEnabled()
       || gameFaceSuppressedGameId === activeId
       || gameFaceAutoOpenedGameId === activeId
       || currentWidgetId === "setup"
-      || (currentWidgetId === "wow-forever" && targetWidgetId !== "wow-forever")) {
+      || isOtherGameHomePanel(currentWidgetId, targetWidgetId)) {
       return false;
     }
 
@@ -1526,9 +1568,10 @@
 
     gameFacePreviousWidgetId = currentWidgetId || getFallbackPrimaryWidget();
     gameFaceAutoOpenedGameId = activeId;
+    gameFaceOpenedWidgetId = targetWidgetId;
     clearPendingGameFaceAutoOpen();
     selectWidget(targetWidgetId, false);
-    showTouchFeedback(targetWidgetId === "wow-forever" ? "For the Horde" : "Game focus");
+    showTouchFeedback(profile && profile.name ? profile.name + " profile" : "Game focus");
     return true;
   }
 
@@ -1560,7 +1603,7 @@
       || gameFaceAutoOpenedGameId === activeId
       || !isGameFaceAutoOpenEnabled()
       || currentWidgetId === "setup"
-      || (currentWidgetId === "wow-forever" && gameFaceWidgetIdFromPayload(gameActivity) !== "wow-forever")) {
+      || isOtherGameHomePanel(currentWidgetId, gameHomeWidgetId(gameActivity))) {
       clearPendingGameFaceAutoOpen();
       return;
     }
@@ -1617,6 +1660,11 @@
         && (payload.status === "idle" || payload.status === "ended")) {
         restorePreGamePerformanceBudget();
         clearTransientGameTheme();
+        // Return to the panel that was showing before the game, unless the user has moved on.
+        if (gameFaceOpenedWidgetId && currentWidgetId === gameFaceOpenedWidgetId && !isDashboardBusyForGameFaceAutoOpen()) {
+          selectWidget(gameFacePreviousWidgetId || getFallbackPrimaryWidget(), false);
+        }
+        gameFaceOpenedWidgetId = "";
         gameFaceLastActiveId = "";
         gameFaceLastProcessId = 0;
         gameFaceLastStartedAt = 0;
@@ -1639,6 +1687,7 @@
       gameFaceLastStartedAt = 0;
       gameFaceAutoOpenedGameId = "";
       gameFaceSuppressedGameId = "";
+      gameFaceOpenedWidgetId = "";
       clearPendingGameFaceAutoOpen();
     }
     // Missing process metadata during a poll does not erase the known launch.
@@ -1651,13 +1700,13 @@
       || gameFaceSuppressedGameId === activeId
       || gameFaceAutoOpenedGameId === activeId
       || currentWidgetId === "setup"
-      || (currentWidgetId === "wow-forever" && gameFaceWidgetIdFromPayload(gameActivity) !== "wow-forever")) {
+      || isOtherGameHomePanel(currentWidgetId, gameHomeWidgetId(gameActivity))) {
       clearPendingGameFaceAutoOpen();
       renderDashboardChromeState();
       return;
     }
 
-    if (currentWidgetId === gameFaceWidgetIdFromPayload(gameActivity)) {
+    if (currentWidgetId === gameHomeWidgetId(gameActivity)) {
       gameFaceAutoOpenedGameId = activeId;
       clearPendingGameFaceAutoOpen();
       renderDashboardChromeState();
@@ -1693,14 +1742,18 @@
       return;
     }
     var now = Date.now();
-    var activeGame = activityPayload && activityPayload.active && activityPayload.activeGame ? activityPayload.activeGame : null;
-    if (now - lastSceneEvaluationAt < 20000) {
+    var activeGame = gameForAutoOpen(activityPayload);
+    var evaluatedGame = activeGame ? String(activeGame.gameKey || activeGame.id || activeGame.name || "game") : "";
+    // A game starting, stopping or changing is evaluated at once; otherwise at most every 20 seconds.
+    if (evaluatedGame === lastSceneEvaluationGame && now - lastSceneEvaluationAt < 20000) {
       return;
     }
     lastSceneEvaluationAt = now;
+    lastSceneEvaluationGame = evaluatedGame;
     fetchJson(buildUrl(bridgeOrigin, "/api/media"), 2600).catch(function () { return {}; }).then(function (media) {
       return postJson(buildUrl(bridgeOrigin, "/api/scenes/evaluate"), {
         activeGame: activeGame ? (activeGame.name || activeGame.processName || activeGame.id || "Game") : "",
+        activeGameKey: activeGame ? String(activeGame.gameKey || "") : "",
         foregroundProcess: activeGame ? (activeGame.processName || "") : "",
         mediaPlaying: Boolean(media && (media.playing || String(media.playbackStatus || media.status || "").toLowerCase() === "playing")),
         sampledAt: new Date().toISOString()
@@ -1711,7 +1764,7 @@
       if (payload.activeSceneId && payload.activeSceneId !== previousId) {
         applyScenePresentation(payload.activeScene);
         renderQuickDrawer();
-        showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Mode") + " activated automatically");
+        showTouchFeedback((payload.activeScene && payload.activeScene.name ? payload.activeScene.name : "Default") + " profile");
       }
     }).catch(function (error) {
       console.warn("Scene evaluation failed", error);
@@ -3067,6 +3120,31 @@
     document.body.dataset.density = scene.density || "comfortable";
   }
 
+  function activeProfile() {
+    var scenes = bridgeConfig && bridgeConfig.scenes ? bridgeConfig.scenes : {};
+    return (Array.isArray(scenes.profiles) ? scenes.profiles : []).filter(function (profile) {
+      return profile && profile.id === scenes.activeSceneId;
+    })[0] || null;
+  }
+
+  // The theme belongs to the active Profile, so it comes back whenever that Profile does.
+  function saveProfileTheme(themeId) {
+    var profile = activeProfile();
+    if (!profile || bridgeReachable !== true) {
+      return Promise.resolve();
+    }
+    return postJson(buildUrl(bridgeOrigin, "/api/scenes/theme"), {
+      sceneId: profile.id,
+      themeId: normalizeThemeId(themeId)
+    }, 5000).then(function (payload) {
+      if (payload && Array.isArray(payload.profiles)) {
+        bridgeConfig.scenes = payload;
+      }
+    }, function (error) {
+      console.warn("Saving the Profile theme failed", error);
+    });
+  }
+
   function activateScene(sceneId, manualOverrideMinutes) {
     if (sceneId === "scene-night") {
       // Toggle the displayed variant, including a local Appearance override.
@@ -3470,6 +3548,11 @@
         reportWidgetError(widget, error, phase || "updating", generation);
       },
       productThemes: window.AuxoraThemes.list.slice(),
+      activeProfileName: function () {
+        var profile = activeProfile();
+        return profile && profile.name ? String(profile.name) : "";
+      },
+      saveProfileTheme: saveProfileTheme,
       saveSettings: saveDashboardSettings,
       normalizeReleaseChannel: function (value) { return normalizeReleaseChannelForVersion(value, bridgeApp.version); },
       resetSettings: resetLocalDashboardSettings,
