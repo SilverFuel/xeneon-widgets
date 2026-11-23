@@ -87,9 +87,75 @@
     return String(Math.floor(seconds / 3600)).padStart(2, "0") + ":" + String(Math.floor(seconds / 60) % 60).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
   }
 
+  function formatCoins(copper) {
+    copper = Math.floor(Number(copper));
+    if (!isFinite(copper) || copper < 0) copper = 0;
+    var gold = Math.floor(copper / 10000);
+    var silver = Math.floor(copper / 100) % 100;
+    return (gold ? gold.toLocaleString("en-US") + "g " : "") + (gold || silver ? silver + "s " : "") + (copper % 100) + "c";
+  }
+
+  function formatSavedAgo(savedAt, now) {
+    var time = typeof savedAt === "string" ? Date.parse(savedAt) : NaN;
+    if (!isFinite(time)) return "";
+    var minutes = Math.floor(Math.max(0, now - time) / 60000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return minutes + (minutes === 1 ? " minute ago" : " minutes ago");
+    var hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago");
+    var days = Math.floor(hours / 24);
+    return days + (days === 1 ? " day ago" : " days ago");
+  }
+
+  // The character the Auxora Companion add-on saved in game, in the shape the
+  // panel shows, or null when the host has none. The host's reply is checked
+  // field by field; nothing in it is trusted to have the right type.
+  function gameCharacter(payload) {
+    var source = payload && payload.available === true ? payload.character : null;
+    if (!source || typeof source !== "object" || typeof source.name !== "string" || !source.name) return null;
+    function text(value) { return typeof value === "string" ? value : ""; }
+    function whole(value) { value = Number(value); return isFinite(value) && value > 0 ? Math.floor(value) : 0; }
+    var xp = whole(source.xp);
+    var xpMax = whole(source.xpMax);
+    return {
+      name: text(source.name),
+      race: text(source.race),
+      className: text(source.class),
+      faction: source.faction === "Alliance" ? "Alliance" : "Horde",
+      level: whole(source.level),
+      zone: text(source.zone),
+      subZone: text(source.subZone),
+      hearth: text(source.home),
+      xp: xp,
+      xpMax: xpMax,
+      xpPercent: xpMax > 0 ? Math.min(100, xp / xpMax * 100) : 0,
+      rested: whole(source.xpRested),
+      coins: formatCoins(source.copper),
+      savedAt: text(source.savedAt),
+      quests: (Array.isArray(source.quests) ? source.quests : []).filter(function (quest) {
+        return quest && typeof quest === "object" && typeof quest.title === "string" && quest.title;
+      }).slice(0, 40).map(function (quest) {
+        return {
+          title: quest.title,
+          zone: text(quest.zone),
+          level: whole(quest.level),
+          complete: quest.complete === true,
+          objectives: (Array.isArray(quest.objectives) ? quest.objectives : []).filter(function (objective) {
+            return objective && typeof objective === "object" && typeof objective.text === "string" && objective.text;
+          }).slice(0, 8).map(function (objective) {
+            return { text: objective.text, done: objective.done === true };
+          })
+        };
+      })
+    };
+  }
+
   // Pure state helpers are also available to the Node regression tests.
   if (typeof module === "object" && module.exports) {
-    module.exports = { freshJournal: freshJournal, validateJournal: validateJournal, elapsedSession: elapsedSession, formatSession: formatSession };
+    module.exports = {
+      freshJournal: freshJournal, validateJournal: validateJournal, elapsedSession: elapsedSession, formatSession: formatSession,
+      formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter
+    };
     return;
   }
 
@@ -114,7 +180,7 @@
     }).join("");
   }
 
-  function mountAdventure(widget, container) {
+  function mountAdventure(widget, container, env) {
     var cleanups = [];
     var journal = freshJournal();
     var activeFilter = "active";
@@ -128,6 +194,12 @@
     var disposed = false;
     var storageWritable = true;
     var downloadUrls = [];
+    // The character saved in game by the Auxora Companion add-on, when there is one.
+    var game = null;
+    var gameMessage = "";
+    var gameSignature = "";
+    var gameRequestId = 0;
+    var gameTicks = 0;
 
     try {
       var saved = window.localStorage.getItem(STORAGE_KEY);
@@ -185,7 +257,18 @@
 
     function profileMarkup() {
       var p = journal.profile;
-      return '<div class="wow-emblem" aria-hidden="true"><svg viewBox="0 0 100 100" fill="none"><path d="M50 5 83 24v38L50 94 17 62V24Z" stroke="currentColor" stroke-width="2"/><path d="m50 16 23 14v27L50 80 27 57V30Z" stroke="currentColor" opacity=".45"/><path d="m50 24 7 20 19 6-19 7-7 20-7-20-19-7 19-6Z" fill="currentColor"/><path d="M50 5v11M83 24l-10 6M17 24l10 6M50 80v14" stroke="currentColor"/></svg></div>' +
+      var emblem = '<div class="wow-emblem" aria-hidden="true"><svg viewBox="0 0 100 100" fill="none"><path d="M50 5 83 24v38L50 94 17 62V24Z" stroke="currentColor" stroke-width="2"/><path d="m50 16 23 14v27L50 80 27 57V30Z" stroke="currentColor" opacity=".45"/><path d="m50 24 7 20 19 6-19 7-7 20-7-20-19-7 19-6Z" fill="currentColor"/><path d="M50 5v11M83 24l-10 6M17 24l10 6M50 80v14" stroke="currentColor"/></svg></div>';
+      if (game) {
+        return emblem +
+          '<div class="wow-level-badge">Level <strong>' + game.level + '</strong></div>' +
+          '<h3 class="wow-character-name">' + escapeHtml(game.name) + '</h3>' +
+          '<p class="wow-character-meta">' + escapeHtml([game.race, game.className].filter(Boolean).join(" ")) + ' <span>For the ' + game.faction + '</span></p>' +
+          '<div class="wow-location"><span class="wow-eyebrow">Current location</span><strong>' + escapeHtml([game.subZone, game.zone].filter(Boolean).join(", ") || "Unknown") + '</strong></div>' +
+          '<div class="wow-progress-track" role="progressbar" aria-label="Experience this level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(game.xpPercent) + '"><span style="width:' + game.xpPercent.toFixed(2) + '%"></span></div>' +
+          '<p class="wow-character-meta">' + (game.xpMax ? game.xp.toLocaleString("en-US") + " / " + game.xpMax.toLocaleString("en-US") + " XP" + (game.rested ? ", rested" : "") : "Experience not reported") + '</p>' +
+          '<dl class="wow-profile-summary"><div><dt>Coin</dt><dd>' + escapeHtml(game.coins) + '</dd></div><div><dt>Hearthstone</dt><dd>' + escapeHtml(game.hearth || "Not set") + '</dd></div><div><dt>Professions</dt><dd>' + escapeHtml(p.professions || "Choose your crafts") + '</dd></div></dl>';
+      }
+      return emblem +
         '<div class="wow-level-badge">Level <strong>' + p.level + '</strong></div>' +
         '<h3 class="wow-character-name">' + escapeHtml(p.name || "Your story begins") + '</h3>' +
         '<p class="wow-character-meta">' + escapeHtml([p.race, p.className].filter(Boolean).join(" ") || "Create your adventurer") + ' <span>For the Horde</span></p>' +
@@ -205,7 +288,7 @@
       function field(label, key, max, placeholder) {
         return '<label>' + label + '<input name="' + key + '" maxlength="' + max + '" value="' + escapeHtml(p[key]) + '" placeholder="' + escapeHtml(placeholder || "") + '"></label>';
       }
-      return '<div class="wow-card-heading"><h3>Your adventurer</h3><small>Update as your story unfolds</small></div><div class="wow-fields">' +
+      return '<div class="wow-card-heading"><h3>Your adventurer</h3><small>' + (game ? "Name, level, zone and hearthstone come from the game while the add-on is saving" : "Update as your story unfolds") + '</small></div><div class="wow-fields">' +
         field("Character name", "name", 64, "First and last name") +
         '<label>Class<select name="className">' + options(CLASSES, p.className, "Choose a class") + '</select></label>' +
         field("Race", "race", 40, "e.g. Troll") +
@@ -217,10 +300,32 @@
         '</div><div class="wow-timer-actions"><button class="wow-button wow-button--primary" type="submit">Save character</button>' + button("cancel-profile", "Cancel", "quiet") + '</div>';
     }
 
+    // The game's own quest log: read-only, grouped as the game groups it.
+    function gameQuestsMarkup() {
+      return game.quests.map(function (quest) {
+        var detail = [quest.zone, quest.level ? "Level " + quest.level : ""].filter(Boolean).join(" / ");
+        var objectives = quest.complete ? "Ready to turn in" : quest.objectives.map(function (objective) { return objective.text; }).join(" / ");
+        return '<li class="wow-quest wow-quest--game' + (quest.complete ? ' is-ready' : '') + '"><span class="wow-quest-copy"><small>' + escapeHtml(detail || "Quest") + '</small><strong>' + escapeHtml(quest.title) + '</strong>' +
+          (objectives ? '<span class="wow-quest-objectives">' + escapeHtml(objectives) + '</span>' : '') + '</span></li>';
+      }).join("");
+    }
+
     function renderQuests() {
       var done = journal.quests.filter(function (quest) { return quest.done; }).length;
-      query(".wow-quest-count").textContent = (journal.quests.length - done) + " active / " + done + " complete";
+      var gameTab = query('[data-wow-filter="game"]');
+      gameTab.hidden = !game;
+      if (!game && activeFilter === "game") activeFilter = "active";
       container.querySelectorAll("[data-wow-filter]").forEach(function (tab) { tab.setAttribute("aria-pressed", String(tab.dataset.wowFilter === activeFilter)); });
+      if (activeFilter === "game") {
+        var ready = game.quests.filter(function (quest) { return quest.complete; }).length;
+        query(".wow-quest-count").textContent = game.quests.length + " in game / " + ready + " ready";
+        query(".wow-quest-list").innerHTML = gameQuestsMarkup();
+        var none = query(".wow-empty");
+        none.hidden = game.quests.length > 0;
+        none.innerHTML = '<strong>An empty quest log.</strong><p>Quests you accept in game appear here after the next save.</p>';
+        return;
+      }
+      query(".wow-quest-count").textContent = (journal.quests.length - done) + " active / " + done + " complete";
       var entries = journal.quests.filter(function (quest) { return activeFilter === "all" || (activeFilter === "completed" ? quest.done : !quest.done); });
       query(".wow-quest-list").innerHTML = entries.map(function (quest) {
         return '<li class="wow-quest' + (quest.done ? ' is-complete' : '') + '"><label><input type="checkbox" data-wow-quest="' + quest.id + '"' + (quest.done ? ' checked' : '') + '><span class="wow-quest-copy"><small>' + escapeHtml(quest.category) + '</small><strong>' + escapeHtml(quest.title) + '</strong></span></label><button type="button" class="wow-icon-button" data-wow-remove="' + quest.id + '" aria-label="Remove ' + escapeHtml(quest.title) + '" title="Remove entry">' +
@@ -229,6 +334,51 @@
       var empty = query(".wow-empty");
       empty.hidden = entries.length > 0;
       empty.innerHTML = activeFilter === "completed" ? '<strong>Stories still in the making.</strong><p>Completed entries will be kept here.</p>' : journal.quests.length ? '<strong>A moment at the campfire.</strong><p>No active entries. Choose your next adventure above.</p>' : '<strong>Every adventure starts with a plan.</strong><p>Add a quest, a piece of gear to hunt, or a place you want to discover.</p>';
+    }
+
+    function renderGameStatus() {
+      var node = query(".wow-game-status");
+      if (!node) return;
+      var saved = game ? formatSavedAgo(game.savedAt, Date.now()) : "";
+      node.textContent = game
+        ? "Character and quests from the game" + (saved ? ", saved " + saved : "") + ". Type /auxora in game to update."
+        : "Manual tracking. " + (gameMessage || "Not connected to game data.");
+    }
+
+    function applyGame(payload) {
+      var next = gameCharacter(payload);
+      var message = payload && typeof payload.message === "string" ? payload.message.slice(0, 200) : "";
+      var signature = JSON.stringify([next, message]);
+      if (signature === gameSignature) {
+        renderGameStatus();
+        return;
+      }
+      var firstGame = !game && Boolean(next);
+      gameSignature = signature;
+      game = next;
+      gameMessage = message;
+      // With nothing tracked by hand, the game's quest log is the useful view.
+      if (firstGame && !journal.quests.length && activeFilter === "active") activeFilter = "game";
+      renderProfile();
+      renderQuests();
+      renderGameStatus();
+    }
+
+    // The host reads what the add-on saved; the game writes it at logout or /reload.
+    function loadGame() {
+      if (!env || !env.bridgeOrigin || typeof runtime.requestJson !== "function" || typeof runtime.buildBridgeUrl !== "function") return;
+      var requestId = ++gameRequestId;
+      runtime.requestJson(runtime.buildBridgeUrl(env, "/api/wow/companion"), undefined, 4000).then(function (payload) {
+        if (!disposed && requestId === gameRequestId) applyGame(payload);
+      }, function () {
+        // No companion data from this host. The journal stays manual.
+      });
+    }
+
+    function tick() {
+      updateTimer();
+      gameTicks += 1;
+      if (gameTicks % 15 === 0) loadGame();
     }
 
     function updateTimer() {
@@ -245,15 +395,16 @@
         '<div class="wow-notice" role="status" hidden></div>' +
         (originalUnreadable !== null ? '<div class="wow-recovery wow-card"><p>Your existing saved data is protected until you choose how to recover it.</p>' + button("export-recovery", "Export recovery copy") + button("new-journal", "Start new journal", "quiet") + '</div>' : '') +
         '<div class="wow-grid"><article class="wow-card wow-character"><div class="wow-card-heading"><span class="wow-eyebrow">The adventurer</span><span class="wow-eyebrow">Chapter I</span></div><div class="wow-character-content"></div></article>' +
-        '<article class="wow-card wow-quests"><div class="wow-card-heading"><h3>Quest ledger</h3><small class="wow-quest-count"></small></div><div class="wow-quest-tabs" role="group" aria-label="Filter quest ledger"><button type="button" data-wow-filter="active" aria-pressed="true">Active</button><button type="button" data-wow-filter="completed" aria-pressed="false">Completed</button><button type="button" data-wow-filter="all" aria-pressed="false">All entries</button></div>' +
+        '<article class="wow-card wow-quests"><div class="wow-card-heading"><h3>Quest ledger</h3><small class="wow-quest-count"></small></div><div class="wow-quest-tabs" role="group" aria-label="Filter quest ledger"><button type="button" data-wow-filter="active" aria-pressed="true">Active</button><button type="button" data-wow-filter="completed" aria-pressed="false">Completed</button><button type="button" data-wow-filter="all" aria-pressed="false">All entries</button><button type="button" data-wow-filter="game" aria-pressed="false" hidden>In game</button></div>' +
         '<form class="wow-quest-form" aria-label="Add adventure entry"><label class="wow-sr-only" for="wow-quest-title">Your next objective</label><input id="wow-quest-title" name="title" placeholder="What will you pursue next?" maxlength="180" required autocomplete="off"><label class="wow-sr-only" for="wow-quest-category">Entry type</label><select id="wow-quest-category" name="category">' + options(CATEGORIES, "Quest") + '</select><button class="wow-button wow-button--primary" type="submit">Add entry</button></form><ul class="wow-quest-list"></ul><div class="wow-empty"></div></article>' +
         '<aside class="wow-card wow-camp"><div class="wow-card-heading"><h3>At the campfire</h3></div><p class="wow-timer-label"></p><div class="wow-timer-value" role="timer" aria-label="Session elapsed time">00:00:00</div><div class="wow-timer-actions">' + button("toggle-session", "Begin session", "primary") + button("reset-session", "Reset", "quiet") + '</div><p class="wow-timer-help">Runs until you pause, even when you leave this tab.</p><div class="wow-card-heading"><h3>Before you set out</h3></div><div class="wow-prep-list">' + PREPARATIONS.map(function (label, index) { return '<label><input type="checkbox" data-wow-prep="' + index + '"' + (journal.preparations[index] ? ' checked' : '') + '><span>' + label + '</span></label>'; }).join("") + '</div></aside>' +
         '<article class="wow-card wow-journal"><div class="wow-card-heading"><h3>Field notes</h3><small>Saved as you write</small></div><label class="wow-sr-only" for="wow-field-notes">Field notes</label><textarea id="wow-field-notes" maxlength="20000" placeholder="A hidden path. A helpful stranger. The materials you still need. Leave a note for your next session.">' + escapeHtml(journal.notes) + '</textarea></article>' +
         '<aside class="wow-card wow-resources"><div class="wow-card-heading"><h3>The wayfinder</h3><small>Official field guides</small></div><div class="wow-resource-links">' + resources.map(function (resource) { return '<a href="' + resource.url + '" target="_blank" rel="noopener noreferrer"><strong>' + resource.label + '</strong><small>' + resource.detail + '</small></a>'; }).join("") + '</div></aside></div>' +
-        '<footer class="wow-footer"><span class="wow-save-status" role="status"></span><span>Personal companion / Manual tracking / Not connected to game data</span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
+        '<footer class="wow-footer"><span class="wow-save-status" role="status"></span><span class="wow-game-status" role="status"></span></footer><input class="wow-backup-file" type="file" accept=".json,application/json" hidden aria-label="Import journal backup"></section>';
       query('[data-wow-action="profile"]').setAttribute("aria-expanded", "false");
       renderProfile();
       renderQuests();
+      renderGameStatus();
       updateTimer();
       showNotice();
     }
@@ -444,8 +595,9 @@
       }
     });
 
-    var loop = runtime.createTimerLoop(updateTimer, 1000);
+    var loop = runtime.createTimerLoop(tick, 1000);
     loop.start();
+    loadGame();
     return {
       refresh: function () { return loop.refresh(); },
       destroy: function () {

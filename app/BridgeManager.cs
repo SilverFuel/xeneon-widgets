@@ -111,7 +111,7 @@ public sealed class BridgeManager : IAsyncDisposable
             _gameActivityService,
             _gamePerformanceService,
             _logger);
-        _gameController = new GameController(_steamService, _gameActivityService, _gamePerformanceService, _gameModeSessionService);
+        _gameController = new GameController(_steamService, _gameActivityService, _gamePerformanceService, _gameModeSessionService, new WowCompanionService());
         _provisioningService = new ProvisioningService(_configStore, _steamService, _logger);
         _systemActionsService = new SystemActionsService(_logger);
         var actionChainService = new ActionChainService(_sceneService, _systemActionsService);

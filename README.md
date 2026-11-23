@@ -133,11 +133,19 @@ While Auxora is running, launching WoW Forever automatically opens the Horde adv
 
 You can also open **Gaming > WoW Forever**. The panel is available directly at `dashboard.html?widget=wow-forever`, and other games do not replace an already selected journal with Game Mode. This feature switches tabs inside the running Auxora dashboard; it does not start Auxora if it is closed.
 
-The journal uses a permanent Horde theme. Use **Edit character** to set your character, level, current zone, hearthstone destination, and professions. The quest ledger tracks quests, dungeons, gear goals, professions, and exploration. Field notes save as you type; the session timer runs until paused, including time spent outside the tab. Progress is entered manually, with no connection to game data.
+The journal uses a permanent Horde theme. Use **Edit character** to set your character, level, current zone, hearthstone destination, and professions. The quest ledger tracks quests, dungeons, gear goals, professions, and exploration. Field notes save as you type; the session timer runs until paused, including time spent outside the tab. Progress is entered manually unless the Auxora Companion add-on is installed (see below).
 
 Journal data stays in this dashboard's browser storage. Use **Export journal** for a backup and **Import backup** to restore it. Import asks before replacing the current journal, and entry removal and timer resets can be undone. The standard presentation backup does not include the journal. Clearing Auxora's local data removes it.
 
 Validate the journal state and backup handling with `npm run test:wow-forever`.
+
+### Auxora Companion add-on
+
+The journal can show your character from the game: name, level, experience, location, coin, hearthstone and quest log. Copy the `addons\AuxoraCompanion` folder from this repository into `World of Warcraft\_forever_\Interface\AddOns` and enable **Auxora Companion** on the character screen.
+
+World of Warcraft writes add-on data to disk only when you log out or reload the interface, so the journal shows the character as of the last save, with its age. Type `/auxora` in game to save and reload at once; `/auxora status` shows what will be saved. The add-on reads your own character only and sends nothing anywhere.
+
+Auxora looks for the Forever client in the usual install folders, and in the folder of a running Forever client. It reads that one saved file and never writes to the game's folders. Once a character is found, the character card follows the game and the quest ledger gains an **In game** tab; the entries you track by hand are unchanged.
 
 ## Camera Detection
 

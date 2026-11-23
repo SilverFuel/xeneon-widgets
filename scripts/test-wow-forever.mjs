@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -361,4 +361,84 @@ test("failed recovery replacement preserves the original export until saving suc
     assert.doesNotMatch(fixture.container.innerHTML, /class="wow-recovery wow-card"/);
     fixture.instance.destroy();
   }
+});
+
+// What the native host returns for a character the Auxora Companion add-on saved.
+function companionPayload(overrides = {}) {
+  return {
+    gameFound: true, installed: true, available: true, addonVersion: "0.1.1", message: "Type /auxora in game to update.",
+    character: {
+      name: "Grimbold", realm: "Forever One", class: "Paladin", classToken: "PALADIN", race: "Undead", faction: "Horde",
+      level: 18, xp: 16733, xpMax: 19400, xpRested: 3000, zone: "Hillsbrad Foothills", subZone: "Tarren Mill",
+      home: "The Sepulcher", copper: 25098, savedAt: "2026-11-12T05:31:30+00:00", questsRead: true,
+      quests: [
+        { title: "The Rescue", zone: "Hillsbrad Foothills", level: 22, complete: false, objectives: [{ text: "0/1 Rescue Drull", done: false }] },
+        { title: "Deathstalkers in Shadowfang", zone: "Shadowfang Keep", level: 25, complete: true, objectives: [] }
+      ],
+      ...overrides
+    }
+  };
+}
+
+test("coins are shown as gold, silver and copper", () => {
+  assert.equal(formatCoins(25098), "2g 50s 98c");
+  assert.equal(formatCoins(12345678), "1,234g 56s 78c");
+  assert.equal(formatCoins(10000), "1g 0s 0c");
+  assert.equal(formatCoins(250), "2s 50c");
+  assert.equal(formatCoins(7), "7c");
+  for (const value of [0, -5, NaN, Infinity, null, undefined, "many"]) assert.equal(formatCoins(value), "0c");
+});
+
+test("the age of the game's last save reads in plain words", () => {
+  const saved = "2026-11-12T05:00:00+00:00";
+  const at = minutes => Date.parse(saved) + minutes * 60000;
+  assert.equal(formatSavedAgo(saved, at(0.5)), "just now");
+  assert.equal(formatSavedAgo(saved, at(1)), "1 minute ago");
+  assert.equal(formatSavedAgo(saved, at(59)), "59 minutes ago");
+  assert.equal(formatSavedAgo(saved, at(60)), "1 hour ago");
+  assert.equal(formatSavedAgo(saved, at(60 * 23)), "23 hours ago");
+  assert.equal(formatSavedAgo(saved, at(60 * 24)), "1 day ago");
+  assert.equal(formatSavedAgo(saved, at(60 * 24 * 9)), "9 days ago");
+  assert.equal(formatSavedAgo(saved, at(-30)), "just now", "a clock that runs behind must not show a negative age");
+  for (const value of ["", "soon", null, undefined, 5]) assert.equal(formatSavedAgo(value, at(1)), "");
+});
+
+test("the game's character is read from the host's reply", () => {
+  const character = gameCharacter(companionPayload());
+  assert.deepEqual(
+    { name: character.name, race: character.race, className: character.className, faction: character.faction, level: character.level },
+    { name: "Grimbold", race: "Undead", className: "Paladin", faction: "Horde", level: 18 });
+  assert.deepEqual([character.zone, character.subZone, character.hearth], ["Hillsbrad Foothills", "Tarren Mill", "The Sepulcher"]);
+  assert.deepEqual([character.xp, character.xpMax, character.rested, character.coins], [16733, 19400, 3000, "2g 50s 98c"]);
+  assert.ok(Math.abs(character.xpPercent - 86.25) < 0.01);
+  assert.deepEqual(character.quests, [
+    { title: "The Rescue", zone: "Hillsbrad Foothills", level: 22, complete: false, objectives: [{ text: "0/1 Rescue Drull", done: false }] },
+    { title: "Deathstalkers in Shadowfang", zone: "Shadowfang Keep", level: 25, complete: true, objectives: [] }
+  ]);
+});
+
+test("no character is shown unless the host says one is available", () => {
+  for (const payload of [null, undefined, "text", 5, [], {}, { available: true }, { available: true, character: null },
+    { available: true, character: { name: "" } }, { available: true, character: { name: 7 } },
+    { ...companionPayload(), available: false }, { ...companionPayload(), available: "true" }]) {
+    assert.equal(gameCharacter(payload), null);
+  }
+});
+
+test("a reply with the wrong types cannot break or mislead the panel", () => {
+  const character = gameCharacter(companionPayload({
+    race: 4, class: null, faction: "<script>", level: "eighteen", xp: 500, xpMax: 0, xpRested: -3, zone: {}, subZone: [], home: undefined,
+    copper: "lots", savedAt: 12,
+    quests: [null, "quest", { title: "" }, { title: 9 }, { title: "Kept", level: -2, complete: "yes", objectives: [null, { text: 5 }, { text: "Step", done: 1 }] }]
+  }));
+  assert.deepEqual([character.race, character.className, character.faction, character.level], ["", "", "Horde", 0]);
+  assert.deepEqual([character.xpPercent, character.rested, character.zone, character.subZone, character.hearth, character.coins, character.savedAt], [0, 0, "", "", "", "0c", ""]);
+  assert.deepEqual(character.quests, [{ title: "Kept", zone: "", level: 0, complete: false, objectives: [{ text: "Step", done: false }] }]);
+  assert.equal(gameCharacter(companionPayload({ xp: 30000, xpMax: 19400 })).xpPercent, 100);
+  assert.equal(gameCharacter(companionPayload({ faction: "Alliance" })).faction, "Alliance");
+  const many = gameCharacter(companionPayload({
+    quests: Array.from({ length: 90 }, (_, index) => ({ title: `Quest ${index}`, objectives: Array.from({ length: 20 }, (_, step) => ({ text: `step ${step}` })) }))
+  }));
+  assert.equal(many.quests.length, 40);
+  assert.equal(many.quests[0].objectives.length, 8);
 });

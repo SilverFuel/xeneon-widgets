@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <XenonAssetRevision>20261111-03</XenonAssetRevision>
-    <XenonInformationalVersion>0.3.0-beta.1+20261111</XenonInformationalVersion>
+    <XenonAssetRevision>20261112-01</XenonAssetRevision>
+    <XenonInformationalVersion>0.3.0-beta.1+20261112</XenonInformationalVersion>
   </PropertyGroup>
 </Project>

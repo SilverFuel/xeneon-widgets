@@ -6,17 +6,20 @@ public sealed class GameController
     private readonly GameActivityService _gameActivityService;
     private readonly GamePerformanceService _gamePerformanceService;
     private readonly GameModeSessionService _gameModeSessionService;
+    private readonly WowCompanionService _wowCompanionService;
 
     public GameController(
         SteamService steamService,
         GameActivityService gameActivityService,
         GamePerformanceService gamePerformanceService,
-        GameModeSessionService gameModeSessionService)
+        GameModeSessionService gameModeSessionService,
+        WowCompanionService wowCompanionService)
     {
         _steamService = steamService;
         _gameActivityService = gameActivityService;
         _gamePerformanceService = gamePerformanceService;
         _gameModeSessionService = gameModeSessionService;
+        _wowCompanionService = wowCompanionService;
     }
 
     public SteamGamesSnapshot GetSteamGames(bool refresh)
@@ -52,6 +55,13 @@ public sealed class GameController
     public Task<GameModeSessionSnapshot> GetSessionAsync(GameModeSessionRequest request, CancellationToken cancellationToken)
     {
         return _gameModeSessionService.GetSnapshotAsync(request, cancellationToken);
+    }
+
+    // The running game's location stays here; the snapshot carries no path.
+    public WowCompanionSnapshot GetWowCompanion()
+    {
+        var activity = _gameActivityService.GetSnapshot();
+        return _wowCompanionService.GetSnapshot(activity.ActiveGame?.ExecutablePath ?? activity.LastGame?.ExecutablePath);
     }
 
     public GameActivityPinResult PinCandidate(GameActivityPinRequest request)
