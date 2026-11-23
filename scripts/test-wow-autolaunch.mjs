@@ -34,6 +34,8 @@ function harness(panel = "home", enabled = true, profiles = builtInProfiles()) {
   const timers = new Map();
   let nextTimer = 0;
   const context = {
+    // The play log has its own test (test-play-log.mjs); here it is not under test.
+    trackPlay() {},
     currentWidgetId: panel,
     primaryDestination: navigation.sectionForWidget(panel) || "home",
     navigation,

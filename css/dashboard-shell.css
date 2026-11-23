@@ -245,3 +245,100 @@ body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; 
 .auxora-home-feedback { margin: 0; color: var(--theme-text); }
 @media (max-width: 600px) { .auxora-glance-chains > .inline-actions { grid-template-columns: minmax(0, 1fr); } }
 @media (forced-colors: active) { .auxora-home-link, .auxora-home-link__action { color: ButtonText; } .auxora-home-link:hover { background: ButtonFace; border-color: Highlight; } }
+
+/* The session chip: the game being played and a running clock. Tapping it opens the game's panel. */
+.auxora-play-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 420px;
+  padding: 6px 14px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  border-radius: 999px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--theme-accent) 22%, var(--theme-page)), var(--theme-page));
+  color: var(--theme-text);
+  font: inherit;
+  font-size: max(14px, 0.875rem);
+  font-weight: 650;
+  cursor: pointer;
+}
+.auxora-play-chip[hidden] { display: none; }
+.auxora-play-chip__dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--theme-accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--theme-accent) 70%, transparent);
+  animation: auxora-play-pulse 2.2s ease-out infinite;
+}
+.auxora-play-chip__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auxora-play-chip__clock { flex: 0 0 auto; color: var(--theme-accent-text); font-variant-numeric: tabular-nums; }
+@keyframes auxora-play-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--theme-accent) 70%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 10px transparent; }
+}
+@media (min-width: 1800px) and (min-height: 600px) {
+  .auxora-play-chip { min-height: 54px; padding-inline: 18px; font-size: max(15px, 0.9375rem); }
+}
+/* No room beside the tabs on a narrow screen. */
+@media (max-width: 1100px) { .auxora-play-chip { display: none; } }
+
+/* The welcome shown for a few seconds when a game starts. It never takes a tap or the focus. */
+.auxora-arrival {
+  position: fixed;
+  z-index: 40;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: min(760px, calc(100vw - 48px));
+  padding: 26px 40px 28px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 60%, transparent);
+  border-radius: 22px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 26%, var(--theme-page)), var(--theme-page) 62%);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .04) inset;
+  color: var(--theme-text);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.auxora-arrival[hidden] { display: none; }
+.auxora-arrival__eyebrow { color: var(--theme-accent-text); font-size: max(15px, 0.9375rem); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.auxora-arrival__name { max-width: 100%; overflow: hidden; font-size: clamp(34px, 3.2vw, 64px); font-weight: 800; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+.auxora-arrival__line { font-size: clamp(18px, 1.3vw, 28px); font-weight: 600; }
+.auxora-arrival__history { margin-top: 6px; color: var(--theme-text-muted); font-size: clamp(15px, 1vw, 22px); }
+/* A band of light crosses the card once. */
+.auxora-arrival::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -40%;
+  width: 34%;
+  background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--theme-accent) 34%, transparent), transparent);
+  transform: skewX(-18deg);
+  opacity: 0;
+}
+.auxora-arrival.is-showing { animation: auxora-arrival-in .5s cubic-bezier(.2, .9, .2, 1) both, auxora-arrival-out .6s ease-in 5.8s both; }
+.auxora-arrival.is-showing::after { animation: auxora-arrival-sweep 1.2s ease-out .25s both; }
+@keyframes auxora-arrival-in {
+  from { opacity: 0; transform: translate(-50%, -42%) scale(.94); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes auxora-arrival-out { to { opacity: 0; transform: translate(-50%, -56%) scale(.98); } }
+@keyframes auxora-arrival-sweep {
+  0% { left: -40%; opacity: 0; }
+  20% { opacity: 1; }
+  100% { left: 110%; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auxora-play-chip__dot, .auxora-arrival.is-showing, .auxora-arrival.is-showing::after { animation: none; }
+}
+body:is(.dashboard-native-page--motion-off, .dashboard-native-page--motion-low) :is(.auxora-play-chip__dot, .auxora-arrival.is-showing, .auxora-arrival.is-showing::after) { animation: none; }
+@media (forced-colors: active) {
+  .auxora-play-chip, .auxora-arrival { border: 2px solid CanvasText; background: Canvas; color: CanvasText; }
+  .auxora-arrival::after { display: none; }
+}

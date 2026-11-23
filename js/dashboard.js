@@ -1661,6 +1661,84 @@
     });
   }
 
+  // The play log (js/play-log.js): which game is running and for how long, kept on this device.
+  // It feeds the session chip in the header and the welcome shown when a game starts.
+  var playLog = window.AuxoraPlayLog ? window.AuxoraPlayLog.load(window.localStorage) : null;
+  var playChipTimer = 0;
+  var arrivalTimer = 0;
+  var arrivalLines = {
+    "scene-wow-forever": "The road is waiting.",
+    "scene-battlefield": "Boots on the ground.",
+    "scene-fable": "Every choice tells a tale."
+  };
+
+  function renderPlayChip() {
+    var chip = document.getElementById("dashboard-play-chip");
+    var stats = playLog && playLog.current ? window.AuxoraPlayLog.summary(playLog, playLog.current.key, Date.now()) : null;
+    if (!chip) {
+      return;
+    }
+    chip.hidden = !stats;
+    if (!stats) {
+      window.clearInterval(playChipTimer);
+      playChipTimer = 0;
+      return;
+    }
+    var clock = window.AuxoraPlayLog.formatClock(stats.sessionMs);
+    document.getElementById("dashboard-play-chip-name").textContent = stats.name;
+    document.getElementById("dashboard-play-chip-clock").textContent = clock;
+    chip.setAttribute("aria-label", stats.name + ", this session " + window.AuxoraPlayLog.formatDuration(stats.sessionMs)
+      + ", today " + window.AuxoraPlayLog.formatDuration(stats.todayMs) + ". Open its panel.");
+    if (!playChipTimer) {
+      playChipTimer = window.setInterval(renderPlayChip, 1000);
+    }
+  }
+
+  // A short welcome when a game starts: its name, a line for its Profile, and the player's history with it.
+  function showArrival(game, stats) {
+    var banner = document.getElementById("dashboard-arrival");
+    var profile = profileForGame(game);
+    if (!banner) {
+      return;
+    }
+    document.getElementById("dashboard-arrival-name").textContent = stats ? stats.name : "Game";
+    document.getElementById("dashboard-arrival-line").textContent = (profile && arrivalLines[profile.id]) || "Game on.";
+    document.getElementById("dashboard-arrival-history").textContent = window.AuxoraPlayLog.historyLine(stats);
+    banner.hidden = false;
+    // Restart the entrance each time.
+    banner.classList.remove("is-showing");
+    void banner.offsetWidth;
+    banner.classList.add("is-showing");
+    window.clearTimeout(arrivalTimer);
+    arrivalTimer = window.setTimeout(function () {
+      banner.hidden = true;
+      banner.classList.remove("is-showing");
+    }, 6500);
+  }
+
+  function trackPlay(payload) {
+    if (!playLog) {
+      return;
+    }
+    var api = window.AuxoraPlayLog;
+    var now = Date.now();
+    var game = gameForAutoOpen(payload);
+    var key = game ? String(game.gameKey || game.id || game.name || "") : "";
+    if (key) {
+      var began = api.seen(playLog, { key: key, name: game.name || "Game" }, now);
+      api.save(window.localStorage, playLog);
+      if (began) {
+        showArrival(game, api.summary(playLog, key, now));
+      }
+    } else if (playLog.current && payload && payload.active === false && payload.supported !== false && !payload.stale
+      && (payload.status === "idle" || payload.status === "ended")) {
+      // Only a clear "no game" ends the session; a failed read does not.
+      api.end(playLog, now);
+      api.save(window.localStorage, playLog);
+    }
+    renderPlayChip();
+  }
+
   function handleGameActivity(payload) {
     var activeGame;
     var activeId;
@@ -1669,6 +1747,7 @@
     var newProcess;
 
     gameActivity = payload || null;
+    trackPlay(gameActivity);
     activeGame = gameForAutoOpen(gameActivity);
     activeId = activeGameIdFromPayload(gameActivity);
 
@@ -4663,6 +4742,13 @@
           if (!event.relatedTarget) {
             window.setTimeout(keepFocusInQuickDrawer, 0);
           }
+        });
+      }
+
+      var playChipNode = document.getElementById("dashboard-play-chip");
+      if (playChipNode) {
+        playChipNode.addEventListener("click", function () {
+          selectWidget(gameHomeWidgetId(gameActivity) || "game-mode", true);
         });
       }
 
