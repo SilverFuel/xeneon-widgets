@@ -303,6 +303,22 @@ public sealed class ApiRouter
                 await WriteJsonAsync(response, 200, _telemetryController.SetAudioBlend(blendTarget?.ProcessId, blendTarget?.ProcessName, blendRequest), cancellationToken);
                 return;
             }
+            case "/api/audio/chat-blend" when request.HttpMethod == "GET":
+            {
+                var chatGame = _gameController.GetActivity().ActiveGame;
+                await WriteJsonAsync(response, 200, _telemetryController.GetChatBlend(chatGame?.ProcessId, chatGame?.ProcessName), cancellationToken);
+                return;
+            }
+            case "/api/audio/chat-blend" when request.HttpMethod == "POST":
+            {
+                var chatRequest = await ReadJsonAsync<AudioBlendRequest>(request, cancellationToken);
+                var chatTarget = _gameController.GetActivity().ActiveGame;
+                await WriteJsonAsync(response, 200, _telemetryController.SetChatBlend(chatTarget?.ProcessId, chatTarget?.ProcessName, chatRequest), cancellationToken);
+                return;
+            }
+            case "/api/discord/open" when request.HttpMethod == "POST":
+                await WriteJsonAsync(response, 200, DiscordLauncher.Open(), cancellationToken);
+                return;
             case "/api/audio/session-volume" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, await _telemetryController.SetAudioSessionVolumeAsync(await ReadJsonAsync<AudioSessionVolumeRequest>(request, cancellationToken), cancellationToken), cancellationToken);
                 return;

@@ -1290,6 +1290,15 @@ try {
     `/api/audio/blend returned an unexpected shape: ${JSON.stringify(blendReply)}`);
   assert(!/[A-Za-z]:\\\\|\.exe/i.test(JSON.stringify(blendReply)), "/api/audio/blend must not name a process or a path");
 
+  // The game and Discord balance answers the same way, and says whether Discord is running.
+  const chatBlendResponse = await fetchWithTimeout("/api/audio/chat-blend");
+  assert(chatBlendResponse.status === 200, `/api/audio/chat-blend must answer; received HTTP ${chatBlendResponse.status}`);
+  const chatBlend = await chatBlendResponse.json();
+  assert(chatBlend.other === "chat" && typeof chatBlend.available === "boolean" && typeof chatBlend.otherFound === "boolean"
+    && typeof chatBlend.otherRunning === "boolean" && Number.isInteger(chatBlend.position),
+    `/api/audio/chat-blend returned an unexpected shape: ${JSON.stringify(chatBlend)}`);
+  assert(!/[A-Za-z]:\\\\|\.exe/i.test(JSON.stringify(chatBlend)), "/api/audio/chat-blend must not name a process or a path");
+
   const unconfiguredSnapshotResponse = await fetchWithTimeout("/api/frigate/snapshot?id=current-event");
   assert(unconfiguredSnapshotResponse.status === 404, `unconfigured Camera Detection snapshot must return HTTP 404; received ${unconfiguredSnapshotResponse.status}`);
   assert(/not configured/i.test((await unconfiguredSnapshotResponse.json()).error || ""), "unconfigured Camera Detection snapshot must explain that Frigate is not configured");

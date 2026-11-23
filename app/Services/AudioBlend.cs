@@ -7,8 +7,15 @@ public static class AudioBlend
 {
     public const string Game = "game";
     public const string Music = "music";
+    public const string Chat = "chat";
 
-    // Which side of the balance an audio session belongs to: "music", "game" or "".
+    // The process names Discord's desktop apps run under (stable, test and canary builds).
+    public static bool IsDiscordProcess(string? processName)
+    {
+        return TrimExe(processName).StartsWith("Discord", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Which side of a balance an audio session belongs to: "music", "chat", "game" or "".
     public static string RoleOf(string? processName, string? displayName, int processId, int? gameProcessId, string? gameProcessName)
     {
         var process = TrimExe(processName);
@@ -16,6 +23,11 @@ public static class AudioBlend
             || (displayName ?? "").Contains("Apple Music", StringComparison.OrdinalIgnoreCase))
         {
             return Music;
+        }
+
+        if (IsDiscordProcess(process))
+        {
+            return Chat;
         }
 
         if (gameProcessId is int id && id > 0 && id == processId)
@@ -74,10 +86,51 @@ public sealed class AudioBlendPayload
 
     public int Position { get; set; } = 50;
 
+    // What the game is balanced against: "music" (Apple Music) or "chat" (Discord).
+    public string Other { get; set; } = AudioBlend.Music;
+
+    public bool OtherFound { get; set; }
+
+    public int OtherVolume { get; set; }
+
+    // For chat: whether Discord is running at all, sound or no sound.
+    public bool OtherRunning { get; set; }
+
     public string Message { get; set; } = "";
 }
 
 public sealed class AudioBlendRequest
 {
     public double Position { get; set; } = 50;
+}
+
+// Brings Discord to the front, or starts it, through the link Discord registers with Windows.
+public static class DiscordLauncher
+{
+    public const string Target = "discord://-/";
+
+    public static DiscordOpenPayload Open()
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = Target,
+                UseShellExecute = true
+            });
+            return new DiscordOpenPayload { Opened = true, Message = "" };
+        }
+        catch (Exception)
+        {
+            // Windows has no app for discord:// links: Discord is not installed for this user.
+            return new DiscordOpenPayload { Opened = false, Message = "Discord does not seem to be installed on this PC." };
+        }
+    }
+}
+
+public sealed class DiscordOpenPayload
+{
+    public bool Opened { get; set; }
+
+    public string Message { get; set; } = "";
 }
