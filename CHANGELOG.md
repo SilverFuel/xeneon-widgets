@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings > Appearance fits on one screen on the EDGE: its settings sit four across where they were stacked two across and scrolled. Text size is three buttons (Normal, Large, Extra large), one tap where the dropdown took two.
 - Gaming has a **This week** card when no game is running: time played over the last seven days as seven bars, the total, one line on the busiest day ("Most on Saturday: 3 h 45 min."), and the three games the time went on. It reads the play log Auxora already keeps and appears once a game has been played.
 - WoW Forever's Apple Music control now shows the cover art and has **previous** and **next** buttons under the play button. The cover is read from Apple Music itself, once per track. Skip buttons appear only when Apple Music says it can skip.
 - Smart Home > Lights: each room and each light is one tile painted in the colour its lamps are showing, with its switch and brightness inside it. A brighter lamp gives a lighter tile; a room that is off, or a light that cannot be reached, stays plain. Rooms show how many lights they hold. On the EDGE the tiles fill the screen with larger names, switches and percentages.
