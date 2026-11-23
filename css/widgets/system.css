@@ -25,122 +25,102 @@
   }
 
   :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .inline-widget-shell--system .system-monitor-cockpit {
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto;
-    gap: 10px;
     overflow: visible;
   }
 
-  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .inline-widget-shell--system .system-health-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .inline-widget-shell--system .system-stat-card {
+    grid-template-rows: auto auto 120px auto;
   }
 
-  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .inline-widget-shell--system .system-health-card {
-    grid-column: 1 / -1;
-  }
-
-  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .inline-widget-shell--system .system-detail-grid {
-    grid-template-columns: 1fr;
-    gap: 8px;
+  :is(.dashboard-native-page--browser, .dashboard-native-page--layout-compact, .dashboard-native-page--layout-ultrawide) .inline-widget-shell--system .system-side {
     overflow: visible;
   }
 }
 
-.system-toolbar-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex: 0 0 auto;
+@media (max-width: 760px) {
+  .inline-widget-shell--system .system-health-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
+/* PC > Performance: three tiles (CPU, GPU, Memory), each a large figure over its last two
+   minutes, and one side column that says in a line how the PC is doing. Sizes are in rem
+   with a pixel floor, so they follow Settings > Appearance > Text size. */
 .system-monitor-cockpit {
+  --system-fs-label: max(18px, 1.125rem);
+  --system-fs-text: max(16px, 1rem);
+  --system-fs-value: clamp(3rem, 6vw, 4.5rem);
+  --system-fs-health: max(24px, 1.5rem);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.34fr);
   gap: 12px;
   min-height: 0;
   overflow: hidden;
-}
-
-.system-health-strip,
-.system-detail-grid {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  min-height: 0;
 }
 
 .system-health-strip {
-  grid-template-columns: minmax(210px, 1.12fr) repeat(4, minmax(0, 1fr));
-}
-
-.system-detail-grid {
-  grid-template-columns: minmax(0, 1.26fr) minmax(0, 0.96fr) minmax(0, 0.96fr);
-  overflow: hidden;
-}
-
-.system-health-card,
-.system-stat-card,
-.system-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  overflow: hidden;
 }
 
+.system-stat-card,
 .system-health-card,
+.system-facts,
+.system-side-foot {
+  min-width: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-muted);
+}
+
 .system-stat-card {
   display: grid;
-  align-content: start;
-  gap: 6px;
-  padding: 10px 12px;
-}
-
-.system-health-card {
-  border-color: rgba(77, 255, 194, 0.18);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(77, 255, 194, 0.14), transparent 48%),
-    rgba(255, 255, 255, 0.035);
-}
-
-.system-health-card[data-tone="warn"] {
-  border-color: rgba(255, 196, 87, 0.28);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(255, 196, 87, 0.16), transparent 48%),
-    rgba(255, 255, 255, 0.035);
-}
-
-.system-health-card[data-tone="danger"] {
-  border-color: rgba(255, 91, 122, 0.34);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(255, 91, 122, 0.18), transparent 48%),
-    rgba(255, 255, 255, 0.035);
-}
-
-.system-health-card strong {
-  color: var(--color-text);
-  font-size: clamp(1.22rem, 1.55vw, 1.82rem);
-  line-height: 1;
-}
-
-.system-health-card span,
-.system-stat-card .router-inline-copy {
-  min-width: 0;
+  grid-template-rows: auto auto minmax(48px, 1fr) auto;
+  gap: 8px;
+  min-height: 0;
+  padding: 16px 18px 12px;
   overflow: hidden;
-  color: var(--color-text-dim);
-  font-size: max(12px, 0.75rem);
-  line-height: 1.2;
-  text-overflow: ellipsis;
+}
+
+.system-stat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.system-stat-label {
+  color: var(--color-text);
+  font-size: var(--system-fs-label);
+  font-weight: 800;
+}
+
+.system-stat-side {
+  color: var(--color-text);
+  font-size: var(--system-fs-label);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
   white-space: nowrap;
 }
 
 .system-stat-value {
   color: var(--color-text);
-  font-size: clamp(1.38rem, 2vw, 2.1rem);
+  font-size: var(--system-fs-value);
+  font-variant-numeric: tabular-nums;
   font-weight: 800;
   line-height: 1;
+}
+
+.system-stat-value small {
+  margin-left: 0.08em;
+  font-size: 0.45em;
+  font-weight: 700;
 }
 
 .system-stat-card[data-tone="good"] .system-stat-value,
@@ -150,137 +130,64 @@
 
 .system-stat-card[data-tone="warn"] .system-stat-value,
 .system-health-card[data-tone="warn"] strong {
-  color: #ffc457;
+  color: var(--status-warning-text);
 }
 
 .system-stat-card[data-tone="danger"] .system-stat-value,
 .system-health-card[data-tone="danger"] strong {
-  color: #ff5b7a;
+  color: var(--status-danger-text);
 }
 
+/* The last two minutes as thirty bars, newest on the right. The faint line is 50%. */
 .system-trend {
   display: flex;
-  align-items: end;
-  gap: 2px;
-  height: 18px;
+  align-items: flex-end;
+  gap: 3px;
   min-width: 0;
-  margin-top: 1px;
+  min-height: 0;
+  border-bottom: 1px solid var(--theme-border);
+  background: linear-gradient(var(--theme-border), var(--theme-border)) left 50% / 100% 1px no-repeat;
 }
 
 .system-trend span {
   flex: 1 1 0;
   min-width: 2px;
-  max-width: 8px;
-  border-radius: 999px 999px 2px 2px;
-  background: rgba(77, 255, 194, 0.46);
+  border-radius: 3px 3px 0 0;
+  background: var(--status-success-border);
+}
+
+.system-trend span.is-empty {
+  height: 0;
 }
 
 .system-trend[data-tone="warn"] span {
-  background: rgba(255, 196, 87, 0.58);
+  background: var(--status-warning-border);
 }
 
 .system-trend[data-tone="danger"] span {
-  background: rgba(255, 91, 122, 0.62);
+  background: var(--status-danger-border);
 }
 
-.system-trend.is-empty span {
-  width: 100%;
-  max-width: none;
-  height: 8px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.system-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 10px;
-  padding: 12px;
-}
-
-.system-panel-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
-
-.system-panel-head > div {
-  min-width: 0;
-}
-
-.system-panel-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.system-panel-head strong {
-  display: block;
-  min-width: 0;
-  margin-top: 5px;
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 1.05rem;
-  line-height: 1.08;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.system-tools-panel .router-inline-copy {
-  align-self: center;
-  margin: 0;
-}
-
-.system-display-grid,
-.system-sensor-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  min-height: 0;
-}
-
-.system-display-grid div,
-.system-sensor-grid div {
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  min-width: 0;
-  padding: 9px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.system-display-grid span,
-.system-sensor-grid span {
+.system-trend-caption {
   color: var(--color-text-dim);
-  font-size: max(12px, 0.75rem);
-  font-weight: 850;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: var(--system-fs-text);
 }
 
-.system-display-grid strong,
-.system-sensor-grid strong {
+.system-side {
+  display: grid;
+  grid-template-rows: minmax(max-content, 1fr) auto auto;
+  gap: 12px;
   min-width: 0;
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 0.8rem;
-  line-height: 1.16;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-height: 0;
+  overflow: auto;
 }
 
-.system-stat-card,
-.system-list-card {
-  border-color: var(--theme-border);
-  background: var(--theme-surface-muted);
-}
-
+/* How the PC is doing takes the room the facts leave. */
 .system-health-card {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  padding: 16px 18px;
   border-color: var(--status-success-border);
   background: var(--status-success-surface);
 }
@@ -295,24 +202,93 @@
   background: var(--status-danger-surface);
 }
 
-.system-stat-card[data-tone="warn"] .system-stat-value,
-.system-health-card[data-tone="warn"] strong {
-  color: var(--status-warning-text);
+.system-health-card strong {
+  font-size: var(--system-fs-health);
+  line-height: 1.25;
 }
 
-.system-stat-card[data-tone="danger"] .system-stat-value,
-.system-health-card[data-tone="danger"] strong {
-  color: var(--status-danger-text);
+.system-health-card span {
+  color: var(--color-text);
+  font-size: var(--system-fs-text);
+  line-height: 1.3;
 }
 
-.system-trend span {
-  background: var(--status-success-border);
+.system-facts {
+  display: grid;
+  align-content: start;
+  padding: 4px 18px;
 }
 
-.system-trend[data-tone="warn"] span {
-  background: var(--status-warning-border);
+.system-facts:empty {
+  display: none;
 }
 
-.system-trend[data-tone="danger"] span {
-  background: var(--status-danger-border);
+.system-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.system-fact + .system-fact {
+  border-top: 1px solid var(--theme-border);
+}
+
+.system-fact span {
+  flex: 0 0 auto;
+  color: var(--color-text-dim);
+  font-size: var(--system-fs-text);
+}
+
+.system-fact strong {
+  min-width: 0;
+  color: var(--color-text);
+  font-size: var(--system-fs-text);
+  font-weight: 700;
+  text-align: right;
+}
+
+.system-side-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+}
+
+.inline-widget-shell--system .system-side-foot .inline-button {
+  flex: 0 0 auto;
+  min-height: 54px;
+  padding-inline: 18px;
+  font-size: var(--system-fs-text);
+  font-weight: 700;
+}
+
+.system-side-foot p {
+  margin: 0;
+  color: var(--color-text-dim);
+  font-size: max(14px, 0.875rem);
+  line-height: 1.3;
+}
+
+/* The EDGE and other wide, short screens: sized to be read from a seat behind a keyboard. */
+@media (min-width: 1800px) {
+  .system-monitor-cockpit {
+    /* Already large here, so Text size grows them only a little: the column has to fit. */
+    --system-fs-label: clamp(24px, 1.5rem, 30px);
+    --system-fs-text: clamp(20px, 1.25rem, 25px);
+    --system-fs-value: clamp(104px, 6.5rem, 132px);
+    --system-fs-health: clamp(44px, 2.75rem, 50px);
+    grid-template-columns: minmax(0, 1fr) minmax(440px, 0.3fr);
+  }
+
+  .system-side-foot p {
+    font-size: clamp(17px, 1.0625rem, 20px);
+  }
+}
+
+@media (forced-colors: active) {
+  .system-trend span {
+    border: 1px solid CanvasText;
+  }
 }
