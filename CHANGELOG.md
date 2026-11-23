@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- New **Text size** setting in Settings > Appearance: Normal, Large or Extra large. It scales the text in every panel, for screens read from a distance such as the EDGE. The WoW Forever journal keeps its own sizes.
+- New **Text size** setting in Settings > Appearance: Normal, Large or Extra large. It scales the text in every panel, the side menu, the tabs and the header controls, for screens read from a distance such as the EDGE. The WoW Forever journal keeps its own sizes.
 - The Quick controls drawer keeps keyboard focus inside it while it is open. Focus that is taken elsewhere, or dropped, returns to the drawer.
 - Battlefield and Fable each have a built-in Profile that Auxora switches to when the game runs, with two new themes: Frontline (slate with amber) and Albion (woodland green with gold). They are matched by the game's name, so any Battlefield title and any store's copy are covered. Existing installs gain both Profiles on the next start.
 - On the EDGE at its full 2560x720, the WoW Forever panel's text is now 18 to 26px, close to the size of ordinary text on a desktop monitor when read from a seat. That does not fit four cards, so the panel has two pages there, switched in the bottom row: Quests (your character and the quest log) and Camp and notes (session timer, checklist, field notes, guides).

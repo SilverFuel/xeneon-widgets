@@ -3918,6 +3918,24 @@ async function checkTextSizeInPage(expectedAtLoad) {
   const rootSize = () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
   const labelSize = () => Number.parseFloat(getComputedStyle(select().closest("label").querySelector("span")).fontSize);
   const sizes = { normal: 16, large: 20, larger: 24 };
+  // The side menu, tabs and header controls scale with the panels, and still fit.
+  const shown = node => { const rect = node.getBoundingClientRect(); return rect.width > 1 && rect.height > 1; };
+  const chrome = () => Array.from(document.querySelectorAll(".auxora-section-link, .auxora-panel-link, .auxora-mode-select, .auxora-shell-status, #dashboard-quick-toggle")).filter(shown);
+  const menuSize = () => Number.parseFloat(getComputedStyle(document.querySelector(".auxora-section-link")).fontSize);
+  const chromeProblems = () => {
+    const controls = chrome();
+    const name = node => (node.textContent || node.value || node.id).trim().slice(0, 24);
+    const problems = controls.filter(node => node.tagName !== "SELECT" && (node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1)).map(node => "clipped: " + name(node));
+    controls.forEach((node, index) => {
+      const rect = node.getBoundingClientRect();
+      if (rect.left < -1 || rect.right > innerWidth + 1 || rect.bottom > innerHeight + 1) problems.push("off screen: " + name(node));
+      controls.slice(index + 1).forEach(other => {
+        const next = other.getBoundingClientRect();
+        if (Math.min(rect.right, next.right) - Math.max(rect.left, next.left) > 1 && Math.min(rect.bottom, next.bottom) - Math.max(rect.top, next.top) > 1) problems.push("overlap: " + name(node) + " / " + name(other));
+      });
+    });
+    return problems;
+  };
   check(select().value === expectedAtLoad && rootSize() === sizes[expectedAtLoad] && document.documentElement.dataset.textSize === expectedAtLoad,
     "Text size at load is " + select().value + " with a " + rootSize() + "px root; expected " + expectedAtLoad);
   check(Array.from(select().options).map(option => option.value).join() === "normal,large,larger", "Text size choices changed");
@@ -3928,9 +3946,15 @@ async function checkTextSizeInPage(expectedAtLoad) {
     await wait(300);
     check(select().value === choice && rootSize() === sizes[choice], "Choosing " + choice + " left a " + rootSize() + "px root");
     seen[choice] = labelSize();
+    seen[choice + "Menu"] = menuSize();
     check(document.documentElement.scrollWidth <= innerWidth + 1, choice + " text makes the page scroll sideways");
+    const problems = chromeProblems();
+    check(problems.length === 0, choice + " text breaks the menu or header: " + problems.slice(0, 5).join("; "));
+    const tagline = document.querySelector(".auxora-brand small");
+    check(!tagline || shown(tagline) === (choice === "normal") || !shown(tagline.closest(".auxora-brand")), choice + ": the logo tagline is " + (shown(tagline) ? "shown" : "hidden"));
   }
   check(seen.large > seen.normal && seen.larger > seen.large, "Panel text did not grow with the setting: " + JSON.stringify(seen));
+  check(seen.largeMenu > seen.normalMenu && seen.largerMenu > seen.largeMenu, "The side menu did not grow with the setting: " + JSON.stringify(seen));
   // Leave Large chosen, for the reload that follows.
   select().value = "large";
   select().dispatchEvent(new Event("change", { bubbles: true }));
@@ -3951,7 +3975,7 @@ async function validateTextSize(cdp) {
   }
   // Put the default back so later scenarios see the usual sizes.
   await cdp.send("Storage.clearDataForOrigin", { origin: baseUrl, storageTypes: "all" });
-  console.log(`rendered Text size: Normal, Large and Extra large scale panel text (${seen.normal}px, ${seen.large}px, ${seen.larger}px) and the choice survives a reload: passed`);
+  console.log(`rendered Text size: Normal, Large and Extra large scale panel text (${seen.normal}px, ${seen.large}px, ${seen.larger}px) and the side menu (${seen.normalMenu}px, ${seen.largeMenu}px, ${seen.largerMenu}px), nothing clipped, and the choice survives a reload: passed`);
 }
 
 async function validateForcedColorsProductSurfaces(cdp) {
