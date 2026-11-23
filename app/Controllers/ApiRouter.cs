@@ -28,6 +28,8 @@ public sealed class ApiRouter
     private readonly WeatherService _weatherService;
     private readonly CalendarService _calendarService;
     private readonly FrigateService _frigateService;
+    // What Claude Code's hooks report. It needs nothing from the rest of the host and keeps nothing on disk.
+    private readonly ClaudeCodeService _claudeCode = new();
 
     public ApiRouter(
         ConfigStore configStore,
@@ -316,6 +318,12 @@ public sealed class ApiRouter
                 await WriteJsonAsync(response, 200, _telemetryController.SetChatBlend(chatTarget?.ProcessId, chatTarget?.ProcessName, chatRequest), cancellationToken);
                 return;
             }
+            case "/api/claude-code" when request.HttpMethod == "GET":
+                await WriteJsonAsync(response, 200, _claudeCode.Snapshot(DateTimeOffset.UtcNow), cancellationToken);
+                return;
+            case "/api/claude-code/event" when request.HttpMethod == "POST":
+                await HandleClaudeCodeEventAsync(request, response, cancellationToken);
+                return;
             case "/api/discord/open" when request.HttpMethod == "POST":
                 await WriteJsonAsync(response, 200, DiscordLauncher.Open(), cancellationToken);
                 return;
@@ -564,6 +572,57 @@ public sealed class ApiRouter
             ["stale"] = false,
             ["error"] = message
         };
+    }
+
+    // A report from one of Claude Code's hooks. The body can be large (a hook input can carry a
+    // file's contents), so only its first part is read into memory and the rest is read past.
+    // The reply is always empty: Claude Code reads a JSON reply as instructions, and this
+    // route never gives any.
+    private async Task HandleClaudeCodeEventAsync(HttpListenerRequest request, HttpListenerResponse response, CancellationToken cancellationToken)
+    {
+        const long maxReadPast = 16L * 1024 * 1024;
+        var head = System.Buffers.ArrayPool<byte>.Shared.Rent(ClaudeCodeEvent.MaxHeadBytes);
+        try
+        {
+            var filled = 0;
+            while (filled < ClaudeCodeEvent.MaxHeadBytes)
+            {
+                var read = await request.InputStream.ReadAsync(head.AsMemory(filled, ClaudeCodeEvent.MaxHeadBytes - filled), cancellationToken);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                filled += read;
+            }
+
+            var report = ClaudeCodeEvent.Parse(head, filled);
+            if (report is not null)
+            {
+                _claudeCode.Record(report, DateTimeOffset.UtcNow);
+            }
+
+            if (filled == ClaudeCodeEvent.MaxHeadBytes)
+            {
+                long readPast = 0;
+                while (readPast < maxReadPast)
+                {
+                    var read = await request.InputStream.ReadAsync(head.AsMemory(0, ClaudeCodeEvent.MaxHeadBytes), cancellationToken);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    readPast += read;
+                }
+            }
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(head);
+        }
+
+        await WriteJsonAsync(response, 204, new { }, cancellationToken);
     }
 
     private static async Task<T> ReadJsonAsync<T>(HttpListenerRequest request, CancellationToken cancellationToken)

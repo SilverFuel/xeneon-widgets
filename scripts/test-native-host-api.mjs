@@ -1299,6 +1299,43 @@ try {
     `/api/audio/chat-blend returned an unexpected shape: ${JSON.stringify(chatBlend)}`);
   assert(!/[A-Za-z]:\\\\|\.exe/i.test(JSON.stringify(chatBlend)), "/api/audio/chat-blend must not name a process or a path");
 
+  // Claude Code's hooks report to the host without the dashboard's session token. The reply is
+  // empty (Claude Code reads a JSON reply as instructions), only a short line is kept, and a
+  // request that names a web origin is refused like any other change without the token.
+  const hookEvent = (body, headers = {}) => fetchWithTimeout("/api/claude-code/event", {
+    method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body)
+  });
+  const claudeSessions = async () => {
+    const response = await fetchWithTimeout("/api/claude-code");
+    assert(response.status === 200, `/api/claude-code must answer; received HTTP ${response.status}`);
+    const reply = await response.json();
+    assert(reply.available === true && Array.isArray(reply.sessions), `/api/claude-code returned an unexpected shape: ${JSON.stringify(reply)}`);
+    return reply.sessions;
+  };
+  const hookSession = { session_id: "fixture-session-0001", transcript_path: "C:\\Users\\fixture\\.claude\\transcript.jsonl", cwd: "C:\\Users\\fixture\\code\\fixture-project", permission_mode: "default" };
+  assert((await claudeSessions()).length === 0, "no Claude Code session may be listed before one reports");
+  const askReply = await hookEvent({ ...hookSession, hook_event_name: "PermissionRequest", tool_name: "Bash", tool_input: { command: "git push origin main", description: "Push the branch" } });
+  assert(askReply.status === 204 && (await askReply.text()) === "", `a hook report must get an empty reply; received HTTP ${askReply.status}`);
+  let hookSessions = await claudeSessions();
+  assert(hookSessions.length === 1 && hookSessions[0].state === "waiting" && hookSessions[0].project === "fixture-project"
+    && hookSessions[0].text === "Run: git push origin main" && hookSessions[0].id === "fixture-" && Number.isInteger(hookSessions[0].stateSeconds),
+    `a permission request must show as waiting with what was asked: ${JSON.stringify(hookSessions)}`);
+  assert(!/Users|transcript|session-0001/.test(JSON.stringify(hookSessions)), `/api/claude-code must not carry a path or the full session id: ${JSON.stringify(hookSessions)}`);
+  // A tool result can be far larger than the host reads; the report still counts.
+  const largeReply = await hookEvent({ ...hookSession, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "git push origin main" }, tool_response: { stdout: "x".repeat(400000) } });
+  assert(largeReply.status === 204, `a large hook report must still be accepted; received HTTP ${largeReply.status}`);
+  hookSessions = await claudeSessions();
+  assert(hookSessions.length === 1 && hookSessions[0].state === "working" && hookSessions[0].text === "", `the tool running must end the wait: ${JSON.stringify(hookSessions)}`);
+  for (const origin of [hostUrl, "https://example.com", "null"]) {
+    const fromPage = await hookEvent({ ...hookSession, hook_event_name: "StopFailure" }, { Origin: origin });
+    assert(fromPage.status === 403, `a hook report naming the origin ${origin} must be refused without the session token; received HTTP ${fromPage.status}`);
+  }
+  assert((await hookEvent("not json")).status === 204, "a malformed hook report must be ignored quietly");
+  hookSessions = await claudeSessions();
+  assert(hookSessions.length === 1 && hookSessions[0].state === "working", `refused and malformed reports must change nothing: ${JSON.stringify(hookSessions)}`);
+  await hookEvent({ ...hookSession, hook_event_name: "SessionEnd", reason: "exit" });
+  assert((await claudeSessions()).length === 0, "a session that ended must no longer be listed");
+
   const unconfiguredSnapshotResponse = await fetchWithTimeout("/api/frigate/snapshot?id=current-event");
   assert(unconfiguredSnapshotResponse.status === 404, `unconfigured Camera Detection snapshot must return HTTP 404; received ${unconfiguredSnapshotResponse.status}`);
   assert(/not configured/i.test((await unconfiguredSnapshotResponse.json()).error || ""), "unconfigured Camera Detection snapshot must explain that Frigate is not configured");

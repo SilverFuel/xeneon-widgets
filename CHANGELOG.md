@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Claude Code on the EDGE.** With the add-on in `addons/ClaudeCode` set up, the header shows what Claude Code is doing on this PC: a wide amber bar that flashes when a session is waiting on a decision (with the project and what it is asking), and a quiet chip while it works, when it finishes, or if it stops on an error. A tap marks it seen. You still answer in Claude Code's own window. Auxora keeps one short line per session in memory only; see `addons/ClaudeCode/README.md`.
 - WoW Forever leaves Apple Music alone while a track is changing: after a skip, or when a song ends, the new track's cover is asked for once the track has played for three seconds, not within a second of the change. A precaution after Apple Music showed "Something went wrong" once following a skip from the panel; the cause is not confirmed.
 - Game covers. Home's **Recently played** row shows each game's cover, and the welcome card that appears when a game starts shows it beside the name. The picture is the one Steam already keeps on this PC, served by Auxora itself; nothing is fetched from the internet. A game with no Steam picture shows its initials on Home and the welcome card as it was.
 - WoW Forever's balance slider works for **Discord** too. With Apple Music and Discord both making sound, two buttons beside the slider (Music, Discord) choose which one the game is balanced against; each keeps its own setting. With only one of them making sound the slider is that one's, with no buttons.
