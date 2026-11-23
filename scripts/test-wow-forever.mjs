@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
-const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView } = require("../js/widgets/wow-forever.js");
+const { freshJournal, validateJournal, elapsedSession, formatSession, formatCoins, formatSavedAgo, gameCharacter, questViews, questViewId, questsInView, formatProfessions, gearSummary, bagSummary } = require("../js/widgets/wow-forever.js");
 const now = 1800000000000;
 
 function entry(id = "quest-1", overrides = {}) {
@@ -503,5 +503,65 @@ test("a short or empty quest log needs no extra views", () => {
     assert.deepEqual(questViews(empty), []);
     assert.equal(questViewId(empty, "zone:The Barrens"), "all");
     assert.deepEqual(questsInView(empty, "all"), []);
+  }
+});
+
+test("professions, gear wear and bag space are read from the host's reply", () => {
+  const character = gameCharacter(companionPayload({
+    professions: [
+      { name: "Mining", rank: 75, maxRank: 150, primary: true },
+      { name: "Cooking", rank: 40.9, maxRank: "75", primary: "yes" },
+      { rank: 10 }, null, "Fishing"
+    ],
+    durability: 62.7, durabilityLowest: 0, bagFree: 0, bagTotal: 64
+  }));
+  assert.deepEqual(character.professions, [
+    { name: "Mining", rank: 75, maxRank: 150, primary: true },
+    { name: "Cooking", rank: 40, maxRank: 75, primary: false }
+  ]);
+  assert.equal(character.durability, 62);
+  assert.equal(character.durabilityLowest, 0, "a broken piece is a reading, not a missing one");
+  assert.equal(character.bagFree, 0, "full bags are a reading, not a missing one");
+  assert.equal(character.bagTotal, 64);
+});
+
+test("an older add-on, or a wrong reply, leaves the new readings empty", () => {
+  const older = gameCharacter(companionPayload());
+  assert.deepEqual(older.professions, []);
+  assert.equal(older.durability, null);
+  assert.equal(older.durabilityLowest, null);
+  assert.equal(older.bagFree, null);
+  assert.equal(older.bagTotal, null);
+  const wrong = gameCharacter(companionPayload({ professions: "Mining", durability: "62", durabilityLowest: -4, bagFree: 70, bagTotal: 64 }));
+  assert.deepEqual(wrong.professions, []);
+  assert.equal(wrong.durability, null);
+  assert.equal(wrong.durabilityLowest, null);
+  assert.equal(wrong.bagFree, null, "more free slots than slots is not shown");
+  assert.equal(wrong.bagTotal, null);
+  assert.equal(gameCharacter(companionPayload({ durability: 400 })).durability, 100);
+  assert.equal(gameCharacter(companionPayload({ bagFree: 3, bagTotal: 0 })).bagTotal, null);
+  const many = gameCharacter(companionPayload({ professions: Array.from({ length: 20 }, (_, index) => ({ name: "Skill " + index })) }));
+  assert.equal(many.professions.length, 8);
+});
+
+test("the card names the two main professions, or the first three when none is marked", () => {
+  const profession = (name, rank, primary) => ({ name, rank, maxRank: 150, primary });
+  assert.equal(formatProfessions({ professions: [profession("Mining", 75, true), profession("Blacksmithing", 60, true), profession("Cooking", 40, false)] }), "Mining 75, Blacksmithing 60");
+  assert.equal(formatProfessions({ professions: [profession("Cooking", 40, false), profession("Fishing", 0, false), profession("First Aid", 5, false), profession("Riding", 75, false)] }), "Cooking 40, Fishing, First Aid 5");
+  for (const none of [null, {}, { professions: [] }, { professions: "Mining" }]) assert.equal(formatProfessions(none), "");
+});
+
+test("gear and bag lines say what the game reported and flag only real trouble", () => {
+  assert.deepEqual(gearSummary({ durability: 62, durabilityLowest: 18 }), { text: "62%, worst piece 18%", low: true });
+  assert.deepEqual(gearSummary({ durability: 90, durabilityLowest: 25 }), { text: "90%, worst piece 25%", low: false });
+  assert.deepEqual(gearSummary({ durability: 100, durabilityLowest: 100 }), { text: "100%", low: false });
+  assert.deepEqual(gearSummary({ durability: 12, durabilityLowest: null }), { text: "12%", low: true });
+  assert.deepEqual(gearSummary({ durability: 0, durabilityLowest: 0 }), { text: "0%", low: true });
+  assert.deepEqual(bagSummary({ bagFree: 11, bagTotal: 64 }), { text: "11 of 64 free", low: false });
+  assert.deepEqual(bagSummary({ bagFree: 3, bagTotal: 64 }), { text: "3 of 64 free", low: true });
+  assert.deepEqual(bagSummary({ bagFree: 0, bagTotal: 64 }), { text: "Full", low: true });
+  for (const none of [null, {}, { durability: null, bagFree: null, bagTotal: null }, { bagFree: 4 }]) {
+    assert.deepEqual(gearSummary(none), { text: "", low: false });
+    assert.deepEqual(bagSummary(none), { text: "", low: false });
   }
 });

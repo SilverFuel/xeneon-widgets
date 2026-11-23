@@ -115,8 +115,13 @@
     if (!source || typeof source !== "object" || typeof source.name !== "string" || !source.name) return null;
     function text(value) { return typeof value === "string" ? value : ""; }
     function whole(value) { value = Number(value); return isFinite(value) && value > 0 ? Math.floor(value) : 0; }
+    // A reading the add-on may not have: a whole number from 0 to max, or null.
+    function optional(value, max) { return typeof value === "number" && isFinite(value) && value >= 0 ? Math.min(max, Math.floor(value)) : null; }
     var xp = whole(source.xp);
     var xpMax = whole(source.xpMax);
+    var bagTotal = optional(source.bagTotal, 2000);
+    var bagFree = optional(source.bagFree, 2000);
+    if (!bagTotal || bagFree === null || bagFree > bagTotal) { bagTotal = null; bagFree = null; }
     return {
       name: text(source.name),
       race: text(source.race),
@@ -132,6 +137,15 @@
       rested: whole(source.xpRested),
       coins: formatCoins(source.copper),
       savedAt: text(source.savedAt),
+      professions: (Array.isArray(source.professions) ? source.professions : []).filter(function (profession) {
+        return profession && typeof profession === "object" && typeof profession.name === "string" && profession.name;
+      }).slice(0, 8).map(function (profession) {
+        return { name: profession.name, rank: whole(profession.rank), maxRank: whole(profession.maxRank), primary: profession.primary === true };
+      }),
+      durability: optional(source.durability, 100),
+      durabilityLowest: optional(source.durabilityLowest, 100),
+      bagFree: bagFree,
+      bagTotal: bagTotal,
       quests: (Array.isArray(source.quests) ? source.quests : []).filter(function (quest) {
         return quest && typeof quest === "object" && typeof quest.title === "string" && quest.title;
       }).slice(0, 40).map(function (quest) {
@@ -147,6 +161,36 @@
           })
         };
       })
+    };
+  }
+
+  // The character's professions in one short line: the two main ones when the
+  // game marks them, otherwise the first three. "" when there are none.
+  function formatProfessions(game) {
+    var all = game && Array.isArray(game.professions) ? game.professions : [];
+    var main = all.filter(function (profession) { return profession.primary; });
+    return (main.length ? main : all.slice(0, 3)).map(function (profession) {
+      return profession.name + (profession.rank ? " " + profession.rank : "");
+    }).join(", ");
+  }
+
+  // What the game last said about gear wear and bag space, as { text, low }.
+  // text is "" when the add-on did not say. low marks a piece close to
+  // breaking, or bags with almost no room.
+  function gearSummary(game) {
+    if (!game || typeof game.durability !== "number") return { text: "", low: false };
+    var worst = typeof game.durabilityLowest === "number" ? game.durabilityLowest : game.durability;
+    return {
+      text: game.durability + "%" + (worst < game.durability ? ", worst piece " + worst + "%" : ""),
+      low: worst < 25
+    };
+  }
+
+  function bagSummary(game) {
+    if (!game || typeof game.bagFree !== "number" || typeof game.bagTotal !== "number") return { text: "", low: false };
+    return {
+      text: game.bagFree === 0 ? "Full" : game.bagFree + " of " + game.bagTotal + " free",
+      low: game.bagFree < 4
     };
   }
 
@@ -199,7 +243,8 @@
     module.exports = {
       freshJournal: freshJournal, validateJournal: validateJournal, elapsedSession: elapsedSession, formatSession: formatSession,
       formatCoins: formatCoins, formatSavedAgo: formatSavedAgo, gameCharacter: gameCharacter,
-      questViews: questViews, questViewId: questViewId, questsInView: questsInView
+      questViews: questViews, questViewId: questViewId, questsInView: questsInView,
+      formatProfessions: formatProfessions, gearSummary: gearSummary, bagSummary: bagSummary
     };
     return;
   }
@@ -303,6 +348,11 @@
       showNotice();
     }
 
+    // A row the game may not have reported; nothing is shown then.
+    function gameRow(label, summary) {
+      return summary.text ? '<div' + (summary.low ? ' data-state="low"' : '') + '><dt>' + label + '</dt><dd>' + escapeHtml(summary.text) + '</dd></div>' : '';
+    }
+
     function profileMarkup() {
       var p = journal.profile;
       var emblem = '<div class="wow-emblem" aria-hidden="true"><svg viewBox="0 0 100 100" fill="none"><path d="M50 5 83 24v38L50 94 17 62V24Z" stroke="currentColor" stroke-width="2"/><path d="m50 16 23 14v27L50 80 27 57V30Z" stroke="currentColor" opacity=".45"/><path d="m50 24 7 20 19 6-19 7-7 20-7-20-19-7 19-6Z" fill="currentColor"/><path d="M50 5v11M83 24l-10 6M17 24l10 6M50 80v14" stroke="currentColor"/></svg></div>';
@@ -310,16 +360,16 @@
         return emblem +
           '<div class="wow-level-badge">Level <strong>' + game.level + '</strong></div>' +
           '<h3 class="wow-character-name">' + escapeHtml(game.name) + '</h3>' +
-          '<p class="wow-character-meta">' + escapeHtml([game.race, game.className].filter(Boolean).join(" ")) + ' <span>For the ' + game.faction + '</span></p>' +
+          '<p class="wow-character-meta"><b class="wow-meta-level">Level ' + game.level + ' </b>' + escapeHtml([game.race, game.className].filter(Boolean).join(" ")) + ' <span>For the ' + game.faction + '</span></p>' +
           '<div class="wow-location"><span class="wow-eyebrow">Current location</span><strong>' + escapeHtml([game.subZone, game.zone].filter(Boolean).join(", ") || "Unknown") + '</strong></div>' +
           '<div class="wow-progress-track" role="progressbar" aria-label="Experience this level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(game.xpPercent) + '"><span style="width:' + game.xpPercent.toFixed(2) + '%"></span></div>' +
           '<p class="wow-character-meta">' + (game.xpMax ? game.xp.toLocaleString("en-US") + " / " + game.xpMax.toLocaleString("en-US") + " XP" + (game.rested ? ", rested" : "") : "Experience not reported") + '</p>' +
-          '<dl class="wow-profile-summary"><div><dt>Coin</dt><dd>' + escapeHtml(game.coins) + '</dd></div><div><dt>Hearthstone</dt><dd>' + escapeHtml(game.hearth || "Not set") + '</dd></div><div><dt>Professions</dt><dd>' + escapeHtml(p.professions || "Choose your crafts") + '</dd></div></dl>';
+          '<dl class="wow-profile-summary"><div><dt>Coin</dt><dd>' + escapeHtml(game.coins) + '</dd></div><div><dt>Hearthstone</dt><dd>' + escapeHtml(game.hearth || "Not set") + '</dd></div><div><dt>Professions</dt><dd>' + escapeHtml(formatProfessions(game) || p.professions || "Choose your crafts") + '</dd></div>' + gameRow("Gear", gearSummary(game)) + gameRow("Bags", bagSummary(game)) + '</dl>';
       }
       return emblem +
         '<div class="wow-level-badge">Level <strong>' + p.level + '</strong></div>' +
         '<h3 class="wow-character-name">' + escapeHtml(p.name || "Your story begins") + '</h3>' +
-        '<p class="wow-character-meta">' + escapeHtml([p.race, p.className].filter(Boolean).join(" ") || "Create your adventurer") + ' <span>For the Horde</span></p>' +
+        '<p class="wow-character-meta"><b class="wow-meta-level">Level ' + p.level + ' </b>' + escapeHtml([p.race, p.className].filter(Boolean).join(" ") || "Create your adventurer") + ' <span>For the Horde</span></p>' +
         '<div class="wow-location"><span class="wow-eyebrow">Current chapter</span><strong>' + escapeHtml(p.zone || "A world waiting to be explored") + '</strong></div>' +
         '<div class="wow-progress-track" role="progressbar" aria-label="Level journey" aria-valuemin="1" aria-valuemax="60" aria-valuenow="' + p.level + '"><span style="width:' + ((p.level - 1) / 59 * 100).toFixed(2) + '%"></span></div>' +
         '<p class="wow-character-meta">' + (p.level === 60 ? "Level 60 reached. A new chapter awaits." : "Your journey to level 60") + '</p>' +
@@ -329,6 +379,13 @@
     function renderProfile() {
       query(".wow-adventure").dataset.faction = journal.profile.faction;
       query(".wow-character-content").innerHTML = profileMarkup();
+      // The editor changes the hand-kept character, which the game's replaces.
+      var edit = query('[data-wow-action="profile"]');
+      edit.hidden = Boolean(game);
+      if (game && !query(".wow-editor").hidden) {
+        query(".wow-editor").hidden = true;
+        edit.setAttribute("aria-expanded", "false");
+      }
     }
 
     function editorMarkup() {
@@ -336,7 +393,7 @@
       function field(label, key, max, placeholder) {
         return '<label>' + label + '<input name="' + key + '" maxlength="' + max + '" value="' + escapeHtml(p[key]) + '" placeholder="' + escapeHtml(placeholder || "") + '"></label>';
       }
-      return '<div class="wow-card-heading"><h3>Your adventurer</h3><small>' + (game ? "Name, level, zone and hearthstone come from the game while the add-on is saving" : "Update as your story unfolds") + '</small></div><div class="wow-fields">' +
+      return '<div class="wow-card-heading"><h3>Your adventurer</h3><small>Update as your story unfolds</small></div><div class="wow-fields">' +
         field("Character name", "name", 64, "First and last name") +
         '<label>Class<select name="className">' + options(CLASSES, p.className, "Choose a class") + '</select></label>' +
         field("Race", "race", 40, "e.g. Troll") +

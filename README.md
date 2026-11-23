@@ -141,11 +141,11 @@ Validate the journal state and backup handling with `npm run test:wow-forever`.
 
 ### Auxora Companion add-on
 
-The journal can show your character from the game: name, level, experience, location, coin, hearthstone and quest log. Copy the `addons\AuxoraCompanion` folder from this repository into `World of Warcraft\_forever_\Interface\AddOns` and enable **Auxora Companion** on the character screen.
+The journal can show your character from the game: name, level, experience, location, coin, hearthstone, quest log, professions, gear durability and free bag slots. The last three need add-on 0.2.0 or newer, and appear only if the game reports them. Copy the `addons\AuxoraCompanion` folder from this repository into `World of Warcraft\_forever_\Interface\AddOns` and enable **Auxora Companion** on the character screen.
 
 World of Warcraft writes add-on data to disk only when you log out or reload the interface, so the journal shows the character as of the last save, with its age. Type `/auxora` in game to save and reload at once; `/auxora status` shows what will be saved. The add-on reads your own character only and sends nothing anywhere.
 
-Auxora looks for the Forever client in the usual install folders, and in the folder of a running Forever client. It reads that one saved file and never writes to the game's folders. Once a character is found, the character card follows the game and the quest ledger opens on an **In game** tab. It shows one view of the game's log at a time: the zone you are in, quests ready to turn in, each other zone, or all of them. The entries you track by hand are unchanged, under **Active**, **Completed** and **All entries**.
+Auxora looks for the Forever client in the usual install folders, and in the folder of a running Forever client. It reads that one saved file and never writes to the game's folders. Once a character is found, the character card follows the game (**Edit character** is hidden, since it edits the character you keep by hand) and the quest ledger opens on an **In game** tab. It shows one view of the game's log at a time: the zone you are in, quests ready to turn in, each other zone, or all of them. The entries you track by hand are unchanged, under **Active**, **Completed** and **All entries**.
 
 ## Camera Detection
 

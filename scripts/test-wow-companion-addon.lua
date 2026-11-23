@@ -86,7 +86,7 @@ do
   check(w.env.AuxoraCompanionDB == nil and #w.timers == 1 and w.timers[1].delay == 5, "a change waits five seconds")
   w.runTimers()
   local db = w.env.AuxoraCompanionDB
-  check(db.schema == 1 and db.addonVersion == "0.1.1" and db.last == KEY, "header fields")
+  check(db.schema == 1 and db.addonVersion == "0.2.0" and db.last == KEY, "header fields")
   local c = w.character()
   check(c.name == "Grimbold" and c.realm == "Forever One", "name and realm")
   check(c.class == "Paladin" and c.classToken == "PALADIN" and c.race == "Undead" and c.raceToken == "Scourge", "class and race")
@@ -274,6 +274,104 @@ do
   w2.fire("PLAYER_MONEY")
   w2.runTimers()
   check(w2.character().copper == 123456, "still saves after an unknown event")
+end
+
+-- 16. With none of the newer game functions, the new fields are simply absent.
+do
+  local w = world()
+  w.slash("status")
+  local c = w.character()
+  check(c.professions == nil and c.durability == nil and c.durabilityLowest == nil and c.bagFree == nil and c.bagTotal == nil,
+    "no profession, durability or bag functions: nothing invented")
+  check(not w.printed[#w.printed - 1]:find("professions") and not w.printed[#w.printed - 1]:find("gear"), "status does not mention what it could not read")
+end
+
+-- 17. Professions, gear wear and bag space are saved when the game offers them.
+do
+  local durability = { [1] = { 50, 100 }, [5] = { 30, 120 }, [16] = { 0, 0 }, [19] = { 1, 1 } }
+  local w = world(function(env)
+    env.GetProfessions = function() return 3, 7, nil, 9, 5 end
+    env.GetProfessionInfo = function(index)
+      local known = { [3] = { "Mining", 75, 150 }, [7] = { "Blacksmithing", 60, 150 }, [5] = { "Cooking", 40, 75 }, [9] = { "Fishing", 1, 75 } }
+      local entry = known[index]
+      return entry[1], "icon", entry[2], entry[3]
+    end
+    env.GetInventoryItemDurability = function(slot)
+      local entry = durability[slot]
+      if entry then return entry[1], entry[2] end
+      return nil
+    end
+    env.C_Container = {
+      GetContainerNumSlots = function(bag) return ({ [0] = 16, [1] = 10, [2] = 0, [3] = 8, [4] = 0 })[bag] end,
+      GetContainerNumFreeSlots = function(bag) return ({ [0] = 3, [1] = 0, [2] = 99, [3] = 8, [4] = 0 })[bag] end
+    }
+  end)
+  check(w.events.BAG_UPDATE_DELAYED and w.events.UPDATE_INVENTORY_DURABILITY and w.events.SKILL_LINES_CHANGED, "registers bag, durability and skill events")
+  w.fire("BAG_UPDATE_DELAYED")
+  w.runTimers()
+  local c = w.character()
+  check(#c.professions == 4, "four professions")
+  check(c.professions[1].name == "Mining" and c.professions[1].rank == 75 and c.professions[1].maxRank == 150 and c.professions[1].primary == true, "first primary profession")
+  check(c.professions[2].name == "Blacksmithing" and c.professions[2].primary == true, "second primary profession")
+  check(c.professions[3].name == "Cooking" and c.professions[3].primary == false and c.professions[4].name == "Fishing", "secondary professions follow")
+  -- 80 of 220 points left across the two pieces that wear; the worst is at 25%.
+  check(c.durability == 36 and c.durabilityLowest == 25, "durability is the whole set and the worst piece, ignoring slots that do not wear")
+  check(c.bagFree == 11 and c.bagTotal == 34, "bag space ignores empty bag slots")
+  w.slash("status")
+  local line = w.printed[#w.printed - 1]
+  check(line:find("4 professions") and line:find("gear 36%%") and line:find("11 of 34 bag slots free"), "status reports the new fields")
+end
+
+-- 18. The older skill list and the older bag functions work too.
+do
+  local skills = {
+    { "Class Skills", true }, { "Holy", false, 1, 1 },
+    { "Professions", true }, { "Herbalism", false, 120, 150 }, { "Alchemy", false, 110, 150 },
+    { "Secondary Skills", true }, { "First Aid", false, 80, 150 },
+    { "Weapon Skills", true }, { "Swords", false, 95, 95 },
+  }
+  local w = world(function(env)
+    env.GetNumSkillLines = function() return #skills end
+    env.GetSkillLineInfo = function(index)
+      local entry = skills[index]
+      return entry[1], entry[2], true, entry[3], 0, 0, entry[4]
+    end
+    env.GetContainerNumSlots = function(bag) return bag == 0 and 16 or 0 end
+    env.GetContainerNumFreeSlots = function(bag) return bag == 0 and 16 or 0 end
+  end)
+  w.slash("status")
+  local c = w.character()
+  check(#c.professions == 3, "only the two profession headings are read")
+  check(c.professions[1].name == "Herbalism" and c.professions[1].rank == 120 and c.professions[1].primary == true, "primary from the older list")
+  check(c.professions[3].name == "First Aid" and c.professions[3].primary == false, "secondary from the older list")
+  check(c.bagFree == 16 and c.bagTotal == 16, "older bag functions")
+end
+
+-- 19. A profession, durability or bag function that throws loses only its own field.
+do
+  local w = world(function(env)
+    env.GetProfessions = function() error("blocked") end
+    env.GetProfessionInfo = function() return "Mining", "icon", 1, 75 end
+    env.GetInventoryItemDurability = function() error("blocked") end
+    env.C_Container = { GetContainerNumSlots = function() error("blocked") end, GetContainerNumFreeSlots = function() return 1 end }
+  end)
+  w.slash("status")
+  local c = w.character()
+  check(c.level == 19 and #c.quests == 2, "the rest of the snapshot is intact")
+  check(c.professions == nil and c.durability == nil and c.bagFree == nil, "failed readings are left out")
+end
+
+-- 20. No gear that wears, and no professions learned.
+do
+  local w = world(function(env)
+    env.GetProfessions = function() return nil, nil, nil, nil, nil end
+    env.GetProfessionInfo = function() error("should not be asked") end
+    env.GetInventoryItemDurability = function() return nil end
+  end)
+  w.slash("status")
+  local c = w.character()
+  check(type(c.professions) == "table" and #c.professions == 0, "no professions learned is an empty list, not missing")
+  check(c.durability == nil and c.durabilityLowest == nil, "nothing that wears: no durability")
 end
 
 io.write("passed " .. passed .. " checks\n")

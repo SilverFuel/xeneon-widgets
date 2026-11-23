@@ -3761,7 +3761,10 @@ function installWowQuestLogFixture() {
         character: {
           name: "Fixture", realm: "Realm", class: "Paladin", classToken: "PALADIN", race: "Undead", faction: "Horde", level: 18,
           xp: 16733, xpMax: 19400, xpRested: 3000, zone: "The Barrens", subZone: "The Crossroads", home: "The Sepulcher",
-          copper: 25098, savedAt: new Date().toISOString(), questsRead: true, quests
+          copper: 25098, savedAt: new Date().toISOString(), questsRead: true, quests,
+          professions: [{ name: "Mining", rank: 75, maxRank: 150, primary: true }, { name: "Blacksmithing", rank: 60, maxRank: 150, primary: true },
+            { name: "Cooking", rank: 40, maxRank: 75, primary: false }],
+          durability: 62, durabilityLowest: 18, bagFree: 0, bagTotal: 64
         }
       }), { status: 200, headers: { "Content-Type": "application/json" } }));
     }
@@ -3799,6 +3802,14 @@ async function checkWowQuestLogInPage() {
   check(label(views()[1]) === "Ready to turn in 2" && label(views()[views().length - 1]) === "All 28", size + ": views are wrong: " + views().map(label).join(", "));
   check(list.children.length === 13 && !overlappingRows(), size + ": the zone view shows " + list.children.length + " quests, or rows overlap");
   check(panel().querySelector(".wow-quest-form").hidden, size + ": the game's read-only log still shows the add form");
+  // The character card: professions, gear and bags from the game, and no editor for the hand-kept character.
+  const rows = Object.fromEntries(Array.from(panel().querySelectorAll(".wow-profile-summary > div")).map(row => [label(row.querySelector("dt")), row]));
+  const value = name => rows[name] ? label(rows[name].querySelector("dd")) : "(missing)";
+  check(value("Professions") === "Mining 75, Blacksmithing 60" && value("Gear") === "62%, worst piece 18%" && value("Bags") === "Full",
+    size + ": the card shows " + JSON.stringify([value("Professions"), value("Gear"), value("Bags")]));
+  check(rows.Gear.dataset.state === "low" && rows.Bags.dataset.state === "low" && !rows.Professions.dataset.state, size + ": worn gear and full bags are not flagged");
+  const edit = panel().querySelector('[data-wow-action="profile"]');
+  check(edit.hidden && edit.getBoundingClientRect().height === 0, size + ": Edit character is offered while the game supplies the character");
   if (oneScreen) {
     check(pageFits(), size + ": the panel runs off the screen with a zone view: " + page.scrollHeight + " > " + page.clientHeight);
     const small = views().filter(view => { const rect = view.getBoundingClientRect(); return rect.width < 54 || rect.height < 54; }).map(label);

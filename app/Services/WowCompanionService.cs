@@ -18,6 +18,7 @@ public sealed class WowCompanionService
     internal const int MaxAccounts = 16;
     internal const int MaxQuests = 40;
     internal const int MaxObjectives = 8;
+    internal const int MaxProfessions = 8;
 
     private readonly string[] _installRoots;
     private readonly object _gate = new();
@@ -266,6 +267,28 @@ public sealed class WowCompanionService
             }
         }
 
+        var professions = (character.Table("professions")?.Items ?? [])
+            .OfType<LuaTable>()
+            .Select(profession => new WowCompanionProfession
+            {
+                Name = Clean(profession.Text("name"), 48),
+                Rank = (int)Whole(profession.Number("rank"), 9999),
+                MaxRank = (int)Whole(profession.Number("maxRank"), 9999),
+                Primary = profession.Flag("primary")
+            })
+            .Where(profession => profession.Name.Length > 0)
+            .Take(MaxProfessions)
+            .ToList();
+
+        // Bag space is only meaningful as a pair, with free no larger than total.
+        var bagTotal = Optional(character.Number("bagTotal"), 2000);
+        var bagFree = Optional(character.Number("bagFree"), 2000);
+        if (bagTotal is null or 0 || bagFree is null || bagFree > bagTotal)
+        {
+            bagTotal = null;
+            bagFree = null;
+        }
+
         var savedAt = Whole(character.Number("savedAt"), 4102444800);
         return new WowCompanionSnapshot
         {
@@ -292,7 +315,12 @@ public sealed class WowCompanionService
                 Copper = Whole(character.Number("copper"), long.MaxValue / 2),
                 SavedAt = savedAt > 0 ? DateTimeOffset.FromUnixTimeSeconds(savedAt) : null,
                 QuestsRead = character.Flag("questsRead"),
-                Quests = quests
+                Quests = quests,
+                Professions = professions,
+                Durability = Optional(character.Number("durability"), 100),
+                DurabilityLowest = Optional(character.Number("durabilityLowest"), 100),
+                BagFree = bagFree,
+                BagTotal = bagTotal
             }
         };
     }
@@ -320,6 +348,17 @@ public sealed class WowCompanionService
         }
 
         return builder.ToString().Trim();
+    }
+
+    // A whole number from 0 to max, or null when the add-on did not save one.
+    private static int? Optional(double? value, int max)
+    {
+        if (value is not { } number || double.IsNaN(number) || number < 0)
+        {
+            return null;
+        }
+
+        return number >= max ? max : (int)Math.Floor(number);
     }
 
     private static long Whole(double? value, long max)
@@ -386,6 +425,31 @@ public sealed class WowCompanionCharacter
     public bool QuestsRead { get; set; }
 
     public List<WowCompanionQuest> Quests { get; set; } = [];
+
+    // Empty when the add-on could not read professions, or none are learned.
+    public List<WowCompanionProfession> Professions { get; set; } = [];
+
+    // Equipped gear, as whole percentages: all of it, and the most worn piece.
+    // Null when the add-on did not report it.
+    public int? Durability { get; set; }
+
+    public int? DurabilityLowest { get; set; }
+
+    public int? BagFree { get; set; }
+
+    public int? BagTotal { get; set; }
+}
+
+public sealed class WowCompanionProfession
+{
+    public string Name { get; set; } = "";
+
+    public int Rank { get; set; }
+
+    public int MaxRank { get; set; }
+
+    // One of the two main professions, as opposed to cooking, fishing and the like.
+    public bool Primary { get; set; }
 }
 
 public sealed class WowCompanionQuest
