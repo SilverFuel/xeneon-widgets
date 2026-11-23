@@ -3702,6 +3702,9 @@ async function validateGameProfileSwitching(cdp) {
       check(getComputedStyle(arrival).pointerEvents === "none", "the welcome can take a tap");
       const playLogText = localStorage.getItem("auxora-play-log-v1") || "";
       check(playLogText.includes("wow-forever") && !/[A-Za-z]:\\\\|\\.exe/i.test(playLogText), "the play log is missing the game or holds a path: " + playLogText.slice(0, 200));
+      // A game gets the machine to itself: the page says one is running and the background stops drawing.
+      check(document.body.hasAttribute("data-game-running"), "the page does not say a game is running");
+      check(document.getElementById("dashboard-ambient-canvas")?.dataset.ambientMotion !== "running", "the background kept animating while a game was running");
 
       // 2. The user moves on: later polls must not pull them back.
       window.__auxoraTestOpenWidget("audio");
@@ -3722,6 +3725,7 @@ async function validateGameProfileSwitching(cdp) {
       const exited = await until(current => current.scene === defaultId && current.theme === before.theme, "the default Profile did not return when the game exited");
       check(exited.panel === "audio", "exiting the game replaced the panel the user chose: " + JSON.stringify(exited));
       check(chip.hidden, "the session chip stayed after the game exited");
+      check(!document.body.hasAttribute("data-game-running"), "the page still says a game is running after it exited");
 
       // 4. A new session where the user stays on the game panel: the previous panel returns on exit.
       fixture.activity = forever();

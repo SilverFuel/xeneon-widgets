@@ -9,7 +9,9 @@ namespace XenonEdgeHost;
 public sealed class GameActivityService
 {
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(6);
-    private static readonly TimeSpan WmiProcessScanCooldown = TimeSpan.FromSeconds(30);
+    // WMI is slow and runs in a separate Windows service. Paths now come from a direct query that also
+    // covers elevated and protected processes, so WMI is kept only as an occasional safety net.
+    private static readonly TimeSpan WmiProcessScanCooldown = TimeSpan.FromMinutes(5);
     private static readonly HashSet<string> IgnoredProcessNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "agent",

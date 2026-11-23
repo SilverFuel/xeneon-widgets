@@ -5,8 +5,9 @@ using System.Text;
 namespace XenonEdgeHost;
 
 // Reads the path of a running process's executable.
-// Process.MainModule needs rights that anti-cheat and protected processes refuse, so a game such as
-// Battlefield 6 has no readable path that way. The limited query is the one Windows allows for those.
+// The limited query is one system call and is allowed for protected and anti-cheat processes.
+// Process.MainModule lists every module of the process and is refused for those, so it is only the
+// fallback. Game detection asks for every process on each pass, which makes the order matter.
 internal static class ProcessPathReader
 {
     private const uint ProcessQueryLimitedInformation = 0x1000;
@@ -17,7 +18,7 @@ internal static class ProcessPathReader
     {
         try
         {
-            var path = process.MainModule?.FileName;
+            var path = ReadLimited(process.Id);
             if (!string.IsNullOrWhiteSpace(path))
             {
                 return path;
@@ -29,7 +30,7 @@ internal static class ProcessPathReader
 
         try
         {
-            return ReadLimited(process.Id);
+            return process.MainModule?.FileName ?? "";
         }
         catch
         {

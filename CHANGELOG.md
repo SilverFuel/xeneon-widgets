@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Less work in the background.
+  - The moving background stops drawing while a game is running, whenever it is hidden (Night, the game and battery budgets, motion off, clean readability), and a minute after the last touch or key. It used to draw fifteen frames a second in all of those cases.
+  - Game detection reads each program's path with one cheap system call instead of listing all its modules. The slow WMI scan it fell back to every 30 seconds now runs at most every five minutes.
+  - The play log is written to storage when a session starts or ends and otherwise once a minute, not on every reading. The session chip no longer rewrites its label every second.
 - Smart Home > Lights is rebuilt. Before a Hue bridge is linked it is one card that says how to connect. Once linked, rooms come first as tiles with an On/Off button and a brightness slider, then single lights the same way; the bridge's own settings fold away at the bottom. The three counters (bridge address, number of lights, number of groups) are gone.
 - Media is laid out again. The equalizer is its own screen: **Equalizer** on the Media screen opens it over the panel and **Done** closes it. The eight sound presets stay on the Media screen, one tap each. What is left is three cards that use the width: output and presets, what is playing, and app volumes as their own card with one line per app, up to six.
 - Fixed a Profile changing without its theme. When a game started or closed at the same moment as Auxora's routine settings refresh, the Profile switched but the colours of the previous one stayed until the next switch.
