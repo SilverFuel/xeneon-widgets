@@ -3924,6 +3924,15 @@ async function checkWowQuestLogInPage() {
   // Large text does not fit four cards, so the panel is two pages there, and only there.
   const pageSwitch = panel().querySelector(".wow-pages");
   check(shown(pageSwitch) === largeText, size + ": the page switch is " + (shown(pageSwitch) ? "shown" : "missing"));
+  // On one screen the hand-kept list's tabs step aside for one "My list" button; elsewhere all four tabs stay.
+  const tabsShown = Array.from(panel().querySelectorAll(".wow-quest-tabs > button")).filter(shown);
+  if (oneScreen) {
+    const ownBox = tabsShown[0]?.getBoundingClientRect();
+    check(tabsShown.length === 1 && label(tabsShown[0]) === "My list" && ownBox.width >= 54 && ownBox.height >= 54
+      && ownBox.top < list.getBoundingClientRect().top, size + ": the tabs did not give way to My list: " + tabsShown.map(label).join(", "));
+  } else {
+    check(tabsShown.length === 4 && tabsShown[0].getAttribute("aria-pressed") === "true", size + ": the four tabs are not all shown: " + tabsShown.map(label).join(", "));
+  }
   // The mic button: live to start with, muted after a tap, live again after the next.
   const micButton = panel().querySelector(".wow-mic");
   const micBox = () => micButton.getBoundingClientRect();
