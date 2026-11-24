@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- On the EDGE the Claude Code chip uses the whole spare width of the header in every state, not only while a session waits, so the latest step or what Claude said when it finished can be read in full.
 - The Claude Code chip says more at a glance: a working session shows its latest step ("Ran: npm run check", "Edited: dashboard.js", "Failed: npm test"), turns amber-edged with "quiet for 6 min" when nothing has been reported for five minutes, a waiting bar says how long it has waited, and a finished chip glows three times as it appears. Screen readers hear a wait or a finish once, not every step.
 - **Claude Code on the EDGE.** With the add-on in `addons/ClaudeCode` set up, the header shows what Claude Code is doing on this PC: a wide amber bar that flashes when a session is waiting on a decision (with the project and what it is asking), and a quiet chip while it works, when it finishes, or if it stops on an error. A tap marks it seen. You still answer in Claude Code's own window. Auxora keeps one short line per session in memory only; see `addons/ClaudeCode/README.md`.
 - WoW Forever leaves Apple Music alone while a track is changing: after a skip, or when a song ends, the new track's cover is asked for once the track has played for three seconds, not within a second of the change. A precaution after Apple Music showed "Something went wrong" once following a skip from the panel; the cause is not confirmed.
