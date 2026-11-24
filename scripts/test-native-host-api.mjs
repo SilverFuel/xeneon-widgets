@@ -1325,7 +1325,8 @@ try {
   const largeReply = await hookEvent({ ...hookSession, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "git push origin main" }, tool_response: { stdout: "x".repeat(400000) } });
   assert(largeReply.status === 204, `a large hook report must still be accepted; received HTTP ${largeReply.status}`);
   hookSessions = await claudeSessions();
-  assert(hookSessions.length === 1 && hookSessions[0].state === "working" && hookSessions[0].text === "", `the tool running must end the wait: ${JSON.stringify(hookSessions)}`);
+  assert(hookSessions.length === 1 && hookSessions[0].state === "working" && hookSessions[0].text === "Ran: git push origin main",
+    `the tool running must end the wait and show what ran: ${JSON.stringify(hookSessions)}`);
   for (const origin of [hostUrl, "https://example.com", "null"]) {
     const fromPage = await hookEvent({ ...hookSession, hook_event_name: "StopFailure" }, { Origin: origin });
     assert(fromPage.status === 403, `a hook report naming the origin ${origin} must be refused without the session token; received HTTP ${fromPage.status}`);

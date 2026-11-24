@@ -33,7 +33,7 @@ Game performance capture may create short-lived local PresentMon CSV files while
 
 Auxora keeps a play log on this device: for each game it has seen running, the game's name, a short key such as a store id, and the minutes played per day for the last 60 days. It is used for the welcome shown when a game starts and the session clock in the header. It is not sent anywhere, holds no file paths, and is removed when you reset local data.
 
-If you set up the Claude Code add-on (`addons/ClaudeCode`), Claude Code on this PC reports to Auxora when a session starts work, finishes, or waits on a decision. Auxora keeps, in memory only, the session id, the project folder's name (not its path), the state, and one line of up to 160 characters such as the command being asked about. None of it is written to disk or sent anywhere, and it is gone when Auxora closes.
+If you set up the Claude Code add-on (`addons/ClaudeCode`), Claude Code on this PC reports to Auxora when a session starts work, finishes, or waits on a decision. Auxora keeps, in memory only, the session id, the project folder's name (not its path), the state, and one line of up to 160 characters such as the command being asked about or just run. None of it is written to disk or sent anywhere, and it is gone when Auxora closes.
 
 If the optional Auxora Companion add-on is installed in World of Warcraft Forever, Auxora reads the one file that add-on saves (character name, realm, level, experience, location, coin, quest log, professions, gear durability and bag space) to show it in the WoW Forever journal. Auxora does not write to the game's folders, keeps no copy of that file, and does not send it anywhere. The add-on itself has no network access.
 

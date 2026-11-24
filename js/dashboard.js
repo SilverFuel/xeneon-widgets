@@ -1758,7 +1758,7 @@
 
   // Claude Code sessions on this PC, as their own hooks report them to the host. The chip in
   // the header shows the one that matters most: flashing while a session waits on a decision.
-  var claudeWatch = { payload: null, seenKey: "", shownKey: "", misses: 0, timer: 0 };
+  var claudeWatch = { payload: null, seenKey: "", shownKey: "", announced: "", misses: 0, timer: 0 };
 
   function renderClaudeChip() {
     var chip = document.getElementById("dashboard-claude-chip");
@@ -1770,12 +1770,20 @@
     chip.hidden = !shown;
     if (!shown) {
       chip.removeAttribute("data-state");
+      claudeWatch.announced = "";
       return;
     }
     var title = document.getElementById("dashboard-claude-chip-title");
     var detail = document.getElementById("dashboard-claude-chip-detail");
     if (chip.getAttribute("data-state") !== shown.state) { chip.setAttribute("data-state", shown.state); }
     chip.toggleAttribute("data-flash", shown.flash);
+    chip.toggleAttribute("data-quiet", shown.quiet);
+    // A screen reader hears a wait or a finish once, not the chip's text changing with every step.
+    var announce = document.getElementById("dashboard-claude-announce");
+    if (announce && shown.announce !== claudeWatch.announced) {
+      claudeWatch.announced = shown.announce;
+      announce.textContent = shown.announce;
+    }
     if (title.textContent !== shown.title) { title.textContent = shown.title; }
     if (detail.textContent !== shown.detail) { detail.textContent = shown.detail; }
     if (chip.getAttribute("aria-label") !== shown.label) { chip.setAttribute("aria-label", shown.label); }

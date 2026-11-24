@@ -74,10 +74,24 @@ public sealed class ClaudeCodeServiceTests
         Assert.That(waiting.StateSeconds, Is.EqualTo(12));
         Assert.That(waiting.Id, Is.EqualTo("session-"));
 
-        service.Record(Report("PostToolUse"), Start.AddSeconds(50));
+        var ran = Report("PostToolUse");
+        ran.ToolName = "Bash";
+        ran.Command = "git push origin main";
+        service.Record(ran, Start.AddSeconds(50));
         var working = service.Snapshot(Start.AddSeconds(51)).Sessions.Single();
         Assert.That(working.State, Is.EqualTo("working"));
-        Assert.That(working.Text, Is.Empty);
+        Assert.That(working.Text, Is.EqualTo("Ran: git push origin main"));
+        Assert.That(working.StateSeconds, Is.EqualTo(1));
+
+        // Each tool after that changes the line but not how long the session has been working.
+        var edited = Report("PostToolUse");
+        edited.ToolName = "Edit";
+        edited.FilePath = @"C:\Users\someone\code\auxora\js\dashboard.js";
+        service.Record(edited, Start.AddSeconds(70));
+        var moving = service.Snapshot(Start.AddSeconds(75)).Sessions.Single();
+        Assert.That(moving.Text, Is.EqualTo("Edited: dashboard.js"));
+        Assert.That(moving.StateSeconds, Is.EqualTo(25));
+        Assert.That(moving.IdleSeconds, Is.EqualTo(5));
 
         var stop = Report("Stop");
         stop.LastAssistantMessage = "\n## Pushed the branch.\nNext I would open the pull request.";
@@ -141,6 +155,28 @@ public sealed class ClaudeCodeServiceTests
         Assert.That(ClaudeCodeService.Ask(Report("PermissionRequest")), Is.EqualTo("Needs your permission"));
         Assert.That(ClaudeCodeService.ProjectOf("/home/someone/code/auxora/"), Is.EqualTo("auxora"));
         Assert.That(ClaudeCodeService.ProjectOf(""), Is.Empty);
+    }
+
+    [Test]
+    public void Did_SaysWhatJustHappenedAndWhenItFailed()
+    {
+        var test = Report("PostToolUseFailure");
+        test.ToolName = "Bash";
+        test.Command = "npm run check";
+        Assert.That(ClaudeCodeService.Did(test, failed: false), Is.EqualTo("Ran: npm run check"));
+        Assert.That(ClaudeCodeService.Did(test, failed: true), Is.EqualTo("Failed: npm run check"));
+        Assert.That(ClaudeCodeService.Next("working", "", test, out var line), Is.EqualTo("working"));
+        Assert.That(line, Is.EqualTo("Failed: npm run check"));
+
+        var read = Report("PostToolUse");
+        read.ToolName = "Read";
+        read.FilePath = "/home/someone/auxora/README.md";
+        Assert.That(ClaudeCodeService.Did(read, failed: false), Is.EqualTo("Read: README.md"));
+
+        var search = Report("PostToolUse");
+        search.ToolName = "WebSearch";
+        Assert.That(ClaudeCodeService.Did(search, failed: false), Is.EqualTo("Used WebSearch"));
+        Assert.That(ClaudeCodeService.Did(Report("PostToolUse"), failed: false), Is.Empty);
     }
 
     [Test]

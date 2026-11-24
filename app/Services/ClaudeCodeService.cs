@@ -325,10 +325,11 @@ public sealed class ClaudeCodeService
                 }
             case "PostToolUse":
             case "PostToolUseFailure":
-                // The tool ran, so whatever it was waiting on has been answered.
-                if (state == Waiting || state.Length == 0)
+                // The tool ran, so whatever it was waiting on has been answered. The line
+                // becomes what it just did, so a glance shows the session is moving.
+                if (state == Waiting || state == Working || state.Length == 0)
                 {
-                    text = "";
+                    text = Did(report, report.Name == "PostToolUseFailure");
                     return Working;
                 }
 
@@ -347,27 +348,42 @@ public sealed class ClaudeCodeService
     // What Claude Code is asking to do, in a few words.
     public static string Ask(ClaudeCodeEvent report)
     {
+        return report.ToolName.Length == 0 && report.FilePath.Length == 0
+            ? "Needs your permission"
+            : Describe(report, "Run", "Read", "Write", "Edit", "Use");
+    }
+
+    // What Claude Code just did, in a few words. Empty when the report names no tool.
+    public static string Did(ClaudeCodeEvent report, bool failed)
+    {
+        if (report.ToolName.Length == 0 && report.FilePath.Length == 0)
+        {
+            return "";
+        }
+
+        return failed
+            ? Describe(report, "Failed", "Could not read", "Could not write", "Could not edit", "Failed")
+            : Describe(report, "Ran", "Read", "Wrote", "Edited", "Used");
+    }
+
+    private static string Describe(ClaudeCodeEvent report, string run, string read, string write, string edit, string use)
+    {
         var tool = report.ToolName;
         if (tool == "Bash" && report.Command.Length > 0)
         {
-            return Clean("Run: " + report.Command, MaxTextLength);
+            return Clean(run + ": " + report.Command, MaxTextLength);
         }
 
         if (report.FilePath.Length > 0)
         {
-            var verb = tool == "Read" ? "Read" : tool == "Write" ? "Write" : "Edit";
+            var verb = tool == "Read" ? read : tool == "Write" ? write : edit;
             return Clean(verb + ": " + ProjectOf(report.FilePath), MaxTextLength);
-        }
-
-        if (tool.Length == 0)
-        {
-            return "Needs your permission";
         }
 
         var name = tool.StartsWith("mcp__", StringComparison.Ordinal)
             ? tool[5..].Replace("__", ": ", StringComparison.Ordinal)
             : tool;
-        return Clean(report.Description.Length > 0 ? "Use " + name + ": " + report.Description : "Use " + name, MaxTextLength);
+        return Clean(report.Description.Length > 0 ? use + " " + name + ": " + report.Description : use + " " + name, MaxTextLength);
     }
 
     // The last part of a folder or file path. Only this reaches the dashboard, never the path.
