@@ -16,6 +16,9 @@
   // closed without saying so. A finished one stays up for ten minutes.
   var QUIET_WORKING_SECONDS = 30 * 60;
   var FINISHED_SHOWN_SECONDS = 10 * 60;
+  // Claude Code reports after each step, so five minutes with nothing means one long step
+  // (a build, a long think) or something it could not report. Worth a glance, not an alarm.
+  var QUIET_SECONDS = 5 * 60;
 
   function text(value, max) {
     return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -69,11 +72,16 @@
     if (!chosen) return null;
 
     var detail = chosen.project;
+    var quiet = chosen.state === "working" && chosen.idleSeconds >= QUIET_SECONDS;
     if (chosen.state === "working") {
+      // How long it has been going, then either its latest step or how long since one.
       detail += " · " + elapsed(chosen.stateSeconds);
+      if (quiet) detail += " · quiet for " + elapsed(chosen.idleSeconds);
+      else if (chosen.text) detail += " · " + chosen.text;
       if (working.length > 1) detail += " · +" + (working.length - 1) + " more";
     } else {
       if (chosen.text) detail += " · " + chosen.text;
+      if (chosen.state === "waiting" && chosen.stateSeconds >= 60) detail += " · waiting " + elapsed(chosen.stateSeconds);
       if (chosen.state === "waiting" && waiting.length > 1) detail += " · +" + (waiting.length - 1) + " more waiting";
     }
     var key = keyOf(chosen);
@@ -83,6 +91,11 @@
     return {
       state: chosen.state, key: key, title: title, detail: detail,
       flash: chosen.state === "waiting" && key !== seenKey,
+      quiet: quiet,
+      // Said aloud once, when a session starts waiting or finishes; not on every step. The
+      // key tells two sessions apart even when they say the same thing.
+      announce: chosen.state === "working" ? "" : title + ": " + chosen.project + (chosen.text ? " · " + chosen.text : ""),
+      announceKey: chosen.state === "working" ? "" : key,
       label: title + ": " + detail.replace(/[.!?]+$/, "") + "." + hint,
       waitingCount: waiting.length
     };

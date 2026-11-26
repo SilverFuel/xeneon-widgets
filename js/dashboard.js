@@ -1758,7 +1758,7 @@
 
   // Claude Code sessions on this PC, as their own hooks report them to the host. The chip in
   // the header shows the one that matters most: flashing while a session waits on a decision.
-  var claudeWatch = { payload: null, seenKey: "", shownKey: "", misses: 0, timer: 0 };
+  var claudeWatch = { payload: null, seenKey: "", shownKey: "", announced: "", finished: "", misses: 0, timer: 0 };
 
   function renderClaudeChip() {
     var chip = document.getElementById("dashboard-claude-chip");
@@ -1770,12 +1770,32 @@
     chip.hidden = !shown;
     if (!shown) {
       chip.removeAttribute("data-state");
+      claudeWatch.announced = "";
       return;
     }
     var title = document.getElementById("dashboard-claude-chip-title");
     var detail = document.getElementById("dashboard-claude-chip-detail");
     if (chip.getAttribute("data-state") !== shown.state) { chip.setAttribute("data-state", shown.state); }
     chip.toggleAttribute("data-flash", shown.flash);
+    chip.toggleAttribute("data-quiet", shown.quiet);
+    // A screen reader hears a wait or a finish once, not the chip's text changing with every
+    // step. Compared by session, so a second session saying the same words is said too; the
+    // line is emptied first because a status line set to the text it already holds says nothing.
+    var announce = document.getElementById("dashboard-claude-announce");
+    if (announce && shown.announceKey !== claudeWatch.announced) {
+      claudeWatch.announced = shown.announceKey;
+      announce.textContent = "";
+      if (shown.announce) {
+        var words = shown.announce;
+        window.setTimeout(function () { announce.textContent = words; }, 60);
+      }
+    }
+    // The finishing glow starts when the chip becomes "done". When a different session's finish
+    // takes its place the state does not change, so the glow is switched to its twin to start again.
+    if (shown.state === "done" && shown.key !== claudeWatch.finished) {
+      claudeWatch.finished = shown.key;
+      chip.setAttribute("data-glow", chip.getAttribute("data-glow") === "a" ? "b" : "a");
+    }
     if (title.textContent !== shown.title) { title.textContent = shown.title; }
     if (detail.textContent !== shown.detail) { detail.textContent = shown.detail; }
     if (chip.getAttribute("aria-label") !== shown.label) { chip.setAttribute("aria-label", shown.label); }

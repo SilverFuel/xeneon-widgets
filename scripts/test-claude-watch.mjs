@@ -21,10 +21,11 @@ test("a decision someone is waiting on comes before everything else, the longest
   ] }, "");
   assert.equal(shown.state, "waiting");
   assert.equal(shown.title, "Claude needs you");
-  assert.equal(shown.detail, "mission-board · Edit: schema.sql · +1 more waiting");
+  assert.equal(shown.detail, "mission-board · Edit: schema.sql · waiting 4 min · +1 more waiting");
   assert.equal(shown.flash, true);
   assert.equal(shown.waitingCount, 2);
-  assert.match(shown.label, /^Claude needs you: mission-board · Edit: schema\.sql · \+1 more waiting\. Tap to stop the flashing\.$/);
+  assert.equal(shown.label, "Claude needs you: mission-board · Edit: schema.sql · waiting 4 min · +1 more waiting. Tap to stop the flashing.");
+  assert.equal(shown.announce, "Claude needs you: mission-board · Edit: schema.sql");
 });
 
 test("a wait that was tapped stays up but stops flashing, until what is asked changes", () => {
@@ -43,6 +44,8 @@ test("working shows the project and how long, and a long-silent session is left 
   assert.equal(shown.title, "Claude working");
   assert.equal(shown.detail, "auxora · 4 min · +1 more");
   assert.equal(shown.flash, false);
+  assert.equal(shown.quiet, false);
+  assert.equal(shown.announce, "", "a working session is never announced");
   assert.equal(view({ sessions: [session("working", { idleSeconds: 31 * 60 })] }, ""), null);
 });
 
@@ -85,4 +88,38 @@ test("the host is asked often only while a session is live", () => {
   assert.equal(nextPollMs({ sessions: [session("working", { idleSeconds: 40 * 60 })] }), 15000);
   assert.equal(nextPollMs({ sessions: [session("working")] }), 3000);
   assert.equal(nextPollMs({ sessions: [session("waiting", { idleSeconds: 5 * 3600 })] }), 3000);
+});
+
+test("a working session shows its latest step, or how long it has been quiet", () => {
+  const moving = view({ sessions: [session("working", { text: "Ran: npm run check", stateSeconds: 700, idleSeconds: 12 })] }, "");
+  assert.equal(moving.detail, "auxora · 11 min · Ran: npm run check");
+  assert.equal(moving.quiet, false);
+  const quiet = view({ sessions: [session("working", { text: "Ran: npm run check", stateSeconds: 1100, idleSeconds: 400 })] }, "");
+  assert.equal(quiet.title, "Claude working");
+  assert.equal(quiet.detail, "auxora · 18 min · quiet for 6 min");
+  assert.equal(quiet.quiet, true);
+  assert.equal(view({ sessions: [session("working", { idleSeconds: 299 })] }, "").quiet, false);
+});
+
+test("a wait says how long it has been waiting once a minute has passed, without changing what a tap remembers", () => {
+  const fresh = view({ sessions: [session("waiting", { text: "Run: git push", stateSeconds: 40 })] }, "");
+  assert.equal(fresh.detail, "auxora · Run: git push");
+  const later = view({ sessions: [session("waiting", { text: "Run: git push", stateSeconds: 200 })] }, fresh.key);
+  assert.equal(later.detail, "auxora · Run: git push · waiting 3 min");
+  assert.equal(later.key, fresh.key);
+  assert.equal(later.flash, false, "still seen three minutes on");
+  assert.equal(later.announce, "Claude needs you: auxora · Run: git push", "the announcement does not carry the clock");
+});
+
+test("two sessions that say the same thing are still two announcements", () => {
+  const first = session("waiting", { id: "one", text: "Run: npm test", stateSeconds: 90 });
+  const second = session("waiting", { id: "two", text: "Run: npm test", stateSeconds: 30 });
+  const both = view({ sessions: [first, second] }, "");
+  const after = view({ sessions: [second] }, "");
+  assert.equal(both.announce, after.announce, "the words are the same");
+  assert.notEqual(both.announceKey, after.announceKey, "the key is not, so the second is said too");
+  assert.equal(view({ sessions: [session("working")] }, "").announceKey, "");
+  const finishedA = view({ sessions: [session("done", { id: "a", text: "Done.", stateSeconds: 50 })] }, "");
+  const finishedB = view({ sessions: [session("done", { id: "a", text: "Done.", stateSeconds: 50 }), session("done", { id: "b", text: "Done.", stateSeconds: 5 })] }, "");
+  assert.notEqual(finishedA.key, finishedB.key, "a newer finish is a different view, so its glow can start again");
 });
