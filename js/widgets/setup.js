@@ -128,22 +128,11 @@
       return width && height ? Math.round(width) + "x" + Math.round(height) + origin : text(entry && entry.deviceName, "Windows display");
     }
 
-    return '' +
-      '<article class="list-card inline-card setup-diagnostics-card">' +
-        '<div class="inline-card-header">' +
-          '<div>' +
-            '<div class="metric-label">Companion display targeting</div>' +
-            '<div class="router-inline-copy">' + escapeHtml(text(display && display.message, selected ? "Companion display selected." : "Connect a secondary display. Auxora never uses the Windows primary display.")) + '</div>' +
-          '</div>' +
-          statusPill(displayReady ? "Ready" : companionDisplayCount ? "Choose one" : "Waiting", displayReady ? "good" : "warn") +
-        '</div>' +
-        '<div class="setup-display-target">' +
-          '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected companion display") : "No active companion display selected") + '</strong>' +
-          '<span>' + escapeHtml(selected ? describeDisplay(selected) : companionDisplayCount ? "Choose one of the companion displays below." : "Connect or extend a secondary display, then refresh diagnostics.") + '</span>' +
-        '</div>' +
-        '<details class="setup-diagnostics-details" data-preserve-open>' +
-          '<summary>Manage companion displays</summary>' +
-          '<div class="setup-diagnostics-details__body">' +
+    // With companion displays to choose from and none chosen, the choices are what the card is
+    // for, so they are shown outright. Once one is in use they move behind "Manage companion
+    // displays". A person who was told to "choose one below" must not have to find a disclosure first.
+    var needsChoice = !selected && visibleDisplays.length > 0;
+    var displayChoices = '' +
           '<div class="setup-display-list">' + (visibleDisplays.length ? visibleDisplays.map(function (entry) {
           var reasons = Array.isArray(entry.reasons) ? entry.reasons.slice(0, 2).join(" / ") : "";
           return '' +
@@ -161,9 +150,25 @@
         '<div class="inline-actions">' +
           '<button class="inline-button is-primary" type="button" data-action="run-repair">Repair scan</button>' +
           (repairActions.length ? '<span class="router-inline-copy">' + escapeHtml(text(repairActions[0], "Repair actions are available.")) + '</span>' : '') +
-        '</div>' +
+        '</div>';
+
+    return '' +
+      '<article class="list-card inline-card setup-diagnostics-card">' +
+        '<div class="inline-card-header">' +
+          '<div>' +
+            '<div class="metric-label">Companion display targeting</div>' +
+            '<div class="router-inline-copy">' + escapeHtml(text(display && display.message, selected ? "Companion display selected." : "Connect a secondary display. Auxora never uses the Windows primary display.")) + '</div>' +
           '</div>' +
-        '</details>' +
+          statusPill(displayReady ? "Ready" : companionDisplayCount ? "Choose one" : "Waiting", displayReady ? "good" : "warn") +
+        '</div>' +
+        '<div class="setup-display-target">' +
+          '<strong>' + escapeHtml(selected ? text(selected.label || selected.friendlyName, "Selected companion display") : "No active companion display selected") + '</strong>' +
+          '<span>' + escapeHtml(selected ? describeDisplay(selected) : companionDisplayCount ? "Choose one of the companion displays below." : "Connect or extend a secondary display, then refresh diagnostics.") + '</span>' +
+        '</div>' +
+        (needsChoice ? displayChoices : '<details class="setup-diagnostics-details" data-preserve-open>' +
+          '<summary>Manage companion displays</summary>' +
+          '<div class="setup-diagnostics-details__body">' + displayChoices + '</div>' +
+        '</details>') +
       '</article>';
   }
 
@@ -967,6 +972,7 @@
     };
   }
 
+  runtime.registerHelpers({ renderDisplayDiagnosticsCard: renderDisplayDiagnosticsCard });
   runtime.registerRenderer("setup", mountSetupWidget);
   runtime.registerRenderer("calendar", mountCalendarWidget);
 }());
