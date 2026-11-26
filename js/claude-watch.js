@@ -92,8 +92,10 @@
       state: chosen.state, key: key, title: title, detail: detail,
       flash: chosen.state === "waiting" && key !== seenKey,
       quiet: quiet,
-      // Said aloud once, when a session starts waiting or finishes; not on every step.
+      // Said aloud once, when a session starts waiting or finishes; not on every step. The
+      // key tells two sessions apart even when they say the same thing.
       announce: chosen.state === "working" ? "" : title + ": " + chosen.project + (chosen.text ? " · " + chosen.text : ""),
+      announceKey: chosen.state === "working" ? "" : key,
       label: title + ": " + detail.replace(/[.!?]+$/, "") + "." + hint,
       waitingCount: waiting.length
     };

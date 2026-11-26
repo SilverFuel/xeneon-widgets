@@ -110,3 +110,16 @@ test("a wait says how long it has been waiting once a minute has passed, without
   assert.equal(later.flash, false, "still seen three minutes on");
   assert.equal(later.announce, "Claude needs you: auxora · Run: git push", "the announcement does not carry the clock");
 });
+
+test("two sessions that say the same thing are still two announcements", () => {
+  const first = session("waiting", { id: "one", text: "Run: npm test", stateSeconds: 90 });
+  const second = session("waiting", { id: "two", text: "Run: npm test", stateSeconds: 30 });
+  const both = view({ sessions: [first, second] }, "");
+  const after = view({ sessions: [second] }, "");
+  assert.equal(both.announce, after.announce, "the words are the same");
+  assert.notEqual(both.announceKey, after.announceKey, "the key is not, so the second is said too");
+  assert.equal(view({ sessions: [session("working")] }, "").announceKey, "");
+  const finishedA = view({ sessions: [session("done", { id: "a", text: "Done.", stateSeconds: 50 })] }, "");
+  const finishedB = view({ sessions: [session("done", { id: "a", text: "Done.", stateSeconds: 50 }), session("done", { id: "b", text: "Done.", stateSeconds: 5 })] }, "");
+  assert.notEqual(finishedA.key, finishedB.key, "a newer finish is a different view, so its glow can start again");
+});

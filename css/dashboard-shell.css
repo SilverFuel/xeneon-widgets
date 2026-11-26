@@ -318,6 +318,8 @@ body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; 
 .auxora-claude-chip[data-state="working"][data-quiet] .auxora-claude-chip__dot { background: #ffb020; animation: none; }
 /* Finishing glows green three times, then rests. */
 .auxora-claude-chip[data-state="done"] { border-color: #2fbf71; animation: auxora-claude-done 1.2s ease-out 3; }
+/* The same glow under a second name: switching names is what starts it again for a newer finish. */
+.auxora-claude-chip[data-state="done"][data-glow="b"] { animation-name: auxora-claude-done-again; }
 .auxora-claude-chip[data-state="done"] .auxora-claude-chip__dot { background: #2fbf71; }
 .auxora-claude-chip[data-state="error"] { border-color: #ff5c5c; }
 .auxora-claude-chip[data-state="error"] .auxora-claude-chip__dot { background: #ff5c5c; }
@@ -339,6 +341,10 @@ body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; 
 /* While one waits, the row of header controls takes the spare width and hands it to the chip. */
 .auxora-section-shell .router-viewer__header-actions:has(> .auxora-claude-chip[data-state="waiting"]) { flex: 1 1 auto; }
 @keyframes auxora-claude-done {
+  0% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0.75); }
+  100% { box-shadow: 0 0 0 16px rgba(47, 191, 113, 0); }
+}
+@keyframes auxora-claude-done-again {
   0% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0.75); }
   100% { box-shadow: 0 0 0 16px rgba(47, 191, 113, 0); }
 }
@@ -443,7 +449,11 @@ body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; 
   .auxora-claude-chip__dot, .auxora-claude-chip[data-state="waiting"][data-flash], .auxora-claude-chip[data-state="done"] { animation: none; }
 }
 body:is(.dashboard-native-page--motion-off, .dashboard-native-page--motion-low) :is(.auxora-play-chip__dot, .auxora-arrival.is-showing, .auxora-arrival.is-showing::after) { animation: none; }
-body:is(.dashboard-native-page--motion-off, .dashboard-native-page--motion-low) :is(.auxora-claude-chip__dot, .auxora-claude-chip[data-state="waiting"][data-flash], .auxora-claude-chip[data-state="done"]) { animation: none; }
+/* The flash and the finishing glow are signals, not decoration, and a running game puts the
+   dashboard on low motion. They stop only when motion is off altogether; the working dot's
+   pulse, which is decoration, also rests on low. */
+body:is(.dashboard-native-page--motion-off, .dashboard-native-page--motion-low) .auxora-claude-chip[data-state] .auxora-claude-chip__dot { animation: none; }
+body.dashboard-native-page--motion-off :is(.auxora-claude-chip[data-state="waiting"][data-flash], .auxora-claude-chip[data-state="done"]) { animation: none; }
 @media (forced-colors: active) {
   .auxora-claude-chip, .auxora-claude-chip[data-state] { border: 2px solid CanvasText; background: Canvas; color: CanvasText; animation: none; }
   .auxora-claude-chip[data-state="waiting"] { border-color: Highlight; outline: 2px solid Highlight; }
