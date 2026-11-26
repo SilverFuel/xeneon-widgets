@@ -1334,6 +1334,11 @@ try {
   assert((await hookEvent("not json")).status === 204, "a malformed hook report must be ignored quietly");
   hookSessions = await claudeSessions();
   assert(hookSessions.length === 1 && hookSessions[0].state === "working", `refused and malformed reports must change nothing: ${JSON.stringify(hookSessions)}`);
+  // A turn that ends on a question shows as asked, with only the question.
+  await hookEvent({ ...hookSession, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: "Pushed the branch.\n\nThe checks pass. Want me to open the pull request?" });
+  hookSessions = await claudeSessions();
+  assert(hookSessions.length === 1 && hookSessions[0].state === "asked" && hookSessions[0].text === "Want me to open the pull request?",
+    `a turn ending on a question must show as asked: ${JSON.stringify(hookSessions)}`);
   await hookEvent({ ...hookSession, hook_event_name: "SessionEnd", reason: "exit" });
   assert((await claudeSessions()).length === 0, "a session that ended must no longer be listed");
 

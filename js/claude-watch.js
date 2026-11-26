@@ -11,7 +11,7 @@
 })(typeof window !== "undefined" ? window : this, function () {
   "use strict";
 
-  var STATES = { waiting: "Claude needs you", error: "Claude stopped", working: "Claude working", done: "Claude finished" };
+  var STATES = { waiting: "Claude needs you", asked: "Claude asks", error: "Claude stopped", working: "Claude working", done: "Claude finished" };
   // A session that says it is working but has reported nothing for half an hour was most likely
   // closed without saying so. A finished one stays up for ten minutes.
   var QUIET_WORKING_SECONDS = 30 * 60;
@@ -55,8 +55,8 @@
   }
 
   // The one thing to show, or null for nothing. A decision someone is waiting on comes first
-  // (the longest wait first), then a session that stopped on an error, then one that is
-  // working, then one that just finished. `seenKey` is the key of the view the person last
+  // (the longest wait first), then a question a turn ended on, then a session that stopped on
+  // an error, then one that is working, then one that just finished. `seenKey` is the key of the view the person last
   // tapped: a wait that was seen stops flashing, a finished or stopped one is put away.
   function view(payload, seenKey) {
     var all = sessions(payload);
@@ -68,7 +68,11 @@
       .sort(function (a, b) { return a.idleSeconds - b.idleSeconds; });
     var finished = all.filter(function (session) { return session.state === "done" && session.stateSeconds < FINISHED_SHOWN_SECONDS && unseen(session); })
       .sort(function (a, b) { return a.stateSeconds - b.stateSeconds; });
-    var chosen = waiting[0] || stopped[0] || working[0] || finished[0];
+    // A turn that ended on a question waits for an answer; the newest first. It stays until it
+    // is answered or tapped away.
+    var asked = all.filter(function (session) { return session.state === "asked" && unseen(session); })
+      .sort(function (a, b) { return a.stateSeconds - b.stateSeconds; });
+    var chosen = waiting[0] || asked[0] || stopped[0] || working[0] || finished[0];
     if (!chosen) return null;
 
     var detail = chosen.project;
@@ -96,7 +100,7 @@
       // key tells two sessions apart even when they say the same thing.
       announce: chosen.state === "working" ? "" : title + ": " + chosen.project + (chosen.text ? " · " + chosen.text : ""),
       announceKey: chosen.state === "working" ? "" : key,
-      label: title + ": " + detail.replace(/[.!?]+$/, "") + "." + hint,
+      label: title + ": " + detail + (/[.!?]$/.test(detail) ? "" : ".") + hint,
       waitingCount: waiting.length
     };
   }
@@ -104,7 +108,9 @@
   // How long to wait before asking the host again. Often while any session is live, seldom when none is.
   function nextPollMs(payload) {
     var live = sessions(payload).some(function (session) {
-      return session.state === "waiting" || (session.state === "working" && session.idleSeconds < QUIET_WORKING_SECONDS);
+      return session.state === "waiting" || (session.state === "working" && session.idleSeconds < QUIET_WORKING_SECONDS)
+        // A fresh question is likely to be answered soon, and the chip should follow at once.
+        || (session.state === "asked" && session.stateSeconds < QUIET_WORKING_SECONDS);
     });
     return live ? 3000 : 15000;
   }
