@@ -4,6 +4,7 @@ Auxora can show what Claude Code is doing on this PC, so you can play without ch
 
 - **Claude needs you**: a wide amber bar in the header that flashes. A session has stopped to ask permission, ask a question, or show a plan. The bar says which project, what it is asking ("Run: git push origin main") and, after a minute, how long it has waited.
 - **Claude working**: a quiet chip with the project, how long it has been going, and its latest step ("Ran: npm run check", "Edited: dashboard.js", "Failed: npm test"). If nothing has been reported for five minutes the chip gets an amber edge and says "quiet for 6 min": one long step, or something Claude Code could not report.
+- **Claude asks**: an amber-edged chip with the question, when a turn ends on one ("Want me to open the pull request next?"). It glows three times as it appears and stays until you answer or tap it away. It does not flash: nothing is blocked.
 - **Claude finished**: a green-edged chip with the first line of what it said, for ten minutes. It glows three times when it appears.
 - **Claude stopped**: a red-edged chip when a turn ended on an error.
 
@@ -36,7 +37,7 @@ The script adds hooks to `%USERPROFILE%\.claude\settings.json`, so they apply to
 | `PreToolUse` for `AskUserQuestion`, `ExitPlanMode` | The session is waiting with a question or a plan. |
 | `Notification` (permission, input needed) | The session is waiting. |
 | `PostToolUse`, `PostToolUseFailure` | The tool ran, so the wait is over. The command or the file's name becomes the session's latest step. |
-| `Stop`, `StopFailure` | Finished, or stopped on an error. |
+| `Stop`, `StopFailure` | Finished, or stopped on an error. If the last line of Claude's message ends in a question mark, the session shows as asking and the line is that question. |
 | `SessionStart`, `SessionEnd` | The session is listed, or forgotten. |
 
 ## What Auxora keeps

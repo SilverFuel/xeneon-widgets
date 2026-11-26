@@ -321,6 +321,11 @@ body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; 
 /* The same glow under a second name: switching names is what starts it again for a newer finish. */
 .auxora-claude-chip[data-state="done"][data-glow="b"] { animation-name: auxora-claude-done-again; }
 .auxora-claude-chip[data-state="done"] .auxora-claude-chip__dot { background: #2fbf71; }
+/* A turn that ended on a question: amber like a wait, but an edge and a glow, not a filled
+   flashing bar. Nothing is blocked; an answer is wanted. */
+.auxora-claude-chip[data-state="asked"] { border-color: #ffb020; border-width: 2px; animation: auxora-claude-asked 1.2s ease-out 3; }
+.auxora-claude-chip[data-state="asked"][data-glow="b"] { animation-name: auxora-claude-asked-again; }
+.auxora-claude-chip[data-state="asked"] .auxora-claude-chip__dot { background: #ffb020; }
 .auxora-claude-chip[data-state="error"] { border-color: #ff5c5c; }
 .auxora-claude-chip[data-state="error"] .auxora-claude-chip__dot { background: #ff5c5c; }
 /* A waiting chip takes whatever width the header row has spare and never asks for any: its
@@ -347,6 +352,14 @@ body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; 
 @keyframes auxora-claude-done-again {
   0% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0.75); }
   100% { box-shadow: 0 0 0 16px rgba(47, 191, 113, 0); }
+}
+@keyframes auxora-claude-asked {
+  0% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.8); }
+  100% { box-shadow: 0 0 0 16px rgba(255, 176, 32, 0); }
+}
+@keyframes auxora-claude-asked-again {
+  0% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.8); }
+  100% { box-shadow: 0 0 0 16px rgba(255, 176, 32, 0); }
 }
 @keyframes auxora-claude-flash {
   0%, 49% { background: #ffb020; box-shadow: 0 0 0 4px rgba(255, 176, 32, 0.45); }
@@ -446,14 +459,14 @@ body.auxora-section-shell .router-rail__lower { display: block; flex: 0 0 auto; 
 }
 @media (prefers-reduced-motion: reduce) {
   .auxora-play-chip__dot, .auxora-arrival.is-showing, .auxora-arrival.is-showing::after { animation: none; }
-  .auxora-claude-chip__dot, .auxora-claude-chip[data-state="waiting"][data-flash], .auxora-claude-chip[data-state="done"] { animation: none; }
+  .auxora-claude-chip__dot, .auxora-claude-chip[data-state="waiting"][data-flash], .auxora-claude-chip[data-state="done"], .auxora-claude-chip[data-state="asked"] { animation: none; }
 }
 body:is(.dashboard-native-page--motion-off, .dashboard-native-page--motion-low) :is(.auxora-play-chip__dot, .auxora-arrival.is-showing, .auxora-arrival.is-showing::after) { animation: none; }
 /* The flash and the finishing glow are signals, not decoration, and a running game puts the
    dashboard on low motion. They stop only when motion is off altogether; the working dot's
    pulse, which is decoration, also rests on low. */
 body:is(.dashboard-native-page--motion-off, .dashboard-native-page--motion-low) .auxora-claude-chip[data-state] .auxora-claude-chip__dot { animation: none; }
-body.dashboard-native-page--motion-off :is(.auxora-claude-chip[data-state="waiting"][data-flash], .auxora-claude-chip[data-state="done"]) { animation: none; }
+body.dashboard-native-page--motion-off :is(.auxora-claude-chip[data-state="waiting"][data-flash], .auxora-claude-chip[data-state="done"], .auxora-claude-chip[data-state="asked"]) { animation: none; }
 @media (forced-colors: active) {
   .auxora-claude-chip, .auxora-claude-chip[data-state] { border: 2px solid CanvasText; background: Canvas; color: CanvasText; animation: none; }
   .auxora-claude-chip[data-state="waiting"] { border-color: Highlight; outline: 2px solid Highlight; }

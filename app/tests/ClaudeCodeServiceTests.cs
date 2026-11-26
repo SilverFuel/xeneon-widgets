@@ -180,6 +180,43 @@ public sealed class ClaudeCodeServiceTests
     }
 
     [Test]
+    public void ATurnThatEndsOnAQuestionIsAskedNotDone()
+    {
+        var stop = Report("Stop");
+        stop.LastAssistantMessage = "Pushed the branch and the checks pass.\n\nThe build is in app\\dist. **Want me to open the pull request next?**\n";
+        Assert.That(ClaudeCodeService.Next("working", "", stop, out var asked), Is.EqualTo("asked"));
+        Assert.That(asked, Is.EqualTo("Want me to open the pull request next?"));
+
+        var plain = Report("Stop");
+        plain.LastAssistantMessage = "Should I merge it?\n\nNo need: it is already merged.";
+        Assert.That(ClaudeCodeService.Next("working", "", plain, out var done), Is.EqualTo("done"));
+        Assert.That(done, Is.EqualTo("Should I merge it?"), "only the last line decides; the first line is still what a finish shows");
+
+        // An asked session stays asked until the next prompt.
+        Assert.That(ClaudeCodeService.Next("asked", "Merge it?", Report("PostToolUse"), out var kept), Is.EqualTo("asked"));
+        Assert.That(kept, Is.EqualTo("Merge it?"));
+        Assert.That(ClaudeCodeService.Next("asked", "Merge it?", Report("UserPromptSubmit"), out var cleared), Is.EqualTo("working"));
+        Assert.That(cleared, Is.Empty);
+    }
+
+    [Test]
+    public void ClosingQuestion_KeepsOnlyTheQuestion()
+    {
+        Assert.That(ClaudeCodeService.ClosingQuestion("Merge it?"), Is.EqualTo("Merge it?"));
+        Assert.That(ClaudeCodeService.ClosingQuestion("?"), Is.EqualTo("?"));
+        Assert.That(ClaudeCodeService.ClosingQuestion("Done. Which one? The first, or the second?"), Is.EqualTo("The first, or the second?"));
+        Assert.That(ClaudeCodeService.ClosingQuestion("- Want the Mac covered too?  \r\n\n"), Is.EqualTo("Want the Mac covered too?"));
+        Assert.That(ClaudeCodeService.ClosingQuestion("All done."), Is.Empty);
+        Assert.That(ClaudeCodeService.ClosingQuestion(""), Is.Empty);
+        Assert.That(ClaudeCodeService.ClosingQuestion("Which do you want?\n1. The first\n2. The second"), Is.Empty, "a list after the question is not handled; it shows as finished");
+
+        var longQuestion = ClaudeCodeService.ClosingQuestion("Should I " + new string('x', 400) + " now?");
+        Assert.That(longQuestion.Length, Is.EqualTo(160));
+        Assert.That(longQuestion, Does.StartWith("…"));
+        Assert.That(longQuestion, Does.EndWith(" now?"));
+    }
+
+    [Test]
     public void Clean_MakesOneShortLine()
     {
         Assert.That(ClaudeCodeService.Clean("  a\r\n\tb \u0007 c  ", 20), Is.EqualTo("a b c"));

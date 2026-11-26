@@ -1790,9 +1790,10 @@
         window.setTimeout(function () { announce.textContent = words; }, 60);
       }
     }
-    // The finishing glow starts when the chip becomes "done". When a different session's finish
-    // takes its place the state does not change, so the glow is switched to its twin to start again.
-    if (shown.state === "done" && shown.key !== claudeWatch.finished) {
+    // The glow starts when the chip becomes "done" or "asked". When a different session's finish
+    // or question takes its place the state does not change, so the glow is switched to its
+    // twin to start again.
+    if ((shown.state === "done" || shown.state === "asked") && shown.key !== claudeWatch.finished) {
       claudeWatch.finished = shown.key;
       chip.setAttribute("data-glow", chip.getAttribute("data-glow") === "a" ? "b" : "a");
     }

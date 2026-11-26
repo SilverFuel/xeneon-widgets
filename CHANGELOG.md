@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Claude asks.** When Claude Code ends a turn on a question, the chip no longer says "finished": it reads "Claude asks" with the question itself, amber-edged, and stays until you answer or tap it away. It comes after a permission wait and before everything else.
 - Fixed: the Claude Code bar did not flash, and the finished chip did not glow, while a game was running or with Motion at its default. A running game puts the dashboard on low motion, and both were switched off there. They now stop only when Motion is off altogether or Windows asks for reduced motion.
 - The Claude Code chip glows again when a second session finishes while the first is still showing, and a screen reader is told about a second waiting session even when it asks the same thing as the first.
 - On the EDGE the Claude Code chip uses the whole spare width of the header in every state, not only while a session waits, so the latest step or what Claude said when it finished can be read in full.

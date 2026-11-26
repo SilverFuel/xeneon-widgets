@@ -173,6 +173,7 @@ public sealed class ClaudeCodeService
     public const string Working = "working";
     public const string Waiting = "waiting";
     public const string Done = "done";
+    public const string Asked = "asked";
     public const string Failed = "error";
     public const string Ended = "ended";
 
@@ -335,6 +336,15 @@ public sealed class ClaudeCodeService
 
                 return state;
             case "Stop":
+                // A turn that ends on a question is waiting on an answer, even though Claude
+                // Code reports it as finished like any other.
+                var question = ClosingQuestion(report.LastAssistantMessage);
+                if (question.Length > 0)
+                {
+                    text = question;
+                    return Asked;
+                }
+
                 text = FirstLine(report.LastAssistantMessage);
                 return Done;
             case "StopFailure":
@@ -402,6 +412,35 @@ public sealed class ClaudeCodeService
             {
                 return cleaned;
             }
+        }
+
+        return "";
+    }
+
+    // The question a message ends on, or nothing. Only the last sentence of the last line is
+    // kept, so a paragraph that ends "... Want me to push it?" gives just the question.
+    public static string ClosingQuestion(string text)
+    {
+        var lines = (text ?? "").Split('\n');
+        for (var index = lines.Length - 1; index >= 0; index -= 1)
+        {
+            var line = Clean(lines[index], 4000).TrimStart('#', '*', '-', '>', '`', ' ').TrimEnd('*', '_', '`', ' ');
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            if (!line.EndsWith('?'))
+            {
+                return "";
+            }
+
+            var body = line[..^1];
+            var start = Math.Max(
+                body.LastIndexOf(". ", StringComparison.Ordinal),
+                Math.Max(body.LastIndexOf("! ", StringComparison.Ordinal), body.LastIndexOf("? ", StringComparison.Ordinal)));
+            var question = (start >= 0 ? line[(start + 2)..] : line).TrimStart('*', '_', '`', ' ');
+            return question.Length > MaxTextLength ? "…" + question[^(MaxTextLength - 1)..] : question;
         }
 
         return "";

@@ -123,3 +123,19 @@ test("two sessions that say the same thing are still two announcements", () => {
   const finishedB = view({ sessions: [session("done", { id: "a", text: "Done.", stateSeconds: 50 }), session("done", { id: "b", text: "Done.", stateSeconds: 5 })] }, "");
   assert.notEqual(finishedA.key, finishedB.key, "a newer finish is a different view, so its glow can start again");
 });
+
+test("a turn that ended on a question comes after a permission wait and before everything else", () => {
+  const question = session("asked", { id: "q", project: "auxora", text: "Want me to open the pull request next?", stateSeconds: 45 });
+  const shown = view({ sessions: [session("working", { id: "w" }), session("done", { id: "d" }), session("error", { id: "e" }), question] }, "");
+  assert.equal(shown.state, "asked");
+  assert.equal(shown.title, "Claude asks");
+  assert.equal(shown.detail, "auxora · Want me to open the pull request next?");
+  assert.equal(shown.flash, false, "it does not flash; only a blocked step does");
+  assert.equal(shown.label, "Claude asks: auxora · Want me to open the pull request next? Tap to put this away.");
+  assert.equal(shown.announce, "Claude asks: auxora · Want me to open the pull request next?");
+  assert.equal(view({ sessions: [question, session("waiting", { id: "p", text: "Run: git push" })] }, "").state, "waiting");
+  assert.equal(view({ sessions: [question, session("working", { id: "w" })] }, shown.key).state, "working", "tapped away");
+  assert.equal(view({ sessions: [{ ...question, stateSeconds: 3 * 3600 }] }, "").state, "asked", "it stays until answered or tapped");
+  assert.equal(nextPollMs({ sessions: [question] }), 3000);
+  assert.equal(nextPollMs({ sessions: [{ ...question, stateSeconds: 3 * 3600 }] }), 15000);
+});
