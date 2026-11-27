@@ -2443,3 +2443,115 @@
     font-size: clamp(17px, 1.0625rem, 19px);
   }
 }
+
+/* Gaming with a game running, on the EDGE: text sized to be read from the seat. Sizes only,
+   plus one arrangement change in the two sound boxes (below). The selectors start at body so
+   they outrank the ultrawide label and button rules. */
+@media (min-width: 1800px) and (min-height: 600px) {
+  body .game-focus-shell .game-focus-identity small,
+  body .game-focus-shell .game-focus-home,
+  body .game-focus-shell .game-focus-mute,
+  body .game-focus-shell .game-focus-audio-row .inline-button,
+  body .game-focus-shell .game-focus-mic-panel small,
+  body .game-focus-shell .game-focus-audio small {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  body .game-focus-shell .game-focus-session span,
+  body .game-focus-shell .game-focus-metric > span,
+  body .game-focus-shell .game-focus-metric > small,
+  body .game-focus-shell .game-focus-mic-panel span,
+  body .game-focus-shell .game-focus-audio span {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  body .game-focus-shell .game-focus-audio-row strong,
+  body .game-focus-shell .game-focus-audio-row b {
+    font-size: clamp(22px, 1.375rem, 24px);
+  }
+
+  body .game-focus-shell .game-focus-audio-row span,
+  body .game-focus-shell .game-focus-discord-copy small {
+    font-size: clamp(17px, 1.0625rem, 19px);
+  }
+
+  /* Thinner app rows, so three of them still fit under the Discord row. */
+  body .game-focus-shell .game-focus-audio-row {
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  /* Mic and Audio boxes: the name on the left with the device under it, the figure on the
+     right. Three stacked lines at these sizes would push the app volumes off the screen;
+     this way all three apps fit under the Discord row, at the largest text size too. */
+  body .game-focus-shell .game-focus-mic-panel > div,
+  body .game-focus-shell .game-focus-audio {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    align-content: center;
+    column-gap: 14px;
+    row-gap: 0;
+  }
+
+  body .game-focus-shell .game-focus-mic-panel > div > strong,
+  body .game-focus-shell .game-focus-audio > strong {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin-top: 0;
+    font-size: clamp(32px, 2rem, 36px);
+    line-height: 1.15;
+  }
+
+  body .game-focus-shell .game-focus-audio > small {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The mic box is 192px wide beside its button, which leaves no room for a device name,
+     and its figure is a little smaller so that "Muted" fits beside the name. */
+  body .game-focus-shell .game-focus-mic-panel > div > small {
+    display: none;
+  }
+
+  body .game-focus-shell .game-focus-mic-panel > div {
+    column-gap: 10px;
+  }
+
+  body .game-focus-shell .game-focus-mic-panel > div > strong {
+    font-size: clamp(28px, 1.75rem, 30px);
+  }
+
+  /* The mic row keeps a taller button than the rest: it is the one to hit without looking. */
+  body .game-focus-shell .game-focus-mic-panel {
+    min-height: 64px;
+  }
+
+  /* These three grew with Text size without a cap: at the largest setting the mic button's
+     words wrapped and the Discord row was wider than its column. */
+  body .game-focus-shell .game-focus-card--utility .game-focus-mic-toggle {
+    font-size: clamp(22px, 1.375rem, 24px);
+  }
+
+  body .game-focus-shell .game-focus-discord {
+    grid-template-columns: max-content minmax(72px, 1fr) max-content;
+  }
+
+  body .game-focus-shell .game-focus-discord:not([data-state="blend"]) {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  body .game-focus-shell .game-focus-discord-side,
+  body .game-focus-shell .game-focus-discord-copy strong {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  body .game-focus-shell .game-focus-card--utility .game-focus-discord .inline-button {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+}
