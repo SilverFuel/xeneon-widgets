@@ -2052,3 +2052,137 @@
   font-size: max(15px, 0.9375rem);
   font-style: normal;
 }
+
+/* Media on the EDGE: text sized to be read from the seat. Sizes only; the layout is unchanged.
+   The selectors start at body so they outrank the ultrawide rules that set labels and buttons. */
+@media (min-width: 1800px) and (min-height: 600px) {
+  body .audio-command-grid .metric-label,
+  body .audio-command-grid .audio-master-card .router-inline-copy,
+  body .audio-command-grid .audio-media-idle span,
+  body .audio-command-grid .audio-apps-card .inline-empty span {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  body .audio-command-grid .audio-media-idle strong,
+  body .audio-command-grid .audio-apps-card .inline-empty strong {
+    font-size: clamp(24px, 1.5rem, 26px);
+  }
+
+  body .audio-command-grid .audio-apps-card .widget-status {
+    font-size: clamp(17px, 1.0625rem, 19px);
+  }
+
+  body .audio-command-grid .audio-output-change,
+  body .audio-command-grid .audio-master-row .inline-button,
+  body .audio-command-grid .audio-card-subhead .inline-button,
+  body .audio-command-grid .audio-preset-button,
+  body .audio-command-grid .audio-apps-card .inline-button {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  /* The track's column is 300px wide at 2048 and 456px at 2560, so these two follow the width. */
+  body .audio-command-grid .audio-playback-card .audio-media-title {
+    font-size: clamp(30px, 1.5vw, 40px);
+    line-height: 1.15;
+  }
+
+  body .audio-command-grid .audio-media-subtitle {
+    font-size: clamp(22px, 1.375rem, 24px);
+    line-height: 1.3;
+  }
+
+  body .audio-command-grid .audio-media-state {
+    font-size: clamp(17px, 1.0625rem, 19px);
+  }
+
+  body .audio-command-grid .audio-media-progress-row span,
+  body .audio-command-grid .audio-media-progress-row strong {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  body .audio-command-grid .audio-playback-card .audio-media-controls .inline-button {
+    font-size: clamp(16px, 0.82vw, 21px);
+  }
+
+  body .audio-command-grid .audio-album-carousel__position {
+    font-size: clamp(17px, 1.0625rem, 19px);
+  }
+
+  body .audio-command-grid .audio-album-cover__placeholder > * {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  body .audio-command-grid .audio-session-row .inline-list-title,
+  body .audio-command-grid .audio-session-row__level strong {
+    font-size: clamp(22px, 1.375rem, 24px);
+  }
+
+  /* The Equalizer screen, the same way. */
+  body .audio-equalizer-screen .metric-label,
+  body .audio-equalizer-screen .inline-card-header .router-inline-copy,
+  body .audio-equalizer-screen .audio-tone-heading strong,
+  body .audio-equalizer-screen .audio-tone-control > span > strong,
+  body .audio-equalizer-screen .audio-equalizer-fine-tune > summary strong {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  body .audio-equalizer-screen .audio-preset-button,
+  body .audio-equalizer-screen .audio-equalizer-actions .inline-button,
+  body .audio-equalizer-screen__bar .inline-button,
+  body .audio-equalizer-screen .audio-preset-summary strong,
+  body .audio-equalizer-screen .audio-preset-summary span,
+  body .audio-equalizer-screen .audio-tone-control > strong,
+  body .audio-equalizer-screen .audio-eq-band > span,
+  body .audio-equalizer-screen .audio-eq-band > strong {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  body .audio-equalizer-screen .inline-card-header .widget-status,
+  body .audio-equalizer-screen .audio-tone-heading small,
+  body .audio-equalizer-screen .audio-tone-heading > span,
+  body .audio-equalizer-screen .audio-tone-control > span > small,
+  body .audio-equalizer-screen .audio-equalizer-fine-tune > summary small,
+  body .audio-equalizer-screen .audio-equalizer-fine-tune > summary > span,
+  body .audio-equalizer-screen .audio-equalizer-footer span,
+  body .audio-equalizer-screen .audio-equalizer-footer strong {
+    font-size: clamp(17px, 1.0625rem, 19px);
+  }
+
+  /* Room for the larger text. The screen's own title already says "Equalizer", so the card's
+     label is dropped and its heading and status share a line; the value columns are widened. */
+  body .audio-equalizer-screen .audio-equalizer-card {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  body .audio-equalizer-screen .inline-card-header .metric-label {
+    display: none;
+  }
+
+  body .audio-equalizer-screen .inline-card-header > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 14px;
+    min-width: 0;
+  }
+
+  body .audio-equalizer-screen .inline-card-header > div:first-child > * {
+    margin: 0;
+  }
+
+  body .audio-equalizer-screen .audio-tone-control {
+    grid-template-columns: 92px minmax(0, 1fr) 80px;
+  }
+
+  body .audio-equalizer-screen .audio-eq-band {
+    grid-template-columns: 50px minmax(0, 1fr) 80px;
+  }
+
+  /* The "Choose an output" screen: the kind of each output and "Playing here". */
+  body .audio-outputs-screen .audio-output-current > strong,
+  body .audio-outputs-screen .audio-output-current > em,
+  body .audio-outputs-screen .audio-route-button > strong {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+}
