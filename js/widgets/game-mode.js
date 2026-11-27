@@ -258,7 +258,38 @@
     return "--game-accent:" + escapeHtml(theme.accent) + ";--game-secondary:" + escapeHtml(theme.secondary) + ";";
   }
 
-  function renderGameModeSteamPad(steam, statusText, statusTone, launchingId, expandedAppId, env) {
+  // The second line of a game on the shelf: how long it was played today when the play log has
+  // that, else when it was last played (the later of the play log's and Steam's own record),
+  // else the plain action. Calendar days, so a game played late last night reads "Yesterday".
+  // `text` is short enough for the tile; `spoken` is the full sentence for a screen reader.
+  function steamTileLine(game, stats, now, formatDuration) {
+    var day = 24 * 60 * 60 * 1000;
+    var midnight = function (ms) {
+      var date = new Date(ms);
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    };
+    var steamPlayed = game && game.lastPlayed ? Date.parse(game.lastPlayed) : 0;
+    var last = Math.max(stats && stats.lastPlayed > 0 ? stats.lastPlayed : 0, steamPlayed > 0 ? steamPlayed : 0);
+    var daysAgo;
+    var when;
+    if (stats && stats.todayMs >= 60000 && typeof formatDuration === "function") {
+      when = formatDuration(stats.todayMs) + " today";
+      return { text: when, spoken: "Played " + when };
+    }
+    if (!(last > 0) || last > now + day) {
+      return { text: "Launch", spoken: "" };
+    }
+    daysAgo = Math.max(0, Math.round((midnight(now) - midnight(last)) / day));
+    when = daysAgo === 0 ? "Today"
+      : daysAgo === 1 ? "Yesterday"
+      : daysAgo < 14 ? daysAgo + " days ago"
+      : daysAgo < 63 ? Math.round(daysAgo / 7) + " weeks ago"
+      : daysAgo < 365 ? Math.round(daysAgo / 30) + " months ago"
+      : "Over a year ago";
+    return { text: when, spoken: "Last played " + when.charAt(0).toLowerCase() + when.slice(1) };
+  }
+
+  function renderGameModeSteamPad(steam, statusText, statusTone, launchingId, expandedAppId, env, played) {
     var games = Array.isArray(steam.games) ? steam.games : [];
     var total = Array.isArray(steam.games) ? steam.games.length : 0;
     var activeAppId = steam && steam.activeGame ? String(steam.activeGame.appId || "") : "";
@@ -273,7 +304,7 @@
           '</div>' +
           '<div class="game-mode-steam-actions">' +
             '<button class="inline-button" type="button" data-action="steam-refresh"' + (launchingId ? " disabled" : "") + '>Rescan</button>' +
-            statusPill(statusText, statusTone) +
+            (statusText && statusText !== "Ready" ? statusPill(statusText, statusTone) : '') +
           '</div>' +
         '</div>' +
         '<div class="game-mode-steam-dock" role="list" aria-label="Steam launch dock">' + (games.length ? games.map(function (game) {
@@ -282,15 +313,19 @@
           var active = activeAppId === game.appId || savedGame === game.name;
           var expanded = expandedAppId === game.appId;
           var tileClass = "game-mode-steam-tile" + (active ? " is-active" : "") + (expanded ? " is-expanded" : "");
+          var line = launching ? { text: "Launching", spoken: "" }
+            : active ? { text: "Active look", spoken: "" }
+            : expanded ? { text: "Look ready", spoken: "" }
+            : typeof played === "function" ? played(game) : { text: "Launch", spoken: "" };
           return '' +
             '<div class="' + tileClass + '" style="' + gameModeThemeStyle(theme) + '" data-app-id="' + escapeHtml(game.appId) + '" role="listitem">' +
-              '<button class="game-mode-steam-launch" type="button" data-action="steam-launch" data-app-id="' + escapeHtml(game.appId) + '"' + (launchingId ? " disabled" : "") + '>' +
+              '<button class="game-mode-steam-launch" type="button" data-action="steam-launch" data-app-id="' + escapeHtml(game.appId) + '" aria-label="' + escapeHtml("Launch " + game.name + (line.spoken ? ". " + line.spoken : "")) + '"' + (launchingId ? " disabled" : "") + '>' +
                 '<span class="game-mode-steam-art">' + (game.artworkUrl
                   ? '<img src="' + escapeHtml(game.artworkUrl) + '" alt="' + escapeHtml(game.name) + '" loading="lazy">'
                   : '<span>' + escapeHtml(game.tileLabel) + '</span>') + '</span>' +
                 '<span class="game-mode-steam-copy">' +
                   '<strong>' + escapeHtml(game.name) + '</strong>' +
-                  '<small>' + escapeHtml(launching ? "Launching" : active ? "Active look" : expanded ? "Look ready" : "Launch") + '</small>' +
+                  '<small>' + escapeHtml(line.text) + '</small>' +
                 '</span>' +
               '</button>' +
               (expanded ? '<div class="game-mode-steam-long-actions">' +
@@ -957,6 +992,7 @@
   function mountGameModeWidget(widget, container, env) {
     var cleanups = [];
     var playWeek = { at: 0, html: "" };
+    var playLines = { at: 0, log: null };
     // Discord beside the running game: the last reading, when it was asked for, a hold while
     // the slider is moving, and the timer that spaces out what the host is told.
     var discord = { chat: null, askedAt: 0, holdUntil: 0, requestId: 0, sendTimer: 0, notice: "" };
@@ -1118,7 +1154,7 @@
           '<div class="game-mode-idle-grid">' +
             '<section class="game-mode-idle-top">' +
               '<div class="inline-grid inline-grid--4 game-mode-performance">' +
-                metricCard("FPS", formatFps(state.performance.fps), text(state.performance.message, "Shows once a game is running."), fpsProgress(state.performance.fps, 240), "game-mode-metric--primary") +
+                metricCard("FPS", formatFps(state.performance.fps), text(state.performance.message, "Shows once a game is running."), fpsProgress(state.performance.fps, 240), "game-mode-metric--primary" + (formatFps(state.performance.fps) === "--" ? " game-mode-metric--idle" : "")) +
                 metricCard("GPU", formatPercent(system.gpu), system.gpuTemp != null ? formatTemp(system.gpuTemp) : "3D engine", system.gpu) +
                 metricCard("CPU", formatPercent(system.cpu), system.cpuTemp != null ? formatTemp(system.cpuTemp) : "System load", system.cpu) +
                 metricCard("RAM", formatPercent(system.ram), "Memory", system.ram) +
@@ -1127,7 +1163,7 @@
             (frameRateCard ? '<section class="game-mode-idle-telemetry">' + frameRateCard + '</section>' : '') +
             (idleStatusPanels ? '<section class="game-mode-idle-notices">' + idleStatusPanels + '</section>' : '') +
             '<section class="game-mode-idle-launch">' +
-              renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env) +
+              renderGameModeSteamPad(state.steam, state.steamStatusText, state.steamStatusTone, state.steamLaunchingId, state.longPressAppId, env, steamPlayedLine) +
             '</section>' +
             (weekCard ? '<section class="game-mode-idle-week">' + weekCard + '</section>' : '') +
           '</div>' +
@@ -1150,6 +1186,25 @@
         }
       }
       return playWeek.html;
+    }
+
+    // A shelf tile's second line. The play log is read at most every 30 seconds.
+    function steamPlayedLine(game) {
+      var now = Date.now();
+      var api = window.AuxoraPlayLog;
+      var stats = null;
+      try {
+        if (api && typeof api.summary === "function" && window.localStorage) {
+          if (!playLines.log || now - playLines.at >= 30000) {
+            playLines.at = now;
+            playLines.log = api.load(window.localStorage);
+          }
+          stats = api.summary(playLines.log, "steam:" + game.appId, now);
+        }
+      } catch (error) {
+        stats = null;
+      }
+      return steamTileLine(game, stats, now, api && api.formatDuration);
     }
 
     // The Discord row lives in the in-game screen's sound column and is kept by this function
@@ -1636,7 +1691,7 @@
 
 
   if (typeof runtime.registerHelpers === "function") {
-    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard, renderGameFocusScene: renderGameFocusScene, renderPlayWeekCard: renderPlayWeekCard, discordChatState: discordChatState, renderDiscordRow: renderDiscordRow });
+    runtime.registerHelpers({ renderFrameRateCard: renderFrameRateCard, renderGameFocusScene: renderGameFocusScene, renderPlayWeekCard: renderPlayWeekCard, steamTileLine: steamTileLine, renderGameModeSteamPad: renderGameModeSteamPad, discordChatState: discordChatState, renderDiscordRow: renderDiscordRow });
   }
 
   runtime.registerRenderer("game-mode", mountGameModeWidget);
