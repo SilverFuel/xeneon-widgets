@@ -2362,17 +2362,31 @@ async function checkQuickControlsInPage(deep) {
     "Skipping did not send exactly one Next: " + JSON.stringify(fixture.writes.slice(writesBeforeSkip)));
 
   // Pressing the opener starts the reads, and the drawer then opens on that same reading.
-  await closeDrawer();
-  const readsBeforePress = { ...fixture.reads };
-  opener.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-  await wait(60);
-  check(fixture.reads.audio === readsBeforePress.audio + 1 && fixture.reads.media === readsBeforePress.media + 1,
-    "Pressing Quick controls did not start one reading of each kind: " + JSON.stringify(fixture.reads));
-  check(volume.disabled && mute.disabled && playback.disabled && next.disabled, "A press enabled Quick controls before the drawer opened");
-  await openDrawer();
-  await until(() => !volume.disabled && !playback.disabled, "Quick controls did not open on the early reading");
-  check(fixture.reads.audio === readsBeforePress.audio + 1 && fixture.reads.media === readsBeforePress.media + 1,
-    "Opening after a press read again instead of using the early reading: " + JSON.stringify(fixture.reads));
+  // The app keeps a press's reading for 1.5 seconds and reads again by itself two seconds after a
+  // reading, so a pass through these steps that takes longer than 1.2 seconds says nothing either
+  // way about the early reading. On a busy machine that happens; such a pass is tried again.
+  let pressToReadyMs = Infinity;
+  for (let attempt = 1; attempt <= 4 && pressToReadyMs > 1200; attempt += 1) {
+    await closeDrawer();
+    // Let the earlier press's reading expire, so that this press starts its own.
+    if (attempt > 1) await wait(1700);
+    const readsBeforePress = { ...fixture.reads };
+    const pressedAt = performance.now();
+    opener.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await wait(60);
+    check(fixture.reads.audio === readsBeforePress.audio + 1 && fixture.reads.media === readsBeforePress.media + 1,
+      "Pressing Quick controls did not start one reading of each kind: " + JSON.stringify(fixture.reads));
+    check(volume.disabled && mute.disabled && playback.disabled && next.disabled, "A press enabled Quick controls before the drawer opened");
+    await openDrawer();
+    await until(() => !volume.disabled && !playback.disabled, "Quick controls did not open on the early reading");
+    const readsWhenReady = { ...fixture.reads };
+    pressToReadyMs = performance.now() - pressedAt;
+    if (pressToReadyMs > 1200) continue;
+    check(readsWhenReady.audio === readsBeforePress.audio + 1 && readsWhenReady.media === readsBeforePress.media + 1,
+      "Opening after a press read again instead of using the early reading: " + JSON.stringify(readsWhenReady));
+  }
+  check(pressToReadyMs <= 1200,
+    "Quick controls took longer than 1.2 seconds from press to ready in four tries (last: " + Math.round(pressToReadyMs) + " ms), so the early reading could not be checked");
   check(document.body?.dataset.activeWidgetId === selectedBefore, "Direct controls navigated away from the selected panel");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames();
   check(drawer.classList.contains("is-hidden") && document.activeElement === opener, "Escape did not close Quick and restore its opener");
