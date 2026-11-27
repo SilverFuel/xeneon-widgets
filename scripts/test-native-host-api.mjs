@@ -1269,7 +1269,9 @@ try {
 
   // Apple Music's own playback: the route answers whether or not the app is open.
   // Asking for the cover art must not change the answer's shape, with or without a player open.
-  const appleMusicArtResponse = await fetchWithTimeout("/api/media/apple-music?art=1");
+  // The first media request of the run: the host opens Windows' media session manager for it.
+  // It gets the longer limit the other first-use routes have; three seconds was once not enough.
+  const appleMusicArtResponse = await fetchWithTimeout("/api/media/apple-music?art=1", {}, 10000);
   assert(appleMusicArtResponse.status === 200, `/api/media/apple-music?art=1 must answer; received HTTP ${appleMusicArtResponse.status}`);
   const appleMusicArt = await appleMusicArtResponse.json();
   assert(typeof appleMusicArt.status === "string" && typeof appleMusicArt.thumbnailDataUrl === "string"
