@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- PC > Network on the XENEON EDGE: larger text throughout (labels, the readiness boxes, the UniFi form and lists). In the four-column layout the Local path card shows PC IP, Gateway and DNS as three full lines, so an address is no longer cut short, and the top row is 20px taller.
 - Media on the XENEON EDGE: larger text everywhere. Labels, the track and artist, the times, the playback and preset buttons, app names and their volumes, the empty-state messages, the Equalizer screen (band names and dB values included) and the "Choose an output" screen. The layout is the same; on the Equalizer screen the card's "Sound equalizer" label is dropped because the screen is already titled "Equalizer".
 - Gaming with no game running, on the XENEON EDGE: the Steam games are now a shelf of tall covers that fills the screen, with readable names. The readings above it are one slim line each, and the FPS tile is left out until a game runs. The frame-rate and "Session ended" notices are one line each.
 - Steam games: each tile says how long you played today, or when you last played ("Yesterday", "4 days ago"), in place of the word "Launch". The "Ready" pill next to Rescan is gone; the pill shows only while scanning, launching, or when something is wrong.

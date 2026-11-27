@@ -422,3 +422,93 @@ body.dashboard-native-page .router-inline-widget[data-card-size="compact"] .netw
   border-color: var(--theme-border);
   background: var(--theme-surface-muted);
 }
+
+/* PC > Network on the EDGE: text sized to be read from the seat. Sizes only in this first
+   block; the selectors start at body so they outrank the ultrawide label and button rules. */
+@media (min-width: 1800px) and (min-height: 600px) {
+  body .network-command-grid .metric-label,
+  body .network-command-grid .router-inline-copy,
+  body .network-command-grid .network-quality-score span,
+  body .network-command-grid .inline-list-title {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  body .network-command-grid .network-quality-score small,
+  body .network-command-grid .network-pill strong {
+    font-size: clamp(22px, 1.375rem, 24px);
+    line-height: 1.2;
+  }
+
+  body .network-command-grid .network-pill span,
+  body .network-command-grid .network-pill small,
+  body .network-command-grid .widget-status {
+    font-size: clamp(17px, 1.0625rem, 19px);
+    line-height: 1.25;
+  }
+
+  body .network-command-grid .inline-field > span,
+  body .network-command-grid .inline-input,
+  body .network-command-grid .inline-button,
+  body .network-command-grid .inline-list-copy,
+  body .network-command-grid .inline-list-meta,
+  body .network-command-grid .network-form-message,
+  body .network-command-grid .network-certificate-review span,
+  body .network-command-grid .network-certificate-review strong,
+  body .network-command-grid .network-certificate-review small,
+  body .network-command-grid .inline-empty span {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  body .network-command-grid .inline-empty strong {
+    font-size: clamp(22px, 1.375rem, 24px);
+  }
+
+  body .network-command-grid .network-kpi-grid .metric-value {
+    font-size: clamp(42px, 2.625rem, 46px);
+  }
+}
+
+/* In the four-column layout the top row is a fixed height and the Local path card is 430px
+   wide, so its three boxes cannot hold larger text side by side. There they become three
+   lines, name on the left and value on the right, and the row is a little taller. */
+@media (min-width: 2048px) and (min-height: 600px) {
+  body .network-command-grid {
+    grid-template-rows: 196px minmax(0, 1fr);
+  }
+
+  /* A card's name and its one-line note share a line here, which is what buys the height. */
+  body .network-command-grid .network-adapter-card .inline-card-header > div,
+  body .network-command-grid .network-unifi-card .inline-card-header > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 14px;
+    min-width: 0;
+  }
+
+  body .network-command-grid .network-adapter-card .inline-card-header > div > *,
+  body .network-command-grid .network-unifi-card .inline-card-header > div:first-child > * {
+    margin: 0;
+  }
+
+  body .network-command-grid .network-adapter-card .network-path-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  body .network-command-grid .network-adapter-card .network-pill {
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 14px;
+    min-height: 0;
+    padding: 3px 12px;
+  }
+
+  body .network-command-grid .network-adapter-card .network-pill strong {
+    text-align: right;
+  }
+
+  body .network-command-grid .network-adapter-card .network-pill small {
+    display: none;
+  }
+}
