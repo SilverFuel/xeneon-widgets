@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Gaming with no game running, on the XENEON EDGE: the Steam games are now a shelf of tall covers that fills the screen, with readable names. The readings above it are one slim line each, and the FPS tile is left out until a game runs. The frame-rate and "Session ended" notices are one line each.
+- Steam games: each tile says how long you played today, or when you last played ("Yesterday", "4 days ago"), in place of the word "Launch". The "Ready" pill next to Rescan is gone; the pill shows only while scanning, launching, or when something is wrong.
 - Setup: when Auxora needs you to choose between companion displays, the choices and their "Use this companion display" buttons are now shown outright. They were inside a closed "Manage companion displays" section while the card said to "choose one of the companion displays below" (#11). Once a display is in use the list goes back behind that section.
 - **Claude asks.** When Claude Code ends a turn on a question, the chip no longer says "finished": it reads "Claude asks" with the question itself, amber-edged, and stays until you answer or tap it away. It comes after a permission wait and before everything else.
 - Fixed: the Claude Code bar did not flash, and the finished chip did not glow, while a game was running or with Motion at its default. A running game puts the dashboard on low motion, and both were switched off there. They now stop only when Motion is off altogether or Windows asks for reduced motion.

@@ -2194,3 +2194,252 @@
   font-size: max(16px, 1rem);
   font-weight: 800;
 }
+
+/* Gaming with no game running, on the EDGE: a slim row of readings, then a shelf of covers
+   that takes the rest of the screen. Covers are Steam's own 2:3 pictures, so the tile is
+   sized from the height left over and its width follows. */
+@media (min-width: 1800px) and (min-height: 600px) {
+  /* --shelf-full-h is the cover's height with nothing but the readings above the shelf, and
+     sets the tile's width. A frame-rate or session-ended row takes its height off the covers,
+     which then show a little less of the picture; the tiles stay the same width. */
+  .game-mode-idle-grid {
+    --shelf-full-h: clamp(210px, calc(100vh - 460px), 420px);
+    --shelf-rows: 0px;
+    --shelf-art-h: max(120px, calc(var(--shelf-full-h) - var(--shelf-rows)));
+    min-height: 100%;
+    grid-template-rows: max-content minmax(max-content, 1fr);
+  }
+
+  .game-mode-idle-grid:has(> .game-mode-idle-telemetry),
+  .game-mode-idle-grid:has(> .game-mode-idle-notices) {
+    --shelf-rows: 84px;
+    grid-template-rows: max-content max-content minmax(max-content, 1fr);
+  }
+
+  .game-mode-idle-grid:has(> .game-mode-idle-telemetry):has(> .game-mode-idle-notices) {
+    --shelf-rows: 168px;
+    grid-template-rows: max-content max-content max-content minmax(max-content, 1fr);
+  }
+
+  /* The week's chart gives up the same height, so the card beside the shelf still fits. */
+  .game-mode-idle-grid:has(> .game-mode-idle-telemetry) .game-week-card,
+  .game-mode-idle-grid:has(> .game-mode-idle-notices) .game-week-card {
+    grid-template-rows: auto auto minmax(max(40px, calc(140px - var(--shelf-rows))), 1fr) auto;
+  }
+
+  /* Those rows, each on one line. The frame-rate card's three boxes hold dashes with no game
+     running, so only its message and its button are kept here. */
+  .game-mode-idle-telemetry .game-mode-telemetry-card,
+  .game-mode-idle-notices .game-mode-ended-panel {
+    display: flex;
+    align-items: center;
+    gap: 12px 28px;
+    min-height: 72px;
+    padding: 8px 20px;
+  }
+
+  .game-mode-idle-telemetry .game-mode-telemetry-grid {
+    display: none;
+  }
+
+  .game-mode-idle-telemetry .inline-card-header {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .game-mode-idle-telemetry .inline-card-header > div,
+  .game-mode-idle-notices .game-mode-ended-panel > div:first-child {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 18px;
+    min-width: 0;
+  }
+
+  .game-mode-idle-telemetry .game-mode-telemetry-actions {
+    flex: 0 0 auto;
+    margin: 0;
+  }
+
+  .game-mode-idle-telemetry .inline-card-header > :last-child {
+    flex: 0 0 auto;
+  }
+
+  body .game-mode-idle-grid .game-mode-idle-telemetry .metric-label,
+  body .game-mode-idle-grid .game-mode-idle-notices .game-mode-ended-panel .metric-label {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  body .game-mode-idle-grid .game-mode-idle-telemetry .router-inline-copy,
+  .game-mode-idle-notices .game-mode-ended-panel > div:first-child span {
+    margin: 0;
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  .game-mode-idle-notices .game-mode-ended-panel > div:first-child strong {
+    margin: 0;
+    font-size: clamp(22px, 1.375rem, 24px);
+  }
+
+  .game-mode-idle-notices {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .game-mode-idle-notices .game-mode-ended-stats {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 28px;
+    margin: 0;
+  }
+
+  .game-mode-idle-notices .game-mode-ended-stats div {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  .game-mode-idle-notices .game-mode-ended-stats span {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  .game-mode-idle-notices .game-mode-ended-stats strong {
+    font-size: clamp(22px, 1.375rem, 24px);
+  }
+
+  .game-mode-idle-top .game-mode-performance {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  /* One line per reading: name, figure, bar, detail. */
+  .game-mode-idle-top .metric-card {
+    display: grid;
+    grid-template-columns: max-content max-content minmax(60px, 1fr) max-content;
+    align-items: center;
+    column-gap: 18px;
+    min-height: 0;
+    padding: 8px 20px;
+  }
+
+  /* The FPS tile has nothing to say until a game runs. */
+  .game-mode-idle-top .metric-card.game-mode-metric--idle {
+    display: none;
+  }
+
+  body .game-mode-idle-grid .game-mode-idle-top .metric-label {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  .game-mode-idle-top .metric-value {
+    font-size: clamp(40px, 2.5rem, 42px);
+    line-height: 1.1;
+  }
+
+  body .game-mode-idle-grid .game-mode-idle-top .router-inline-copy {
+    grid-column: 4;
+    margin: 0;
+    font-size: clamp(20px, 1.25rem, 22px);
+    white-space: nowrap;
+  }
+
+  .game-mode-idle-top .inline-progress {
+    grid-column: 3;
+    margin: 0;
+  }
+
+  .game-mode-idle-launch .game-mode-steam-panel {
+    grid-template-rows: max-content minmax(0, 1fr);
+    align-content: start;
+    height: 100%;
+    padding: 12px 16px;
+  }
+
+  .game-mode-idle-launch .game-mode-steam-head > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 18px;
+    min-width: 0;
+  }
+
+  body .game-mode-idle-grid .game-mode-idle-launch .game-mode-steam-head .metric-label {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  .game-mode-idle-launch .game-mode-steam-head strong {
+    margin-top: 0;
+    font-size: clamp(22px, 1.375rem, 24px);
+  }
+
+  .game-mode-idle-launch .game-mode-steam-head span {
+    margin-top: 0;
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  .game-mode-idle-launch .game-mode-steam-dock {
+    align-items: start;
+    gap: 14px;
+  }
+
+  .game-mode-idle-launch .game-mode-steam-tile {
+    flex: 0 0 calc(var(--shelf-full-h) * 2 / 3);
+    min-height: 0;
+  }
+
+  .game-mode-idle-launch .game-mode-steam-art {
+    width: 100%;
+    height: var(--shelf-art-h);
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+
+  .game-mode-idle-launch .game-mode-steam-art > span {
+    font-size: clamp(44px, 2.75rem, 52px);
+  }
+
+  .game-mode-idle-launch .game-mode-steam-copy {
+    gap: 2px;
+    padding: 10px 12px 12px;
+  }
+
+  /* Two lines for the name, and room kept for two so every tile is the same height. */
+  .game-mode-idle-launch .game-mode-steam-copy strong {
+    display: -webkit-box;
+    min-height: 2.4em;
+    font-size: clamp(20px, 1.25rem, 22px);
+    line-height: 1.2;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
+  .game-mode-idle-launch .game-mode-steam-copy small {
+    font-size: clamp(17px, 1.0625rem, 19px);
+    line-height: 1.25;
+  }
+
+  /* Held: Theme and Launch sit over the foot of the cover, so the tile keeps its height. */
+  .game-mode-idle-launch .game-mode-steam-long-actions {
+    position: absolute;
+    top: calc(var(--shelf-art-h) - 70px);
+    right: 0;
+    left: 0;
+    padding: 8px;
+    background: var(--theme-surface-elevated);
+  }
+
+  .game-mode-idle-launch .game-mode-steam-long-actions .inline-button {
+    min-height: 54px;
+    padding: 8px 6px;
+    font-size: clamp(17px, 1.0625rem, 19px);
+  }
+}
