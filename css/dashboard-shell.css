@@ -124,13 +124,18 @@ body.auxora-section-shell.dashboard-native-page--game-focus-active .router-viewe
   background: var(--theme-surface-primary);
 }
 
+/* On the EDGE the side menu, the tabs and the header's own controls are 18px. They grow with
+   Text size up to 23px, and never past 0.9% of the screen's width: PC has seven tabs, and at
+   2048px wide anything much over 18px wraps the header onto a second row. */
 @media (min-width: 1800px) and (min-height: 600px) {
   body.auxora-section-shell :is(.auxora-section-link, .auxora-panel-link, .auxora-mode-select, .auxora-shell-status) {
     min-width: 54px;
     min-height: 54px;
-    font-size: max(15px, 0.9375rem);
+    font-size: clamp(18px, min(1.125rem, 0.9vw), 23px);
   }
-  .auxora-section-nav .auxora-section-link { min-height: 58px; font-size: max(16px, 1rem); }
+  .auxora-section-nav .auxora-section-link { min-height: 58px; font-size: clamp(18px, min(1.125rem, 0.9vw), 23px); }
+  body.auxora-section-shell .dashboard-router-stage .auxora-quick-toggle { font-size: clamp(18px, min(1.125rem, 0.9vw), 23px); }
+  body.auxora-section-shell .auxora-mode-copy :is(strong, span) { font-size: clamp(17px, min(1.0625rem, 0.85vw), 20px); }
 }
 
 @media (max-width: 1100px), (max-height: 480px) {
