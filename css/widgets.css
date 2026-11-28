@@ -5611,3 +5611,45 @@ body.dashboard-native-page :where(.router-settings__field-help, .router-settings
   object-fit: cover;
   background: var(--theme-surface-primary);
 }
+
+/* Quick controls on the EDGE: a wider drawer with text and buttons sized to be read and hit
+   from the seat. The selectors start at body so they outrank the ultrawide button rules. */
+@media (min-width: 1800px) and (min-height: 600px) {
+  body .auxora-quick-drawer {
+    width: min(880px, calc(100vw - 32px));
+    gap: 14px;
+    padding: 20px;
+  }
+
+  body .auxora-quick-drawer__head > strong {
+    font-size: clamp(24px, 1.5rem, 26px);
+  }
+
+  body .auxora-quick-drawer .auxora-quick-media {
+    gap: 10px 16px;
+    padding: 16px;
+  }
+
+  body .auxora-quick-drawer .auxora-quick-media__title,
+  body .auxora-quick-drawer .auxora-quick-night > span {
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  body .auxora-quick-drawer .auxora-quick-media__volume-label {
+    font-size: clamp(22px, 1.375rem, 24px);
+  }
+
+  body .auxora-quick-drawer .auxora-quick-media__status {
+    font-size: clamp(18px, 1.125rem, 20px);
+  }
+
+  body .dashboard-router-stage .auxora-quick-drawer button {
+    min-block-size: 64px;
+    font-size: clamp(20px, 1.25rem, 22px);
+  }
+
+  body .auxora-quick-drawer .auxora-quick-night {
+    grid-template-columns: auto repeat(3, minmax(120px, 1fr));
+    gap: 10px 12px;
+  }
+}

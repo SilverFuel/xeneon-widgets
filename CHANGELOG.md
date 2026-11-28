@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Quick controls on the XENEON EDGE: a wider drawer with larger text and 64px buttons (volume, mute, previous, pause, next, night display).
+- The side menu, tabs and header controls are 18px on the XENEON EDGE, up from 15px. They still grow with Text size, up to 23px, and no longer push the PC tabs onto a second row at 2048px wide.
 - Gaming with a game running, on the XENEON EDGE: larger labels and notes (FPS, GPU, CPU, RAM, Network, Session, the sound column). The Mic and Audio boxes are one row each, which leaves room for three app volumes under the Discord row at every text size. At the largest text size the mic button no longer wraps and the Discord row no longer runs past its column.
 - PC > Network on the XENEON EDGE: larger text throughout (labels, the readiness boxes, the UniFi form and lists). In the four-column layout the Local path card shows PC IP, Gateway and DNS as three full lines, so an address is no longer cut short, and the top row is 20px taller.
 - Media on the XENEON EDGE: larger text everywhere. Labels, the track and artist, the times, the playback and preset buttons, app names and their volumes, the empty-state messages, the Equalizer screen (band names and dB values included) and the "Choose an output" screen. The layout is the same; on the Equalizer screen the card's "Sound equalizer" label is dropped because the screen is already titled "Equalizer".
